@@ -14,34 +14,11 @@
         data-tooltip-placement="bottom"
         @click="$emit('select-tab', item.id)"
       >
-        <svg
-          v-if="item.kind === 'image'"
-          viewBox="0 0 24 24"
+        <FileEntryIcon
+          kind="file"
+          :path="item.path ?? item.name"
           class="editor-file-tab-icon"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <rect x="4" y="5" width="16" height="14" rx="2" />
-          <path d="m7.5 15 3.4-3.4a1 1 0 0 1 1.4 0L16.5 16" />
-          <path d="m14.5 14 1.5-1.5a1 1 0 0 1 1.4 0L19 14" />
-          <circle cx="9" cy="9" r="1.2" />
-        </svg>
-        <svg
-          v-else
-          viewBox="0 0 24 24"
-          class="editor-file-tab-icon"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M14 3H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9z" />
-          <path d="M14 3v6h6" />
-        </svg>
+        />
         <span class="editor-file-tab-name truncate">{{ item.name }}</span>
         <span class="editor-file-tab-action" aria-hidden="true">
           <span class="editor-file-tab-indicator" />
@@ -62,8 +39,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import FileEntryIcon from '@/components/common/FileEntryIcon.vue';
 import type { IEditorDocument } from '@/types/editor';
+import { computed } from 'vue';
 
 const props = defineProps<{
   documents: IEditorDocument[];
@@ -77,6 +55,10 @@ defineEmits<{
 }>();
 
 const breadcrumbText = computed(() => {
+  if (props.documents.length === 0) {
+    return '未打开文件';
+  }
+
   if (!props.filePath) {
     return '未保存到本地文件';
   }

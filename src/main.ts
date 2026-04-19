@@ -7,6 +7,22 @@ interface ITauriBootstrapInternals {
   invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 }
 
+interface IBootstrapSplashState {
+  startedAt: number;
+  visibleCharacters: number;
+  progress: number;
+  handoff?: boolean;
+}
+
+declare global {
+  interface Window {
+    __SH_SPLASH_BOOTSTRAP_STATE__?: IBootstrapSplashState;
+  }
+}
+
+const BOOTSTRAP_SPLASH_HOST_ID = 'bootstrap-splash-host';
+const BOOTSTRAP_SPLASH_INITIAL_PROGRESS = 24;
+
 const escapeHtml = (value: string): string =>
   value
     .replaceAll('&', '&amp;')
@@ -18,6 +34,27 @@ const escapeHtml = (value: string): string =>
 const enableSplashWindowMode = (): void => {
   document.documentElement.classList.add('splash-window-mode');
   document.body.classList.add('splash-window-mode');
+};
+
+const resolveBootstrapSplashHost = (): HTMLDivElement | null =>
+  document.querySelector<HTMLDivElement>(`#${BOOTSTRAP_SPLASH_HOST_ID}`);
+
+const ensureBootstrapSplashState = (): IBootstrapSplashState => {
+  const currentState = window.__SH_SPLASH_BOOTSTRAP_STATE__;
+  if (currentState) {
+    currentState.startedAt = currentState.startedAt || performance.now();
+    currentState.visibleCharacters = Number.POSITIVE_INFINITY;
+    currentState.progress = Math.max(currentState.progress, BOOTSTRAP_SPLASH_INITIAL_PROGRESS);
+    return currentState;
+  }
+
+  const nextState: IBootstrapSplashState = {
+    startedAt: performance.now(),
+    visibleCharacters: Number.POSITIVE_INFINITY,
+    progress: BOOTSTRAP_SPLASH_INITIAL_PROGRESS,
+  };
+  window.__SH_SPLASH_BOOTSTRAP_STATE__ = nextState;
+  return nextState;
 };
 
 const showStartupWindow = (): void => {
@@ -35,21 +72,31 @@ const showStartupWindow = (): void => {
 const renderFatalBootstrapError = (error: unknown): void => {
   enableSplashWindowMode();
   showStartupWindow();
+  ensureBootstrapSplashState();
 
-  const target = document.querySelector<HTMLDivElement>('#app');
+  const target = document.body;
   if (!target) {
     return;
   }
 
   const message = escapeHtml(error instanceof Error ? error.message : String(error));
-  const detail = escapeHtml(error instanceof Error ? error.stack ?? error.message : String(error));
+  const detail = escapeHtml(
+    error instanceof Error ? (error.stack ?? error.message) : String(error),
+  );
 
-  target.innerHTML = `
+  let host = resolveBootstrapSplashHost();
+  if (!host) {
+    host = document.createElement('div');
+    host.id = BOOTSTRAP_SPLASH_HOST_ID;
+    target.appendChild(host);
+  }
+
+  host.innerHTML = `
     <style>
       #bootstrap-splash,#bootstrap-splash *{box-sizing:border-box}
       #bootstrap-splash{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:0;background:transparent;color:#d1d5db;font-family:Inter,'JetBrains Mono',Consolas,monospace}
       #bootstrap-splash::before{position:absolute;inset:0;background:radial-gradient(circle at 50% 42%,rgba(94,106,210,.16),transparent 42%),radial-gradient(circle at 50% 54%,rgba(255,255,255,.05),transparent 38%);content:'';pointer-events:none}
-      #bootstrap-splash .editor{position:relative;z-index:1;width:min(780px,100vw);height:min(520px,100vh);min-height:0;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;border:1px solid #23262b;border-radius:10px;background:#15171a;box-shadow:0 24px 72px rgba(0,0,0,.36),0 1px 0 rgba(255,255,255,.04) inset}
+      #bootstrap-splash .editor{position:relative;z-index:1;width:min(780px,100vw);height:min(520px,100vh);min-height:0;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;border:1px solid #23262b;border-radius:10px;background:#15171a;box-shadow:0 24px 72px rgba(0,0,0,.36),0 1px 0 rgba(255,255,255,.04) inset;transform:translateZ(0);backface-visibility:hidden}
       #bootstrap-splash .editor.error{border-color:rgba(255,107,122,.34);box-shadow:0 24px 72px rgba(0,0,0,.36),0 1px 0 rgba(255,255,255,.04) inset,0 0 0 1px rgba(255,107,122,.08)}
       #bootstrap-splash .top{display:flex;align-items:center;gap:8px;padding:14px 20px;border-bottom:1px solid #23262b;background:#111215}
       #bootstrap-splash .dot{width:10px;height:10px;border-radius:999px}
@@ -95,22 +142,25 @@ const renderFatalBootstrapError = (error: unknown): void => {
 const renderBootstrapLoading = (): void => {
   enableSplashWindowMode();
   showStartupWindow();
+  ensureBootstrapSplashState();
 
-  const target = document.querySelector<HTMLDivElement>('#app');
+  const target = document.body;
   if (!target) {
     return;
   }
 
-  if (target.querySelector('#bootstrap-splash')) {
+  if (resolveBootstrapSplashHost()) {
     return;
   }
 
-  target.innerHTML = `
+  const host = document.createElement('div');
+  host.id = BOOTSTRAP_SPLASH_HOST_ID;
+  host.innerHTML = `
     <style>
       #bootstrap-splash,#bootstrap-splash *{box-sizing:border-box}
       #bootstrap-splash{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:0;background:transparent;color:#d1d5db;font-family:Inter,'JetBrains Mono',Consolas,monospace}
       #bootstrap-splash::before{position:absolute;inset:0;background:radial-gradient(circle at 50% 42%,rgba(94,106,210,.16),transparent 42%),radial-gradient(circle at 50% 54%,rgba(255,255,255,.05),transparent 38%);content:'';pointer-events:none}
-      #bootstrap-splash .editor{position:relative;z-index:1;width:min(780px,100vw);height:min(520px,100vh);min-height:0;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;border:1px solid #23262b;border-radius:10px;background:#15171a;box-shadow:0 24px 72px rgba(0,0,0,.36),0 1px 0 rgba(255,255,255,.04) inset}
+      #bootstrap-splash .editor{position:relative;z-index:1;width:min(780px,100vw);height:min(520px,100vh);min-height:0;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;border:1px solid #23262b;border-radius:10px;background:#15171a;box-shadow:0 24px 72px rgba(0,0,0,.36),0 1px 0 rgba(255,255,255,.04) inset;transform:translateZ(0);backface-visibility:hidden}
       #bootstrap-splash .editor.error{border-color:rgba(255,107,122,.34);box-shadow:0 24px 72px rgba(0,0,0,.36),0 1px 0 rgba(255,255,255,.04) inset,0 0 0 1px rgba(255,107,122,.08)}
       #bootstrap-splash .top{display:flex;align-items:center;gap:8px;padding:14px 20px;border-bottom:1px solid #23262b;background:#111215}
       #bootstrap-splash .dot{width:10px;height:10px;border-radius:999px}
@@ -128,13 +178,13 @@ const renderBootstrapLoading = (): void => {
       #bootstrap-splash .progress-wrap{padding:0 32px 28px}
       #bootstrap-splash .progress-bar{width:100%;height:5px;overflow:hidden;border-radius:6px;background:#23262b}
       #bootstrap-splash .progress-bar.error-bar{background:#2b1d21}
-      #bootstrap-splash .progress{height:100%;width:18%;border-radius:6px;background:#5e6ad2;animation:bootstrapProgress 1.8s ease-in-out infinite}
+      #bootstrap-splash .progress{height:100%;width:${BOOTSTRAP_SPLASH_INITIAL_PROGRESS}%;border-radius:6px;background:#5e6ad2}
       #bootstrap-splash .progress.error-progress{background:linear-gradient(90deg,#ff7b88,#ff8e6b);animation:none}
       #bootstrap-splash .status{display:flex;align-items:center;justify-content:center;gap:8px;padding-bottom:20px;color:#6e7681;font-size:12px}
       #bootstrap-splash .status.error-status{color:#c2c9d6}
       #bootstrap-splash .spinner{width:13px;height:13px;border:2px solid rgba(94,106,210,.24);border-top-color:#5e6ad2;border-radius:999px;animation:bootstrapSpin 1s linear infinite}
       #bootstrap-splash .error-indicator{display:inline-flex;width:15px;height:15px;align-items:center;justify-content:center;border-radius:999px;background:rgba(255,107,122,.18);color:#ff9aa5;font-size:11px;font-weight:700}
-      @keyframes bootstrapCaret{50%{opacity:0}}@keyframes bootstrapSpin{to{transform:rotate(360deg)}}@keyframes bootstrapProgress{0%{width:16%}50%{width:42%}100%{width:24%}}
+      @keyframes bootstrapCaret{50%{opacity:0}}@keyframes bootstrapSpin{to{transform:rotate(360deg)}}
     </style>
     <section id="bootstrap-splash">
       <div class="editor">
@@ -160,19 +210,19 @@ const renderBootstrapLoading = (): void => {
       </div>
     </section>
   `;
+  target.appendChild(host);
 };
 
 const bootstrap = async (): Promise<void> => {
   try {
     renderBootstrapLoading();
 
-    const [{ createApp }, { createPinia }, { default: App }] =
-      await Promise.all([
-        import('vue'),
-        import('pinia'),
-        import('./App.vue'),
-        import('./styles.css'),
-      ]);
+    const [{ createApp }, { createPinia }, { default: App }] = await Promise.all([
+      import('vue'),
+      import('pinia'),
+      import('./App.vue'),
+      import('./styles.css'),
+    ]);
 
     const app = createApp(App);
     app.use(createPinia());

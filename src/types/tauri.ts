@@ -2,11 +2,14 @@ import type {
   IAnalyzeScriptPayload,
   IAnalyzeScriptRequest,
   IExecutionEnvironment,
+  IFormatScriptPayload,
+  IFormatScriptRequest,
   IImageAssetPayload,
   IRunResult,
   IRunScriptRequest,
   ISaveScriptRequest,
   IScriptFilePayload,
+  IStartupWorkspacePayload,
   IWorkspaceDirectoryPayload,
 } from './editor';
 import type {
@@ -22,7 +25,9 @@ import type {
 } from './terminal';
 
 export interface ITauriService {
+  getStartupWorkspace(): Promise<IStartupWorkspacePayload>;
   analyzeScript(payload: IAnalyzeScriptRequest): Promise<IAnalyzeScriptPayload>;
+  formatScript(payload: IFormatScriptRequest): Promise<IFormatScriptPayload>;
   loadScript(path: string): Promise<IScriptFilePayload>;
   loadImageAsset(path: string): Promise<IImageAssetPayload>;
   saveScript(payload: ISaveScriptRequest): Promise<IScriptFilePayload>;

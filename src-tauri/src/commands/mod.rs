@@ -11,16 +11,21 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command as StdCommand, Stdio},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, Size, State};
-use tokio::{process::Command, time::{sleep, timeout}};
+use tokio::{
+    io::AsyncWriteExt,
+    process::Command,
+    time::{sleep, timeout},
+};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(4);
 const EXEC_TIMEOUT: Duration = Duration::from_secs(120);
 const SHELLCHECK_TIMEOUT: Duration = Duration::from_secs(12);
+const SHFMT_TIMEOUT: Duration = Duration::from_secs(12);
 const SPLASH_WINDOW_WIDTH: f64 = 780.0;
 const SPLASH_WINDOW_HEIGHT: f64 = 520.0;
 const MAIN_WINDOW_WIDTH: f64 = 1500.0;
@@ -35,6 +40,12 @@ const TERMINAL_RUN_MARKER_ESCAPED_PREFIX: &str = "\\033]SH_EDITOR:";
 const TERMINAL_RUN_MARKER_ESCAPED_SUFFIX: &str = "\\007";
 const TERMINAL_RUN_START_MARKER_PREFIX: &str = "SH_EDITOR_RUN_BEGIN:";
 const TERMINAL_RUN_END_MARKER_PREFIX: &str = "SH_EDITOR_RUN_END:";
+const DEFAULT_WORKSPACE_DIRECTORY_NAME: &str = "builtin-workspace";
+const DEFAULT_WORKSPACE_SCRIPT_NAME: &str = "startup.sh";
+const DEFAULT_WORKSPACE_SCRIPT_CONTENT: &str = "#!/bin/bash\n\nset -euo pipefail\n\nmain() {\n  echo \"Welcome to SH Editor\"\n}\n\nmain \"$@\"\n";
+const SHELLCHECK_ZH_MESSAGES_JSON: &str = include_str!("../../../resources/Messages_zh.json");
+
+static SHELLCHECK_ZH_MESSAGES: OnceLock<HashMap<String, String>> = OnceLock::new();
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,6 +73,23 @@ pub struct SaveScriptRequest {
     path: String,
     content: String,
     encoding: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormatScriptRequest {
+    path: Option<String>,
+    content: String,
+    encoding: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormatScriptPayload {
+    content: String,
+    encoding: String,
+    line_count: usize,
+    char_count: usize,
 }
 
 #[derive(Debug, Deserialize)]
@@ -154,6 +182,15 @@ pub struct WorkspaceDirectoryPayload {
     root_path: String,
     root_name: String,
     entries: Vec<WorkspaceEntry>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupWorkspacePayload {
+    root_path: String,
+    root_name: String,
+    default_file_path: Option<String>,
+    protected_root_paths: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -265,6 +302,11 @@ struct ExecutorCandidate {
 }
 
 struct ShellCheckCandidate {
+    executable: PathBuf,
+    use_wsl: bool,
+}
+
+struct ShfmtCandidate {
     executable: PathBuf,
     use_wsl: bool,
 }
@@ -536,6 +578,18 @@ pub fn close_terminal_session(
 }
 
 #[tauri::command]
+pub fn get_startup_workspace(app: AppHandle) -> Result<StartupWorkspacePayload, String> {
+    let (workspace_root, default_file_path) = ensure_startup_workspace(&app)?;
+
+    Ok(StartupWorkspacePayload {
+        root_path: workspace_root.to_string_lossy().to_string(),
+        root_name: workspace_name(&workspace_root),
+        default_file_path: default_file_path.map(|value| value.to_string_lossy().to_string()),
+        protected_root_paths: vec![workspace_root.to_string_lossy().to_string()],
+    })
+}
+
+#[tauri::command]
 pub fn load_script(path: String) -> Result<ScriptFilePayload, String> {
     let file_path = PathBuf::from(&path);
     let bytes = fs::read(&file_path).map_err(|error| format!("读取脚本失败：{error}"))?;
@@ -617,6 +671,34 @@ pub async fn analyze_script(payload: AnalyzeScriptRequest) -> Result<AnalyzeScri
         message: None,
         dialect,
         diagnostics,
+    })
+}
+
+#[tauri::command]
+pub async fn format_script(payload: FormatScriptRequest) -> Result<FormatScriptPayload, String> {
+    let Some(shfmt) = resolve_shfmt_candidate() else {
+        return Err(
+            "未检测到可用的 shfmt，请先在 Windows 或 WSL 中安装 shfmt，或配置 SHFMT_BIN。"
+                .into(),
+        );
+    };
+
+    if payload.content.trim().is_empty() {
+        return Ok(FormatScriptPayload {
+            line_count: line_count(&payload.content),
+            char_count: payload.content.chars().count(),
+            content: payload.content,
+            encoding: payload.encoding,
+        });
+    }
+
+    let formatted = run_shfmt(&shfmt, &payload.content, payload.path.as_deref()).await?;
+
+    Ok(FormatScriptPayload {
+        line_count: line_count(&formatted),
+        char_count: formatted.chars().count(),
+        content: formatted,
+        encoding: payload.encoding,
     })
 }
 
@@ -1169,16 +1251,39 @@ fn parse_shellcheck_diagnostics(output: &str) -> Result<Vec<ScriptDiagnosticPayl
     Ok(payload
         .comments
         .into_iter()
-        .map(|item| ScriptDiagnosticPayload {
-            line: item.line.max(1),
-            end_line: item.end_line.max(item.line).max(1),
-            column: item.column.max(1),
-            end_column: item.end_column.max(item.column).max(1),
-            level: item.level,
-            code: format!("SC{}", item.code),
-            message: item.message,
+        .map(|item| {
+            let code = format!("SC{}", item.code);
+
+            ScriptDiagnosticPayload {
+                line: item.line.max(1),
+                end_line: item.end_line.max(item.line).max(1),
+                column: item.column.max(1),
+                end_column: item.end_column.max(item.column).max(1),
+                level: item.level,
+                message: translate_shellcheck_message(&code, item.message),
+                code,
+            }
         })
         .collect())
+}
+
+fn shellcheck_translation_map() -> &'static HashMap<String, String> {
+    SHELLCHECK_ZH_MESSAGES.get_or_init(|| {
+        serde_json::from_str::<HashMap<String, String>>(
+            SHELLCHECK_ZH_MESSAGES_JSON.trim_start_matches('\u{feff}'),
+        )
+        .unwrap_or_else(|error| {
+            eprintln!("加载 ShellCheck 中文消息失败：{error}");
+            HashMap::new()
+        })
+    })
+}
+
+fn translate_shellcheck_message(code: &str, fallback: String) -> String {
+    shellcheck_translation_map()
+        .get(code)
+        .cloned()
+        .unwrap_or(fallback)
 }
 
 fn resolve_analysis_script_name(path: Option<&str>, name: Option<&str>) -> String {
@@ -1291,6 +1396,43 @@ fn resolve_shellcheck_candidate() -> Option<ShellCheckCandidate> {
     None
 }
 
+fn resolve_shfmt_candidate() -> Option<ShfmtCandidate> {
+    if let Some(configured_path) = env::var_os("SHFMT_BIN") {
+        let executable = PathBuf::from(configured_path);
+        if executable.exists() {
+            return Some(ShfmtCandidate {
+                executable,
+                use_wsl: false,
+            });
+        }
+    }
+
+    let shfmt_command = if cfg!(windows) { "shfmt.exe" } else { "shfmt" };
+    if let Some(system_binary) = find_command_path(shfmt_command, &[]) {
+        return Some(ShfmtCandidate {
+            executable: system_binary,
+            use_wsl: false,
+        });
+    }
+
+    let wsl_path = find_command_path("wsl.exe", &["C:\\Windows\\System32\\wsl.exe"])?;
+    if StdCommand::new(&wsl_path)
+        .args(["--", "shfmt", "--version"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .ok()
+        .is_some_and(|status| status.success())
+    {
+        return Some(ShfmtCandidate {
+            executable: wsl_path,
+            use_wsl: true,
+        });
+    }
+
+    None
+}
+
 async fn run_shellcheck(
     candidate: &ShellCheckCandidate,
     script_path: &Path,
@@ -1337,6 +1479,63 @@ async fn run_shellcheck(
     }
 
     Err(format!("ShellCheck 执行失败：{stderr}"))
+}
+
+async fn run_shfmt(
+    candidate: &ShfmtCandidate,
+    content: &str,
+    _path: Option<&str>,
+) -> Result<String, String> {
+    let mut command = Command::new(&candidate.executable);
+
+    if candidate.use_wsl {
+        command.args(["--", "shfmt", "-i", "2"]);
+    } else {
+        command.args(["-i", "2"]);
+    }
+
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("启动 shfmt 失败：{error}"))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(content.as_bytes())
+            .await
+            .map_err(|error| format!("写入 shfmt 输入失败：{error}"))?;
+        stdin
+            .shutdown()
+            .await
+            .map_err(|error| format!("关闭 shfmt 输入失败：{error}"))?;
+    }
+
+    let output = match timeout(SHFMT_TIMEOUT, child.wait_with_output()).await {
+        Ok(Ok(output)) => output,
+        Ok(Err(error)) => return Err(format!("运行 shfmt 失败：{error}")),
+        Err(_) => {
+            return Err(format!(
+                "shfmt 格式化超时（超过 {} 秒）。",
+                SHFMT_TIMEOUT.as_secs()
+            ))
+        }
+    };
+
+    if output.status.success() {
+        return String::from_utf8(output.stdout)
+            .map_err(|error| format!("解析 shfmt 输出失败：{error}"));
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if stderr.is_empty() {
+        return Err("shfmt 执行失败。".into());
+    }
+
+    Err(format!("shfmt 执行失败：{stderr}"))
 }
 
 fn build_image_asset_payload(path: PathBuf, bytes: Vec<u8>) -> Result<ImageAssetPayload, String> {
@@ -1422,6 +1621,38 @@ fn resolve_workspace_root(selected_root: Option<String>) -> Result<PathBuf, Stri
     fallback_root
         .canonicalize()
         .map_err(|error| format!("读取工作区目录失败：{error}"))
+}
+
+fn ensure_startup_workspace(app: &AppHandle) -> Result<(PathBuf, Option<PathBuf>), String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("读取应用数据目录失败：{error}"))?;
+
+    fs::create_dir_all(&app_data_dir).map_err(|error| format!("创建应用数据目录失败：{error}"))?;
+
+    let workspace_root = app_data_dir.join(DEFAULT_WORKSPACE_DIRECTORY_NAME);
+    fs::create_dir_all(&workspace_root).map_err(|error| format!("创建默认工作区失败：{error}"))?;
+
+    let default_script_path = workspace_root.join(DEFAULT_WORKSPACE_SCRIPT_NAME);
+    let should_seed_default_script = match fs::metadata(&default_script_path) {
+        Ok(metadata) => metadata.len() == 0,
+        Err(_) => true,
+    };
+
+    if should_seed_default_script {
+        fs::write(&default_script_path, DEFAULT_WORKSPACE_SCRIPT_CONTENT.as_bytes())
+            .map_err(|error| format!("写入默认脚本失败：{error}"))?;
+    }
+
+    let canonical_workspace_root = workspace_root
+        .canonicalize()
+        .map_err(|error| format!("读取默认工作区失败：{error}"))?;
+    let canonical_default_script = default_script_path
+        .canonicalize()
+        .map_err(|error| format!("读取默认脚本失败：{error}"))?;
+
+    Ok((canonical_workspace_root, Some(canonical_default_script)))
 }
 
 fn workspace_name(root_path: &Path) -> String {

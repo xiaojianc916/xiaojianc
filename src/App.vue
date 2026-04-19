@@ -1,11 +1,11 @@
 <template>
-  <div class="app-root-stage" :class="{ 'is-splash-mode': isSplashVisible }">
+  <div class="app-root-stage" :class="{ 'is-splash-mode': isWindowSplashMode }">
     <div
       v-if="isContentMounted && workbenchComponent && !runtimeErrorState"
       class="app-content-entry"
       :class="{ 'is-visible': isAppContentVisible }"
     >
-      <component :is="workbenchComponent" />
+      <component :is="workbenchComponent" @ready="handleWorkbenchReady" />
     </div>
 
     <SplashScreen
@@ -19,10 +19,19 @@
 </template>
 
 <script setup lang="ts">
-import type { Component } from 'vue';
-import { computed, markRaw, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import SplashScreen from '@/components/common/SplashScreen.vue';
 import { runtimeErrorState, setRuntimeError } from '@/utils/runtime-diagnostics';
+import type { Component } from 'vue';
+import {
+  computed,
+  markRaw,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  shallowRef,
+  watch,
+} from 'vue';
 
 const MAIN_WINDOW_SIZE = {
   width: 1500,
@@ -34,12 +43,17 @@ const MAIN_WINDOW_MIN_SIZE = {
   height: 760,
 };
 
+const MAIN_CONTENT_REVEAL_DELAY_MS = 50;
+
 const isSplashMounted = ref(true);
 const isContentMounted = ref(false);
 const isAppContentVisible = ref(false);
 const isWorkbenchModuleReady = ref(false);
+const isWorkbenchViewReady = ref(false);
 const workbenchComponent = shallowRef<Component | null>(null);
-const isRevealingMainWindow = ref(false);
+const isWindowSplashMode = ref(true);
+let revealMainWindowPromise: Promise<void> | null = null;
+let revealDelayTimerId: number | null = null;
 
 const applyNativeWindowStage = async (stage: 'splash' | 'main'): Promise<boolean> => {
   try {
@@ -87,9 +101,12 @@ const applyMainWindowFrame = async (): Promise<void> => {
 };
 
 const loadWorkbenchModule = async (): Promise<void> => {
+  isWorkbenchViewReady.value = false;
+
   try {
     const module = await import('@/views/ShellWorkbenchView.vue');
     workbenchComponent.value = markRaw(module.default);
+    isContentMounted.value = true;
   } catch (error) {
     setRuntimeError('工作台模块加载失败', error);
   } finally {
@@ -98,7 +115,11 @@ const loadWorkbenchModule = async (): Promise<void> => {
 };
 
 const isApplicationReady = computed(
-  () => !runtimeErrorState.value && isWorkbenchModuleReady.value && Boolean(workbenchComponent.value),
+  () =>
+    !runtimeErrorState.value &&
+    isWorkbenchModuleReady.value &&
+    isWorkbenchViewReady.value &&
+    Boolean(workbenchComponent.value),
 );
 
 const isSplashVisible = computed(() => isSplashMounted.value || Boolean(runtimeErrorState.value));
@@ -108,8 +129,56 @@ const setDocumentSplashMode = (enabled: boolean): void => {
   document.body.classList.toggle('splash-window-mode', enabled);
 };
 
+const waitForMainRevealDelay = (): Promise<void> =>
+  new Promise((resolve) => {
+    if (revealDelayTimerId !== null) {
+      window.clearTimeout(revealDelayTimerId);
+    }
+
+    revealDelayTimerId = window.setTimeout(() => {
+      revealDelayTimerId = null;
+      resolve();
+    }, MAIN_CONTENT_REVEAL_DELAY_MS);
+  });
+
+const waitForStablePaint = (): Promise<void> =>
+  new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        resolve();
+      });
+    });
+  });
+
+const revealMainWindow = async (): Promise<void> => {
+  if (runtimeErrorState.value) {
+    return;
+  }
+
+  if (revealMainWindowPromise) {
+    await revealMainWindowPromise;
+    return;
+  }
+
+  isWindowSplashMode.value = false;
+  setDocumentSplashMode(false);
+
+  revealMainWindowPromise = Promise.all([applyMainWindowFrame(), waitForMainRevealDelay()])
+    .then(async () => {
+      isContentMounted.value = true;
+      await nextTick();
+      await waitForStablePaint();
+      isAppContentVisible.value = true;
+    })
+    .finally(() => {
+      revealMainWindowPromise = null;
+    });
+
+  await revealMainWindowPromise;
+};
+
 const handleSplashLeaveStart = (): void => {
-  // 等欢迎窗完全淡出后再显示主界面，避免两层界面同时出现。
+  isAppContentVisible.value = false;
 };
 
 const handleSplashAfterLeave = async (): Promise<void> => {
@@ -117,17 +186,12 @@ const handleSplashAfterLeave = async (): Promise<void> => {
     return;
   }
 
-  if (isRevealingMainWindow.value) {
-    return;
-  }
-
-  isRevealingMainWindow.value = true;
-  await applyMainWindowFrame();
-  isContentMounted.value = true;
   isSplashMounted.value = false;
-  window.requestAnimationFrame(() => {
-    isAppContentVisible.value = true;
-  });
+  await revealMainWindow();
+};
+
+const handleWorkbenchReady = (): void => {
+  isWorkbenchViewReady.value = true;
 };
 
 watch(runtimeErrorState, (error) => {
@@ -135,18 +199,31 @@ watch(runtimeErrorState, (error) => {
     return;
   }
 
+  revealMainWindowPromise = null;
+  if (revealDelayTimerId !== null) {
+    window.clearTimeout(revealDelayTimerId);
+    revealDelayTimerId = null;
+  }
+  isWindowSplashMode.value = true;
+  setDocumentSplashMode(true);
   isSplashMounted.value = true;
   isContentMounted.value = false;
   isAppContentVisible.value = false;
+  isWorkbenchViewReady.value = false;
 });
 
-watch(isSplashVisible, (visible) => setDocumentSplashMode(visible), { immediate: true });
+watch(isWindowSplashMode, (visible) => setDocumentSplashMode(visible), { immediate: true });
 
 onMounted(() => {
   void loadWorkbenchModule();
 });
 
 onBeforeUnmount(() => {
+  if (revealDelayTimerId !== null) {
+    window.clearTimeout(revealDelayTimerId);
+    revealDelayTimerId = null;
+  }
+
   setDocumentSplashMode(false);
 });
 </script>

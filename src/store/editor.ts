@@ -18,6 +18,20 @@ const normalizePath = (value: string | null | undefined): string =>
   value ? value.replace(/\\/g, '/').toLowerCase() : '';
 const MAX_TERMINAL_OUTPUT_LENGTH = 120_000;
 
+const EMPTY_DOCUMENT: Readonly<IEditorDocument> = Object.freeze({
+  id: '',
+  path: null,
+  name: '未打开文件',
+  kind: 'text',
+  content: '',
+  encoding: 'utf-8',
+  savedContent: '',
+  savedEncoding: 'utf-8',
+  isDirty: false,
+  lineCount: 1,
+  charCount: 0,
+});
+
 type TTerminalReplayRequest = {
   runId: string;
   content: string;
@@ -98,34 +112,33 @@ export const useEditorStore = defineStore('editor', () => {
   const lastRunResult = ref<IRunResult | null>(null);
   const isRunning = ref(false);
   const workspaceRootPath = ref<string | null>(null);
+  const protectedWorkspaceRootPaths = ref<string[]>([]);
   const activeDocumentId = ref('');
   const pendingTerminalRunId = ref<string | null>(null);
   const terminalReplayOutput = ref<TTerminalReplayRequest | null>(null);
   const documentAnalysis = ref<Record<string, IAnalyzeScriptPayload>>({});
 
-  const ensureDocumentCollection = (): IEditorDocument => {
-    if (documents.value.length > 0) {
-      const activeDocument = documents.value.find((item) => item.id === activeDocumentId.value);
-      if (activeDocument) {
-        return activeDocument;
-      }
-
-      activeDocumentId.value = documents.value[0].id;
-      return documents.value[0];
+  const syncActiveDocument = (): IEditorDocument | null => {
+    if (documents.value.length === 0) {
+      activeDocumentId.value = '';
+      return null;
     }
 
-    const initialDocument = createDocument(documents.value, { name: 'untitled.sh' });
-    documents.value = [initialDocument];
-    activeDocumentId.value = initialDocument.id;
-    return initialDocument;
+    const activeDocument = documents.value.find((item) => item.id === activeDocumentId.value);
+    if (activeDocument) {
+      return activeDocument;
+    }
+
+    activeDocumentId.value = documents.value[0].id;
+    return documents.value[0];
   };
 
-  const getDocumentById = (documentId?: string | null): IEditorDocument => {
+  const getDocumentById = (documentId?: string | null): IEditorDocument | null => {
     if (!documentId) {
-      return ensureDocumentCollection();
+      return syncActiveDocument();
     }
 
-    return documents.value.find((item) => item.id === documentId) ?? ensureDocumentCollection();
+    return documents.value.find((item) => item.id === documentId) ?? null;
   };
 
   const findDocumentByPath = (path: string): IEditorDocument | undefined => {
@@ -133,7 +146,8 @@ export const useEditorStore = defineStore('editor', () => {
     return documents.value.find((item) => normalizePath(item.path) === normalizedPath);
   };
 
-  const document = computed<IEditorDocument>(() => ensureDocumentCollection());
+  const hasActiveDocument = computed(() => syncActiveDocument() !== null);
+  const document = computed<IEditorDocument>(() => syncActiveDocument() ?? EMPTY_DOCUMENT);
   const documentTitle = computed(() =>
     document.value.isDirty ? `${document.value.name} · 未保存` : document.value.name,
   );
@@ -240,6 +254,10 @@ export const useEditorStore = defineStore('editor', () => {
     payload: IScriptFilePayload,
   ): IEditorDocument => {
     const targetDocument = getDocumentById(documentId);
+    if (!targetDocument) {
+      return openDocumentTab(payload).document;
+    }
+
     targetDocument.path = payload.path;
     targetDocument.name = payload.name;
     targetDocument.kind = 'text';
@@ -255,7 +273,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   const updateDocumentContent = (documentId: string, content: string): void => {
     const targetDocument = getDocumentById(documentId);
-    if (targetDocument.kind !== 'text') {
+    if (!targetDocument || targetDocument.kind !== 'text') {
       return;
     }
 
@@ -269,7 +287,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   const updateDocumentEncoding = (documentId: string, encoding: TDocumentEncoding): void => {
     const targetDocument = getDocumentById(documentId);
-    if (targetDocument.kind !== 'text') {
+    if (!targetDocument || targetDocument.kind !== 'text') {
       return;
     }
 
@@ -281,10 +299,10 @@ export const useEditorStore = defineStore('editor', () => {
     updateDocumentEncoding(document.value.id, encoding);
   };
 
-  const closeDocument = (documentId: string): IEditorDocument => {
+  const closeDocument = (documentId: string): IEditorDocument | null => {
     const targetIndex = documents.value.findIndex((item) => item.id === documentId);
     if (targetIndex === -1) {
-      return ensureDocumentCollection();
+      return syncActiveDocument();
     }
 
     const wasActive = documents.value[targetIndex].id === activeDocumentId.value;
@@ -292,12 +310,10 @@ export const useEditorStore = defineStore('editor', () => {
     documents.value.splice(targetIndex, 1);
 
     if (documents.value.length === 0) {
-      const replacementDocument = createDocument(documents.value, { name: 'untitled.sh' });
-      documents.value = [replacementDocument];
-      activeDocumentId.value = replacementDocument.id;
+      activeDocumentId.value = '';
       cursorLine.value = 1;
       cursorColumn.value = 1;
-      return replacementDocument;
+      return null;
     }
 
     if (wasActive) {
@@ -308,7 +324,7 @@ export const useEditorStore = defineStore('editor', () => {
       return fallbackDocument;
     }
 
-    return ensureDocumentCollection();
+    return syncActiveDocument();
   };
 
   const setEnvironment = (payload: IExecutionEnvironment): void => {
@@ -347,6 +363,18 @@ export const useEditorStore = defineStore('editor', () => {
     workspaceRootPath.value = path;
   };
 
+  const setProtectedWorkspaceRootPaths = (paths: string[]): void => {
+    protectedWorkspaceRootPaths.value = [...paths];
+  };
+
+  const clearDocuments = (): void => {
+    documents.value = [];
+    activeDocumentId.value = '';
+    cursorLine.value = 1;
+    cursorColumn.value = 1;
+    documentAnalysis.value = {};
+  };
+
   const clearLogs = (): void => {
     runLogs.value = [];
     terminalOutput.value = '';
@@ -378,11 +406,19 @@ export const useEditorStore = defineStore('editor', () => {
     documentAnalysis.value = nextValue;
   };
 
-  ensureDocumentCollection();
+  const clearWorkspaceSession = (): void => {
+    clearDocuments();
+    workspaceRootPath.value = null;
+    clearLogs();
+    isRunning.value = false;
+    pendingTerminalRunId.value = null;
+    terminalReplayOutput.value = null;
+  };
 
   return {
     documents,
     document,
+    hasActiveDocument,
     activeDocumentId,
     environment,
     cursorLine,
@@ -393,6 +429,7 @@ export const useEditorStore = defineStore('editor', () => {
     lastRunResult,
     isRunning,
     workspaceRootPath,
+    protectedWorkspaceRootPaths,
     pendingTerminalRunId,
     terminalReplayOutput,
     documentAnalysis,
@@ -422,10 +459,13 @@ export const useEditorStore = defineStore('editor', () => {
     setCursorPosition,
     appendLog,
     setWorkspaceRootPath,
+    setProtectedWorkspaceRootPaths,
     setPendingTerminalRunId,
     queueTerminalReplayOutput,
     setDocumentAnalysis,
     clearDocumentAnalysis,
+    clearDocuments,
+    clearWorkspaceSession,
     clearLogs,
   };
 });

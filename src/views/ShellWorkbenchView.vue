@@ -1,6 +1,7 @@
 <template>
   <AppShellLayout
     :is-desktop-runtime="isDesktopRuntime"
+    :sidebar-visible="isSidebarVisible"
     :terminal-visible="isTerminalVisible"
     :terminal-height="terminalHeight"
     @update:terminal-height="terminalHeight = $event"
@@ -9,6 +10,7 @@
       <WindowTitleBar
         :document-name="editorStore.document.name"
         :is-dirty="editorStore.document.isDirty"
+        :has-active-document="editorStore.hasActiveDocument"
         :document-kind="editorStore.document.kind"
         :theme="appStore.theme"
         :is-running="editorStore.isRunning"
@@ -16,31 +18,39 @@
         :can-save="canSave"
         :is-desktop-runtime="isDesktopRuntime"
         :is-terminal-visible="isTerminalVisible"
+        :is-diagnostics-visible="isDiagnosticsPanelVisible"
+        :can-toggle-diagnostics="canToggleDiagnosticsPanel"
+        :diagnostic-issue-count="diagnosticIssueCount"
         :command-templates="commandTemplates"
         :comment-templates="commentTemplates"
         @new="createNewDocument"
         @open="openDocument"
         @open-folder="openFolder"
+        @close-workspace="requestCloseWorkspace"
         @save="saveDocument"
         @save-as="saveDocumentAs"
         @close-request="requestCloseApplication"
         @run="handleRunScript"
+        @format-document="handleFormatDocument"
         @open-terminal="openTerminal"
         @hide-terminal="hideTerminal"
+        @toggle-diagnostics="toggleDiagnosticsPanel"
         @toggle-theme="toggleTheme"
         @insert-template="handleInsertTemplate"
       />
     </template>
 
     <template #activity>
-      <ActivityRail />
+      <ActivityRail :active-view="activeSidebarView" @select-view="handleSelectSidebarView" />
     </template>
 
     <template #sidebar>
       <AppSidebar
         :document="editorStore.document"
+        :view="activeSidebarView"
         :is-desktop-runtime="isDesktopRuntime"
         :workspace-root-path="editorStore.workspaceRootPath"
+        :preloaded-workspace-root="startupWorkspaceRoot"
         @open-file="openDocumentByPath"
       />
     </template>
@@ -49,31 +59,96 @@
       <WorkbenchHeader
         :documents="editorStore.documents"
         :active-document-id="editorStore.activeDocumentId"
-        :file-path="editorStore.document.path"
+        :file-path="editorStore.hasActiveDocument ? editorStore.document.path : null"
         @select-tab="activateDocument"
         @close-tab="requestCloseDocument"
       />
     </template>
 
-    <div class="h-full">
-      <SmartScriptEditor
-        v-if="editorStore.document.kind === 'text'"
-        ref="editorRef"
-        :document-id="editorStore.document.id"
-        :document-path="editorStore.document.path"
-        :document-name="editorStore.document.name"
-        :model-value="editorStore.document.content"
-        :theme="appStore.theme"
-        @update:model-value="updateContent"
-        @cursor-position-change="handleCursorPositionChange"
-        @diagnostics-change="handleDiagnosticsChange"
-      />
+    <div
+      ref="editorViewportRef"
+      class="workbench-editor-viewport relative h-full min-h-0 overflow-hidden bg-(--editor-bg)"
+      :data-diagnostics-resizing="diagnosticsTransitionsEnabled ? 'false' : 'true'"
+    >
+      <div class="h-full min-h-0">
+        <div
+          v-if="!editorStore.hasActiveDocument"
+          class="flex h-full min-h-0 items-center justify-center px-6"
+        >
+          <div
+            class="flex max-w-md flex-col items-center gap-4 text-center text-(--text-quaternary)"
+          >
+            <div
+              class="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/8 bg-white/3 text-(--text-secondary)"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                class="h-8 w-8"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M14 3H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9z" />
+                <path d="M14 3v6h6" />
+              </svg>
+            </div>
+            <div class="space-y-1">
+              <p class="text-[13px] font-medium text-(--text-secondary)">未打开编辑器</p>
+              <p class="text-[12px] leading-6">
+                {{
+                  editorStore.workspaceRootPath
+                    ? '当前工作区中暂未打开文件。'
+                    : '当前未加载工作区，也没有打开任何文件。'
+                }}
+              </p>
+            </div>
+          </div>
+        </div>
 
-      <ImageAssetPreview
-        v-else-if="editorStore.document.path"
-        :path="editorStore.document.path"
-        :name="editorStore.document.name"
-      />
+        <SmartScriptEditor
+          v-else-if="editorStore.document.kind === 'text'"
+          ref="editorRef"
+          :document-id="editorStore.document.id"
+          :document-path="editorStore.document.path"
+          :document-name="editorStore.document.name"
+          :model-value="editorStore.document.content"
+          :theme="appStore.theme"
+          @update:model-value="updateContent"
+          @cursor-position-change="handleCursorPositionChange"
+          @diagnostics-change="handleDiagnosticsChange"
+          @format-request="handleFormatDocument"
+        />
+
+        <ImageAssetPreview
+          v-else-if="editorStore.document.path"
+          :path="editorStore.document.path"
+          :name="editorStore.document.name"
+        />
+      </div>
+
+      <div
+        v-if="shouldRenderDiagnosticsPanel"
+        class="diagnostics-overlay-panel absolute inset-y-0 right-0 z-20 max-w-full overflow-hidden border-l border-(--shell-divider) bg-(--panel-bg) shadow-[-24px_0_48px_rgba(0,0,0,0.28)]"
+        :style="diagnosticsPanelStyle"
+        :class="[
+          diagnosticsPanelMotionClass,
+          isDiagnosticsPanelVisible
+            ? 'pointer-events-auto translate-x-0 opacity-100'
+            : 'pointer-events-none translate-x-3 opacity-0',
+        ]"
+      >
+        <div class="h-full">
+          <DiagnosticsPanel
+            :analysis="editorStore.activeScriptAnalysis"
+            :content="editorStore.document.content"
+            :document-name="editorStore.document.name"
+            @select-diagnostic="handleSelectDiagnostic"
+          />
+        </div>
+      </div>
     </div>
 
     <template #terminal>
@@ -93,6 +168,7 @@
 
     <template #statusbar>
       <WorkbenchStatusBar
+        :has-active-document="editorStore.hasActiveDocument"
         :document-kind="editorStore.document.kind"
         :is-running="editorStore.isRunning"
         :encoding="editorStore.document.encoding"
@@ -100,11 +176,6 @@
         :cursor-line="editorStore.cursorLine"
         :cursor-column="editorStore.cursorColumn"
         :char-count="editorStore.document.charCount"
-        :diagnostic-available="editorStore.activeScriptAnalysis.available"
-        :diagnostic-message="editorStore.activeScriptAnalysis.message"
-        :diagnostic-errors="editorStore.activeDiagnosticErrors"
-        :diagnostic-warnings="editorStore.activeDiagnosticWarnings"
-        :diagnostic-infos="editorStore.activeDiagnosticInfos"
         @change-encoding="updateEncoding"
       />
     </template>
@@ -117,22 +188,47 @@ import ImageAssetPreview from '@/components/editor/ImageAssetPreview.vue';
 import SmartScriptEditor from '@/components/editor/SmartScriptEditor.vue';
 import ActivityRail from '@/components/workbench/ActivityRail.vue';
 import AppSidebar from '@/components/workbench/AppSidebar.vue';
+import DiagnosticsPanel from '@/components/workbench/DiagnosticsPanel.vue';
 import RunPanel from '@/components/workbench/RunPanel.vue';
 import WorkbenchHeader from '@/components/workbench/WorkbenchHeader.vue';
 import WorkbenchStatusBar from '@/components/workbench/WorkbenchStatusBar.vue';
 import { useWorkbench } from '@/composables/useWorkbench';
 import AppShellLayout from '@/layouts/AppShellLayout.vue';
-import type { IAnalyzeScriptPayload, ICommandTemplate } from '@/types/editor';
-import { onMounted, ref } from 'vue';
+import type { TWorkbenchSidebarView } from '@/types/app';
+import type {
+    IAnalyzeScriptPayload,
+    ICommandTemplate,
+    IWorkspaceDirectoryPayload,
+} from '@/types/editor';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+
+const emit = defineEmits<{
+  ready: [];
+}>();
 
 type TEditorExpose = {
   focusEditor: () => void;
   insertSnippet: (snippet: string) => void;
+  revealPosition: (line: number, column: number) => void;
 };
 
 const editorRef = ref<TEditorExpose | null>(null);
+const editorViewportRef = ref<HTMLElement | null>(null);
 const isTerminalVisible = ref(true);
+const isSidebarVisible = ref(true);
+const isDiagnosticsPanelVisible = ref(false);
+const terminalVisibilityBeforeDiagnostics = ref(false);
 const terminalHeight = ref(236);
+const activeSidebarView = ref<TWorkbenchSidebarView>('explorer');
+const editorViewportWidth = ref(0);
+const diagnosticsTransitionsEnabled = ref(true);
+const startupWorkspaceRoot = ref<IWorkspaceDirectoryPayload | null>(null);
+const hasEmittedReady = ref(false);
+let editorViewportResizeObserver: ResizeObserver | null = null;
+let diagnosticsResizeSettleTimerId: number | null = null;
+let editorViewportResizeFrameId: number | null = null;
+let previousEditorViewportSize = { width: 0, height: 0 };
+let pendingEditorViewportSize: { width: number; height: number } | null = null;
 
 const {
   appStore,
@@ -150,9 +246,11 @@ const {
   saveDocument,
   saveDocumentAs,
   requestCloseDocument,
+  requestCloseWorkspace,
   requestCloseApplication,
   activateDocument,
   runScript,
+  formatDocumentWithShfmt,
   updateContent,
   appendTerminalOutput,
   handleIntegratedTerminalRunComplete,
@@ -161,10 +259,134 @@ const {
   notifyTemplateInserted,
 } = useWorkbench();
 
+const shouldRenderDiagnosticsPanel = computed(
+  () => editorStore.hasActiveDocument && editorStore.document.kind === 'text',
+);
+
+const canToggleDiagnosticsPanel = computed(() => shouldRenderDiagnosticsPanel.value);
+const diagnosticIssueCount = computed(() => editorStore.activeDiagnostics.length);
+const diagnosticsPanelMotionClass = computed(() =>
+  diagnosticsTransitionsEnabled.value
+    ? 'transition-[opacity,transform,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]'
+    : 'transition-none',
+);
+
+const clampNumber = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
+
+const resolveDiagnosticsPanelWidth = (availableWidth: number): number => {
+  const normalizedWidth = Math.max(0, Math.round(availableWidth));
+  if (normalizedWidth <= 0) {
+    return 0;
+  }
+
+  const inset = normalizedWidth >= 960 ? 24 : 16;
+  const hardMaxWidth = Math.max(0, normalizedWidth - inset);
+  if (hardMaxWidth <= 0) {
+    return normalizedWidth;
+  }
+
+  const sizeStrategy =
+    normalizedWidth >= 1680
+      ? { ratio: 0.28, minWidth: 320, softMaxWidth: 460 }
+      : normalizedWidth >= 1440
+        ? { ratio: 0.3, minWidth: 300, softMaxWidth: 440 }
+        : normalizedWidth >= 1200
+          ? { ratio: 0.32, minWidth: 280, softMaxWidth: 420 }
+          : normalizedWidth >= 960
+            ? { ratio: 0.34, minWidth: 260, softMaxWidth: 400 }
+            : normalizedWidth >= 760
+              ? { ratio: 0.38, minWidth: 220, softMaxWidth: 360 }
+              : { ratio: 0.46, minWidth: 180, softMaxWidth: 320 };
+
+  const resolvedMaxWidth = Math.min(hardMaxWidth, sizeStrategy.softMaxWidth);
+  const resolvedMinWidth = Math.min(sizeStrategy.minWidth, resolvedMaxWidth);
+  const preferredWidth = Math.round(normalizedWidth * sizeStrategy.ratio);
+
+  return clampNumber(preferredWidth, resolvedMinWidth, resolvedMaxWidth);
+};
+
+const diagnosticsPanelStyle = computed(() => {
+  const availableWidth = editorViewportWidth.value;
+  if (availableWidth <= 0) {
+    return undefined;
+  }
+
+  const resolvedWidth = resolveDiagnosticsPanelWidth(availableWidth);
+
+  return {
+    width: `${resolvedWidth}px`,
+    maxWidth: '100%',
+  };
+});
+
+const scheduleDiagnosticsTransitionRestore = (): void => {
+  if (diagnosticsResizeSettleTimerId !== null) {
+    window.clearTimeout(diagnosticsResizeSettleTimerId);
+  }
+
+  diagnosticsResizeSettleTimerId = window.setTimeout(() => {
+    diagnosticsTransitionsEnabled.value = true;
+    diagnosticsResizeSettleTimerId = null;
+  }, 140);
+};
+
+const handleEditorViewportResize = (width: number, height: number): void => {
+  const normalizedWidth = Math.round(width);
+  const normalizedHeight = Math.round(height);
+
+  if (normalizedWidth <= 0 || normalizedHeight <= 0) {
+    return;
+  }
+
+  if (editorViewportWidth.value !== normalizedWidth) {
+    editorViewportWidth.value = normalizedWidth;
+  }
+
+  if (
+    previousEditorViewportSize.width === normalizedWidth &&
+    previousEditorViewportSize.height === normalizedHeight
+  ) {
+    return;
+  }
+
+  previousEditorViewportSize = { width: normalizedWidth, height: normalizedHeight };
+  diagnosticsTransitionsEnabled.value = false;
+  scheduleDiagnosticsTransitionRestore();
+};
+
+const flushEditorViewportResize = (): void => {
+  editorViewportResizeFrameId = null;
+  if (!pendingEditorViewportSize) {
+    return;
+  }
+
+  const { width, height } = pendingEditorViewportSize;
+  pendingEditorViewportSize = null;
+  handleEditorViewportResize(width, height);
+};
+
+const queueEditorViewportResize = (width: number, height: number): void => {
+  pendingEditorViewportSize = {
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+
+  if (editorViewportResizeFrameId !== null) {
+    return;
+  }
+
+  editorViewportResizeFrameId = window.requestAnimationFrame(flushEditorViewportResize);
+};
+
 const handleInsertTemplate = (template: ICommandTemplate): void => {
   editorRef.value?.insertSnippet(template.snippet);
   editorRef.value?.focusEditor();
   notifyTemplateInserted(template);
+};
+
+const handleFormatDocument = async (): Promise<void> => {
+  await formatDocumentWithShfmt();
 };
 
 const handleCursorPositionChange = (line: number, column: number): void => {
@@ -175,20 +397,161 @@ const handleDiagnosticsChange = (documentId: string, payload: IAnalyzeScriptPayl
   editorStore.setDocumentAnalysis(documentId, payload);
 };
 
+const handleSelectDiagnostic = (line: number, column: number): void => {
+  editorRef.value?.revealPosition(line, column);
+  editorRef.value?.focusEditor();
+};
+
+const resetDiagnosticsTerminalLink = (): void => {
+  terminalVisibilityBeforeDiagnostics.value = false;
+};
+
+const openDiagnosticsPanel = (): void => {
+  if (!canToggleDiagnosticsPanel.value || isDiagnosticsPanelVisible.value) {
+    return;
+  }
+
+  terminalVisibilityBeforeDiagnostics.value = isTerminalVisible.value;
+  isDiagnosticsPanelVisible.value = true;
+
+  if (isTerminalVisible.value) {
+    isTerminalVisible.value = false;
+  }
+};
+
+const closeDiagnosticsPanel = (restoreTerminal = true): void => {
+  if (!isDiagnosticsPanelVisible.value) {
+    resetDiagnosticsTerminalLink();
+    return;
+  }
+
+  const shouldRestoreTerminal = terminalVisibilityBeforeDiagnostics.value;
+  isDiagnosticsPanelVisible.value = false;
+  resetDiagnosticsTerminalLink();
+
+  if (restoreTerminal && shouldRestoreTerminal) {
+    isTerminalVisible.value = true;
+  }
+};
+
 const openTerminal = (): void => {
+  if (isDiagnosticsPanelVisible.value) {
+    closeDiagnosticsPanel(false);
+  }
+
+  resetDiagnosticsTerminalLink();
   isTerminalVisible.value = true;
 };
 
+const toggleSidebar = (): void => {
+  isSidebarVisible.value = !isSidebarVisible.value;
+};
+
+const toggleDiagnosticsPanel = (): void => {
+  if (!canToggleDiagnosticsPanel.value) {
+    return;
+  }
+
+  if (isDiagnosticsPanelVisible.value) {
+    closeDiagnosticsPanel();
+    return;
+  }
+
+  openDiagnosticsPanel();
+};
+
+const handleSelectSidebarView = (view: TWorkbenchSidebarView): void => {
+  if (activeSidebarView.value === view) {
+    toggleSidebar();
+    return;
+  }
+
+  activeSidebarView.value = view;
+  isSidebarVisible.value = true;
+};
+
 const hideTerminal = (): void => {
+  resetDiagnosticsTerminalLink();
   isTerminalVisible.value = false;
 };
 
+const emitWorkbenchReady = async (): Promise<void> => {
+  if (hasEmittedReady.value) {
+    return;
+  }
+
+  await nextTick();
+  await new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
+
+  hasEmittedReady.value = true;
+  emit('ready');
+};
+
+const initializeWorkbench = async (): Promise<void> => {
+  const result = await initialize();
+  startupWorkspaceRoot.value = result.startupWorkspaceDirectory;
+  await emitWorkbenchReady();
+};
+
 const handleRunScript = async (): Promise<void> => {
+  if (isDiagnosticsPanelVisible.value) {
+    closeDiagnosticsPanel(false);
+  }
+
+  resetDiagnosticsTerminalLink();
   isTerminalVisible.value = true;
   await runScript();
 };
 
+watch(
+  () => [editorStore.hasActiveDocument, editorStore.document.kind],
+  () => {
+    if (!shouldRenderDiagnosticsPanel.value && isDiagnosticsPanelVisible.value) {
+      closeDiagnosticsPanel();
+    }
+  },
+  { immediate: true },
+);
+
 onMounted(() => {
-  void initialize();
+  if (editorViewportRef.value) {
+    previousEditorViewportSize = {
+      width: editorViewportRef.value.clientWidth,
+      height: editorViewportRef.value.clientHeight,
+    };
+    editorViewportWidth.value = editorViewportRef.value.clientWidth;
+  }
+
+  if (typeof ResizeObserver !== 'undefined' && editorViewportRef.value) {
+    editorViewportResizeObserver = new ResizeObserver((entries) => {
+      const targetEntry = entries[0];
+      if (!targetEntry) {
+        return;
+      }
+
+      queueEditorViewportResize(targetEntry.contentRect.width, targetEntry.contentRect.height);
+    });
+    editorViewportResizeObserver.observe(editorViewportRef.value);
+  }
+
+  void initializeWorkbench();
+});
+
+onBeforeUnmount(() => {
+  editorViewportResizeObserver?.disconnect();
+
+  if (editorViewportResizeFrameId !== null) {
+    window.cancelAnimationFrame(editorViewportResizeFrameId);
+    editorViewportResizeFrameId = null;
+  }
+
+  if (diagnosticsResizeSettleTimerId !== null) {
+    window.clearTimeout(diagnosticsResizeSettleTimerId);
+    diagnosticsResizeSettleTimerId = null;
+  }
 });
 </script>

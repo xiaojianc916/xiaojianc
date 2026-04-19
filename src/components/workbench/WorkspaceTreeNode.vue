@@ -26,52 +26,14 @@
         </svg>
       </span>
 
-      <svg
-        v-if="isDirectory"
-        viewBox="0 0 24 24"
-        class="h-4 w-4 shrink-0 text-[var(--warning)]"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path d="M3.5 7.5h6l1.8 2H20v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
-        <path d="M3.5 9.5V7a2 2 0 0 1 2-2h4" />
-      </svg>
-
-      <svg
-        v-else-if="isImageFile"
-        viewBox="0 0 24 24"
-        class="h-4 w-4 shrink-0 text-[var(--accent-strong)]"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <rect x="4" y="5" width="16" height="14" rx="2" />
-        <path d="m7.5 15 3.4-3.4a1 1 0 0 1 1.4 0L16.5 16" />
-        <path d="m14.5 14 1.5-1.5a1 1 0 0 1 1.4 0L19 14" />
-        <circle cx="9" cy="9" r="1.2" />
-      </svg>
-
-      <svg
-        v-else
-        viewBox="0 0 24 24"
-        class="h-4 w-4 shrink-0 text-[var(--accent-strong)]"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-        <path d="M14 3v5h5" />
-      </svg>
+      <FileEntryIcon
+        :kind="entry.kind"
+        :path="entry.path"
+        :expanded="isExpanded"
+        class="h-4 w-4 shrink-0"
+      />
 
       <span class="min-w-0 flex-1 truncate">{{ entry.name }}</span>
-      <span v-if="isActive && activeDirty" class="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--warning)]" />
     </button>
 
     <div v-if="isDirectory && isExpanded">
@@ -96,10 +58,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import type { CSSProperties } from 'vue';
+import FileEntryIcon from '@/components/common/FileEntryIcon.vue';
 import type { IWorkspaceEntry } from '@/types/editor';
-import { isImageAssetPath } from '@/utils/file-assets';
+import type { CSSProperties } from 'vue';
+import { computed } from 'vue';
 
 defineOptions({
   name: 'WorkspaceTreeNode',
@@ -127,7 +89,6 @@ const isDirectory = computed(() => props.entry.kind === 'directory');
 const isExpanded = computed(() => Boolean(props.expandedPaths[props.entry.path]));
 const isLoading = computed(() => Boolean(props.loadingPaths[props.entry.path]));
 const childEntries = computed(() => props.childrenMap[props.entry.path] ?? []);
-const isImageFile = computed(() => !isDirectory.value && isImageAssetPath(props.entry.path));
 const isActive = computed(
   () => normalizePath(props.entry.path) === normalizePath(props.activePath),
 );

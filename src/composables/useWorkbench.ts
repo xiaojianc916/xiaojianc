@@ -8,14 +8,13 @@ import type {
   IEditorDocument,
   IExecutionEnvironment,
   IRunResult,
-  TDocumentEncoding
+  TDocumentEncoding,
+  IWorkspaceDirectoryPayload,
 } from '@/types/editor';
-import {
-  DEFAULT_TERMINAL_SESSION_ID,
-  type ITerminalRunCompletePayload,
-} from '@/types/terminal';
+import { DEFAULT_TERMINAL_SESSION_ID, type ITerminalRunCompletePayload } from '@/types/terminal';
 import { desktopRuntimeReady, waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import { getFileBaseName, isImageAssetPath } from '@/utils/file-assets';
+import { formatShellScript } from '@/utils/shfmt';
 import {
   COMMAND_TEMPLATES,
   COMMENT_TEMPLATES,
@@ -37,35 +36,52 @@ const TERMINAL_OUTPUT_BATCH_INTERVAL_MS = 16;
 
 const isTextDocument = (document: IEditorDocument): boolean => document.kind === 'text';
 
-const normalizeLocalPath = (path: string): string => path.replace(/\\/g, '/');
-
-const getParentDirectory = (path: string): string | null => {
-  const normalizedPath = normalizeLocalPath(path);
-  const separatorIndex = normalizedPath.lastIndexOf('/');
-  if (separatorIndex <= 0) {
-    return null;
-  }
-
-  return path.slice(0, separatorIndex);
-};
-
 const getPathName = (path: string): string => {
-  const normalizedPath = normalizeLocalPath(path).replace(/\/+$/, '');
+  const normalizedPath = path.replace(/\\/g, '/').replace(/\/+$/, '');
   const segments = normalizedPath.split('/');
   return segments.length > 0 ? segments[segments.length - 1] || normalizedPath : normalizedPath;
 };
 
 type TDirtyCloseAction = 'save' | 'discard' | 'cancel';
+type TDirtyCloseScene =
+  | 'close-document'
+  | 'close-application'
+  | 'close-workspace'
+  | 'switch-workspace';
 
 const resolveCloseConfirmMessage = (
   dirtyDocuments: IEditorDocument[],
-  scene: 'close-document' | 'close-application',
+  scene: TDirtyCloseScene,
 ): { title: string; message: string } => {
   if (scene === 'close-document') {
     return {
       title: '未保存的更改',
       message: `文件“${dirtyDocuments[0]?.name ?? '当前文件'}”仍有未保存内容，是否保存后再关闭？`,
     };
+  }
+
+  if (scene === 'close-workspace') {
+    return dirtyDocuments.length === 1
+      ? {
+          title: '未保存的更改',
+          message: `文件“${dirtyDocuments[0]?.name ?? '当前文件'}”仍有未保存内容，是否保存后再关闭工作区？`,
+        }
+      : {
+          title: '未保存的更改',
+          message: `当前有 ${dirtyDocuments.length} 个文件尚未保存，是否保存后再关闭工作区？`,
+        };
+  }
+
+  if (scene === 'switch-workspace') {
+    return dirtyDocuments.length === 1
+      ? {
+          title: '未保存的更改',
+          message: `文件“${dirtyDocuments[0]?.name ?? '当前文件'}”仍有未保存内容，是否保存后再切换工作区？`,
+        }
+      : {
+          title: '未保存的更改',
+          message: `当前有 ${dirtyDocuments.length} 个文件尚未保存，是否保存后再切换工作区？`,
+        };
   }
 
   if (dirtyDocuments.length === 1) {
@@ -86,24 +102,28 @@ export const useWorkbench = () => {
   const editorStore = useEditorStore();
   let bufferedTerminalOutput = '';
   let bufferedTerminalOutputTimerId: number | null = null;
-  let activeTerminalRunMeta:
-    | {
-      runId: string;
-      startedAt: string;
-      commandLine: string;
-      usedTempFile: boolean;
-      receivedLiveOutput: boolean;
-    }
-    | null = null;
+  let activeTerminalRunMeta: {
+    runId: string;
+    startedAt: string;
+    commandLine: string;
+    usedTempFile: boolean;
+    receivedLiveOutput: boolean;
+  } | null = null;
 
   const canRun = computed(() => {
-    if (!isTextDocument(editorStore.document) || editorStore.document.content.trim().length <= 0) {
+    if (!editorStore.hasActiveDocument || !isTextDocument(editorStore.document)) {
+      return false;
+    }
+
+    if (editorStore.document.content.trim().length <= 0) {
       return false;
     }
 
     return editorStore.environment.hasAny;
   });
-  const canSave = computed(() => isTextDocument(editorStore.document));
+  const canSave = computed(
+    () => editorStore.hasActiveDocument && isTextDocument(editorStore.document),
+  );
 
   const getAppWindow = async () => {
     const runtimeReady = await waitForDesktopRuntime();
@@ -154,10 +174,7 @@ export const useWorkbench = () => {
     return message.includes('目标终端会话不存在');
   };
 
-  const dispatchScriptToIntegratedTerminal = async (
-    document: IEditorDocument,
-    runId: string,
-  ) => {
+  const dispatchScriptToIntegratedTerminal = async (document: IEditorDocument, runId: string) => {
     try {
       return await tauriService.dispatchScriptToTerminal({
         sessionId: DEFAULT_TERMINAL_SESSION_ID,
@@ -193,7 +210,7 @@ export const useWorkbench = () => {
 
   const confirmCloseForDirtyDocuments = async (
     dirtyDocuments: IEditorDocument[],
-    scene: 'close-document' | 'close-application',
+    scene: TDirtyCloseScene,
   ): Promise<TDirtyCloseAction> => {
     if (dirtyDocuments.length === 0) {
       return 'discard';
@@ -218,22 +235,10 @@ export const useWorkbench = () => {
     }
   };
 
-  const syncWorkspaceRootByPath = (path: string | null): void => {
-    if (!path) {
-      return;
-    }
-
-    const parentDirectory = getParentDirectory(path);
-    if (parentDirectory) {
-      editorStore.setWorkspaceRootPath(parentDirectory);
-    }
-  };
-
   const loadDocumentFromPath = async (path: string, scene: string): Promise<void> => {
     if (isImageAssetPath(path)) {
       const imageName = getFileBaseName(path);
       const result = editorStore.openImageDocument(path, imageName);
-      syncWorkspaceRootByPath(path);
 
       if (result.reusedExisting) {
         editorStore.appendLog('info', scene, buildLogDetail('切换到已打开图片', path));
@@ -248,7 +253,6 @@ export const useWorkbench = () => {
 
     const payload = await tauriService.loadScript(path);
     const result = editorStore.openDocumentTab(payload);
-    syncWorkspaceRootByPath(payload.path);
 
     if (result.reusedExisting) {
       editorStore.appendLog('info', scene, buildLogDetail('切换到已打开文件', payload.path));
@@ -260,7 +264,11 @@ export const useWorkbench = () => {
     useMessage().success(`已打开 ${payload.name}`);
   };
 
-  const initialize = async (): Promise<void> => {
+  const initialize = async (): Promise<{
+    startupWorkspaceDirectory: IWorkspaceDirectoryPayload | null;
+  }> => {
+    let startupWorkspaceDirectory: IWorkspaceDirectoryPayload | null = null;
+
     const runtimeReady = await waitForDesktopRuntime();
     if (!runtimeReady) {
       editorStore.setEnvironment(EMPTY_ENVIRONMENT);
@@ -270,7 +278,9 @@ export const useWorkbench = () => {
         '浏览器预览模式',
         '当前界面运行在浏览器预览环境，默认执行方案为 WSL2，打开、保存与执行脚本仅在 Tauri 桌面端可用。',
       );
-      return;
+      return {
+        startupWorkspaceDirectory,
+      };
     }
 
     try {
@@ -289,6 +299,35 @@ export const useWorkbench = () => {
       editorStore.appendLog('error', '执行环境检测失败', message);
       useMessage().error(message);
     }
+
+    try {
+      const startupWorkspace = await tauriService.getStartupWorkspace();
+      editorStore.setProtectedWorkspaceRootPaths(startupWorkspace.protectedRootPaths);
+
+      try {
+        startupWorkspaceDirectory = await tauriService.listWorkspaceEntries(
+          undefined,
+          startupWorkspace.rootPath,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '加载默认文件夹目录结构失败';
+        editorStore.appendLog('error', '加载默认文件夹目录结构失败', message);
+      }
+
+      editorStore.setWorkspaceRootPath(startupWorkspace.rootPath);
+
+      if (startupWorkspace.defaultFilePath) {
+        await loadDocumentFromPath(startupWorkspace.defaultFilePath, '加载默认工作区');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '加载默认工作区失败';
+      editorStore.appendLog('error', '加载默认工作区失败', message);
+      useMessage().error(message);
+    }
+
+    return {
+      startupWorkspaceDirectory,
+    };
   };
 
   const createNewDocument = (): void => {
@@ -319,6 +358,20 @@ export const useWorkbench = () => {
         return;
       }
 
+      const dirtyDocuments = editorStore.dirtyDocuments;
+      const action = await confirmCloseForDirtyDocuments(dirtyDocuments, 'switch-workspace');
+      if (action === 'cancel') {
+        return;
+      }
+
+      if (action === 'save') {
+        const saved = await saveDirtyDocuments(dirtyDocuments.map((item) => item.id));
+        if (!saved) {
+          return;
+        }
+      }
+
+      editorStore.clearDocuments();
       editorStore.setWorkspaceRootPath(path);
       editorStore.appendLog('success', '打开文件夹', buildLogDetail('资源目录', path));
       useMessage().success(`已打开文件夹 ${getPathName(path)}`);
@@ -334,7 +387,6 @@ export const useWorkbench = () => {
       const existingDocument = editorStore.findDocumentByPath(path);
       if (existingDocument) {
         editorStore.setActiveDocument(existingDocument.id);
-        syncWorkspaceRootByPath(existingDocument.path);
         useMessage().success(`已切换到 ${existingDocument.name}`);
         return;
       }
@@ -347,8 +399,105 @@ export const useWorkbench = () => {
     }
   };
 
+  const formatDocumentWithShfmt = async (
+    documentId = editorStore.document.id,
+  ): Promise<boolean> => {
+    const targetDocument = editorStore.getDocumentById(documentId);
+    if (!targetDocument) {
+      useMessage().warning('当前没有可格式化的脚本文件。');
+      return false;
+    }
+
+    if (!isTextDocument(targetDocument)) {
+      useMessage().warning('当前图片预览不支持 shfmt 格式化。');
+      return false;
+    }
+
+    try {
+      const formattedContent = await formatShellScript(
+        targetDocument.content,
+        targetDocument.path ?? targetDocument.name,
+      );
+      const hasChanges = formattedContent !== targetDocument.content;
+
+      editorStore.updateDocumentContent(documentId, formattedContent);
+      editorStore.appendLog(
+        'success',
+        'shfmt 格式化',
+        hasChanges
+          ? `已格式化当前文件：${targetDocument.name}。`
+          : `当前文件已符合 shfmt 格式：${targetDocument.name}。`,
+      );
+      useMessage().success(
+        hasChanges ? '已通过 shfmt 格式化当前文件' : '当前文件已符合 shfmt 格式',
+      );
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'shfmt 格式化失败';
+      editorStore.appendLog('error', 'shfmt 格式化失败', message);
+      useMessage().error(message);
+      return false;
+    }
+  };
+
+  const formatWorkspaceFileByPath = async (path: string): Promise<boolean> => {
+    try {
+      const existingDocument = editorStore.findDocumentByPath(path);
+      if (existingDocument && !isTextDocument(existingDocument)) {
+        useMessage().warning('当前目标不是可由 shfmt 处理的脚本文件。');
+        return false;
+      }
+
+      const sourceDocument =
+        existingDocument && isTextDocument(existingDocument)
+          ? {
+              path: existingDocument.path,
+              name: existingDocument.name,
+              content: existingDocument.content,
+              encoding: existingDocument.encoding,
+            }
+          : await tauriService.loadScript(path);
+
+      const formattedContent = await formatShellScript(
+        sourceDocument.content,
+        sourceDocument.path ?? sourceDocument.name,
+      );
+      const savedPayload = await tauriService.saveScript({
+        path,
+        content: formattedContent,
+        encoding: sourceDocument.encoding,
+      });
+      const hasChanges = formattedContent !== sourceDocument.content;
+
+      if (existingDocument && isTextDocument(existingDocument)) {
+        editorStore.applyDocumentPayload(existingDocument.id, savedPayload);
+      }
+
+      editorStore.appendLog(
+        'success',
+        'shfmt 格式化',
+        buildLogDetail(hasChanges ? '已格式化文件' : '已检查文件', savedPayload.path),
+      );
+      useMessage().success(
+        hasChanges
+          ? `已通过 shfmt 格式化 ${savedPayload.name}`
+          : `${savedPayload.name} 已符合 shfmt 格式`,
+      );
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '工作区文件 shfmt 格式化失败';
+      editorStore.appendLog('error', '工作区文件 shfmt 格式化失败', message);
+      useMessage().error(message);
+      return false;
+    }
+  };
+
   const saveDocumentAs = async (documentId = editorStore.document.id): Promise<boolean> => {
     const targetDocument = editorStore.getDocumentById(documentId);
+    if (!targetDocument) {
+      return false;
+    }
+
     if (!isTextDocument(targetDocument)) {
       useMessage().warning('当前图片预览为只读模式，暂不支持另存为。');
       return false;
@@ -369,7 +518,6 @@ export const useWorkbench = () => {
       });
 
       editorStore.applyDocumentPayload(documentId, payload);
-      syncWorkspaceRootByPath(payload.path);
       editorStore.appendLog('success', '另存为成功', buildLogDetail('保存路径', payload.path));
       useMessage().success('脚本已另存为');
       return true;
@@ -383,6 +531,10 @@ export const useWorkbench = () => {
 
   const saveDocument = async (documentId = editorStore.document.id): Promise<boolean> => {
     const targetDocument = editorStore.getDocumentById(documentId);
+    if (!targetDocument) {
+      return false;
+    }
+
     if (!isTextDocument(targetDocument)) {
       useMessage().warning('当前图片预览为只读模式，无需保存。');
       return false;
@@ -400,7 +552,6 @@ export const useWorkbench = () => {
       });
 
       editorStore.applyDocumentPayload(documentId, payload);
-      syncWorkspaceRootByPath(payload.path);
       editorStore.appendLog('success', '保存成功', buildLogDetail('保存路径', payload.path));
       useMessage().success('脚本已保存');
       return true;
@@ -415,6 +566,10 @@ export const useWorkbench = () => {
   const saveDirtyDocuments = async (documentIds: string[]): Promise<boolean> => {
     for (const documentId of documentIds) {
       const targetDocument = editorStore.getDocumentById(documentId);
+      if (!targetDocument) {
+        continue;
+      }
+
       if (!targetDocument.isDirty) {
         continue;
       }
@@ -430,6 +585,10 @@ export const useWorkbench = () => {
 
   const requestCloseDocument = async (documentId: string): Promise<void> => {
     const targetDocument = editorStore.getDocumentById(documentId);
+    if (!targetDocument) {
+      return;
+    }
+
     if (!targetDocument.isDirty) {
       editorStore.closeDocument(documentId);
       return;
@@ -448,6 +607,24 @@ export const useWorkbench = () => {
     }
 
     editorStore.closeDocument(documentId);
+  };
+
+  const requestCloseWorkspace = async (): Promise<void> => {
+    const dirtyDocuments = editorStore.dirtyDocuments;
+    const action = await confirmCloseForDirtyDocuments(dirtyDocuments, 'close-workspace');
+    if (action === 'cancel') {
+      return;
+    }
+
+    if (action === 'save') {
+      const saved = await saveDirtyDocuments(dirtyDocuments.map((item) => item.id));
+      if (!saved) {
+        return;
+      }
+    }
+
+    editorStore.clearWorkspaceSession();
+    useMessage().success('工作区已关闭');
   };
 
   const requestCloseApplication = async (): Promise<void> => {
@@ -551,7 +728,8 @@ export const useWorkbench = () => {
     flushBufferedTerminalOutput();
     const activeRun = activeTerminalRunMeta;
     const safeOutput = payload.output;
-    const hadLiveTerminalOutput = Boolean(activeRun?.receivedLiveOutput) || editorStore.terminalOutput.length > 0;
+    const hadLiveTerminalOutput =
+      Boolean(activeRun?.receivedLiveOutput) || editorStore.terminalOutput.length > 0;
     if (safeOutput) {
       editorStore.setTerminalOutput(safeOutput);
     }
@@ -564,7 +742,10 @@ export const useWorkbench = () => {
       });
     }
     const durationMs = activeRun
-      ? Math.max(0, new Date(payload.finishedAt).getTime() - new Date(activeRun.startedAt).getTime())
+      ? Math.max(
+          0,
+          new Date(payload.finishedAt).getTime() - new Date(activeRun.startedAt).getTime(),
+        )
       : 0;
     const runResult: IRunResult = {
       success: payload.exitCode === 0,
@@ -626,8 +807,8 @@ export const useWorkbench = () => {
     let shouldKeepRunning = false;
 
     try {
-      shouldKeepRunning = true;
       await runScriptInIntegratedTerminal(currentDocument);
+      shouldKeepRunning = true;
     } catch (error) {
       shouldKeepRunning = false;
       resetBufferedTerminalOutput();
@@ -668,6 +849,10 @@ export const useWorkbench = () => {
   };
 
   const updateEncoding = (value: TDocumentEncoding): void => {
+    if (!editorStore.hasActiveDocument) {
+      return;
+    }
+
     editorStore.updateActiveDocumentEncoding(value);
     editorStore.appendLog('info', '切换编码', `当前编码已切换为 ${value.toUpperCase()}。`);
   };
@@ -694,9 +879,12 @@ export const useWorkbench = () => {
     openDocument,
     openFolder,
     openDocumentByPath,
+    formatDocumentWithShfmt,
+    formatWorkspaceFileByPath,
     saveDocument,
     saveDocumentAs,
     requestCloseDocument,
+    requestCloseWorkspace,
     requestCloseApplication,
     activateDocument,
     runScript,

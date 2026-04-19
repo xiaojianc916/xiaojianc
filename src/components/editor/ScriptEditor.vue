@@ -1,61 +1,19 @@
 <template>
   <div class="shell-editor-surface relative h-full min-h-0 w-full bg-[var(--editor-bg)]">
     <div ref="containerRef" class="h-full min-h-0 w-full bg-[var(--editor-bg)]" />
-
-    <aside
-      v-if="shouldShowOverlay"
-      class="shell-diagnostic-overlay"
-      :class="overlayToneClass"
-    >
-      <div class="shell-diagnostic-overlay-head">
-        <div>
-          <p class="shell-diagnostic-overlay-eyebrow">实时诊断</p>
-          <p class="shell-diagnostic-overlay-title">ShellCheck / {{ analysisState.dialect }}</p>
-        </div>
-        <span class="shell-diagnostic-overlay-count mono-text">
-          {{ overlaySummaryLabel }}
-        </span>
-      </div>
-
-      <p v-if="analysisState.message && !analysisState.available" class="shell-diagnostic-overlay-message">
-        {{ analysisState.message }}
-      </p>
-
-      <div v-else class="shell-diagnostic-overlay-list">
-        <article
-          v-for="item in overlayDiagnostics"
-          :key="`${item.code}-${item.line}-${item.column}-${item.message}`"
-          class="shell-diagnostic-card"
-          :class="diagnosticCardToneClass(item.level)"
-        >
-          <div class="shell-diagnostic-card-head">
-            <span class="shell-diagnostic-card-badge" :class="diagnosticBadgeToneClass(item.level)">
-              {{ severityLabel(item.level) }}
-            </span>
-            <span class="mono-text shell-diagnostic-card-position">
-              L{{ item.line }}:{{ item.column }} · {{ item.code }}
-            </span>
-          </div>
-          <p class="shell-diagnostic-card-message">{{ item.message }}</p>
-          <div class="shell-diagnostic-card-snippet mono-text">
-            <span class="shell-diagnostic-card-line">{{ item.line }}</span>
-            <span class="truncate">{{ excerptFor(item) }}</span>
-          </div>
-        </article>
-      </div>
-    </aside>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { TThemeMode } from '@/types/app';
-import type { IAnalyzeScriptPayload, IScriptDiagnostic, TScriptDiagnosticSeverity } from '@/types/editor';
+import type { IAnalyzeScriptPayload, TScriptDiagnosticSeverity } from '@/types/editor';
 import { monaco } from '@/utils/monaco';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 interface IEditorExpose {
   focusEditor: () => void;
   insertSnippet: (snippet: string) => void;
+  revealPosition: (line: number, column: number) => void;
 }
 
 const createEmptyAnalysis = (): IAnalyzeScriptPayload => ({
@@ -74,65 +32,24 @@ const props = withDefaults(
   {
     modelValue: '',
     theme: 'dark',
+    analysis: undefined,
   },
 );
 
 const emit = defineEmits<{
   'update:modelValue': [value: string];
   'cursor-position-change': [line: number, column: number];
+  'format-request': [];
 }>();
 
 const containerRef = ref<HTMLElement | null>(null);
+const analysisState = computed(() => props.analysis ?? createEmptyAnalysis());
+
 let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
 let suppressModelValueEmit = false;
 let resizeObserver: ResizeObserver | null = null;
-const activeCursorLine = ref(1);
-
-const analysisState = computed(() => props.analysis ?? createEmptyAnalysis());
-const normalizedLines = computed(() =>
-  (props.modelValue ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n'),
-);
-
-const overlayDiagnostics = computed<IScriptDiagnostic[]>(() => {
-  const diagnostics = analysisState.value.diagnostics;
-  if (diagnostics.length === 0) {
-    return [];
-  }
-
-  const activeLineMatches = diagnostics.filter(
-    (item) => activeCursorLine.value >= item.line && activeCursorLine.value <= item.endLine,
-  );
-
-  return (activeLineMatches.length > 0 ? activeLineMatches : diagnostics).slice(0, 3);
-});
-
-const shouldShowOverlay = computed(
-  () => !analysisState.value.available || overlayDiagnostics.value.length > 0,
-);
-
-const overlaySummaryLabel = computed(() => {
-  if (!analysisState.value.available) {
-    return '未就绪';
-  }
-
-  return `${analysisState.value.diagnostics.length} 项`;
-});
-
-const overlayToneClass = computed(() => {
-  if (!analysisState.value.available) {
-    return 'is-warning';
-  }
-
-  const highestLevel = overlayDiagnostics.value[0]?.level;
-  if (highestLevel === 'error') {
-    return 'is-danger';
-  }
-  if (highestLevel === 'warning') {
-    return 'is-warning';
-  }
-
-  return 'is-info';
-});
+let editorLayoutFrameId: number | null = null;
+let previousContainerSize = { width: 0, height: 0 };
 
 const toMarkerSeverity = (level: TScriptDiagnosticSeverity): monaco.MarkerSeverity => {
   switch (level) {
@@ -169,48 +86,19 @@ const syncMarkers = (): void => {
   monaco.editor.setModelMarkers(model, 'shellcheck', markers);
 };
 
-const excerptFor = (diagnostic: IScriptDiagnostic): string => {
-  const lineText = normalizedLines.value[diagnostic.line - 1] ?? '';
-  return lineText.trim() || '(空行)';
-};
-
-const severityLabel = (level: TScriptDiagnosticSeverity): string => {
-  switch (level) {
-    case 'error':
-      return '错误';
-    case 'warning':
-      return '警告';
-    case 'style':
-      return '风格';
-    default:
-      return '提示';
-  }
-};
-
-const diagnosticCardToneClass = (level: TScriptDiagnosticSeverity): string => {
-  switch (level) {
-    case 'error':
-      return 'is-danger';
-    case 'warning':
-      return 'is-warning';
-    default:
-      return 'is-info';
-  }
-};
-
-const diagnosticBadgeToneClass = (level: TScriptDiagnosticSeverity): string => {
-  switch (level) {
-    case 'error':
-      return 'is-danger';
-    case 'warning':
-      return 'is-warning';
-    default:
-      return 'is-info';
-  }
-};
-
 const layoutEditor = (): void => {
   editorInstance?.layout();
+};
+
+const scheduleEditorLayout = (): void => {
+  if (editorLayoutFrameId !== null) {
+    return;
+  }
+
+  editorLayoutFrameId = window.requestAnimationFrame(() => {
+    editorLayoutFrameId = null;
+    layoutEditor();
+  });
 };
 
 const setTheme = (theme: TThemeMode): void => {
@@ -234,7 +122,7 @@ const createEditor = (): void => {
     lineNumbersMinChars: 3,
     fontSize: 13,
     fontWeight: '400',
-    fontFamily: `Berkeley Mono, JetBrains Mono, Consolas, 'Courier New', monospace`,
+    fontFamily: "Berkeley Mono, JetBrains Mono, Consolas, 'Courier New', monospace",
     padding: {
       top: 18,
       bottom: 24,
@@ -264,12 +152,18 @@ const createEditor = (): void => {
     },
   });
 
-  editorInstance.onDidChangeModelContent(() => {
-    if (!editorInstance) {
-      return;
-    }
+  editorInstance.addAction({
+    id: 'sh-editor.format-with-shfmt',
+    label: '使用 shfmt 格式化',
+    contextMenuGroupId: '1_modification',
+    contextMenuOrder: 1.5,
+    run: async () => {
+      emit('format-request');
+    },
+  });
 
-    if (suppressModelValueEmit) {
+  editorInstance.onDidChangeModelContent(() => {
+    if (!editorInstance || suppressModelValueEmit) {
       return;
     }
 
@@ -277,22 +171,20 @@ const createEditor = (): void => {
   });
 
   editorInstance.onDidChangeCursorPosition((event) => {
-    activeCursorLine.value = event.position.lineNumber;
     emit('cursor-position-change', event.position.lineNumber, event.position.column);
   });
 
   const initialPosition = editorInstance.getPosition();
   if (initialPosition) {
-    activeCursorLine.value = initialPosition.lineNumber;
     emit('cursor-position-change', initialPosition.lineNumber, initialPosition.column);
   }
 
   syncMarkers();
 
   requestAnimationFrame(() => {
-    layoutEditor();
+    scheduleEditorLayout();
     requestAnimationFrame(() => {
-      layoutEditor();
+      scheduleEditorLayout();
     });
   });
 };
@@ -331,8 +223,31 @@ onMounted(() => {
   createEditor();
 
   if (typeof ResizeObserver !== 'undefined' && containerRef.value) {
+    previousContainerSize = {
+      width: Math.round(containerRef.value.clientWidth),
+      height: Math.round(containerRef.value.clientHeight),
+    };
+
     resizeObserver = new ResizeObserver(() => {
-      layoutEditor();
+      if (!containerRef.value) {
+        return;
+      }
+
+      const nextWidth = Math.round(containerRef.value.clientWidth);
+      const nextHeight = Math.round(containerRef.value.clientHeight);
+
+      if (
+        previousContainerSize.width === nextWidth &&
+        previousContainerSize.height === nextHeight
+      ) {
+        return;
+      }
+
+      previousContainerSize = {
+        width: nextWidth,
+        height: nextHeight,
+      };
+      scheduleEditorLayout();
     });
     resizeObserver.observe(containerRef.value);
   }
@@ -343,8 +258,15 @@ onBeforeUnmount(() => {
   if (model) {
     monaco.editor.setModelMarkers(model, 'shellcheck', []);
   }
+
   resizeObserver?.disconnect();
   resizeObserver = null;
+
+  if (editorLayoutFrameId !== null) {
+    window.cancelAnimationFrame(editorLayoutFrameId);
+    editorLayoutFrameId = null;
+  }
+
   editorInstance?.dispose();
   editorInstance = null;
 });
@@ -373,8 +295,24 @@ const insertSnippet = (snippet: string): void => {
   editorInstance.focus();
 };
 
+const revealPosition = (line: number, column: number): void => {
+  if (!editorInstance) {
+    return;
+  }
+
+  const position = {
+    lineNumber: Math.max(1, line),
+    column: Math.max(1, column),
+  };
+
+  editorInstance.revealPositionInCenter(position);
+  editorInstance.setPosition(position);
+  editorInstance.focus();
+};
+
 defineExpose<IEditorExpose>({
   focusEditor,
   insertSnippet,
+  revealPosition,
 });
 </script>

@@ -123,6 +123,13 @@ button {
   box-shadow: none;
 }
 
+button:disabled,
+[aria-disabled='true'],
+.is-disabled,
+.is-inert-control {
+  cursor: default !important;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -178,6 +185,20 @@ button {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
 }
 
+.app-shell-pane,
+.workbench-editor-viewport,
+.diagnostics-overlay-panel {
+  min-width: 0;
+  min-height: 0;
+  contain: layout paint;
+  isolation: isolate;
+}
+
+.workbench-scroll-region {
+  scrollbar-gutter: stable both-edges;
+  overscroll-behavior: contain;
+}
+
 .linear-card,
 .linear-card-soft {
   border-radius: 0;
@@ -213,8 +234,13 @@ button {
 }
 
 .linear-button:disabled {
-  cursor: not-allowed;
   opacity: 0.45;
+}
+
+.linear-button:disabled:hover {
+  border-color: var(--border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
 }
 
 .linear-button-primary {
@@ -302,6 +328,12 @@ button {
 }
 
 .activity-button.is-active {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+}
+
+.activity-button.is-active:hover {
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text-primary);
 }
 
@@ -311,6 +343,31 @@ button {
 
 .activity-button.is-bottom {
   margin-top: auto;
+}
+
+.activity-settings-trigger {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  margin-top: auto;
+  margin-bottom: 12px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-quaternary);
+  background: transparent;
+  transition: color 0.18s ease;
+}
+
+.activity-settings-trigger:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.activity-settings-icon {
+  transform-origin: center;
+  will-change: transform;
+  backface-visibility: hidden;
+  transition: transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .icon-button {
@@ -329,6 +386,13 @@ button {
 .icon-button:hover {
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-primary);
+}
+
+.icon-button.is-inert-control:hover,
+.icon-button[aria-disabled='true']:hover,
+.icon-button:disabled:hover {
+  background: transparent;
+  color: var(--text-tertiary);
 }
 
 .window-command-bar {
@@ -389,8 +453,18 @@ button {
 }
 
 .titlebar-run-button:disabled {
-  cursor: not-allowed;
   opacity: 0.45;
+}
+
+.titlebar-run-button:disabled:hover {
+  background: transparent;
+  color: #83979d;
+  transform: none;
+}
+
+.titlebar-run-button:disabled:hover .titlebar-run-icon {
+  color: inherit;
+  transform: none;
 }
 
 .titlebar-run-icon {
@@ -526,8 +600,12 @@ button {
 }
 
 .dropdown-menu-item.is-disabled {
-  cursor: not-allowed;
   opacity: 0.45;
+}
+
+.dropdown-menu-item.is-disabled:hover {
+  background: transparent;
+  color: var(--text-secondary);
 }
 
 .window-resize-handle {
@@ -743,16 +821,20 @@ button {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  color: #6f7789;
-  transition: color 0.15s ease;
+  opacity: 0.88;
+  transition:
+    opacity 0.15s ease,
+    filter 0.15s ease;
 }
 
 .editor-file-tab:hover .editor-file-tab-icon {
-  color: #8b93a8;
+  opacity: 1;
+  filter: saturate(1.06) brightness(1.04);
 }
 
 .editor-file-tab.is-active .editor-file-tab-icon {
-  color: #9aa3ff;
+  opacity: 1;
+  filter: saturate(1.08) brightness(1.08);
 }
 
 .editor-file-tab-name {
@@ -830,7 +912,6 @@ button {
 }
 
 [data-theme='light'] .editor-file-tab-icon {
-  color: #4c6fff;
   background: transparent;
 }
 
@@ -850,6 +931,11 @@ button {
 
 .editor-surface {
   background: var(--editor-bg);
+}
+
+.diagnostics-overlay-panel {
+  max-width: 100%;
+  backdrop-filter: saturate(1.04);
 }
 
 .terminal-resize-handle {
@@ -900,6 +986,20 @@ button {
   width: 26px;
 }
 
+.run-panel-status {
+  line-height: 1;
+  letter-spacing: 0.01em;
+  transition: color 0.18s ease;
+}
+
+.run-panel-status.is-ready {
+  color: var(--text-secondary);
+}
+
+.run-panel-status.is-muted {
+  color: var(--text-quaternary);
+}
+
 .embedded-terminal-shell {
   position: relative;
   height: 100%;
@@ -916,14 +1016,13 @@ button {
   max-width: 100%;
   height: 100%;
   min-height: 0;
-  padding: 12px 14px 10px;
+  padding: 12px 0 10px 14px;
   box-sizing: border-box;
   overflow: hidden;
+  background: var(--terminal-fill, var(--panel-bg));
   contain: layout paint size;
   overscroll-behavior: contain;
   isolation: isolate;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
 }
 
 .embedded-terminal-host.is-hidden-by-overlay {
@@ -957,16 +1056,23 @@ button {
   width: 100%;
   height: 100%;
   min-height: 100%;
+  background: var(--terminal-fill, transparent);
 }
 
 .embedded-terminal-host .xterm-viewport {
   width: 100%;
   height: 100%;
+  background-color: var(--terminal-fill, transparent) !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
   scroll-behavior: auto !important;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
+}
+
+.embedded-terminal-host .xterm-scroll-area {
+  background-color: var(--terminal-fill, transparent);
 }
 
 .embedded-terminal-shell:hover .embedded-terminal-host .xterm-viewport,
@@ -975,7 +1081,7 @@ button {
 }
 
 .embedded-terminal-host .xterm-viewport::-webkit-scrollbar {
-  width: 8px;
+  width: 4px;
   height: 0;
 }
 
@@ -985,7 +1091,9 @@ button {
 }
 
 .embedded-terminal-shell:hover .embedded-terminal-host .xterm-viewport::-webkit-scrollbar-thumb,
-.embedded-terminal-shell:focus-within .embedded-terminal-host .xterm-viewport::-webkit-scrollbar-thumb {
+.embedded-terminal-shell:focus-within
+  .embedded-terminal-host
+  .xterm-viewport::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.14);
 }
 
@@ -998,7 +1106,6 @@ button {
 .embedded-terminal-host .xterm-screen canvas {
   display: block;
   max-width: none;
-  border-radius: 6px;
   backface-visibility: visible;
   transform: none !important;
 }
@@ -1684,7 +1791,7 @@ button {
   padding: 8px 0;
 }
 
-.structured-linear-step-item+.structured-linear-step-item {
+.structured-linear-step-item + .structured-linear-step-item {
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -1726,7 +1833,7 @@ button {
   color: var(--text-secondary);
 }
 
-.structured-linear-console-line+.structured-linear-console-line {
+.structured-linear-console-line + .structured-linear-console-line {
   margin-top: 4px;
 }
 
@@ -1741,7 +1848,7 @@ button {
   color: var(--text-secondary);
 }
 
-.structured-linear-hint-line+.structured-linear-hint-line {
+.structured-linear-hint-line + .structured-linear-hint-line {
   margin-top: 4px;
 }
 
@@ -2069,6 +2176,7 @@ button {
   min-height: 100vh;
   overflow: hidden;
   background: var(--app-bg);
+  isolation: isolate;
 }
 
 .app-root-stage.is-splash-mode {
@@ -2078,11 +2186,23 @@ button {
 .app-content-entry {
   min-height: 100vh;
   opacity: 0;
-  transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+  visibility: hidden;
+  transform: translateY(14px) scale(0.992);
+  transform-origin: center top;
+  will-change: opacity, transform;
+  transition:
+    opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0.42s;
 }
 
 .app-content-entry.is-visible {
   opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  transition-delay: 0s;
 }
 
 .splash-screen {
@@ -2096,9 +2216,10 @@ button {
   background: transparent;
   opacity: 1;
   visibility: visible;
+  will-change: opacity;
   transition:
-    opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1),
-    visibility 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0.32s;
 }
 
 .splash-screen::before {
@@ -2109,11 +2230,18 @@ button {
     radial-gradient(circle at 50% 54%, rgba(255, 255, 255, 0.05), transparent 38%);
   content: '';
   pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .splash-screen.is-leaving {
   opacity: 0;
   visibility: hidden;
+  pointer-events: none;
+}
+
+.splash-screen.is-leaving::before {
+  opacity: 0;
 }
 
 .splash-editor {
@@ -2132,6 +2260,14 @@ button {
   box-shadow:
     0 24px 72px rgba(0, 0, 0, 0.36),
     0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  transform: translateY(0) scale(1) translateZ(0);
+  transform-origin: center center;
+  backface-visibility: hidden;
+  will-change: opacity, transform;
+  transition:
+    opacity 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .splash-editor.is-error {
@@ -2140,6 +2276,14 @@ button {
     0 24px 72px rgba(0, 0, 0, 0.36),
     0 1px 0 rgba(255, 255, 255, 0.04) inset,
     0 0 0 1px rgba(255, 107, 122, 0.08);
+}
+
+.splash-screen.is-leaving .splash-editor {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.986) translateZ(0);
+  box-shadow:
+    0 14px 40px rgba(0, 0, 0, 0.24),
+    0 1px 0 rgba(255, 255, 255, 0.03) inset;
 }
 
 .splash-editor-top {
@@ -2369,7 +2513,6 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-
   .app-content-entry,
   .splash-screen,
   .splash-progress {

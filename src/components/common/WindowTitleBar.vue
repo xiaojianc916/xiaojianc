@@ -1,6 +1,6 @@
 <template>
   <header
-    class="window-titlebar border-b border-[var(--shell-divider)]"
+    class="window-titlebar border-b border-(--shell-divider)"
     @mousedown="handleStartWindowDrag"
   >
     <div
@@ -8,7 +8,7 @@
     >
       <div class="flex min-w-0 items-center gap-3">
         <div
-          class="flex h-6 w-6 items-center justify-center rounded-md bg-[var(--accent-muted)] text-[var(--accent-strong)]"
+          class="flex h-6 w-6 items-center justify-center rounded-md bg-(--accent-muted) text-(--accent-strong)"
         >
           <svg
             viewBox="0 0 24 24"
@@ -24,7 +24,7 @@
           </svg>
         </div>
 
-        <nav class="flex min-w-0 items-center gap-1 text-[12px] text-[var(--text-tertiary)]">
+        <nav class="flex min-w-0 items-center gap-1 text-[12px] text-(--text-tertiary)">
           <AppDropdownMenu
             :items="fileMenuItems"
             align="left"
@@ -46,7 +46,7 @@
           <AppDropdownMenu
             :items="editMenuItems"
             align="left"
-            :min-width="152"
+            :min-width="188"
             @select="handleEditAction"
           >
             <template #trigger="{ open, toggle }">
@@ -81,6 +81,7 @@
 
           <button type="button" class="titlebar-menu-button">选择</button>
           <button type="button" class="titlebar-menu-button">转到</button>
+
           <AppDropdownMenu
             :items="terminalMenuItems"
             align="left"
@@ -98,6 +99,7 @@
               </button>
             </template>
           </AppDropdownMenu>
+
           <button type="button" class="titlebar-menu-button">帮助</button>
         </nav>
       </div>
@@ -106,7 +108,7 @@
         <div class="window-command-bar w-full justify-center text-[12px]">
           <svg
             viewBox="0 0 24 24"
-            class="h-4 w-4 text-[var(--text-quaternary)]"
+            class="h-4 w-4 text-(--text-quaternary)"
             fill="none"
             stroke="currentColor"
             stroke-width="1.8"
@@ -121,40 +123,12 @@
       </div>
 
       <div class="flex min-w-0 items-center justify-end gap-2">
-        <span
-          class="app-tooltip-target inline-flex"
-          :data-tooltip="runButtonTooltip"
-          data-tooltip-placement="bottom"
-        >
-          <button
-            type="button"
-            class="titlebar-run-button"
-            :disabled="isRunning || !isDesktopRuntime || !canRun"
-            aria-label="运行脚本"
-            @click="$emit('run')"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="1em"
-              height="1em"
-              viewBox="0 0 16 16"
-              class="titlebar-run-icon h-5 w-5"
-              aria-hidden="true"
-            >
-              <path
-                fill="currentColor"
-                d="M4.506 3.503L12.501 8l-8 4.5zm-.004-1.505C3.718 1.998 3 2.626 3 3.5v9c0 .874.718 1.502 1.502 1.502c.245 0 .496-.061.733-.195l8-4.5c1.019-.573 1.019-2.041 0-2.615l-8-4.499a1.5 1.5 0 0 0-.733-.195"
-              />
-            </svg>
-          </button>
-        </span>
-
         <button
-          v-if="!isTerminalVisible"
           type="button"
-          class="icon-button app-tooltip-target"
+          class="icon-button relative app-tooltip-target border border-transparent"
+          :class="terminalToggleButtonClass"
           :disabled="!isDesktopRuntime"
-          :data-tooltip="terminalToggleTooltip"
+          :data-tooltip="isTerminalToggleDisabled ? undefined : terminalToggleTooltip"
           data-tooltip-placement="bottom"
           :aria-label="terminalToggleTooltip"
           @click="toggleTerminalVisibility"
@@ -177,7 +151,72 @@
           </svg>
         </button>
 
-        <span class="max-w-[220px] truncate text-[11px] text-[var(--text-quaternary)]">
+        <button
+          type="button"
+          class="icon-button relative app-tooltip-target border border-transparent"
+          :class="diagnosticsToggleButtonClass"
+          :aria-disabled="!props.canToggleDiagnostics"
+          :data-tooltip="isDiagnosticsToggleDisabled ? undefined : diagnosticToggleTooltip"
+          data-tooltip-placement="bottom"
+          :aria-label="diagnosticToggleTooltip"
+          @click="handleDiagnosticsToggleClick"
+        >
+          <svg
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+            class="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M2.5 3.5h11a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Z"
+            />
+            <path d="M9 3.5v9" />
+            <path d="M11.1 6.1h1.8" />
+            <path d="M11.1 8.2h1.8" />
+            <path d="M11.1 10.3h1.1" />
+          </svg>
+
+          <span
+            v-if="diagnosticIssueCount > 0"
+            class="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full border border-[#3a2f16] bg-[#2a2112] px-1 text-[9px] font-semibold leading-4 text-[#ffcc4d]"
+          >
+            {{ diagnosticCounterLabel }}
+          </span>
+        </button>
+
+        <span
+          class="app-tooltip-target inline-flex"
+          :data-tooltip="isRunButtonDisabled ? undefined : runButtonTooltip"
+          data-tooltip-placement="bottom"
+        >
+          <button
+            type="button"
+            class="titlebar-run-button"
+            :disabled="isRunButtonDisabled"
+            aria-label="运行脚本"
+            @click="$emit('run')"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="1em"
+              height="1em"
+              viewBox="0 0 16 16"
+              class="titlebar-run-icon h-5 w-5"
+              aria-hidden="true"
+            >
+              <path
+                fill="currentColor"
+                d="M4.506 3.503L12.501 8l-8 4.5zm-.004-1.505C3.718 1.998 3 2.626 3 3.5v9c0 .874.718 1.502 1.502 1.502c.245 0 .496-.061.733-.195l8-4.5c1.019-.573 1.019-2.041 0-2.615l-8-4.499a1.5 1.5 0 0 0-.733-.195"
+              />
+            </svg>
+          </button>
+        </span>
+
+        <span class="max-w-55 truncate text-[11px] text-(--text-quaternary)">
           {{ currentDocumentLabel }}
         </span>
 
@@ -257,15 +296,16 @@
 </template>
 
 <script setup lang="ts">
-import type { UnlistenFn } from '@tauri-apps/api/event';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AppDropdownMenu from '@/components/common/AppDropdownMenu.vue';
-import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import type { TThemeMode } from '@/types/app';
 import type { ICommandTemplate } from '@/types/editor';
+import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
+import type { UnlistenFn } from '@tauri-apps/api/event';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 const props = defineProps<{
   documentName: string;
+  hasActiveDocument: boolean;
   isDirty: boolean;
   documentKind: 'text' | 'image';
   theme: TThemeMode;
@@ -274,6 +314,9 @@ const props = defineProps<{
   canSave: boolean;
   isDesktopRuntime: boolean;
   isTerminalVisible: boolean;
+  isDiagnosticsVisible: boolean;
+  canToggleDiagnostics: boolean;
+  diagnosticIssueCount: number;
   commandTemplates: ICommandTemplate[];
   commentTemplates: ICommandTemplate[];
 }>();
@@ -282,21 +325,66 @@ const emit = defineEmits<{
   new: [];
   open: [];
   'open-folder': [];
+  'close-workspace': [];
+  'format-document': [];
   save: [];
   'save-as': [];
   'close-request': [];
   run: [];
   'open-terminal': [];
   'hide-terminal': [];
+  'toggle-diagnostics': [];
   'toggle-theme': [];
   'insert-template': [value: ICommandTemplate];
 }>();
 
 const isMaximized = ref(false);
 
-const currentDocumentLabel = computed(() =>
-  props.isDirty ? `${props.documentName} ●` : props.documentName,
+const currentDocumentLabel = computed(() => {
+  if (!props.hasActiveDocument) {
+    return '未打开文件';
+  }
+
+  return props.documentName;
+});
+
+const diagnosticCounterLabel = computed(() =>
+  props.diagnosticIssueCount > 99 ? '99+' : String(props.diagnosticIssueCount),
 );
+
+const isDiagnosticsToggleDisabled = computed(() => !props.canToggleDiagnostics);
+const isTerminalToggleDisabled = computed(() => !props.isDesktopRuntime);
+const isRunButtonDisabled = computed(
+  () => props.isRunning || !props.isDesktopRuntime || !props.canRun,
+);
+
+const diagnosticsToggleButtonClass = computed(() => {
+  if (isDiagnosticsToggleDisabled.value) {
+    return 'is-inert-control opacity-45';
+  }
+
+  if (props.isDiagnosticsVisible) {
+    return 'border-white/10 bg-white/[0.06] text-[var(--text-primary)]';
+  }
+
+  if (props.diagnosticIssueCount > 0) {
+    return 'text-[var(--warning)]';
+  }
+
+  return '';
+});
+
+const terminalToggleButtonClass = computed(() => {
+  if (isTerminalToggleDisabled.value) {
+    return 'is-inert-control opacity-45';
+  }
+
+  if (props.isTerminalVisible) {
+    return 'border-white/10 bg-white/[0.06] text-[var(--text-primary)]';
+  }
+
+  return '';
+});
 
 const fileMenuItems = computed(() => [
   { key: 'new', label: '新建脚本' },
@@ -311,26 +399,37 @@ const fileMenuItems = computed(() => [
     disabled: !props.isDesktopRuntime,
   },
   {
+    key: 'close-workspace',
+    label: '关闭工作区',
+  },
+  {
     key: 'save',
     label: '保存',
     disabled: !props.isDesktopRuntime || !props.canSave,
   },
   {
     key: 'save-as',
-    label: '另存为...',
+    label: '另存为…',
     disabled: !props.isDesktopRuntime || !props.canSave,
   },
 ]);
 
 const editMenuItems = computed(() => [
-  ...props.commandTemplates.map((item) => ({
+  {
+    key: 'format-document',
+    label: '使用 shfmt 格式化',
+    description: '格式化当前打开的 shell 脚本',
+    disabled: !props.canSave,
+  },
+  ...props.commandTemplates.map((item, index) => ({
     key: `template:${item.id}`,
     label: item.title,
+    separatorBefore: index === 0,
   })),
   ...props.commentTemplates.map((item, index) => ({
     key: `template:${item.id}`,
     label: item.title,
-    separatorBefore: index === 0,
+    separatorBefore: props.commandTemplates.length === 0 ? index === 0 : index === 0,
   })),
 ]);
 
@@ -350,11 +449,15 @@ const terminalMenuItems = computed(() => [
 
 const runButtonTooltip = computed(() => {
   if (props.isRunning) {
-    return '脚本执行中';
+    return '脚本正在执行';
   }
 
   if (!props.isDesktopRuntime) {
-    return '当前仅浏览器预览，无法直接执行';
+    return '当前为浏览器预览，无法直接执行';
+  }
+
+  if (!props.hasActiveDocument) {
+    return '请先打开脚本';
   }
 
   if (!props.canRun) {
@@ -364,12 +467,32 @@ const runButtonTooltip = computed(() => {
   return '运行脚本';
 });
 
+const diagnosticToggleTooltip = computed(() => {
+  if (!props.hasActiveDocument) {
+    return '请先打开脚本文件';
+  }
+
+  if (!props.canToggleDiagnostics) {
+    return '当前文件类型不支持代码检查面板';
+  }
+
+  if (props.isDiagnosticsVisible) {
+    return '关闭代码检查面板';
+  }
+
+  if (props.diagnosticIssueCount > 0) {
+    return `打开代码检查面板（${props.diagnosticIssueCount} 项问题）`;
+  }
+
+  return '打开代码检查面板';
+});
+
 const terminalToggleTooltip = computed(() => {
   if (!props.isDesktopRuntime) {
     return '仅桌面端可用';
   }
 
-  return '打开终端';
+  return props.isTerminalVisible ? '隐藏终端' : '打开终端';
 });
 
 let unlistenResize: UnlistenFn | null = null;
@@ -408,6 +531,9 @@ const handleFileAction = (key: string): void => {
     case 'open-folder':
       emit('open-folder');
       break;
+    case 'close-workspace':
+      emit('close-workspace');
+      break;
     case 'save':
       emit('save');
       break;
@@ -420,6 +546,11 @@ const handleFileAction = (key: string): void => {
 };
 
 const handleEditAction = (key: string): void => {
+  if (key === 'format-document') {
+    emit('format-document');
+    return;
+  }
+
   const templateId = key.replace('template:', '');
   const targetTemplate = [...props.commandTemplates, ...props.commentTemplates].find(
     (item) => item.id === templateId,
@@ -444,6 +575,14 @@ const handleTerminalAction = (key: string): void => {
 
     emit('open-terminal');
   }
+};
+
+const handleDiagnosticsToggleClick = (): void => {
+  if (!props.canToggleDiagnostics) {
+    return;
+  }
+
+  emit('toggle-diagnostics');
 };
 
 const toggleTerminalVisibility = (): void => {

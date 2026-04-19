@@ -2,9 +2,12 @@ import type {
   IAnalyzeScriptPayload,
   IAnalyzeScriptRequest,
   IExecutionEnvironment,
+  IFormatScriptPayload,
+  IFormatScriptRequest,
   IImageAssetPayload,
   IRunResult,
   IScriptFilePayload,
+  IStartupWorkspacePayload,
   IWorkspaceDirectoryPayload,
 } from '@/types/editor';
 import type { ITauriService } from '@/types/tauri';
@@ -44,10 +47,20 @@ export const tauriService: ITauriService & {
   pickOpenFolderPath(): Promise<string | null>;
   pickSavePath(defaultPath: string): Promise<string | null>;
 } = {
+  async getStartupWorkspace() {
+    await assertDesktopRuntime('加载默认工作区');
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<IStartupWorkspacePayload>('get_startup_workspace');
+  },
   async analyzeScript(payload: IAnalyzeScriptRequest) {
     await assertDesktopRuntime('执行 ShellCheck 实时诊断');
     const { invoke } = await import('@tauri-apps/api/core');
     return invoke<IAnalyzeScriptPayload>('analyze_script', { payload });
+  },
+  async formatScript(payload: IFormatScriptRequest) {
+    await assertDesktopRuntime('使用 shfmt 格式化脚本');
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<IFormatScriptPayload>('format_script', { payload });
   },
   async pickOpenPath() {
     await assertDesktopRuntime('打开本地脚本');

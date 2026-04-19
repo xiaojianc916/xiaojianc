@@ -15,12 +15,22 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
-import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, type Ref } from 'vue';
+import {
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  readonly,
+  ref,
+  shallowRef,
+  watch,
+  type Ref,
+} from 'vue';
 
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 28;
 const MIN_RENDERABLE_TERMINAL_WIDTH = 24;
 const MIN_RENDERABLE_TERMINAL_HEIGHT = 24;
+const TERMINAL_ENABLE_WEBGL_RENDERER = false;
 const TERMINAL_WEBGL_RECOVERY_DELAY_MS = 180;
 const TERMINAL_LAYOUT_DEBOUNCE_MS = 48;
 const TERMINAL_STREAM_MARKER_PREFIX = '\u001b]SH_EDITOR:';
@@ -30,15 +40,18 @@ const TERMINAL_STREAM_END_MARKER_PREFIX = 'SH_EDITOR_RUN_END:';
 const TERMINAL_RUN_START_MARKER_WAIT_TIMEOUT_MS = 4200;
 const TERMINAL_LAYOUT_SETTLE_DELAY_MS = 72;
 const TERMINAL_OUTPUT_FLUSH_DELAY_MS = 16;
+const TERMINAL_SCROLL_RECOVERY_DELAY_MS = 64;
 const TERMINAL_SCROLLBACK_LIMIT = 12000;
 const POST_RUN_PROMPT_DETECTION_BUFFER_LIMIT = 512;
 const POST_RUN_PROMPT_CHECK_DELAY_MS = 180;
 const POST_RUN_PROMPT_CHECK_RETRY_MS = 260;
 const POST_RUN_PROMPT_MAX_REFRESH_ATTEMPTS = 2;
-const ANSI_ESCAPE_PATTERN = /\u001b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+const ANSI_ESCAPE_PATTERN = new RegExp(String.raw`\u001b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])`, 'g');
 const SHELL_PROMPT_PATTERN = /(?:^|[\r\n])[^\r\n]*[#$>] ?$/;
-const TERMINAL_STREAM_HIDDEN_MARKER_PATTERN =
-  /\u001b\]SH_EDITOR:SH_EDITOR_RUN_(?:BEGIN|END):[^\u0007]*\u0007/g;
+const TERMINAL_STREAM_HIDDEN_MARKER_PATTERN = new RegExp(
+  String.raw`\u001b\]SH_EDITOR:SH_EDITOR_RUN_(?:BEGIN|END):[^\u0007]*\u0007`,
+  'g',
+);
 const createTerminalTheme = (theme: TThemeMode) =>
   theme === 'light'
     ? {
@@ -163,21 +176,21 @@ const sanitizeCapturedTerminalNoise = (value: string, runId: string | null): str
   return sanitizedValue
     .replace(
       new RegExp(
-        `(^|[\\r\\n])([^\\r\\n]*[#$>]\\s+)(?:__sh_editor_out=|i=['\"]${escapedRunId}['\"]).*?(?=$|[\\r\\n])`,
+        `(^|[\\r\\n])([^\\r\\n]*[#$>]\\s+)(?:__sh_editor_out=|i=['"]${escapedRunId}['"]).*?(?=$|[\\r\\n])`,
         'g',
       ),
       '$1$2',
     )
     .replace(
       new RegExp(
-        `(^|[\\r\\n])(?:__sh_editor_out=|i=['\"]${escapedRunId}['\"]).*?(?=$|[\\r\\n])`,
+        `(^|[\\r\\n])(?:__sh_editor_out=|i=['"]${escapedRunId}['"]).*?(?=$|[\\r\\n])`,
         'g',
       ),
       '$1',
     )
     .replace(
       new RegExp(
-        `(^|[\\r\\n])([^\\r\\n]*[#$>]\\s+)?bash\\s+['\"][^\\r\\n]*sh-editor-dispatch-${escapedRunId}\\.sh['\"]?(?=$|[\\r\\n])`,
+        `(^|[\\r\\n])([^\\r\\n]*[#$>]\\s+)?bash\\s+['"][^\\r\\n]*sh-editor-dispatch-${escapedRunId}\\.sh['"]?(?=$|[\\r\\n])`,
         'g',
       ),
       '$1',
@@ -221,6 +234,11 @@ const sharedTerminalRef = shallowRef<Terminal | null>(null);
 const sharedFitAddonRef = shallowRef<FitAddon | null>(null);
 const sharedWebglAddonRef = shallowRef<WebglAddon | null>(null);
 
+export const useIntegratedTerminalStatus = () => ({
+  status: readonly(sharedStatus),
+  statusMessage: readonly(sharedStatusMessage),
+});
+
 let sharedVisibleRef: Ref<boolean> | null = null;
 let sharedStatusListener: ((payload: ITerminalStatusChangePayload) => void) | null = null;
 let sharedOutputListener: ((value: string) => void) | null = null;
@@ -232,7 +250,6 @@ let windowFocusCleanup: (() => void) | null = null;
 let windowResizeCleanup: (() => void) | null = null;
 let webglContextLossCleanup: { dispose(): void } | null = null;
 let resizeObserver: ResizeObserver | null = null;
-let hostWheelCleanup: (() => void) | null = null;
 let layoutDebounceTimeoutId: number | null = null;
 let layoutFrameId: number | null = null;
 let layoutSettleTimeoutId: number | null = null;
@@ -246,13 +263,13 @@ let runStartMarkerTimeoutId: number | null = null;
 let programmaticScrollReleaseFrameId: number | null = null;
 let terminalWriteFrameId: number | null = null;
 let terminalWriteTimeoutId: number | null = null;
+let scrollRecoveryTimeoutId: number | null = null;
 let isTerminalWriteInFlight = false;
 let isProgrammaticScrollSync = false;
 let isAutoFollowEnabled = true;
 let bufferedTerminalWrite = '';
 let pendingScrollToBottomAfterWrite = false;
 let shouldFitBeforeNextVisibleWrite = false;
-let wheelPixelDeltaRemainder = 0;
 const pendingTerminalWriteCallbacks: Array<() => void> = [];
 const replaySuppressedRunIds = new Set<string>();
 let terminalStreamBuffer = '';
@@ -342,6 +359,13 @@ export const useIntegratedTerminal = ({
     if (terminalWriteTimeoutId !== null) {
       window.clearTimeout(terminalWriteTimeoutId);
       terminalWriteTimeoutId = null;
+    }
+  };
+
+  const clearScrollRecoveryTimeout = (): void => {
+    if (scrollRecoveryTimeoutId !== null) {
+      window.clearTimeout(scrollRecoveryTimeoutId);
+      scrollRecoveryTimeoutId = null;
     }
   };
 
@@ -448,6 +472,19 @@ export const useIntegratedTerminal = ({
     scheduleTerminalWriteFlush();
   };
 
+  const syncTerminalSurfaceTone = (): void => {
+    const background = createTerminalTheme(theme.value).background;
+    hostRef.value?.style.setProperty('--terminal-fill', background);
+    if (hostRef.value) {
+      hostRef.value.style.backgroundColor = background;
+    }
+
+    if (terminalRef.value?.element) {
+      terminalRef.value.element.style.setProperty('--terminal-fill', background);
+      terminalRef.value.element.style.backgroundColor = background;
+    }
+  };
+
   const disposeWebglRenderer = (): void => {
     webglContextLossCleanup?.dispose();
     webglContextLossCleanup = null;
@@ -465,7 +502,10 @@ export const useIntegratedTerminal = ({
   };
 
   const canUseWebglRenderer = (): boolean =>
-    !webglRendererBlocked && typeof window !== 'undefined' && 'WebGL2RenderingContext' in window;
+    TERMINAL_ENABLE_WEBGL_RENDERER &&
+    !webglRendererBlocked &&
+    typeof window !== 'undefined' &&
+    'WebGL2RenderingContext' in window;
 
   const ensurePreferredRenderer = (): void => {
     const terminal = terminalRef.value;
@@ -509,7 +549,12 @@ export const useIntegratedTerminal = ({
       clearTerminalTextureAtlas();
     }
 
-    if (shouldScrollToBottom && isTerminalVisible() && isAutoFollowEnabled && !isViewportNearBottom(terminal)) {
+    if (
+      shouldScrollToBottom &&
+      isTerminalVisible() &&
+      isAutoFollowEnabled &&
+      !isViewportNearBottom(terminal)
+    ) {
       runWithProgrammaticScrollLock(() => {
         terminal.scrollToBottom();
       });
@@ -584,6 +629,18 @@ export const useIntegratedTerminal = ({
     });
   };
 
+  const scheduleScrollRecovery = (): void => {
+    scheduleViewportSync({ refresh: true });
+    clearScrollRecoveryTimeout();
+    scrollRecoveryTimeoutId = window.setTimeout(() => {
+      scrollRecoveryTimeoutId = null;
+      scheduleViewportSync({
+        clearTextureAtlas: Boolean(webglAddonRef.value),
+        refresh: true,
+      });
+    }, TERMINAL_SCROLL_RECOVERY_DELAY_MS);
+  };
+
   const syncTerminalLayout = (): void => {
     const terminal = terminalRef.value;
     const fitAddon = fitAddonRef.value;
@@ -627,73 +684,6 @@ export const useIntegratedTerminal = ({
 
   const focusTerminal = (): void => {
     terminalRef.value?.focus();
-  };
-
-  const resolveTerminalWheelLineHeight = (terminal: Terminal): number => {
-    const fontSize = typeof terminal.options.fontSize === 'number' ? terminal.options.fontSize : 13;
-    const lineHeight = typeof terminal.options.lineHeight === 'number' ? terminal.options.lineHeight : 1;
-    return Math.max(12, fontSize * lineHeight);
-  };
-
-  const resolveWheelScrollLines = (event: WheelEvent, terminal: Terminal): number => {
-    if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
-      return event.deltaY > 0 ? Math.ceil(event.deltaY) : Math.floor(event.deltaY);
-    }
-
-    if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
-      return (event.deltaY > 0 ? 1 : -1) * Math.max(1, terminal.rows - 1);
-    }
-
-    wheelPixelDeltaRemainder += event.deltaY;
-    const lineHeight = resolveTerminalWheelLineHeight(terminal);
-    const lineDelta =
-      wheelPixelDeltaRemainder > 0
-        ? Math.floor(wheelPixelDeltaRemainder / lineHeight)
-        : Math.ceil(wheelPixelDeltaRemainder / lineHeight);
-
-    if (lineDelta !== 0) {
-      wheelPixelDeltaRemainder -= lineDelta * lineHeight;
-    }
-
-    return lineDelta;
-  };
-
-  const bindHostWheelListener = (): void => {
-    if (!hostRef.value) {
-      return;
-    }
-
-    hostWheelCleanup?.();
-    wheelPixelDeltaRemainder = 0;
-
-    const hostElement = hostRef.value;
-    const handleWheel = (event: WheelEvent): void => {
-      const terminal = terminalRef.value;
-      if (!terminal || !isTerminalVisible()) {
-        return;
-      }
-
-      const lineDelta = resolveWheelScrollLines(event, terminal);
-      if (event.cancelable) {
-        event.preventDefault();
-      }
-      event.stopPropagation();
-
-      if (lineDelta === 0) {
-        return;
-      }
-
-      runWithProgrammaticScrollLock(() => {
-        terminal.scrollLines(lineDelta);
-      });
-      isAutoFollowEnabled = isViewportNearBottom(terminal);
-    };
-
-    hostElement.addEventListener('wheel', handleWheel, { passive: false });
-    hostWheelCleanup = () => {
-      hostElement.removeEventListener('wheel', handleWheel);
-      hostWheelCleanup = null;
-    };
   };
 
   const scheduleRunStartMarkerTimeout = (runId: string): void => {
@@ -774,7 +764,9 @@ export const useIntegratedTerminal = ({
         return;
       }
 
-      if (SHELL_PROMPT_PATTERN.test(normalizeTerminalOutputForPromptCheck(pendingPromptRestoreBuffer))) {
+      if (
+        SHELL_PROMPT_PATTERN.test(normalizeTerminalOutputForPromptCheck(pendingPromptRestoreBuffer))
+      ) {
         clearPendingPromptRestore();
         return;
       }
@@ -803,7 +795,9 @@ export const useIntegratedTerminal = ({
     pendingPromptRestoreBuffer = `${pendingPromptRestoreBuffer}${output}`.slice(
       -POST_RUN_PROMPT_DETECTION_BUFFER_LIMIT,
     );
-    if (SHELL_PROMPT_PATTERN.test(normalizeTerminalOutputForPromptCheck(pendingPromptRestoreBuffer))) {
+    if (
+      SHELL_PROMPT_PATTERN.test(normalizeTerminalOutputForPromptCheck(pendingPromptRestoreBuffer))
+    ) {
       clearPendingPromptRestore();
     }
   };
@@ -1131,7 +1125,6 @@ export const useIntegratedTerminal = ({
       scheduleViewportSync({ refresh: true, scrollToBottom: true });
       emitStatus('closed', message);
     });
-
   };
 
   const createTerminal = (): void => {
@@ -1149,8 +1142,8 @@ export const useIntegratedTerminal = ({
       }
 
       bindResizeObserver();
-      bindHostWheelListener();
       ensurePreferredRenderer();
+      syncTerminalSurfaceTone();
       scheduleLayoutSync();
       scheduleViewportSync({ clearTextureAtlas: true, refresh: true, scrollToBottom: true });
       return;
@@ -1183,6 +1176,7 @@ export const useIntegratedTerminal = ({
     fitAddonRef.value = fitAddon;
     createTerminal();
     ensurePreferredRenderer();
+    syncTerminalSurfaceTone();
 
     terminal.onData((data) => {
       if (!session.value) {
@@ -1202,6 +1196,12 @@ export const useIntegratedTerminal = ({
       }
 
       isAutoFollowEnabled = isViewportNearBottom(terminal);
+      if (isAutoFollowEnabled) {
+        clearScrollRecoveryTimeout();
+        return;
+      }
+
+      scheduleScrollRecovery();
     });
 
     terminal.onResize(({ cols, rows }) => {
@@ -1215,7 +1215,6 @@ export const useIntegratedTerminal = ({
         // 终端在关闭或窗口隐藏时可能触发瞬时 resize，这里忽略即可。
       });
     });
-
   };
 
   const retry = async (): Promise<void> => {
@@ -1241,6 +1240,7 @@ export const useIntegratedTerminal = ({
       }
 
       terminal.options.theme = createTerminalTheme(nextTheme);
+      syncTerminalSurfaceTone();
       scheduleViewportSync({ clearTextureAtlas: true, refresh: true });
     },
   );
@@ -1255,6 +1255,7 @@ export const useIntegratedTerminal = ({
       await nextTick();
       createTerminal();
       ensurePreferredRenderer();
+      syncTerminalSurfaceTone();
       scheduleLayoutSync();
       scheduleViewportSync({ clearTextureAtlas: true, refresh: true, scrollToBottom: true });
       focusTerminal();
@@ -1324,7 +1325,6 @@ export const useIntegratedTerminal = ({
     sharedOutputListener = null;
     sharedRunCompleteListener = null;
 
-    hostWheelCleanup?.();
     resizeObserver?.disconnect();
     resizeObserver = null;
 
@@ -1335,6 +1335,7 @@ export const useIntegratedTerminal = ({
     clearProgrammaticScrollReleaseFrame();
     clearTerminalWriteFrame();
     clearTerminalWriteTimeout();
+    clearScrollRecoveryTimeout();
   });
 
   return {

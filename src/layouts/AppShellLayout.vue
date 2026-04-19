@@ -1,6 +1,10 @@
 <template>
   <div class="app-surface h-screen">
-    <div class="app-window-shell relative flex h-full flex-col overflow-hidden border border-[var(--shell-divider)]">
+    <div
+      ref="shellRef"
+      class="app-window-shell relative flex h-full flex-col overflow-hidden border border-(--shell-divider)"
+      :data-layout-resizing="layoutTransitionsEnabled ? 'false' : 'true'"
+    >
       <template v-if="isDesktopRuntime">
         <div
           v-for="handle in resizeHandles"
@@ -13,24 +17,48 @@
 
       <slot name="titlebar" />
 
-      <div class="grid min-h-0 flex-1 grid-cols-[52px_288px_minmax(0,1fr)] overflow-hidden">
-        <div class="border-r border-[var(--shell-divider)] bg-[var(--activity-bg)]">
+      <div
+        class="grid min-h-0 flex-1 overflow-hidden"
+        :class="layoutTransitionsEnabled ? layoutGridTransitionClass : 'transition-none'"
+        :style="shellGridStyle"
+      >
+        <div class="border-r border-(--shell-divider) bg-(--activity-bg)">
           <slot name="activity" />
         </div>
-        <div class="border-r border-[var(--shell-divider)] bg-[var(--sidebar-bg)]">
+
+        <div
+          class="app-shell-pane min-w-0 overflow-hidden bg-(--sidebar-bg)"
+          :class="[
+            layoutTransitionsEnabled ? surfaceTransitionClass : 'transition-none',
+            props.sidebarVisible
+              ? 'translate-x-0 border-r border-(--shell-divider) opacity-100'
+              : '-translate-x-3 opacity-0 pointer-events-none',
+          ]"
+        >
           <slot name="sidebar" />
         </div>
-        <div class="flex min-h-0 flex-col bg-[var(--editor-bg)]">
+
+        <div class="app-shell-pane flex min-h-0 flex-col bg-(--editor-bg)">
           <slot name="header" />
-          <main ref="mainRef" class="grid min-h-0 flex-1" :style="mainGridStyle">
-            <section class="min-h-0 editor-surface">
+          <main
+            ref="mainRef"
+            class="grid min-h-0 flex-1"
+            :class="layoutTransitionsEnabled ? layoutRowsTransitionClass : 'transition-none'"
+            :style="mainGridStyle"
+          >
+            <section class="app-shell-pane min-h-0 editor-surface">
               <slot />
             </section>
 
             <button
-              v-show="terminalVisible"
               type="button"
               class="terminal-resize-handle"
+              :class="[
+                layoutTransitionsEnabled ? surfaceTransitionClass : 'transition-none',
+                props.terminalVisible
+                  ? 'translate-y-0 opacity-100'
+                  : 'translate-y-3 opacity-0 pointer-events-none',
+              ]"
               aria-label="调整终端高度"
               @mousedown.prevent="startTerminalResize"
             >
@@ -38,8 +66,13 @@
             </button>
 
             <section
-              v-show="terminalVisible"
-              class="min-h-0 bg-[var(--panel-bg)]"
+              class="app-shell-pane min-h-0 overflow-hidden bg-(--panel-bg)"
+              :class="[
+                layoutTransitionsEnabled ? surfaceTransitionClass : 'transition-none',
+                props.terminalVisible
+                  ? 'translate-y-0 opacity-100'
+                  : 'translate-y-3 opacity-0 pointer-events-none',
+              ]"
             >
               <slot name="terminal" />
             </section>
@@ -67,15 +100,18 @@ type TResizeDirection =
 const TERMINAL_MIN_HEIGHT = 140;
 const EDITOR_MIN_HEIGHT = 220;
 const SPLITTER_HEIGHT = 0;
+const SIDEBAR_WIDTH = 240;
 
 const props = withDefaults(
   defineProps<{
     isDesktopRuntime?: boolean;
+    sidebarVisible?: boolean;
     terminalVisible?: boolean;
     terminalHeight?: number;
   }>(),
   {
     isDesktopRuntime: false,
+    sidebarVisible: true,
     terminalVisible: true,
     terminalHeight: 236,
   },
@@ -85,9 +121,18 @@ const emit = defineEmits<{
   'update:terminalHeight': [value: number];
 }>();
 
+const WINDOW_RESIZE_SETTLE_MS = 140;
 const mainRef = ref<HTMLElement | null>(null);
+const shellRef = ref<HTMLElement | null>(null);
+const layoutTransitionsEnabled = ref(true);
 let resizeObserver: ResizeObserver | null = null;
+let shellResizeObserver: ResizeObserver | null = null;
 let terminalResizeCleanup: (() => void) | null = null;
+let resizeSettleTimerId: number | null = null;
+let shellResizeFrameId: number | null = null;
+let terminalViewportSyncFrameId: number | null = null;
+let previousShellSize = { width: 0, height: 0 };
+let pendingShellSize: { width: number; height: number } | null = null;
 
 const resizeHandles: Array<{ direction: TResizeDirection; className: string }> = [
   { direction: 'North', className: 'is-top' },
@@ -115,17 +160,95 @@ const clampTerminalHeight = (rawHeight: number): number => {
 };
 
 const mainGridStyle = computed(() => {
+  const terminalHeight = clampTerminalHeight(props.terminalHeight);
+
   if (!props.terminalVisible) {
     return {
-      gridTemplateRows: 'minmax(0, 1fr)',
+      gridTemplateRows: `minmax(${EDITOR_MIN_HEIGHT}px, 1fr) 0px 0px`,
     };
   }
 
-  const terminalHeight = clampTerminalHeight(props.terminalHeight);
   return {
     gridTemplateRows: `minmax(${EDITOR_MIN_HEIGHT}px, 1fr) ${SPLITTER_HEIGHT}px ${terminalHeight}px`,
   };
 });
+
+const shellGridStyle = computed(() => ({
+  gridTemplateColumns: `52px ${props.sidebarVisible ? SIDEBAR_WIDTH : 0}px minmax(0, 1fr)`,
+}));
+
+const layoutGridTransitionClass =
+  'transition-[grid-template-columns] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]';
+const layoutRowsTransitionClass =
+  'transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]';
+const surfaceTransitionClass =
+  'transition-[opacity,transform,border-color] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]';
+
+const scheduleLayoutTransitionRestore = (): void => {
+  if (resizeSettleTimerId !== null) {
+    window.clearTimeout(resizeSettleTimerId);
+  }
+
+  resizeSettleTimerId = window.setTimeout(() => {
+    layoutTransitionsEnabled.value = true;
+    resizeSettleTimerId = null;
+  }, WINDOW_RESIZE_SETTLE_MS);
+};
+
+const handleShellResize = (width: number, height: number): void => {
+  const normalizedWidth = Math.round(width);
+  const normalizedHeight = Math.round(height);
+
+  if (normalizedWidth <= 0 || normalizedHeight <= 0) {
+    return;
+  }
+
+  if (
+    previousShellSize.width === normalizedWidth &&
+    previousShellSize.height === normalizedHeight
+  ) {
+    return;
+  }
+
+  previousShellSize = { width: normalizedWidth, height: normalizedHeight };
+  layoutTransitionsEnabled.value = false;
+  scheduleLayoutTransitionRestore();
+};
+
+const flushShellResize = (): void => {
+  shellResizeFrameId = null;
+  if (!pendingShellSize) {
+    return;
+  }
+
+  const { width, height } = pendingShellSize;
+  pendingShellSize = null;
+  handleShellResize(width, height);
+};
+
+const queueShellResize = (width: number, height: number): void => {
+  pendingShellSize = {
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+
+  if (shellResizeFrameId !== null) {
+    return;
+  }
+
+  shellResizeFrameId = window.requestAnimationFrame(flushShellResize);
+};
+
+const scheduleTerminalViewportSync = (): void => {
+  if (terminalViewportSyncFrameId !== null) {
+    return;
+  }
+
+  terminalViewportSyncFrameId = window.requestAnimationFrame(() => {
+    terminalViewportSyncFrameId = null;
+    syncTerminalHeightWithinViewport();
+  });
+};
 
 const syncTerminalHeightWithinViewport = (): void => {
   if (!props.terminalVisible) {
@@ -162,10 +285,7 @@ const startTerminalResize = (event: MouseEvent): void => {
   window.addEventListener('mouseup', stopResize, { once: true });
 };
 
-const startWindowResize = async (
-  direction: TResizeDirection,
-  event: MouseEvent,
-): Promise<void> => {
+const startWindowResize = async (direction: TResizeDirection, event: MouseEvent): Promise<void> => {
   if (!props.isDesktopRuntime || event.button !== 0) {
     return;
   }
@@ -181,25 +301,60 @@ const startWindowResize = async (
 watch(
   () => [props.terminalVisible, props.terminalHeight],
   () => {
-    syncTerminalHeightWithinViewport();
+    scheduleTerminalViewportSync();
   },
 );
 
 onMounted(() => {
   syncTerminalHeightWithinViewport();
 
+  if (shellRef.value) {
+    previousShellSize = {
+      width: shellRef.value.clientWidth,
+      height: shellRef.value.clientHeight,
+    };
+  }
+
   if (typeof ResizeObserver === 'undefined' || !mainRef.value) {
     return;
   }
 
   resizeObserver = new ResizeObserver(() => {
-    syncTerminalHeightWithinViewport();
+    scheduleTerminalViewportSync();
   });
   resizeObserver.observe(mainRef.value);
+
+  if (shellRef.value) {
+    shellResizeObserver = new ResizeObserver((entries) => {
+      const targetEntry = entries[0];
+      if (!targetEntry) {
+        return;
+      }
+
+      queueShellResize(targetEntry.contentRect.width, targetEntry.contentRect.height);
+    });
+    shellResizeObserver.observe(shellRef.value);
+  }
 });
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect();
+  shellResizeObserver?.disconnect();
   terminalResizeCleanup?.();
+
+  if (shellResizeFrameId !== null) {
+    window.cancelAnimationFrame(shellResizeFrameId);
+    shellResizeFrameId = null;
+  }
+
+  if (terminalViewportSyncFrameId !== null) {
+    window.cancelAnimationFrame(terminalViewportSyncFrameId);
+    terminalViewportSyncFrameId = null;
+  }
+
+  if (resizeSettleTimerId !== null) {
+    window.clearTimeout(resizeSettleTimerId);
+    resizeSettleTimerId = null;
+  }
 });
 </script>

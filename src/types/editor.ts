@@ -69,6 +69,13 @@ export interface IWorkspaceDirectoryPayload {
   entries: IWorkspaceEntry[];
 }
 
+export interface IStartupWorkspacePayload {
+  rootPath: string;
+  rootName: string;
+  defaultFilePath: string | null;
+  protectedRootPaths: string[];
+}
+
 export interface IRunResult {
   success: boolean;
   stdout: string;
@@ -129,6 +136,19 @@ export interface ISaveScriptRequest {
   path: string;
   content: string;
   encoding: TDocumentEncoding;
+}
+
+export interface IFormatScriptRequest {
+  path: string | null;
+  content: string;
+  encoding: TDocumentEncoding;
+}
+
+export interface IFormatScriptPayload {
+  content: string;
+  encoding: TDocumentEncoding;
+  lineCount: number;
+  charCount: number;
 }
 
 export interface IRunScriptRequest {

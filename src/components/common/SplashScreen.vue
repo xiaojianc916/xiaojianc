@@ -93,6 +93,8 @@ const emit = defineEmits<{
   'after-leave': [];
 }>();
 
+const BOOTSTRAP_SPLASH_HOST_ID = 'bootstrap-splash-host';
+
 const codeLines: ICodeFragment[][] = [
   [
     { text: 'import', className: 'splash-keyword' },
@@ -122,8 +124,8 @@ const codeLines: ICodeFragment[][] = [
   ],
 ];
 
-const FADE_DELAY = 320;
-const FADE_DURATION = 820;
+const FADE_DELAY = 140;
+const FADE_DURATION = 320;
 
 const lineLengths = codeLines.map((line) =>
   line.reduce((total, fragment) => total + fragment.text.length, 0),
@@ -151,6 +153,8 @@ let animationFrame = 0;
 let typingTimer: number | undefined;
 let fadeDelayTimer: number | undefined;
 let afterLeaveTimer: number | undefined;
+let bootstrapHandoffFrame = 0;
+let bootstrapHandoffCleanupFrame = 0;
 
 const roundedProgress = computed(() => Math.min(100, Number(progress.value.toFixed(1))));
 
@@ -195,7 +199,10 @@ const getLineVisibleCharacters = (lineIndex: number): number => {
     .slice(0, lineIndex)
     .reduce((total, length) => total + length, 0);
 
-  return Math.max(0, Math.min(lineLengths[lineIndex], visibleCharacters.value - previousCharacters));
+  return Math.max(
+    0,
+    Math.min(lineLengths[lineIndex], visibleCharacters.value - previousCharacters),
+  );
 };
 
 const resolveVisibleFragments = (lineIndex: number): IVisibleFragment[] => {
@@ -272,6 +279,27 @@ const scheduleTyping = (delay = 120): void => {
   }
 
   typingTimer = window.setTimeout(typeNextCharacter, delay);
+};
+
+const removeBootstrapSplashHost = (): void => {
+  document.getElementById(BOOTSTRAP_SPLASH_HOST_ID)?.remove();
+};
+
+const scheduleBootstrapHandoffCleanup = (): void => {
+  if (!bootstrapState) {
+    removeBootstrapSplashHost();
+    return;
+  }
+
+  bootstrapState.handoff = true;
+
+  bootstrapHandoffFrame = window.requestAnimationFrame(() => {
+    bootstrapHandoffFrame = 0;
+    bootstrapHandoffCleanupFrame = window.requestAnimationFrame(() => {
+      bootstrapHandoffCleanupFrame = 0;
+      removeBootstrapSplashHost();
+    });
+  });
 };
 
 const typeNextCharacter = (): void => {
@@ -383,9 +411,7 @@ watch(
 );
 
 onMounted(() => {
-  if (bootstrapState) {
-    bootstrapState.handoff = true;
-  }
+  scheduleBootstrapHandoffCleanup();
 
   if (!isTypingComplete.value) {
     scheduleTyping(80);
@@ -407,6 +433,14 @@ onBeforeUnmount(() => {
 
   if (afterLeaveTimer) {
     window.clearTimeout(afterLeaveTimer);
+  }
+
+  if (bootstrapHandoffFrame) {
+    window.cancelAnimationFrame(bootstrapHandoffFrame);
+  }
+
+  if (bootstrapHandoffCleanupFrame) {
+    window.cancelAnimationFrame(bootstrapHandoffCleanupFrame);
   }
 });
 </script>

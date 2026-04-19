@@ -6,6 +6,7 @@
     :analysis="analysisState"
     @update:model-value="handleModelValueChange"
     @cursor-position-change="handleCursorPositionChange"
+    @format-request="emit('format-request')"
   />
 </template>
 
@@ -20,6 +21,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 interface IEditorExpose {
   focusEditor: () => void;
   insertSnippet: (snippet: string) => void;
+  revealPosition: (line: number, column: number) => void;
 }
 
 const props = withDefaults(
@@ -31,6 +33,8 @@ const props = withDefaults(
     theme?: TThemeMode;
   }>(),
   {
+    documentPath: null,
+    documentName: '',
     modelValue: '',
     theme: 'dark',
   },
@@ -40,6 +44,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: string];
   'cursor-position-change': [line: number, column: number];
   'diagnostics-change': [documentId: string, payload: IAnalyzeScriptPayload];
+  'format-request': [];
 }>();
 
 const innerEditorRef = ref<IEditorExpose | null>(null);
@@ -149,6 +154,10 @@ const insertSnippet = (snippet: string): void => {
   innerEditorRef.value?.insertSnippet(snippet);
 };
 
+const revealPosition = (line: number, column: number): void => {
+  innerEditorRef.value?.revealPosition(line, column);
+};
+
 const handleModelValueChange = (value: string): void => {
   emit('update:modelValue', value);
 };
@@ -160,5 +169,6 @@ const handleCursorPositionChange = (line: number, column: number): void => {
 defineExpose<IEditorExpose>({
   focusEditor,
   insertSnippet,
+  revealPosition,
 });
 </script>

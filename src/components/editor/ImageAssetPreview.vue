@@ -1,0 +1,122 @@
+<template>
+  <div class="flex h-full min-h-0 flex-col bg-[var(--editor-bg)]">
+    <div class="flex items-center justify-between border-b border-[var(--shell-divider)] px-5 py-3">
+      <div class="min-w-0">
+        <p
+          class="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-quaternary)]"
+        >
+          图片预览
+        </p>
+        <p class="mt-1 truncate text-[13px] font-medium text-[var(--text-primary)]">
+          {{ props.name }}
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2 text-[11px] text-[var(--text-quaternary)]">
+        <span v-if="assetMeta">{{ assetMeta.mimeType }}</span>
+        <span v-if="assetMeta">{{ formatBytes(assetMeta.byteSize) }}</span>
+        <span v-if="imageSizeLabel">{{ imageSizeLabel }}</span>
+      </div>
+    </div>
+
+    <div class="min-h-0 flex-1 overflow-auto p-5">
+      <div
+        v-if="isLoading"
+        class="flex h-full min-h-[240px] items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.02] text-[12px] text-[var(--text-quaternary)]"
+      >
+        正在加载图片资源…
+      </div>
+
+      <div
+        v-else-if="errorMessage"
+        class="flex h-full min-h-[240px] items-center justify-center rounded-xl border border-rose-400/20 bg-rose-500/[0.06] px-6 text-center"
+      >
+        <div class="max-w-md space-y-2">
+          <p class="text-[13px] font-medium text-rose-200">图片预览失败</p>
+          <p class="text-[12px] leading-6 text-[var(--text-secondary)]">{{ errorMessage }}</p>
+        </div>
+      </div>
+
+      <div
+        v-else
+        class="flex min-h-full items-center justify-center rounded-[20px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] p-6"
+      >
+        <div class="image-preview-frame">
+          <img
+            v-if="assetMeta"
+            :src="assetMeta.dataUrl"
+            :alt="props.name"
+            class="image-preview-asset"
+            @load="handleImageLoad"
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue';
+import { tauriService } from '@/services/tauri';
+import type { IImageAssetPayload } from '@/types/editor';
+import { formatBytes } from '@/utils/file-assets';
+
+const props = defineProps<{
+  path: string;
+  name: string;
+}>();
+
+const assetMeta = ref<IImageAssetPayload | null>(null);
+const isLoading = ref(false);
+const errorMessage = ref('');
+const imageNaturalWidth = ref(0);
+const imageNaturalHeight = ref(0);
+
+const imageSizeLabel = computed(() => {
+  if (imageNaturalWidth.value <= 0 || imageNaturalHeight.value <= 0) {
+    return '';
+  }
+
+  return `${imageNaturalWidth.value} × ${imageNaturalHeight.value}`;
+});
+
+const resolveErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : '读取图片资源失败。';
+
+const loadImageAsset = async (): Promise<void> => {
+  isLoading.value = true;
+  errorMessage.value = '';
+  assetMeta.value = null;
+  imageNaturalWidth.value = 0;
+  imageNaturalHeight.value = 0;
+
+  try {
+    assetMeta.value = await tauriService.loadImageAsset(props.path);
+  } catch (error) {
+    errorMessage.value = resolveErrorMessage(error);
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+const handleImageLoad = (event: Event): void => {
+  const target = event.target;
+  if (!(target instanceof HTMLImageElement)) {
+    return;
+  }
+
+  imageNaturalWidth.value = target.naturalWidth;
+  imageNaturalHeight.value = target.naturalHeight;
+};
+
+watch(
+  () => props.path,
+  () => {
+    void loadImageAsset();
+  },
+);
+
+onMounted(() => {
+  void loadImageAsset();
+});
+</script>
