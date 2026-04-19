@@ -1,0 +1,32 @@
+{
+  "names": [
+    "crontab"
+  ],
+  "detail": "Maintain crontab file for individual users",
+  "flags": [
+    {
+      "names": [
+        "-e"
+      ],
+      "detail": "Edit the current crontab"
+    },
+    {
+      "names": [
+        "-l"
+      ],
+      "detail": "Display the current crontab"
+    },
+    {
+      "names": [
+        "-r"
+      ],
+      "detail": "Remove the current crontab"
+    },
+    {
+      "names": [
+        "-u"
+      ],
+      "detail": "Specify the name of the user whose crontab is to be tweaked"
+    }
+  ]
+}

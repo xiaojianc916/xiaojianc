@@ -1,0 +1,673 @@
+{
+  "names": [
+    "ssh"
+  ],
+  "detail": "Log into a remote machine",
+  "args": [
+    {
+      "label": "user@hostname",
+      "detail": "Address of remote machine to log into"
+    }
+  ],
+  "flags": [
+    {
+      "names": [
+        "-1"
+      ],
+      "detail": "Forces ssh to try protocol version 1 only"
+    },
+    {
+      "names": [
+        "-2"
+      ],
+      "detail": "Forces ssh to try protocol version 2 only"
+    },
+    {
+      "names": [
+        "-4"
+      ],
+      "detail": "Forces ssh to use IPv4 addresses only"
+    },
+    {
+      "names": [
+        "-6"
+      ],
+      "detail": "Forces ssh to use IPv6 addresses only"
+    },
+    {
+      "names": [
+        "-A"
+      ],
+      "detail": "Enables forwarding of the authentication agent connection"
+    },
+    {
+      "names": [
+        "-a"
+      ],
+      "detail": "Disables forwarding of the authentication agent connection"
+    },
+    {
+      "names": [
+        "-b"
+      ],
+      "detail": "Use bind_address on the local machine as the source address of the connection",
+      "arg": {
+        "label": "bind address",
+        "detail": "Source address of the connection"
+      }
+    },
+    {
+      "names": [
+        "-C"
+      ],
+      "detail": "Requests compression of all data (including stdin, stdout, stderr, and data for forwarded X11 and TCP connections)"
+    },
+    {
+      "names": [
+        "-c"
+      ],
+      "detail": "Selects the cipher specification for encrypting the session",
+      "arg": {
+        "label": "cipher spec",
+        "detail": "The selected cipher specification"
+      }
+    },
+    {
+      "names": [
+        "-D"
+      ],
+      "detail": "Specifies a local 'dynamic' application-level port forwarding",
+      "arg": {
+        "label": "port",
+        "detail": "Port of the bind address"
+      }
+    },
+    {
+      "names": [
+        "-e"
+      ],
+      "detail": "Sets the escape character for sessions with a pty (default: '~')",
+      "arg": {
+        "label": "escape char",
+        "detail": "Specified escape character"
+      }
+    },
+    {
+      "names": [
+        "-F"
+      ],
+      "detail": "Specifies an alternative per-user configuration file",
+      "arg": {
+        "label": "configfile",
+        "detail": "Path to alternative config file"
+      }
+    },
+    {
+      "names": [
+        "-f"
+      ],
+      "detail": "Requests ssh to go to background just before command execution"
+    },
+    {
+      "names": [
+        "-g"
+      ],
+      "detail": "Allows remote hosts to connect to local forwarded ports"
+    },
+    {
+      "names": [
+        "-I"
+      ],
+      "detail": "Specify the PKCS#11 shared library ssh should use to communicate with a PKCS#11 token providing the user's private RSA key",
+      "arg": {
+        "label": "pkcs11"
+      }
+    },
+    {
+      "names": [
+        "-i"
+      ],
+      "detail": "Selects a file from which the identity (private key) for public key authentication is read",
+      "arg": {
+        "label": "identity file",
+        "detail": "Path to identity (private key)"
+      }
+    },
+    {
+      "names": [
+        "-K"
+      ],
+      "detail": "Enables GSSAPI-based authentication and forwarding (delegation) of GSSAPI credentials to the server"
+    },
+    {
+      "names": [
+        "-k"
+      ],
+      "detail": "Disables forwarding (delegation) of GSSAPI credentials to the server"
+    },
+    {
+      "names": [
+        "-L"
+      ],
+      "detail": "Specifies that the given port on the local (client) host is to be forwarded to the given host and port on the remote side",
+      "arg": {
+        "label": "port:host:hostport",
+        "detail": "Local port, followed by host and host port to forward to"
+      }
+    },
+    {
+      "names": [
+        "-l"
+      ],
+      "detail": "Specifies the user to log in as on the remote machine",
+      "arg": {
+        "label": "login name",
+        "detail": "Name of user logging into remote machine"
+      }
+    },
+    {
+      "names": [
+        "-M"
+      ],
+      "detail": "Places the ssh client into ``master'' mode for connection sharing"
+    },
+    {
+      "names": [
+        "-m"
+      ],
+      "detail": "Additionally, for protocol version 2 a comma-separated list of MAC (message authentication code) algorithms can be specified in order of preference",
+      "arg": {
+        "label": "mac spec"
+      }
+    },
+    {
+      "names": [
+        "-N"
+      ],
+      "detail": "Do not execute a remote command"
+    },
+    {
+      "names": [
+        "-n"
+      ],
+      "detail": "Redirects stdin from /dev/null (actually, prevents reading from stdin)"
+    },
+    {
+      "names": [
+        "-O"
+      ],
+      "detail": "Control an active connection multiplexing master process",
+      "arg": {
+        "label": "ctl cmd",
+        "detail": "Command that's passed to the master process"
+      }
+    },
+    {
+      "names": [
+        "-o"
+      ],
+      "detail": "Can be used to give options in the format used in the configuration file",
+      "arg": {
+        "label": "option",
+        "detail": "Options that can be specified in the format of the config file",
+        "suggestions": [
+          {
+            "names": [
+              "AddressFamily"
+            ]
+          },
+          {
+            "names": [
+              "BatchMode"
+            ]
+          },
+          {
+            "names": [
+              "BindAddress"
+            ]
+          },
+          {
+            "names": [
+              "ChallengeResponseAuthentication"
+            ]
+          },
+          {
+            "names": [
+              "CheckHostIP"
+            ]
+          },
+          {
+            "names": [
+              "Cipher"
+            ]
+          },
+          {
+            "names": [
+              "Ciphers"
+            ]
+          },
+          {
+            "names": [
+              "ClearAllForwardings"
+            ]
+          },
+          {
+            "names": [
+              "Compression"
+            ]
+          },
+          {
+            "names": [
+              "CompressionLevel"
+            ]
+          },
+          {
+            "names": [
+              "ConnectionAttempts"
+            ]
+          },
+          {
+            "names": [
+              "ConnectTimeout"
+            ]
+          },
+          {
+            "names": [
+              "ControlMaster"
+            ]
+          },
+          {
+            "names": [
+              "ControlPath"
+            ]
+          },
+          {
+            "names": [
+              "ControlPersist"
+            ]
+          },
+          {
+            "names": [
+              "DynamicForward"
+            ]
+          },
+          {
+            "names": [
+              "EscapeChar"
+            ]
+          },
+          {
+            "names": [
+              "ExitOnForwardFailure"
+            ]
+          },
+          {
+            "names": [
+              "ForwardAgent"
+            ]
+          },
+          {
+            "names": [
+              "ForwardX11"
+            ]
+          },
+          {
+            "names": [
+              "ForwardX11Timeout"
+            ]
+          },
+          {
+            "names": [
+              "ForwardX11Trusted"
+            ]
+          },
+          {
+            "names": [
+              "GatewayPorts"
+            ]
+          },
+          {
+            "names": [
+              "GlobalKnownHostsFile"
+            ]
+          },
+          {
+            "names": [
+              "GSSAPIAuthentication"
+            ]
+          },
+          {
+            "names": [
+              "GSSAPIDelegateCredentials"
+            ]
+          },
+          {
+            "names": [
+              "HashKnownHosts"
+            ]
+          },
+          {
+            "names": [
+              "Host"
+            ]
+          },
+          {
+            "names": [
+              "HostbasedAuthentication"
+            ]
+          },
+          {
+            "names": [
+              "HostKeyAlgorithms"
+            ]
+          },
+          {
+            "names": [
+              "HostKeyAlias"
+            ]
+          },
+          {
+            "names": [
+              "HostName"
+            ]
+          },
+          {
+            "names": [
+              "IdentityFile"
+            ]
+          },
+          {
+            "names": [
+              "IdentitiesOnly"
+            ]
+          },
+          {
+            "names": [
+              "IPQoS"
+            ]
+          },
+          {
+            "names": [
+              "KbdInteractiveAuthentication"
+            ]
+          },
+          {
+            "names": [
+              "KbdInteractiveDevices"
+            ]
+          },
+          {
+            "names": [
+              "KexAlgorithms"
+            ]
+          },
+          {
+            "names": [
+              "LocalCommand"
+            ]
+          },
+          {
+            "names": [
+              "LocalForward"
+            ]
+          },
+          {
+            "names": [
+              "LogLevel"
+            ]
+          },
+          {
+            "names": [
+              "MACs"
+            ]
+          },
+          {
+            "names": [
+              "NoHostAuthenticationForLocalhost"
+            ]
+          },
+          {
+            "names": [
+              "NumberOfPasswordPrompts"
+            ]
+          },
+          {
+            "names": [
+              "PasswordAuthentication"
+            ]
+          },
+          {
+            "names": [
+              "PermitLocalCommand"
+            ]
+          },
+          {
+            "names": [
+              "PKCS11Provider"
+            ]
+          },
+          {
+            "names": [
+              "Port"
+            ]
+          },
+          {
+            "names": [
+              "PreferredAuthentications"
+            ]
+          },
+          {
+            "names": [
+              "Protocol"
+            ]
+          },
+          {
+            "names": [
+              "ProxyCommand"
+            ]
+          },
+          {
+            "names": [
+              "PubkeyAuthentication"
+            ]
+          },
+          {
+            "names": [
+              "RekeyLimit"
+            ]
+          },
+          {
+            "names": [
+              "RequestTTY"
+            ]
+          },
+          {
+            "names": [
+              "RhostsRSAAuthentication"
+            ]
+          },
+          {
+            "names": [
+              "RSAAuthentication"
+            ]
+          },
+          {
+            "names": [
+              "SendEnv"
+            ]
+          },
+          {
+            "names": [
+              "ServerAliveInterval"
+            ]
+          },
+          {
+            "names": [
+              "ServerAliveCountMax"
+            ]
+          },
+          {
+            "names": [
+              "StrictHostKeyChecking"
+            ]
+          },
+          {
+            "names": [
+              "TCPKeepAlive"
+            ]
+          },
+          {
+            "names": [
+              "Tunnel"
+            ]
+          },
+          {
+            "names": [
+              "TunnelDevice"
+            ]
+          },
+          {
+            "names": [
+              "UsePrivilegedPort"
+            ]
+          },
+          {
+            "names": [
+              "User"
+            ]
+          },
+          {
+            "names": [
+              "UserKnownHostsFile"
+            ]
+          },
+          {
+            "names": [
+              "VerifyHostKeyDNS"
+            ]
+          },
+          {
+            "names": [
+              "VisualHostKey"
+            ]
+          },
+          {
+            "names": [
+              "XAuthLocation"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "-p"
+      ],
+      "detail": "Port to connect to on the remote host",
+      "arg": {
+        "label": "port",
+        "detail": "Port to connect to"
+      }
+    },
+    {
+      "names": [
+        "-q"
+      ],
+      "detail": "Quiet mode. Causes most warning and diagnostic messages to be suppressed"
+    },
+    {
+      "names": [
+        "-R"
+      ],
+      "detail": "Specifies that the given port on the remote (server) host is to be forwarded to the given host and port on the local side",
+      "arg": {
+        "label": "port:host:hostport",
+        "detail": "Local port, followed by host and host port to forward to"
+      }
+    },
+    {
+      "names": [
+        "-S"
+      ],
+      "detail": "Specifies the location of a control socket for connection sharing, or the string 'none' to disable connection sharing",
+      "arg": {
+        "label": "ctl_path",
+        "detail": "Location of the control socket"
+      }
+    },
+    {
+      "names": [
+        "-s"
+      ],
+      "detail": "May be used to request invocation of a subsystem on the remote system"
+    },
+    {
+      "names": [
+        "-T"
+      ],
+      "detail": "Disable pseudo-tty allocation"
+    },
+    {
+      "names": [
+        "-t"
+      ],
+      "detail": "Force pseudo-tty allocation"
+    },
+    {
+      "names": [
+        "-V"
+      ],
+      "detail": "Display the version number and exit"
+    },
+    {
+      "names": [
+        "-v"
+      ],
+      "detail": "Verbose mode. Causes ssh to print debugging messages about its progress"
+    },
+    {
+      "names": [
+        "-W"
+      ],
+      "detail": "Requests that standard input and output on the client be forwarded to host on port over the secure channel",
+      "arg": {
+        "label": "host:port",
+        "detail": "Host and port to forward to"
+      }
+    },
+    {
+      "names": [
+        "-w"
+      ],
+      "detail": "Requests tunnel device forwarding with the specified tun(4) devices between the client (local_tun) and the server (remote_tun)",
+      "arg": {
+        "label": "local tun",
+        "detail": "Local device to forward to"
+      }
+    },
+    {
+      "names": [
+        "-X"
+      ],
+      "detail": "Enables X11 forwarding"
+    },
+    {
+      "names": [
+        "-x"
+      ],
+      "detail": "Disables X11 forwarding"
+    },
+    {
+      "names": [
+        "-Y"
+      ],
+      "detail": "Enables trusted X11 forwarding"
+    },
+    {
+      "names": [
+        "-y"
+      ],
+      "detail": "Send log information using the syslog(3) system module"
+    }
+  ]
+}

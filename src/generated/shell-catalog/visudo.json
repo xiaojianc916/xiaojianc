@@ -1,0 +1,78 @@
+{
+  "names": [
+    "visudo"
+  ],
+  "detail": "Visudo edits the sudoers file, which defines the users and groups with administrator rights",
+  "flags": [
+    {
+      "names": [
+        "--check",
+        "-c"
+      ],
+      "detail": "Checking existing sudoers file for syntax errors"
+    },
+    {
+      "names": [
+        "--file",
+        "-f"
+      ],
+      "detail": "Set an alternative sudoers file location",
+      "arg": {
+        "label": "New sudoers location",
+        "detail": "Specify the alternate sudoers file location"
+      }
+    },
+    {
+      "names": [
+        "--help",
+        "-h"
+      ],
+      "detail": "Display a short help message"
+    },
+    {
+      "names": [
+        "--quiet",
+        "-q"
+      ],
+      "detail": "Enable quiet mode (syntax error not printed)"
+    },
+    {
+      "names": [
+        "--strict",
+        "-s"
+      ],
+      "detail": "Enable strict checking of the sudoers file"
+    },
+    {
+      "names": [
+        "--version",
+        "-V"
+      ],
+      "detail": "Display version and exit"
+    },
+    {
+      "names": [
+        "--export",
+        "-x"
+      ],
+      "detail": "Export JSON and write it to output_file",
+      "arg": {
+        "label": "Output file name"
+      }
+    },
+    {
+      "names": [
+        "--perms",
+        "-P"
+      ],
+      "detail": "Enforce default mode for the sudoers file"
+    },
+    {
+      "names": [
+        "--owner",
+        "-O"
+      ],
+      "detail": "Enforce the default ownership for the sudoers file"
+    }
+  ]
+}

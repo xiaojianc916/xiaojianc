@@ -24,6 +24,9 @@ import type {
 } from '@/types/terminal';
 import { assertDesktopRuntime } from '@/utils/desktop-runtime';
 
+type TauriCoreModule = typeof import('@tauri-apps/api/core');
+type TauriDialogModule = typeof import('@tauri-apps/plugin-dialog');
+
 const openFileFilters = [
   {
     name: 'Shell Script',
@@ -42,115 +45,179 @@ const saveFileFilters = [
   },
 ];
 
+// 动态 import 的单例缓存，避免每次调用都走一次 microtask
+let tauriCorePromise: Promise<TauriCoreModule> | null = null;
+let tauriDialogPromise: Promise<TauriDialogModule> | null = null;
+
+const loadTauriCore = (): Promise<TauriCoreModule> => {
+  if (!tauriCorePromise) {
+    tauriCorePromise = import('@tauri-apps/api/core');
+  }
+  return tauriCorePromise;
+};
+
+const loadTauriDialog = (): Promise<TauriDialogModule> => {
+  if (!tauriDialogPromise) {
+    tauriDialogPromise = import('@tauri-apps/plugin-dialog');
+  }
+  return tauriDialogPromise;
+};
+
+// 统一错误包装：保留原 cause，同时把操作名带出，便于调试 / Sentry 定位
+const wrapInvocationError = (guardHint: string, command: string, error: unknown): Error => {
+  const baseMessage = error instanceof Error ? error.message : String(error);
+  const wrapped = new Error(`[${guardHint}] ${command} 调用失败: ${baseMessage}`);
+  if (error instanceof Error && (wrapped as unknown as { cause?: unknown }).cause === undefined) {
+    (wrapped as unknown as { cause: unknown }).cause = error;
+  }
+  return wrapped;
+};
+
+/**
+ * 调用一个 Rust 端 `#[tauri::command]`。
+ * - 执行运行时守卫（非桌面环境会抛错）。
+ * - 复用动态 import 的核心模块。
+ * - 统一把异常包装为带操作名的 Error。
+ */
+const runTauriCommand = async <T>(
+  guardHint: string,
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> => {
+  await assertDesktopRuntime(guardHint);
+  const { invoke } = await loadTauriCore();
+  try {
+    return await invoke<T>(command, args);
+  } catch (error) {
+    throw wrapInvocationError(guardHint, command, error);
+  }
+};
+
+const runTauriVoidCommand = (
+  guardHint: string,
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<void> => runTauriCommand<void>(guardHint, command, args);
+
+/**
+ * 统一处理 open/save 对话框：Tauri 在用户取消时返回 null，非字符串结果统一当作 null 处理。
+ */
+const normalizeDialogResult = (value: unknown): string | null =>
+  typeof value === 'string' ? value : null;
+
 export const tauriService: ITauriService & {
   pickOpenPath(): Promise<string | null>;
   pickOpenFolderPath(): Promise<string | null>;
   pickSavePath(defaultPath: string): Promise<string | null>;
 } = {
-  async getStartupWorkspace() {
-    await assertDesktopRuntime('加载默认工作区');
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<IStartupWorkspacePayload>('get_startup_workspace');
+  getStartupWorkspace() {
+    return runTauriCommand<IStartupWorkspacePayload>('加载默认工作区', 'get_startup_workspace');
   },
-  async analyzeScript(payload: IAnalyzeScriptRequest) {
-    await assertDesktopRuntime('执行 ShellCheck 实时诊断');
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<IAnalyzeScriptPayload>('analyze_script', { payload });
+
+  analyzeScript(payload: IAnalyzeScriptRequest) {
+    return runTauriCommand<IAnalyzeScriptPayload>('执行 ShellCheck 实时诊断', 'analyze_script', {
+      payload,
+    });
   },
-  async formatScript(payload: IFormatScriptRequest) {
-    await assertDesktopRuntime('使用 shfmt 格式化脚本');
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<IFormatScriptPayload>('format_script', { payload });
+
+  formatScript(payload: IFormatScriptRequest) {
+    return runTauriCommand<IFormatScriptPayload>('使用 shfmt 格式化脚本', 'format_script', {
+      payload,
+    });
   },
+
   async pickOpenPath() {
     await assertDesktopRuntime('打开本地脚本');
-    const { open } = await import('@tauri-apps/plugin-dialog');
-    const path = await open({
+    const { open } = await loadTauriDialog();
+    const result = await open({
       multiple: false,
       directory: false,
       filters: openFileFilters,
     });
-
-    return typeof path === 'string' ? path : null;
+    return normalizeDialogResult(result);
   },
+
   async pickOpenFolderPath() {
     await assertDesktopRuntime('打开本地文件夹');
-    const { open } = await import('@tauri-apps/plugin-dialog');
-    const path = await open({
+    const { open } = await loadTauriDialog();
+    const result = await open({
       multiple: false,
       directory: true,
     });
-
-    return typeof path === 'string' ? path : null;
+    return normalizeDialogResult(result);
   },
+
   async pickSavePath(defaultPath) {
     await assertDesktopRuntime('保存脚本');
-    const { save } = await import('@tauri-apps/plugin-dialog');
-    const path = await save({
+    const { save } = await loadTauriDialog();
+    const result = await save({
       defaultPath,
       filters: saveFileFilters,
     });
+    return normalizeDialogResult(result);
+  },
 
-    return typeof path === 'string' ? path : null;
+  // 下面这一组命令 Rust 端直接接收扁平参数，不是 { payload } 包装
+  loadScript(path) {
+    return runTauriCommand<IScriptFilePayload>('读取脚本文件', 'load_script', { path });
   },
-  async loadScript(path) {
-    await assertDesktopRuntime('读取脚本文件');
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<IScriptFilePayload>('load_script', { path });
+
+  loadImageAsset(path) {
+    return runTauriCommand<IImageAssetPayload>('读取图片资源', 'load_image_asset', { path });
   },
-  async loadImageAsset(path) {
-    await assertDesktopRuntime('读取图片资源');
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<IImageAssetPayload>('load_image_asset', { path });
+
+  saveScript(payload) {
+    return runTauriCommand<IScriptFilePayload>('写入脚本文件', 'save_script', { payload });
   },
-  async saveScript(payload) {
-    await assertDesktopRuntime('写入脚本文件');
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<IScriptFilePayload>('save_script', { payload });
+
+  detectEnvironment() {
+    return runTauriCommand<IExecutionEnvironment>('检测执行环境', 'detect_execution_environment');
   },
-  async detectEnvironment() {
-    await assertDesktopRuntime('检测执行环境');
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<IExecutionEnvironment>('detect_execution_environment');
+
+  runScript(payload) {
+    return runTauriCommand<IRunResult>('运行脚本', 'run_script', { payload });
   },
-  async runScript(payload) {
-    await assertDesktopRuntime('运行脚本');
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<IRunResult>('run_script', { payload });
+
+  listWorkspaceEntries(path, rootPath) {
+    return runTauriCommand<IWorkspaceDirectoryPayload>('读取工作区目录', 'list_workspace_entries', {
+      path,
+      rootPath,
+    });
   },
-  async listWorkspaceEntries(path, rootPath) {
-    await assertDesktopRuntime('读取工作区目录');
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<IWorkspaceDirectoryPayload>('list_workspace_entries', { path, rootPath });
+
+  ensureTerminalSession(payload: IEnsureTerminalSessionRequest) {
+    return runTauriCommand<ITerminalSessionPayload>(
+      '连接 WSL2 终端',
+      'ensure_terminal_session',
+      { payload },
+    );
   },
-  async ensureTerminalSession(payload: IEnsureTerminalSessionRequest) {
-    await assertDesktopRuntime('连接 WSL2 终端');
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<ITerminalSessionPayload>('ensure_terminal_session', { payload });
+
+  dispatchScriptToTerminal(payload: IDispatchTerminalScriptRequest) {
+    return runTauriCommand<IDispatchTerminalScriptPayload>(
+      '在终端中执行脚本',
+      'dispatch_script_to_terminal',
+      { payload },
+    );
   },
-  async dispatchScriptToTerminal(payload: IDispatchTerminalScriptRequest) {
-    await assertDesktopRuntime('在终端中执行脚本');
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<IDispatchTerminalScriptPayload>('dispatch_script_to_terminal', { payload });
+
+  waitForTerminalRun(payload: IWaitTerminalRunRequest) {
+    return runTauriCommand<IWaitTerminalRunPayload>(
+      '等待终端脚本执行完成',
+      'wait_for_terminal_run',
+      { payload },
+    );
   },
-  async waitForTerminalRun(payload: IWaitTerminalRunRequest) {
-    await assertDesktopRuntime('等待终端脚本执行完成');
-    const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<IWaitTerminalRunPayload>('wait_for_terminal_run', { payload });
+
+  writeTerminalInput(payload: IWriteTerminalInputRequest) {
+    return runTauriVoidCommand('写入终端输入', 'write_terminal_input', { payload });
   },
-  async writeTerminalInput(payload: IWriteTerminalInputRequest) {
-    await assertDesktopRuntime('写入终端输入');
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('write_terminal_input', { payload });
+
+  resizeTerminalSession(payload: IResizeTerminalSessionRequest) {
+    return runTauriVoidCommand('同步终端尺寸', 'resize_terminal_session', { payload });
   },
-  async resizeTerminalSession(payload: IResizeTerminalSessionRequest) {
-    await assertDesktopRuntime('同步终端尺寸');
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('resize_terminal_session', { payload });
-  },
-  async closeTerminalSession(payload: ICloseTerminalSessionRequest) {
-    await assertDesktopRuntime('关闭终端会话');
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('close_terminal_session', { payload });
+
+  closeTerminalSession(payload: ICloseTerminalSessionRequest) {
+    return runTauriVoidCommand('关闭终端会话', 'close_terminal_session', { payload });
   },
 };

@@ -1,0 +1,1883 @@
+{
+  "names": [
+    "curl"
+  ],
+  "detail": "Transfer a URL",
+  "args": [
+    {
+      "label": "URL"
+    }
+  ],
+  "flags": [
+    {
+      "names": [
+        "-a",
+        "--append"
+      ],
+      "detail": "Append to target file when uploading"
+    },
+    {
+      "names": [
+        "-E",
+        "--cert"
+      ],
+      "detail": "Client certificate file and password",
+      "arg": {
+        "label": "certificate[:password]"
+      }
+    },
+    {
+      "names": [
+        "-K",
+        "--config"
+      ],
+      "detail": "Read config from a file",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "-C",
+        "--continue-at"
+      ],
+      "detail": "Resumed transfer offset",
+      "arg": {
+        "label": "offset"
+      }
+    },
+    {
+      "names": [
+        "-b",
+        "--cookie"
+      ],
+      "detail": "Send cookies from string/file",
+      "arg": {
+        "label": "data or filename"
+      }
+    },
+    {
+      "names": [
+        "-c",
+        "--cookie-jar"
+      ],
+      "detail": "Write cookies to <filename> after operation",
+      "arg": {
+        "label": "filename"
+      }
+    },
+    {
+      "names": [
+        "-d",
+        "--data"
+      ],
+      "detail": "HTTP POST data",
+      "arg": {
+        "label": "data"
+      }
+    },
+    {
+      "names": [
+        "-q",
+        "--disable"
+      ],
+      "detail": "Disable .curlrc"
+    },
+    {
+      "names": [
+        "-D",
+        "--dump-header"
+      ],
+      "detail": "Write the received headers to <filename>",
+      "arg": {
+        "label": "filename"
+      }
+    },
+    {
+      "names": [
+        "-f",
+        "--fail"
+      ],
+      "detail": "Fail silently (no output at all) on HTTP errors"
+    },
+    {
+      "names": [
+        "-F",
+        "--form"
+      ],
+      "detail": "Specify multipart MIME data",
+      "arg": {
+        "label": "content"
+      }
+    },
+    {
+      "names": [
+        "-P",
+        "--ftp-port"
+      ],
+      "detail": "Use PORT instead of PASV",
+      "arg": {
+        "label": "address"
+      }
+    },
+    {
+      "names": [
+        "-G",
+        "--get"
+      ],
+      "detail": "Put the post data in the URL and use GET"
+    },
+    {
+      "names": [
+        "-g",
+        "--globoff"
+      ],
+      "detail": "Disable URL sequences and ranges using {} and []"
+    },
+    {
+      "names": [
+        "-I",
+        "--head"
+      ],
+      "detail": "Show document info only"
+    },
+    {
+      "names": [
+        "-H",
+        "--header"
+      ],
+      "detail": "Pass custom header(s) to server",
+      "arg": {
+        "label": "header/file",
+        "suggestions": [
+          {
+            "names": [
+              "Content-Type: application/json"
+            ]
+          },
+          {
+            "names": [
+              "Content-Type: application/x-www-form-urlencoded"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "-h",
+        "--help"
+      ],
+      "detail": "This help text"
+    },
+    {
+      "names": [
+        "-0",
+        "--http1.0"
+      ],
+      "detail": "Use HTTP 1.0"
+    },
+    {
+      "names": [
+        "-i",
+        "--include"
+      ],
+      "detail": "Include protocol response headers in the output"
+    },
+    {
+      "names": [
+        "-k",
+        "--insecure"
+      ],
+      "detail": "Allow insecure server connections when using SSL"
+    },
+    {
+      "names": [
+        "-4",
+        "--ipv4"
+      ],
+      "detail": "Resolve names to IPv4 addresses"
+    },
+    {
+      "names": [
+        "-6",
+        "--ipv6"
+      ],
+      "detail": "Resolve names to IPv6 addresses"
+    },
+    {
+      "names": [
+        "-j",
+        "--junk-session-cookies"
+      ],
+      "detail": "Ignore session cookies read from file"
+    },
+    {
+      "names": [
+        "-l",
+        "--list-only"
+      ],
+      "detail": "List only mode"
+    },
+    {
+      "names": [
+        "-L",
+        "--location"
+      ],
+      "detail": "Follow redirects"
+    },
+    {
+      "names": [
+        "-M",
+        "--manual"
+      ],
+      "detail": "Display the full manual"
+    },
+    {
+      "names": [
+        "-m",
+        "--max-time"
+      ],
+      "detail": "Maximum time allowed for the transfer",
+      "arg": {
+        "label": "seconds"
+      }
+    },
+    {
+      "names": [
+        "-n",
+        "--netrc"
+      ],
+      "detail": "Must read .netrc for user name and password"
+    },
+    {
+      "names": [
+        "-:",
+        "--next"
+      ],
+      "detail": "Make next URL use its separate set of options"
+    },
+    {
+      "names": [
+        "-N",
+        "--no-buffer"
+      ],
+      "detail": "Disable buffering of the output stream"
+    },
+    {
+      "names": [
+        "-o",
+        "--output"
+      ],
+      "detail": "Write to file instead of stdout",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "-#",
+        "--progress-bar"
+      ],
+      "detail": "Display transfer progress as a bar"
+    },
+    {
+      "names": [
+        "-x",
+        "--proxy"
+      ],
+      "detail": "[protocol://]host[:port] Use this proxy"
+    },
+    {
+      "names": [
+        "-U",
+        "--proxy-user"
+      ],
+      "detail": "Proxy user and password",
+      "arg": {
+        "label": "user:password"
+      }
+    },
+    {
+      "names": [
+        "-p",
+        "--proxytunnel"
+      ],
+      "detail": "Operate through an HTTP proxy tunnel (using CONNECT)"
+    },
+    {
+      "names": [
+        "-Q",
+        "--quote"
+      ],
+      "detail": "Send command(s) to server before transfer"
+    },
+    {
+      "names": [
+        "-r",
+        "--range"
+      ],
+      "detail": "Retrieve only the bytes within RANGE",
+      "arg": {
+        "label": "range"
+      }
+    },
+    {
+      "names": [
+        "-e",
+        "--referer"
+      ],
+      "detail": "Referrer URL",
+      "arg": {
+        "label": "URL"
+      }
+    },
+    {
+      "names": [
+        "-J",
+        "--remote-header-name"
+      ],
+      "detail": "Use the header-provided filename"
+    },
+    {
+      "names": [
+        "-O",
+        "--remote-name"
+      ],
+      "detail": "Write output to a file named as the remote file"
+    },
+    {
+      "names": [
+        "-R",
+        "--remote-time"
+      ],
+      "detail": "Set the remote file's time on the local output"
+    },
+    {
+      "names": [
+        "-X",
+        "--request"
+      ],
+      "detail": "Specify request command to use",
+      "arg": {
+        "label": "command",
+        "suggestions": [
+          {
+            "names": [
+              "GET"
+            ]
+          },
+          {
+            "names": [
+              "HEAD"
+            ]
+          },
+          {
+            "names": [
+              "POST"
+            ]
+          },
+          {
+            "names": [
+              "PUT"
+            ]
+          },
+          {
+            "names": [
+              "DELETE"
+            ]
+          },
+          {
+            "names": [
+              "CONNECT"
+            ]
+          },
+          {
+            "names": [
+              "OPTIONS"
+            ]
+          },
+          {
+            "names": [
+              "TRACE"
+            ]
+          },
+          {
+            "names": [
+              "PATCH"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "-S",
+        "--show-error"
+      ],
+      "detail": "Show error even when -s is used"
+    },
+    {
+      "names": [
+        "-s",
+        "--silent"
+      ],
+      "detail": "Silent mode"
+    },
+    {
+      "names": [
+        "-Y",
+        "--speed-limit"
+      ],
+      "detail": "Stop transfers slower than this",
+      "arg": {
+        "label": "speed"
+      }
+    },
+    {
+      "names": [
+        "-y",
+        "--speed-time"
+      ],
+      "detail": "Trigger 'speed-limit' abort after this time",
+      "arg": {
+        "label": "seconds"
+      }
+    },
+    {
+      "names": [
+        "-2",
+        "--sslv2"
+      ],
+      "detail": "Use SSLv2"
+    },
+    {
+      "names": [
+        "-3",
+        "--sslv3"
+      ],
+      "detail": "Use SSLv3"
+    },
+    {
+      "names": [
+        "-t",
+        "--telnet-option"
+      ],
+      "detail": "Set telnet option",
+      "arg": {
+        "label": "val"
+      }
+    },
+    {
+      "names": [
+        "-z",
+        "--time-cond"
+      ],
+      "detail": "Transfer based on a time condition",
+      "arg": {
+        "label": "time"
+      }
+    },
+    {
+      "names": [
+        "-1",
+        "--tlsv1"
+      ],
+      "detail": "Use TLSv1.0 or greater"
+    },
+    {
+      "names": [
+        "-T",
+        "--upload-file"
+      ],
+      "detail": "Transfer local FILE to destination",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "-B",
+        "--use-ascii"
+      ],
+      "detail": "Use ASCII/text transfer"
+    },
+    {
+      "names": [
+        "-u",
+        "--user"
+      ],
+      "detail": "Server user and password",
+      "arg": {
+        "label": "user:password"
+      }
+    },
+    {
+      "names": [
+        "-A",
+        "--user-agent"
+      ],
+      "detail": "Send User-Agent <name> to server",
+      "arg": {
+        "label": "name"
+      }
+    },
+    {
+      "names": [
+        "-v",
+        "--verbose"
+      ],
+      "detail": "Make the operation more talkative"
+    },
+    {
+      "names": [
+        "-V",
+        "--version"
+      ],
+      "detail": "Show version number and quit"
+    },
+    {
+      "names": [
+        "-w",
+        "--write-out"
+      ],
+      "detail": "Use output FORMAT after completion",
+      "arg": {
+        "label": "format"
+      }
+    },
+    {
+      "names": [
+        "--abstract-unix-socket"
+      ],
+      "detail": "Connect via abstract Unix domain socket",
+      "arg": {
+        "label": "path"
+      }
+    },
+    {
+      "names": [
+        "--alt-svc"
+      ],
+      "detail": "Name> Enable alt-svc with this cache file",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "--anyauth"
+      ],
+      "detail": "Pick any authentication method"
+    },
+    {
+      "names": [
+        "--basic"
+      ],
+      "detail": "Use HTTP Basic Authentication"
+    },
+    {
+      "names": [
+        "--cacert"
+      ],
+      "detail": "CA certificate to verify peer against",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "--capath"
+      ],
+      "detail": "CA directory to verify peer against",
+      "arg": {
+        "label": "dir"
+      }
+    },
+    {
+      "names": [
+        "--cert-status"
+      ],
+      "detail": "Verify the status of the server certificate"
+    },
+    {
+      "names": [
+        "--cert-type"
+      ],
+      "detail": "Certificate file type",
+      "arg": {
+        "label": "type",
+        "suggestions": [
+          {
+            "names": [
+              "DER"
+            ]
+          },
+          {
+            "names": [
+              "PEM"
+            ]
+          },
+          {
+            "names": [
+              "ENG"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "--ciphers"
+      ],
+      "detail": "Of ciphers> SSL ciphers to use",
+      "arg": {
+        "label": "list"
+      }
+    },
+    {
+      "names": [
+        "--compressed"
+      ],
+      "detail": "Request compressed response"
+    },
+    {
+      "names": [
+        "--compressed-ssh"
+      ],
+      "detail": "Enable SSH compression"
+    },
+    {
+      "names": [
+        "--connect-timeout"
+      ],
+      "detail": "Maximum time allowed for connection",
+      "arg": {
+        "label": "seconds"
+      }
+    },
+    {
+      "names": [
+        "--connect-to"
+      ],
+      "detail": "Connect to host",
+      "arg": {
+        "label": "HOST1:PORT1:HOST2:PORT2"
+      }
+    },
+    {
+      "names": [
+        "--create-dirs"
+      ],
+      "detail": "Create necessary local directory hierarchy"
+    },
+    {
+      "names": [
+        "--crlf"
+      ],
+      "detail": "Convert LF to CRLF in upload"
+    },
+    {
+      "names": [
+        "--crlfile"
+      ],
+      "detail": "Get a CRL list in PEM format from the given file",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "--data-ascii"
+      ],
+      "detail": "HTTP POST ASCII data",
+      "arg": {
+        "label": "data"
+      }
+    },
+    {
+      "names": [
+        "--data-binary"
+      ],
+      "detail": "HTTP POST binary data",
+      "arg": {
+        "label": "data"
+      }
+    },
+    {
+      "names": [
+        "--data-raw"
+      ],
+      "detail": "HTTP POST data, '@' allowed",
+      "arg": {
+        "label": "data"
+      }
+    },
+    {
+      "names": [
+        "--data-urlencode"
+      ],
+      "detail": "HTTP POST data url encoded",
+      "arg": {
+        "label": "data"
+      }
+    },
+    {
+      "names": [
+        "--delegation"
+      ],
+      "detail": "GSS-API delegation permission",
+      "arg": {
+        "label": "LEVEL"
+      }
+    },
+    {
+      "names": [
+        "--digest"
+      ],
+      "detail": "Use HTTP Digest Authentication"
+    },
+    {
+      "names": [
+        "--disable-eprt"
+      ],
+      "detail": "Inhibit using EPRT or LPRT"
+    },
+    {
+      "names": [
+        "--disable-epsv"
+      ],
+      "detail": "Inhibit using EPSV"
+    },
+    {
+      "names": [
+        "--disallow-username-in-url"
+      ],
+      "detail": "Disallow username in url"
+    },
+    {
+      "names": [
+        "--dns-interface"
+      ],
+      "detail": "Interface to use for DNS requests",
+      "arg": {
+        "label": "interface"
+      }
+    },
+    {
+      "names": [
+        "--dns-ipv4-addr"
+      ],
+      "detail": "IPv4 address to use for DNS requests",
+      "arg": {
+        "label": "address"
+      }
+    },
+    {
+      "names": [
+        "--dns-ipv6-addr"
+      ],
+      "detail": "IPv6 address to use for DNS requests",
+      "arg": {
+        "label": "address"
+      }
+    },
+    {
+      "names": [
+        "--dns-servers"
+      ],
+      "detail": "DNS server addrs to use",
+      "arg": {
+        "label": "addresses"
+      }
+    },
+    {
+      "names": [
+        "--doh-url"
+      ],
+      "detail": "Resolve host names over DOH",
+      "arg": {
+        "label": "URL"
+      }
+    },
+    {
+      "names": [
+        "--egd-file"
+      ],
+      "detail": "EGD socket path for random data",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "--engine"
+      ],
+      "detail": "Crypto engine to use",
+      "arg": {
+        "label": "name"
+      }
+    },
+    {
+      "names": [
+        "--etag-compare"
+      ],
+      "detail": "Make a conditional HTTP request for the ETag read from the given file",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "--etag-save"
+      ],
+      "detail": "Save an HTTP ETag to the specified file",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "--expect100-timeout"
+      ],
+      "detail": "How long to wait for 100-continue",
+      "arg": {
+        "label": "seconds"
+      }
+    },
+    {
+      "names": [
+        "--fail-early"
+      ],
+      "detail": "Fail on first transfer error, do not continue"
+    },
+    {
+      "names": [
+        "--fail-with-body"
+      ],
+      "detail": "On HTTP errors, return an error and also output any HTML response"
+    },
+    {
+      "names": [
+        "--false-start"
+      ],
+      "detail": "Enable TLS False Start"
+    },
+    {
+      "names": [
+        "--form-string"
+      ],
+      "detail": "Specify multipart MIME data",
+      "arg": {
+        "label": "string"
+      }
+    },
+    {
+      "names": [
+        "--ftp-account"
+      ],
+      "detail": "Account data string",
+      "arg": {
+        "label": "data"
+      }
+    },
+    {
+      "names": [
+        "--ftp-alternative-to-user"
+      ],
+      "detail": "String to replace USER [name]",
+      "arg": {
+        "label": "command"
+      }
+    },
+    {
+      "names": [
+        "--ftp-create-dirs"
+      ],
+      "detail": "Create the remote dirs if not present"
+    },
+    {
+      "names": [
+        "--ftp-method"
+      ],
+      "detail": "Control CWD usage",
+      "arg": {
+        "label": "method"
+      }
+    },
+    {
+      "names": [
+        "--ftp-pasv"
+      ],
+      "detail": "Use PASV/EPSV instead of PORT"
+    },
+    {
+      "names": [
+        "--ftp-pret"
+      ],
+      "detail": "Send PRET before PASV"
+    },
+    {
+      "names": [
+        "--ftp-skip-pasv-ip"
+      ],
+      "detail": "Skip the IP address for PASV"
+    },
+    {
+      "names": [
+        "--ftp-ssl-ccc"
+      ],
+      "detail": "Send CCC after authenticating"
+    },
+    {
+      "names": [
+        "--ftp-ssl-ccc-mode"
+      ],
+      "detail": "Set CCC mode",
+      "arg": {
+        "label": "mode",
+        "suggestions": [
+          {
+            "names": [
+              "active"
+            ]
+          },
+          {
+            "names": [
+              "passive"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "--ftp-ssl-control"
+      ],
+      "detail": "Require SSL/TLS for FTP login, clear for transfer"
+    },
+    {
+      "names": [
+        "--happy-eyeballs-timeout-ms"
+      ],
+      "detail": "How long to wait in milliseconds for IPv6 before trying IPv4",
+      "arg": {
+        "label": "milliseconds"
+      }
+    },
+    {
+      "names": [
+        "--haproxy-protocol"
+      ],
+      "detail": "Send HAProxy PROXY protocol v1 header"
+    },
+    {
+      "names": [
+        "--hostpubmd5"
+      ],
+      "detail": "Acceptable MD5 hash of the host public key",
+      "arg": {
+        "label": "md5"
+      }
+    },
+    {
+      "names": [
+        "--http0.9"
+      ],
+      "detail": "Allow HTTP 0.9 responses"
+    },
+    {
+      "names": [
+        "--http1.1"
+      ],
+      "detail": "Use HTTP 1.1"
+    },
+    {
+      "names": [
+        "--http2"
+      ],
+      "detail": "Use HTTP 2"
+    },
+    {
+      "names": [
+        "--http2-prior-knowledge"
+      ],
+      "detail": "Use HTTP 2 without HTTP/1.1 Upgrade"
+    },
+    {
+      "names": [
+        "--ignore-content-length"
+      ],
+      "detail": "Ignore the size of the remote resource"
+    },
+    {
+      "names": [
+        "--interface"
+      ],
+      "detail": "Use network INTERFACE (or address)",
+      "arg": {
+        "label": "name"
+      }
+    },
+    {
+      "names": [
+        "--keepalive-time"
+      ],
+      "detail": "Interval time for keepalive probes",
+      "arg": {
+        "label": "seconds"
+      }
+    },
+    {
+      "names": [
+        "--key"
+      ],
+      "detail": "Private key file name",
+      "arg": {
+        "label": "key"
+      }
+    },
+    {
+      "names": [
+        "--key-type"
+      ],
+      "detail": "Private key file type",
+      "arg": {
+        "label": "type",
+        "suggestions": [
+          {
+            "names": [
+              "DER"
+            ]
+          },
+          {
+            "names": [
+              "PEM"
+            ]
+          },
+          {
+            "names": [
+              "ENG"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "--krb"
+      ],
+      "detail": "Enable Kerberos with security <level>",
+      "arg": {
+        "label": "level"
+      }
+    },
+    {
+      "names": [
+        "--libcurl"
+      ],
+      "detail": "Dump libcurl equivalent code of this command line",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "--limit-rate"
+      ],
+      "detail": "Limit transfer speed to RATE",
+      "arg": {
+        "label": "speed"
+      }
+    },
+    {
+      "names": [
+        "--local-port"
+      ],
+      "detail": "Force use of RANGE for local port numbers",
+      "arg": {
+        "label": "num/range"
+      }
+    },
+    {
+      "names": [
+        "--location-trusted"
+      ],
+      "detail": "Like --location, and send auth to other hosts"
+    },
+    {
+      "names": [
+        "--login-options"
+      ],
+      "detail": "Server login options",
+      "arg": {
+        "label": "options"
+      }
+    },
+    {
+      "names": [
+        "--mail-auth"
+      ],
+      "detail": "Originator address of the original email",
+      "arg": {
+        "label": "address"
+      }
+    },
+    {
+      "names": [
+        "--mail-from"
+      ],
+      "detail": "Mail from this address",
+      "arg": {
+        "label": "address"
+      }
+    },
+    {
+      "names": [
+        "--mail-rcpt"
+      ],
+      "detail": "Mail to this address",
+      "arg": {
+        "label": "address"
+      }
+    },
+    {
+      "names": [
+        "--max-filesize"
+      ],
+      "detail": "Maximum file size to download",
+      "arg": {
+        "label": "bytes"
+      }
+    },
+    {
+      "names": [
+        "--max-redirs"
+      ],
+      "detail": "Maximum number of redirects allowed",
+      "arg": {
+        "label": "num"
+      }
+    },
+    {
+      "names": [
+        "--metalink"
+      ],
+      "detail": "Process given URLs as metalink XML file"
+    },
+    {
+      "names": [
+        "--negotiate"
+      ],
+      "detail": "Use HTTP Negotiate (SPNEGO) authentication"
+    },
+    {
+      "names": [
+        "--netrc-file"
+      ],
+      "detail": "Specify FILE for netrc",
+      "arg": {
+        "label": "filename"
+      }
+    },
+    {
+      "names": [
+        "--netrc-optional"
+      ],
+      "detail": "Use either .netrc or URL"
+    },
+    {
+      "names": [
+        "--no-alpn"
+      ],
+      "detail": "Disable the ALPN TLS extension"
+    },
+    {
+      "names": [
+        "--no-keepalive"
+      ],
+      "detail": "Disable TCP keepalive on the connection"
+    },
+    {
+      "names": [
+        "--no-npn"
+      ],
+      "detail": "Disable the NPN TLS extension"
+    },
+    {
+      "names": [
+        "--no-sessionid"
+      ],
+      "detail": "Disable SSL session-ID reusing"
+    },
+    {
+      "names": [
+        "--noproxy"
+      ],
+      "detail": "List of hosts which do not use proxy",
+      "arg": {
+        "label": "no-proxy-list"
+      }
+    },
+    {
+      "names": [
+        "--ntlm"
+      ],
+      "detail": "Use HTTP NTLM authentication"
+    },
+    {
+      "names": [
+        "--ntlm-wb"
+      ],
+      "detail": "Use HTTP NTLM authentication with winbind"
+    },
+    {
+      "names": [
+        "--oauth2-bearer"
+      ],
+      "detail": "OAuth 2 Bearer Token",
+      "arg": {
+        "label": "token"
+      }
+    },
+    {
+      "names": [
+        "--pass"
+      ],
+      "detail": "Pass phrase for the private key",
+      "arg": {
+        "label": "phrase"
+      }
+    },
+    {
+      "names": [
+        "--path-as-is"
+      ],
+      "detail": "Do not squash .. sequences in URL path"
+    },
+    {
+      "names": [
+        "--pinnedpubkey"
+      ],
+      "detail": "FILE/HASHES Public key to verify peer against",
+      "arg": {
+        "label": "hashes"
+      }
+    },
+    {
+      "names": [
+        "--post301"
+      ],
+      "detail": "Do not switch to GET after following a 301"
+    },
+    {
+      "names": [
+        "--post302"
+      ],
+      "detail": "Do not switch to GET after following a 302"
+    },
+    {
+      "names": [
+        "--post303"
+      ],
+      "detail": "Do not switch to GET after following a 303"
+    },
+    {
+      "names": [
+        "--preproxy"
+      ],
+      "detail": "[protocol://]host[:port] Use this proxy first"
+    },
+    {
+      "names": [
+        "--proto"
+      ],
+      "detail": "Enable/disable PROTOCOLS",
+      "arg": {
+        "label": "protocols"
+      }
+    },
+    {
+      "names": [
+        "--proto-default"
+      ],
+      "detail": "Use PROTOCOL for any URL missing a scheme",
+      "arg": {
+        "label": "protocol"
+      }
+    },
+    {
+      "names": [
+        "--proto-redir"
+      ],
+      "detail": "Enable/disable PROTOCOLS on redirect",
+      "arg": {
+        "label": "protocols"
+      }
+    },
+    {
+      "names": [
+        "--proxy-anyauth"
+      ],
+      "detail": "Pick any proxy authentication method"
+    },
+    {
+      "names": [
+        "--proxy-basic"
+      ],
+      "detail": "Use Basic authentication on the proxy"
+    },
+    {
+      "names": [
+        "--proxy-cacert"
+      ],
+      "detail": "CA certificate to verify peer against for proxy",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "--proxy-capath"
+      ],
+      "detail": "CA directory to verify peer against for proxy",
+      "arg": {
+        "label": "dir"
+      }
+    },
+    {
+      "names": [
+        "--proxy-cert"
+      ],
+      "detail": "Set client certificate for proxy",
+      "arg": {
+        "label": "cert[:passwd]"
+      }
+    },
+    {
+      "names": [
+        "--proxy-cert-type"
+      ],
+      "detail": "Client certificate type for HTTPS proxy",
+      "arg": {
+        "label": "type"
+      }
+    },
+    {
+      "names": [
+        "--proxy-ciphers"
+      ],
+      "detail": "SSL ciphers to use for proxy",
+      "arg": {
+        "label": "list"
+      }
+    },
+    {
+      "names": [
+        "--proxy-crlfile"
+      ],
+      "detail": "Set a CRL list for proxy",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "--proxy-digest"
+      ],
+      "detail": "Use Digest authentication on the proxy"
+    },
+    {
+      "names": [
+        "--proxy-header"
+      ],
+      "detail": "Pass custom header(s) to proxy",
+      "arg": {
+        "label": "header/file",
+        "suggestions": [
+          {
+            "names": [
+              "Content-Type: application/json"
+            ]
+          },
+          {
+            "names": [
+              "Content-Type: application/x-www-form-urlencoded"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "--proxy-insecure"
+      ],
+      "detail": "Do HTTPS proxy connections without verifying the proxy"
+    },
+    {
+      "names": [
+        "--proxy-key"
+      ],
+      "detail": "Private key for HTTPS proxy",
+      "arg": {
+        "label": "key"
+      }
+    },
+    {
+      "names": [
+        "--proxy-key-type"
+      ],
+      "detail": "Private key file type for proxy",
+      "arg": {
+        "label": "type"
+      }
+    },
+    {
+      "names": [
+        "--proxy-negotiate"
+      ],
+      "detail": "Use HTTP Negotiate (SPNEGO) authentication on the proxy"
+    },
+    {
+      "names": [
+        "--proxy-ntlm"
+      ],
+      "detail": "Use NTLM authentication on the proxy"
+    },
+    {
+      "names": [
+        "--proxy-pass"
+      ],
+      "detail": "Pass phrase for the private key for HTTPS proxy",
+      "arg": {
+        "label": "phrase"
+      }
+    },
+    {
+      "names": [
+        "--proxy-pinnedpubkey"
+      ],
+      "detail": "FILE/HASHES public key to verify proxy with",
+      "arg": {
+        "label": "hashes"
+      }
+    },
+    {
+      "names": [
+        "--proxy-service-name"
+      ],
+      "detail": "SPNEGO proxy service name",
+      "arg": {
+        "label": "name"
+      }
+    },
+    {
+      "names": [
+        "--proxy-ssl-allow-beast"
+      ],
+      "detail": "Allow security flaw for interop for HTTPS proxy"
+    },
+    {
+      "names": [
+        "--proxy-tls13-ciphers"
+      ],
+      "detail": "List> TLS 1.3 proxy cipher suites",
+      "arg": {
+        "label": "ciphersuite"
+      }
+    },
+    {
+      "names": [
+        "--proxy-tlsauthtype"
+      ],
+      "detail": "TLS authentication type for HTTPS proxy",
+      "arg": {
+        "label": "type"
+      }
+    },
+    {
+      "names": [
+        "--proxy-tlspassword"
+      ],
+      "detail": "TLS password for HTTPS proxy",
+      "arg": {
+        "label": "string"
+      }
+    },
+    {
+      "names": [
+        "--proxy-tlsuser"
+      ],
+      "detail": "TLS username for HTTPS proxy",
+      "arg": {
+        "label": "name"
+      }
+    },
+    {
+      "names": [
+        "--proxy-tlsv1"
+      ],
+      "detail": "Use TLSv1 for HTTPS proxy"
+    },
+    {
+      "names": [
+        "--proxy1.0"
+      ],
+      "detail": "Use HTTP/1.0 proxy on given port",
+      "arg": {
+        "label": "host[:port]"
+      }
+    },
+    {
+      "names": [
+        "--pubkey"
+      ],
+      "detail": "SSH Public key file name",
+      "arg": {
+        "label": "key"
+      }
+    },
+    {
+      "names": [
+        "--random-file"
+      ],
+      "detail": "File for reading random data from",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "--raw"
+      ],
+      "detail": "Do HTTP \"raw\"; no transfer decoding"
+    },
+    {
+      "names": [
+        "--remote-name-all"
+      ],
+      "detail": "Use the remote file name for all URLs"
+    },
+    {
+      "names": [
+        "--request-target"
+      ],
+      "detail": "Specify the target for this request"
+    },
+    {
+      "names": [
+        "--resolve"
+      ],
+      "detail": "Resolve the host+port to this address",
+      "arg": {
+        "label": "host:port:address[,address]..."
+      }
+    },
+    {
+      "names": [
+        "--retry"
+      ],
+      "detail": "Retry request if transient problems occur",
+      "arg": {
+        "label": "num"
+      }
+    },
+    {
+      "names": [
+        "--retry-connrefused"
+      ],
+      "detail": "Retry on connection refused (use with --retry)"
+    },
+    {
+      "names": [
+        "--retry-delay"
+      ],
+      "detail": "Wait time between retries",
+      "arg": {
+        "label": "seconds"
+      }
+    },
+    {
+      "names": [
+        "--retry-max-time"
+      ],
+      "detail": "Retry only within this period",
+      "arg": {
+        "label": "seconds"
+      }
+    },
+    {
+      "names": [
+        "--sasl-ir"
+      ],
+      "detail": "Enable initial response in SASL authentication"
+    },
+    {
+      "names": [
+        "--service-name"
+      ],
+      "detail": "SPNEGO service name",
+      "arg": {
+        "label": "name"
+      }
+    },
+    {
+      "names": [
+        "--socks4"
+      ],
+      "detail": "SOCKS4 proxy on given host + port",
+      "arg": {
+        "label": "host[:port]"
+      }
+    },
+    {
+      "names": [
+        "--socks4a"
+      ],
+      "detail": "SOCKS4a proxy on given host + port",
+      "arg": {
+        "label": "host[:port]"
+      }
+    },
+    {
+      "names": [
+        "--socks5"
+      ],
+      "detail": "SOCKS5 proxy on given host + port",
+      "arg": {
+        "label": "host[:port]"
+      }
+    },
+    {
+      "names": [
+        "--socks5-basic"
+      ],
+      "detail": "Enable username/password auth for SOCKS5 proxies"
+    },
+    {
+      "names": [
+        "--socks5-gssapi"
+      ],
+      "detail": "Enable GSS-API auth for SOCKS5 proxies"
+    },
+    {
+      "names": [
+        "--socks5-gssapi-nec"
+      ],
+      "detail": "Compatibility with NEC SOCKS5 server"
+    },
+    {
+      "names": [
+        "--socks5-gssapi-service"
+      ],
+      "detail": "SOCKS5 proxy service name for GSS-API",
+      "arg": {
+        "label": "name"
+      }
+    },
+    {
+      "names": [
+        "--socks5-hostname"
+      ],
+      "detail": "SOCKS5 proxy, pass host name to proxy",
+      "arg": {
+        "label": "host[:port]"
+      }
+    },
+    {
+      "names": [
+        "--ssl"
+      ],
+      "detail": "Try SSL/TLS"
+    },
+    {
+      "names": [
+        "--ssl-auto-client-cert"
+      ],
+      "detail": "Obtain and use a client certificate automatically"
+    },
+    {
+      "names": [
+        "--ssl-allow-beast"
+      ],
+      "detail": "Allow security flaw to improve interop"
+    },
+    {
+      "names": [
+        "--ssl-no-revoke"
+      ],
+      "detail": "Disable cert revocation checks (Schannel)"
+    },
+    {
+      "names": [
+        "--ssl-reqd"
+      ],
+      "detail": "Require SSL/TLS"
+    },
+    {
+      "names": [
+        "--stderr"
+      ],
+      "detail": "Where to redirect stderr"
+    },
+    {
+      "names": [
+        "--styled-output"
+      ],
+      "detail": "Enable styled output for HTTP headers"
+    },
+    {
+      "names": [
+        "--suppress-connect-headers"
+      ],
+      "detail": "Suppress proxy CONNECT response headers"
+    },
+    {
+      "names": [
+        "--tcp-fastopen"
+      ],
+      "detail": "Use TCP Fast Open"
+    },
+    {
+      "names": [
+        "--tcp-nodelay"
+      ],
+      "detail": "Use the TCP_NODELAY option"
+    },
+    {
+      "names": [
+        "--tftp-blksize"
+      ],
+      "detail": "Set TFTP BLKSIZE option",
+      "arg": {
+        "label": "value"
+      }
+    },
+    {
+      "names": [
+        "--tftp-no-options"
+      ],
+      "detail": "Do not send any TFTP options"
+    },
+    {
+      "names": [
+        "--tls-max"
+      ],
+      "detail": "Set maximum allowed TLS version",
+      "arg": {
+        "label": "VERSION"
+      }
+    },
+    {
+      "names": [
+        "--tls13-ciphers"
+      ],
+      "detail": "Of TLS 1.3 ciphersuites> TLS 1.3 cipher suites to use",
+      "arg": {
+        "label": "list"
+      }
+    },
+    {
+      "names": [
+        "--tlsauthtype"
+      ],
+      "detail": "TLS authentication type",
+      "arg": {
+        "label": "type"
+      }
+    },
+    {
+      "names": [
+        "--tlspassword"
+      ],
+      "detail": "TLS password"
+    },
+    {
+      "names": [
+        "--tlsuser"
+      ],
+      "detail": "TLS user name",
+      "arg": {
+        "label": "name"
+      }
+    },
+    {
+      "names": [
+        "--tlsv1.0"
+      ],
+      "detail": "Use TLSv1.0 or greater"
+    },
+    {
+      "names": [
+        "--tlsv1.1"
+      ],
+      "detail": "Use TLSv1.1 or greater"
+    },
+    {
+      "names": [
+        "--tlsv1.2"
+      ],
+      "detail": "Use TLSv1.2 or greater"
+    },
+    {
+      "names": [
+        "--tlsv1.3"
+      ],
+      "detail": "Use TLSv1.3 or greater"
+    },
+    {
+      "names": [
+        "--tr-encoding"
+      ],
+      "detail": "Request compressed transfer encoding"
+    },
+    {
+      "names": [
+        "--trace"
+      ],
+      "detail": "Write a debug trace to FILE",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "--trace-ascii"
+      ],
+      "detail": "Like --trace, but without hex output",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "--trace-time"
+      ],
+      "detail": "Add time stamps to trace/verbose output"
+    },
+    {
+      "names": [
+        "--unix-socket"
+      ],
+      "detail": "Connect through this Unix domain socket",
+      "arg": {
+        "label": "path"
+      }
+    },
+    {
+      "names": [
+        "--url"
+      ],
+      "detail": "URL to work with",
+      "arg": {
+        "label": "url"
+      }
+    },
+    {
+      "names": [
+        "--xattr"
+      ],
+      "detail": "Store metadata in extended file attributes"
+    }
+  ]
+}

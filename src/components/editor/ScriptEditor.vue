@@ -1,6 +1,6 @@
 <template>
-  <div class="shell-editor-surface relative h-full min-h-0 w-full bg-[var(--editor-bg)]">
-    <div ref="containerRef" class="h-full min-h-0 w-full bg-[var(--editor-bg)]" />
+  <div class="shell-editor-surface relative h-full min-h-0 w-full bg-(--editor-bg)">
+    <div ref="containerRef" class="h-full min-h-0 w-full bg-(--editor-bg)" />
   </div>
 </template>
 
@@ -49,6 +49,8 @@ let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
 let suppressModelValueEmit = false;
 let resizeObserver: ResizeObserver | null = null;
 let editorLayoutFrameId: number | null = null;
+let shellCompletionRegistrationTimerId: number | null = null;
+let shellCompletionRegistrationPromise: Promise<void> | null = null;
 let previousContainerSize = { width: 0, height: 0 };
 
 const toMarkerSeverity = (level: TScriptDiagnosticSeverity): monaco.MarkerSeverity => {
@@ -72,15 +74,15 @@ const syncMarkers = (): void => {
 
   const markers = analysisState.value.available
     ? analysisState.value.diagnostics.map((item) => ({
-        startLineNumber: item.line,
-        endLineNumber: item.endLine,
-        startColumn: item.column,
-        endColumn: Math.max(item.column + 1, item.endColumn),
-        severity: toMarkerSeverity(item.level),
-        message: `${item.code} · ${item.message}`,
-        source: 'ShellCheck',
-        code: item.code,
-      }))
+      startLineNumber: item.line,
+      endLineNumber: item.endLine,
+      startColumn: item.column,
+      endColumn: Math.max(item.column + 1, item.endColumn),
+      severity: toMarkerSeverity(item.level),
+      message: `${item.code} · ${item.message}`,
+      source: 'ShellCheck',
+      code: item.code,
+    }))
     : [];
 
   monaco.editor.setModelMarkers(model, 'shellcheck', markers);
@@ -103,6 +105,32 @@ const scheduleEditorLayout = (): void => {
 
 const setTheme = (theme: TThemeMode): void => {
   monaco.editor.setTheme(theme === 'dark' ? 'sh-dark' : 'sh-light');
+};
+
+const ensureShellCompletionProvider = async (): Promise<void> => {
+  if (!shellCompletionRegistrationPromise) {
+    shellCompletionRegistrationPromise = import('@/utils/shell-completion')
+      .then(({ registerShellCompletionProvider }) => {
+        registerShellCompletionProvider(monaco);
+      })
+      .catch((error) => {
+        shellCompletionRegistrationPromise = null;
+        console.error('Shell completion provider preload failed', error);
+      });
+  }
+
+  await shellCompletionRegistrationPromise;
+};
+
+const scheduleShellCompletionRegistration = (): void => {
+  if (shellCompletionRegistrationTimerId !== null) {
+    return;
+  }
+
+  shellCompletionRegistrationTimerId = window.setTimeout(() => {
+    shellCompletionRegistrationTimerId = null;
+    void ensureShellCompletionProvider();
+  }, 0);
 };
 
 const createEditor = (): void => {
@@ -136,6 +164,12 @@ const createEditor = (): void => {
       indentation: true,
     },
     renderWhitespace: 'selection',
+    quickSuggestions: {
+      other: true,
+      comments: false,
+      strings: true,
+    },
+    suggestOnTriggerCharacters: true,
     autoIndent: 'advanced',
     folding: true,
     foldingStrategy: 'auto',
@@ -180,6 +214,7 @@ const createEditor = (): void => {
   }
 
   syncMarkers();
+  scheduleShellCompletionRegistration();
 
   requestAnimationFrame(() => {
     scheduleEditorLayout();
@@ -265,6 +300,11 @@ onBeforeUnmount(() => {
   if (editorLayoutFrameId !== null) {
     window.cancelAnimationFrame(editorLayoutFrameId);
     editorLayoutFrameId = null;
+  }
+
+  if (shellCompletionRegistrationTimerId !== null) {
+    window.clearTimeout(shellCompletionRegistrationTimerId);
+    shellCompletionRegistrationTimerId = null;
   }
 
   editorInstance?.dispose();

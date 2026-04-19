@@ -8,19 +8,22 @@ import type {
   IEditorDocument,
   IExecutionEnvironment,
   IRunResult,
-  TDocumentEncoding,
   IWorkspaceDirectoryPayload,
+  TDocumentEncoding,
 } from '@/types/editor';
 import { DEFAULT_TERMINAL_SESSION_ID, type ITerminalRunCompletePayload } from '@/types/terminal';
 import { desktopRuntimeReady, waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import { getFileBaseName, isImageAssetPath } from '@/utils/file-assets';
-import { formatShellScript } from '@/utils/shfmt';
 import {
   COMMAND_TEMPLATES,
   COMMENT_TEMPLATES,
   DEFAULT_EXECUTOR,
   getExecutorLabel,
 } from '@/utils/templates';
+import {
+  allowNextProgrammaticWindowClose,
+  clearProgrammaticWindowCloseAllowance,
+} from '@/utils/window-close';
 import { computed } from 'vue';
 
 const buildLogDetail = (title: string, detail: string): string => `${title}：${detail}`;
@@ -33,6 +36,14 @@ const EMPTY_ENVIRONMENT: IExecutionEnvironment = {
 const DEFAULT_TERMINAL_COLS = 120;
 const DEFAULT_TERMINAL_ROWS = 28;
 const TERMINAL_OUTPUT_BATCH_INTERVAL_MS = 16;
+
+const formatShellScriptWithWasm = async (
+  source: string,
+  path?: string | null,
+): Promise<string> => {
+  const { formatShellScript } = await import('@/utils/shfmt');
+  return formatShellScript(source, path);
+};
 
 const isTextDocument = (document: IEditorDocument): boolean => document.kind === 'text';
 
@@ -53,47 +64,49 @@ const resolveCloseConfirmMessage = (
   dirtyDocuments: IEditorDocument[],
   scene: TDirtyCloseScene,
 ): { title: string; message: string } => {
+  const fileName = dirtyDocuments[0]?.name ?? '当前文件';
+
   if (scene === 'close-document') {
     return {
-      title: '未保存的更改',
-      message: `文件“${dirtyDocuments[0]?.name ?? '当前文件'}”仍有未保存内容，是否保存后再关闭？`,
+      title: '保存更改？',
+      message: `文件“${fileName}”的未保存修改将会丢失。`,
     };
   }
 
   if (scene === 'close-workspace') {
     return dirtyDocuments.length === 1
       ? {
-          title: '未保存的更改',
-          message: `文件“${dirtyDocuments[0]?.name ?? '当前文件'}”仍有未保存内容，是否保存后再关闭工作区？`,
-        }
+        title: '保存更改？',
+        message: `关闭工作区前，文件“${fileName}”的未保存修改将会丢失。`,
+      }
       : {
-          title: '未保存的更改',
-          message: `当前有 ${dirtyDocuments.length} 个文件尚未保存，是否保存后再关闭工作区？`,
-        };
+        title: '保存更改？',
+        message: `关闭工作区前，${dirtyDocuments.length} 个文件的未保存修改将会丢失。`,
+      };
   }
 
   if (scene === 'switch-workspace') {
     return dirtyDocuments.length === 1
       ? {
-          title: '未保存的更改',
-          message: `文件“${dirtyDocuments[0]?.name ?? '当前文件'}”仍有未保存内容，是否保存后再切换工作区？`,
-        }
+        title: '保存更改？',
+        message: `切换工作区前，文件“${fileName}”的未保存修改将会丢失。`,
+      }
       : {
-          title: '未保存的更改',
-          message: `当前有 ${dirtyDocuments.length} 个文件尚未保存，是否保存后再切换工作区？`,
-        };
+        title: '保存更改？',
+        message: `切换工作区前，${dirtyDocuments.length} 个文件的未保存修改将会丢失。`,
+      };
   }
 
   if (dirtyDocuments.length === 1) {
     return {
-      title: '未保存的更改',
-      message: `文件“${dirtyDocuments[0]?.name ?? '当前文件'}”仍有未保存内容，是否保存后再关闭应用？`,
+      title: '保存更改？',
+      message: `关闭应用前，文件“${fileName}”的未保存修改将会丢失。`,
     };
   }
 
   return {
-    title: '未保存的更改',
-    message: `当前有 ${dirtyDocuments.length} 个文件尚未保存，是否保存后再关闭应用？`,
+    title: '保存更改？',
+    message: `关闭应用前，${dirtyDocuments.length} 个文件的未保存修改将会丢失。`,
   };
 };
 
@@ -205,7 +218,14 @@ export const useWorkbench = () => {
       return;
     }
 
-    await appWindow.close();
+    allowNextProgrammaticWindowClose();
+
+    try {
+      await appWindow.close();
+    } catch (error) {
+      clearProgrammaticWindowCloseAllowance();
+      throw error;
+    }
   };
 
   const confirmCloseForDirtyDocuments = async (
@@ -218,21 +238,24 @@ export const useWorkbench = () => {
 
     const { title, message } = resolveCloseConfirmMessage(dirtyDocuments, scene);
 
-    try {
-      await useDialog().confirm({
-        title,
-        description: message,
-        confirmText: '保存并关闭',
-        cancelText: '直接关闭',
-        variant: 'warning',
-      });
+    const action = await useDialog().confirm({
+      title,
+      description: message,
+      confirmText: '保存',
+      cancelText: '不保存',
+      dismissText: '取消',
+      variant: 'warning',
+    });
+
+    if (action === 'confirm') {
       return 'save';
-    } catch (action) {
-      if (action === 'cancel') {
-        return 'discard';
-      }
-      return 'cancel';
     }
+
+    if (action === 'cancel') {
+      return 'discard';
+    }
+
+    return 'cancel';
   };
 
   const loadDocumentFromPath = async (path: string, scene: string): Promise<void> => {
@@ -414,7 +437,7 @@ export const useWorkbench = () => {
     }
 
     try {
-      const formattedContent = await formatShellScript(
+      const formattedContent = await formatShellScriptWithWasm(
         targetDocument.content,
         targetDocument.path ?? targetDocument.name,
       );
@@ -451,14 +474,14 @@ export const useWorkbench = () => {
       const sourceDocument =
         existingDocument && isTextDocument(existingDocument)
           ? {
-              path: existingDocument.path,
-              name: existingDocument.name,
-              content: existingDocument.content,
-              encoding: existingDocument.encoding,
-            }
+            path: existingDocument.path,
+            name: existingDocument.name,
+            content: existingDocument.content,
+            encoding: existingDocument.encoding,
+          }
           : await tauriService.loadScript(path);
 
-      const formattedContent = await formatShellScript(
+      const formattedContent = await formatShellScriptWithWasm(
         sourceDocument.content,
         sourceDocument.path ?? sourceDocument.name,
       );
@@ -729,7 +752,7 @@ export const useWorkbench = () => {
     const activeRun = activeTerminalRunMeta;
     const safeOutput = payload.output;
     const hadLiveTerminalOutput =
-      Boolean(activeRun?.receivedLiveOutput) || editorStore.terminalOutput.length > 0;
+      Boolean(activeRun?.receivedLiveOutput) || editorStore.terminalOutputLength > 0;
     if (safeOutput) {
       editorStore.setTerminalOutput(safeOutput);
     }
@@ -743,9 +766,9 @@ export const useWorkbench = () => {
     }
     const durationMs = activeRun
       ? Math.max(
-          0,
-          new Date(payload.finishedAt).getTime() - new Date(activeRun.startedAt).getTime(),
-        )
+        0,
+        new Date(payload.finishedAt).getTime() - new Date(activeRun.startedAt).getTime(),
+      )
       : 0;
     const runResult: IRunResult = {
       success: payload.exitCode === 0,
@@ -804,24 +827,17 @@ export const useWorkbench = () => {
       `当前脚本将使用 ${getExecutorLabel(DEFAULT_EXECUTOR)} 执行。`,
     );
 
-    let shouldKeepRunning = false;
-
     try {
       await runScriptInIntegratedTerminal(currentDocument);
-      shouldKeepRunning = true;
     } catch (error) {
-      shouldKeepRunning = false;
       resetBufferedTerminalOutput();
       editorStore.setPendingTerminalRunId(null);
       activeTerminalRunMeta = null;
+      editorStore.isRunning = false;
       const message = error instanceof Error ? error.message : '脚本执行失败';
       editorStore.appendLog('error', '脚本执行失败', message);
       editorStore.setTerminalOutput(message);
       useMessage().error(message);
-    } finally {
-      if (!shouldKeepRunning) {
-        editorStore.isRunning = false;
-      }
     }
   };
 

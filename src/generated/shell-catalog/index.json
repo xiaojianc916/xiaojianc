@@ -1,0 +1,222 @@
+{
+  "commands": [
+    {
+      "label": "ansible",
+      "file": "ansible.json",
+      "detail": "Define and run a single Ansible task 'playbook' against a set of hosts"
+    },
+    {
+      "label": "ansible-playbook",
+      "file": "ansible-playbook.json",
+      "detail": "Runs Ansible playbooks, executing the defined tasks on the targeted hosts"
+    },
+    {
+      "label": "apt",
+      "file": "apt.json",
+      "detail": "Package manager for Debian-based Linux distributions"
+    },
+    {
+      "label": "cargo",
+      "file": "cargo.json",
+      "detail": "CLI Interface for Cargo"
+    },
+    {
+      "label": "crontab",
+      "file": "crontab.json",
+      "detail": "Maintain crontab file for individual users"
+    },
+    {
+      "label": "curl",
+      "file": "curl.json",
+      "detail": "Transfer a URL"
+    },
+    {
+      "label": "df",
+      "file": "df.json",
+      "detail": "Display free disk space"
+    },
+    {
+      "label": "dig",
+      "file": "dig.json",
+      "detail": "Domain Information Groper"
+    },
+    {
+      "label": "docker",
+      "file": "docker.json",
+      "detail": "A self-sufficient runtime for containers"
+    },
+    {
+      "label": "du",
+      "file": "du.json",
+      "detail": "Display disk usage statistics"
+    },
+    {
+      "label": "fdisk",
+      "file": "fdisk.json",
+      "detail": "Manipulate disk partition table"
+    },
+    {
+      "label": "find",
+      "file": "find.json",
+      "detail": "Walk a file hierarchy"
+    },
+    {
+      "label": "git",
+      "file": "git.json",
+      "detail": "Distributed version control system"
+    },
+    {
+      "label": "grep",
+      "file": "grep.json",
+      "detail": "Matches patterns in input text. Supports simple patterns and regular expressions"
+    },
+    {
+      "label": "helm",
+      "file": "helm.json",
+      "detail": "The Helm package manager for Kubernetes"
+    },
+    {
+      "label": "htop",
+      "file": "htop.json",
+      "detail": "Improved top (interactive process viewer)"
+    },
+    {
+      "label": "kill",
+      "file": "kill.json",
+      "detail": "Terminate or signal a process"
+    },
+    {
+      "label": "killall",
+      "file": "killall.json",
+      "detail": "Kill processes by name"
+    },
+    {
+      "label": "kubectl",
+      "file": "kubectl.json"
+    },
+    {
+      "label": "lsblk",
+      "file": "lsblk.json",
+      "detail": "List block devices"
+    },
+    {
+      "label": "lsof",
+      "file": "lsof.json",
+      "detail": "List open files"
+    },
+    {
+      "label": "mount",
+      "file": "mount.json",
+      "detail": "Mount disks and manage subtrees"
+    },
+    {
+      "label": "nc",
+      "file": "nc.json",
+      "detail": "Arbitrary TCP and UDP connections and listens"
+    },
+    {
+      "label": "nmap",
+      "file": "nmap.json",
+      "detail": "Network exploration tool and security / port scanner"
+    },
+    {
+      "label": "npm",
+      "file": "npm.json",
+      "detail": "Node package manager"
+    },
+    {
+      "label": "pip",
+      "file": "pip.json",
+      "detail": "Python package manager"
+    },
+    {
+      "label": "pnpm",
+      "file": "pnpm.json",
+      "detail": "Fast, disk space efficient package manager"
+    },
+    {
+      "label": "podman",
+      "file": "podman.json",
+      "detail": "Manage containers, pods, and images with Podman"
+    },
+    {
+      "label": "ps",
+      "file": "ps.json",
+      "detail": "Report a snapshot of the current processes"
+    },
+    {
+      "label": "python",
+      "file": "python.json",
+      "detail": "Run the python interpreter"
+    },
+    {
+      "label": "rsync",
+      "file": "rsync.json",
+      "detail": "Rsync is a file transfer program capable of efficient remote update via a fast differencing algorithm"
+    },
+    {
+      "label": "scp",
+      "file": "scp.json",
+      "detail": "Copies files or directories between hosts on a network"
+    },
+    {
+      "label": "sed",
+      "file": "sed.json",
+      "detail": "Stream editor"
+    },
+    {
+      "label": "sftp",
+      "file": "sftp.json",
+      "detail": "OpenSSH secure file transfer"
+    },
+    {
+      "label": "ssh",
+      "file": "ssh.json",
+      "detail": "Log into a remote machine"
+    },
+    {
+      "label": "systemctl",
+      "file": "systemctl.json"
+    },
+    {
+      "label": "tar",
+      "file": "tar.json",
+      "detail": "Manipulating archive files"
+    },
+    {
+      "label": "top",
+      "file": "top.json",
+      "detail": "Display Linux tasks"
+    },
+    {
+      "label": "traceroute",
+      "file": "traceroute.json",
+      "detail": "Print the route packets take to network host"
+    },
+    {
+      "label": "uname",
+      "file": "uname.json",
+      "detail": "Print operating system name"
+    },
+    {
+      "label": "uv",
+      "file": "uv.json",
+      "detail": "An extremely fast Python package manager"
+    },
+    {
+      "label": "visudo",
+      "file": "visudo.json",
+      "detail": "Visudo edits the sudoers file, which defines the users and groups with administrator rights"
+    },
+    {
+      "label": "wget",
+      "file": "wget.json",
+      "detail": "A non-interactive network retriever"
+    },
+    {
+      "label": "yarn",
+      "file": "yarn.json",
+      "detail": "Manage packages and run scripts"
+    }
+  ]
+}

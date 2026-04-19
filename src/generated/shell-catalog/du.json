@@ -1,0 +1,122 @@
+{
+  "names": [
+    "du"
+  ],
+  "detail": "Display disk usage statistics",
+  "args": [
+    {
+      "label": "files",
+      "isOptional": true,
+      "isVariadic": true
+    }
+  ],
+  "flags": [
+    {
+      "names": [
+        "-a"
+      ],
+      "detail": "Display an entry for each file in a file hierarchy"
+    },
+    {
+      "names": [
+        "-c"
+      ],
+      "detail": "Display a grand total"
+    },
+    {
+      "names": [
+        "-H"
+      ],
+      "detail": "Symbolic links on the command line are followed, symbolic links in file hierarchies are not followed"
+    },
+    {
+      "names": [
+        "-h"
+      ],
+      "detail": "\"Human-readable\" output. Use unit suffixes: Byte, Kilobyte, Megabyte, Gigabyte, Terabyte and Petabyte"
+    },
+    {
+      "names": [
+        "-g"
+      ],
+      "detail": "Display block counts in 1073741824-byte (1-Gbyte) blocks"
+    },
+    {
+      "names": [
+        "-k"
+      ],
+      "detail": "Display block counts in 1024-byte (1-Kbyte) blocks"
+    },
+    {
+      "names": [
+        "-m"
+      ],
+      "detail": "Display block counts in 1048576-byte (1-Mbyte) blocks"
+    },
+    {
+      "names": [
+        "-I"
+      ],
+      "detail": "Ignore files and directories matching the specified mask",
+      "arg": {
+        "label": "mask"
+      }
+    },
+    {
+      "names": [
+        "-L"
+      ],
+      "detail": "Symbolic links on the command line and in file hierarchies are followed"
+    },
+    {
+      "names": [
+        "-r"
+      ],
+      "detail": "Generate messages about directories that cannot be read, files that cannot be opened, and so on. This is the default case. This option exists solely for conformance with X/Open Portability Guide Issue 4 (``XPG4'')"
+    },
+    {
+      "names": [
+        "-P"
+      ],
+      "detail": "No symbolic links are followed. This is the default"
+    },
+    {
+      "names": [
+        "-d"
+      ],
+      "detail": "Display an entry for all files and directories depth directories deep",
+      "arg": {
+        "label": "depth",
+        "suggestions": [
+          {
+            "names": [
+              "0"
+            ]
+          },
+          {
+            "names": [
+              "1"
+            ]
+          },
+          {
+            "names": [
+              "2"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "-s"
+      ],
+      "detail": "Display an entry for each specified file. (Equivalent to -d 0)"
+    },
+    {
+      "names": [
+        "-x"
+      ],
+      "detail": "Display an entry for each specified file. (Equivalent to -d 0)"
+    }
+  ]
+}

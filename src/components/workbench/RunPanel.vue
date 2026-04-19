@@ -1,15 +1,9 @@
 <template>
-  <section class="flex h-full min-h-0 flex-col bg-[var(--panel-bg)]">
-    <div class="flex items-center justify-between border-b border-[var(--shell-divider)] px-4">
+  <section class="flex h-full min-h-0 flex-col bg-(--panel-bg)">
+    <div class="flex items-center justify-between border-b border-(--shell-divider) px-4">
       <div class="flex items-center gap-5">
-        <button
-          v-for="item in tabs"
-          :key="item.value"
-          type="button"
-          class="run-panel-tab h-11"
-          :class="{ 'is-active': activeTab === item.value }"
-          @click="activeTab = item.value"
-        >
+        <button v-for="item in tabs" :key="item.value" type="button" class="run-panel-tab h-11"
+          :class="{ 'is-active': activeTab === item.value }" @click="activeTab = item.value">
           {{ item.label }}
         </button>
       </div>
@@ -19,24 +13,10 @@
           {{ statusText }}
         </span>
 
-        <button
-          type="button"
-          class="icon-button app-tooltip-target run-panel-hide-button"
-          data-tooltip="隐藏终端"
-          data-tooltip-placement="top"
-          aria-label="隐藏终端"
-          @click="$emit('hide')"
-        >
-          <svg
-            viewBox="0 0 16 16"
-            aria-hidden="true"
-            class="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
+        <button type="button" class="icon-button app-tooltip-target run-panel-hide-button" data-tooltip="隐藏终端"
+          data-tooltip-placement="top" aria-label="隐藏终端" @click="$emit('hide')">
+          <svg viewBox="0 0 16 16" aria-hidden="true" class="h-4 w-4" fill="none" stroke="currentColor"
+            stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 5.5h10" />
             <path d="m5.2 8.4 2.8 2.8 2.8-2.8" />
           </svg>
@@ -46,26 +26,17 @@
 
     <div class="min-h-0 flex-1 overflow-hidden">
       <div v-show="activeTab === 'output'" class="h-full overflow-hidden">
-        <EmbeddedTerminal
-          :visible="props.visible && activeTab === 'output'"
-          :theme="props.theme"
-          @status-change="handleTerminalStatusChange"
-          @output="$emit('terminal-output', $event)"
-          @run-complete="$emit('terminal-run-complete', $event)"
-        />
+        <EmbeddedTerminal :visible="props.visible && activeTab === 'output'" :theme="props.theme"
+          @status-change="handleTerminalStatusChange" @output="$emit('terminal-output', $event)"
+          @run-complete="$emit('terminal-run-complete', $event)" />
       </div>
 
-      <div
-        v-if="activeTab === 'logs'"
-        class="workbench-scroll-region h-full overflow-auto px-4 py-3"
-      >
-        <StructuredRunInsights
-          :terminal-output="props.terminalOutput"
-          :run-logs="props.runLogs"
-          :last-run-result="props.lastRunResult"
-          :is-running="props.isRunning"
-          :executor="props.executor"
-        />
+      <div v-show="activeTab === 'logs'" class="workbench-scroll-region h-full overflow-auto px-4 py-3">
+        <StructuredRunInsights :active="activeTab === 'logs'" :terminal-output-version="props.terminalOutputVersion"
+          :resolve-terminal-output="props.resolveTerminalOutput" :run-logs="props.runLogs"
+          :last-run-result="props.lastRunResult" :is-running="props.isRunning" :executor="props.executor"
+          :document-name="props.documentName" :document-path="props.documentPath"
+          :workspace-root-path="props.workspaceRootPath" />
       </div>
     </div>
   </section>
@@ -80,11 +51,15 @@ import type { ITerminalRunCompletePayload, ITerminalStatusChangePayload } from '
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
-  terminalOutput: string;
+  terminalOutputVersion: number;
+  resolveTerminalOutput: () => string;
   runLogs: IRunLogEntry[];
   lastRunResult: IRunResult | null;
   isRunning: boolean;
   executor: TExecutorKind;
+  documentName: string;
+  documentPath: string | null;
+  workspaceRootPath: string | null;
   theme: TThemeMode;
   visible: boolean;
 }>();
@@ -99,7 +74,7 @@ const activeTab = ref<'output' | 'logs'>('output');
 
 const tabs = [
   { label: '终端', value: 'output' },
-  { label: '日志输出', value: 'logs' },
+  { label: '运行日志', value: 'logs' },
 ] as const;
 
 const terminalStatus = ref<ITerminalStatusChangePayload>({

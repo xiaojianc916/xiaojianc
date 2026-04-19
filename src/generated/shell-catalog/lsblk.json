@@ -1,0 +1,235 @@
+{
+  "names": [
+    "lsblk"
+  ],
+  "detail": "List block devices",
+  "args": [
+    {
+      "label": "device",
+      "detail": "Device to list",
+      "isOptional": true
+    }
+  ],
+  "flags": [
+    {
+      "names": [
+        "--help",
+        "-h"
+      ],
+      "detail": "Show help for lsblk"
+    },
+    {
+      "names": [
+        "--version",
+        "-V"
+      ],
+      "detail": "Show version for lsblk"
+    },
+    {
+      "names": [
+        "--all",
+        "-a"
+      ],
+      "detail": "Also list empty devices and RAM disk devices"
+    },
+    {
+      "names": [
+        "--bytes",
+        "-b"
+      ],
+      "detail": "Print the SIZE column in bytes"
+    },
+    {
+      "names": [
+        "--discard",
+        "-D"
+      ],
+      "detail": "Print information about the discarding capabilities (TRIM, UNMAP) for each device"
+    },
+    {
+      "names": [
+        "--nodeps",
+        "-d"
+      ],
+      "detail": "Do not print holder devices or slaves"
+    },
+    {
+      "names": [
+        "--dedup",
+        "-E"
+      ],
+      "detail": "Use column as a de-duplication key to de-duplicate output tree",
+      "arg": {
+        "label": "column"
+      }
+    },
+    {
+      "names": [
+        "--exclude",
+        "-e"
+      ],
+      "detail": "Exclude the devices specified by the comma-separated list of major device numbers",
+      "arg": {
+        "label": "list"
+      }
+    },
+    {
+      "names": [
+        "--fs",
+        "-f"
+      ],
+      "detail": "Output info about filesystems"
+    },
+    {
+      "names": [
+        "--include",
+        "-I"
+      ],
+      "detail": "Include devices specified by the comma-separated list of major device numbers",
+      "arg": {
+        "label": "list"
+      }
+    },
+    {
+      "names": [
+        "--ascii",
+        "-i"
+      ],
+      "detail": "Use ASCII characters for tree formatting"
+    },
+    {
+      "names": [
+        "--json",
+        "-J"
+      ],
+      "detail": "Use JSON output format"
+    },
+    {
+      "names": [
+        "--list",
+        "-l"
+      ],
+      "detail": "Produce output in the form of a list"
+    },
+    {
+      "names": [
+        "--merge",
+        "-M"
+      ],
+      "detail": "Group parents of sub-trees to provide more readable output for RAIDs and Multi-path devices"
+    },
+    {
+      "names": [
+        "--perms",
+        "-m"
+      ],
+      "detail": "Output info about device owner, group and mode"
+    },
+    {
+      "names": [
+        "--noheadings",
+        "-n"
+      ],
+      "detail": "Do not print a header line"
+    },
+    {
+      "names": [
+        "--output",
+        "-o"
+      ],
+      "detail": "Specify which output columns to print",
+      "arg": {
+        "label": "list",
+        "isVariadic": true
+      }
+    },
+    {
+      "names": [
+        "--output-all",
+        "-O"
+      ],
+      "detail": "Output all available columns"
+    },
+    {
+      "names": [
+        "--pairs",
+        "-P"
+      ],
+      "detail": "Produce output in the form of key-value pairs"
+    },
+    {
+      "names": [
+        "--raw",
+        "-r"
+      ],
+      "detail": "Produce output in raw format"
+    },
+    {
+      "names": [
+        "--scsi",
+        "-S"
+      ],
+      "detail": "Output info about SCSI devices only"
+    },
+    {
+      "names": [
+        "--inverse",
+        "-s"
+      ],
+      "detail": "Print dependencies in inverse order"
+    },
+    {
+      "names": [
+        "--tree",
+        "-T"
+      ],
+      "detail": "Force tree-like output format",
+      "arg": {
+        "label": "column"
+      }
+    },
+    {
+      "names": [
+        "--topology",
+        "-t"
+      ],
+      "detail": "Output info about block-device topology"
+    },
+    {
+      "names": [
+        "--width",
+        "-w"
+      ],
+      "detail": "Specifies output width as a number of characters",
+      "arg": {
+        "label": "number"
+      }
+    },
+    {
+      "names": [
+        "--sort",
+        "-x"
+      ],
+      "detail": "Sort output lines by column",
+      "arg": {
+        "label": "column"
+      }
+    },
+    {
+      "names": [
+        "--zoned",
+        "-z"
+      ],
+      "detail": "Print the zone model for each device"
+    },
+    {
+      "names": [
+        "--sysroot"
+      ],
+      "detail": "Gather data for a Linux instance other than the instance from which the lsblk command is issued",
+      "arg": {
+        "label": "directory"
+      }
+    }
+  ]
+}

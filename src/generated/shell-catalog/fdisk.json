@@ -1,0 +1,278 @@
+{
+  "names": [
+    "fdisk"
+  ],
+  "detail": "Manipulate disk partition table",
+  "args": [
+    {
+      "label": "device",
+      "detail": "Device to list",
+      "isOptional": true
+    }
+  ],
+  "flags": [
+    {
+      "names": [
+        "--help",
+        "-h"
+      ],
+      "detail": "Show help for fdisk"
+    },
+    {
+      "names": [
+        "--version",
+        "-V"
+      ],
+      "detail": "Show version for lsblk"
+    },
+    {
+      "names": [
+        "--sector-size",
+        "-b"
+      ],
+      "detail": "Specify the sector size of the disk",
+      "arg": {
+        "label": "mode",
+        "detail": "Valid values are 512, 1024, 2048, and 4096",
+        "suggestions": [
+          {
+            "names": [
+              "512"
+            ]
+          },
+          {
+            "names": [
+              "1024"
+            ]
+          },
+          {
+            "names": [
+              "2048"
+            ]
+          },
+          {
+            "names": [
+              "4096"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "--protect-boot",
+        "-B"
+      ],
+      "detail": "Don't erase the beginning of the first disk sector when creating a new disk label"
+    },
+    {
+      "names": [
+        "--compatibility",
+        "-c"
+      ],
+      "detail": "Specify the compatibility mode, 'dos' or 'nondos'",
+      "arg": {
+        "label": "mode",
+        "isOptional": true,
+        "suggestions": [
+          {
+            "names": [
+              "dos"
+            ]
+          },
+          {
+            "names": [
+              "nondos"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "--color",
+        "-L"
+      ],
+      "detail": "Colorize the output",
+      "arg": {
+        "label": "when",
+        "isOptional": true,
+        "suggestions": [
+          {
+            "names": [
+              "always"
+            ]
+          },
+          {
+            "names": [
+              "never"
+            ]
+          },
+          {
+            "names": [
+              "auto"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "--list",
+        "-l"
+      ],
+      "detail": "List the partition tables for the specified devices and then exit"
+    },
+    {
+      "names": [
+        "--list-details",
+        "-x"
+      ],
+      "detail": "Like --list, but provides more details"
+    },
+    {
+      "names": [
+        "--lock"
+      ],
+      "detail": "Use exclusive BSD lock for device or file it operates",
+      "arg": {
+        "label": "mode",
+        "detail": "Optional argument mode can be yes, no (or 1 and 0) or nonblock",
+        "isOptional": true,
+        "suggestions": [
+          {
+            "names": [
+              "yes"
+            ]
+          },
+          {
+            "names": [
+              "no"
+            ]
+          },
+          {
+            "names": [
+              "nonblock"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "--noauto-pt",
+        "-n"
+      ],
+      "detail": "Don't automatically create a default partition table on empty device"
+    },
+    {
+      "names": [
+        "--output",
+        "-o"
+      ],
+      "detail": "Desc",
+      "arg": {
+        "label": "list"
+      }
+    },
+    {
+      "names": [
+        "--type",
+        "-t"
+      ],
+      "detail": "Enable support only for disklabels of the specified type, and disable support for all other types",
+      "arg": {
+        "label": "type"
+      }
+    },
+    {
+      "names": [
+        "--units",
+        "-u"
+      ],
+      "detail": "When listing partition tables, show sizes in 'sectors' or in 'cylinders'",
+      "arg": {
+        "label": "unit",
+        "isOptional": true,
+        "suggestions": [
+          {
+            "names": [
+              "sectors"
+            ]
+          },
+          {
+            "names": [
+              "cylinders"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "--cylinders",
+        "-C"
+      ],
+      "detail": "Specify the number of cylinders of the disk",
+      "arg": {
+        "label": "number"
+      }
+    },
+    {
+      "names": [
+        "--heads",
+        "-H"
+      ],
+      "detail": "Specify the number of heads of the disk. (Not the physical number, of course, but the number used for partition tables.)",
+      "arg": {
+        "label": "number"
+      }
+    },
+    {
+      "names": [
+        "--sectors",
+        "-S"
+      ],
+      "detail": "Specify the number of sectors per track of the disk. (Not the physical number, of course, but the number used for partition tables.)"
+    },
+    {
+      "names": [
+        "--wipe",
+        "-w"
+      ],
+      "detail": "Wipe filesystem, RAID and partition-table signatures from the device, in order to avoid possible collisions",
+      "arg": {
+        "label": "when",
+        "detail": "The argument when can be auto, never or always",
+        "suggestions": [
+          {
+            "names": [
+              "auto"
+            ]
+          },
+          {
+            "names": [
+              "never"
+            ]
+          },
+          {
+            "names": [
+              "always"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "--wipe-partitions",
+        "-W"
+      ],
+      "detail": "Wipe filesystem, RAID and partition-table signatures from a newly created partitions, in order to avoid possible collisions",
+      "arg": {
+        "label": "when",
+        "detail": "The argument when can be auto, never or always"
+      }
+    }
+  ]
+}

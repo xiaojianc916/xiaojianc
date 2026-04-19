@@ -1,0 +1,294 @@
+{
+  "names": [
+    "ps"
+  ],
+  "detail": "Report a snapshot of the current processes",
+  "flags": [
+    {
+      "names": [
+        "-A",
+        "-e"
+      ],
+      "detail": "Select all processes"
+    },
+    {
+      "names": [
+        "-a"
+      ],
+      "detail": "Select all processes except both session leaders",
+      "arg": {
+        "label": "getsid"
+      }
+    },
+    {
+      "names": [
+        "-d"
+      ],
+      "detail": "Select all processes except session leaders"
+    },
+    {
+      "names": [
+        "--deselect"
+      ],
+      "detail": "Select all processes except those that fulfill the specified conditions"
+    },
+    {
+      "names": [
+        "-N"
+      ],
+      "detail": "Select all processes except those that fulfill the specified conditions (negates the selection)"
+    },
+    {
+      "names": [
+        "--pid"
+      ],
+      "detail": "Select by process ID",
+      "arg": {
+        "label": "pidlist"
+      }
+    },
+    {
+      "names": [
+        "--ppid"
+      ],
+      "detail": "Select by parent process ID. This selects the processes with a parent process ID in pidlist",
+      "arg": {
+        "label": "pidlist"
+      }
+    },
+    {
+      "names": [
+        "--sid"
+      ],
+      "detail": "Select by session ID",
+      "arg": {
+        "label": "sesslist"
+      }
+    },
+    {
+      "names": [
+        "--tty"
+      ],
+      "detail": "Select by terminal",
+      "arg": {
+        "label": "ttylist"
+      }
+    },
+    {
+      "names": [
+        "U"
+      ],
+      "detail": "Select by effective user ID (EUID) or name",
+      "arg": {
+        "label": "userlist"
+      }
+    },
+    {
+      "names": [
+        "-U"
+      ],
+      "detail": "Select by real user ID (RUID) or name",
+      "arg": {
+        "label": "userlist"
+      }
+    },
+    {
+      "names": [
+        "-u"
+      ],
+      "detail": "Select by effective user ID (EUID) or name",
+      "arg": {
+        "label": "userlist"
+      }
+    },
+    {
+      "names": [
+        "--User"
+      ],
+      "detail": "Select by real user ID (RUID) or name",
+      "arg": {
+        "label": "userlist"
+      }
+    },
+    {
+      "names": [
+        "--user"
+      ],
+      "detail": "Select by effective user ID (EUID) or name",
+      "arg": {
+        "label": "userlist"
+      }
+    },
+    {
+      "names": [
+        "-c"
+      ],
+      "detail": "Show different scheduler information for the -l option"
+    },
+    {
+      "names": [
+        "--context"
+      ],
+      "detail": "Display security context format (for SE Linux)"
+    },
+    {
+      "names": [
+        "-f"
+      ],
+      "detail": "Do full-format listing"
+    },
+    {
+      "names": [
+        "-F"
+      ],
+      "detail": "Extra full format"
+    },
+    {
+      "names": [
+        "--format",
+        "-o",
+        "o"
+      ],
+      "arg": {
+        "label": "format"
+      }
+    },
+    {
+      "names": [
+        "-M",
+        "Z"
+      ],
+      "detail": "(for SE Linux)"
+    },
+    {
+      "names": [
+        "-y",
+        "-l"
+      ]
+    },
+    {
+      "names": [
+        "--cols"
+      ],
+      "detail": "Set screen width",
+      "arg": {
+        "label": "n"
+      }
+    },
+    {
+      "names": [
+        "--columns"
+      ],
+      "detail": "Set screen width",
+      "arg": {
+        "label": "n"
+      }
+    },
+    {
+      "names": [
+        "--cumulative"
+      ],
+      "detail": "Include some dead child process data (as a sum with the parent)"
+    },
+    {
+      "names": [
+        "--forest"
+      ],
+      "detail": "ASCII art process tree"
+    },
+    {
+      "names": [
+        "-H"
+      ],
+      "detail": "Show process hierarchy (forest)"
+    },
+    {
+      "names": [
+        "--headers"
+      ],
+      "detail": "Repeat header lines, one per page of output"
+    },
+    {
+      "names": [
+        "-n"
+      ],
+      "detail": "Set namelist file",
+      "arg": {
+        "label": "namelist"
+      }
+    },
+    {
+      "names": [
+        "--lines"
+      ],
+      "detail": "Set screen height",
+      "arg": {
+        "label": "n"
+      }
+    },
+    {
+      "names": [
+        "--no-headers",
+        "--no-heading"
+      ],
+      "detail": "Print no header line at all"
+    },
+    {
+      "names": [
+        "--rows"
+      ],
+      "detail": "Set screen height",
+      "arg": {
+        "label": "n"
+      }
+    },
+    {
+      "names": [
+        "--sort"
+      ],
+      "detail": "Specify sorting order",
+      "arg": {
+        "label": "spec"
+      }
+    },
+    {
+      "names": [
+        "--width"
+      ],
+      "detail": "Set screen width",
+      "arg": {
+        "label": "n"
+      }
+    },
+    {
+      "names": [
+        "-L"
+      ],
+      "detail": "Show threads, possibly with LWP and NLWP columns"
+    },
+    {
+      "names": [
+        "-T"
+      ],
+      "detail": "Show threads, possibly with SPID column"
+    },
+    {
+      "names": [
+        "--help"
+      ],
+      "detail": "Print a help message"
+    },
+    {
+      "names": [
+        "--info"
+      ],
+      "detail": "Print debugging info"
+    },
+    {
+      "names": [
+        "--version"
+      ],
+      "detail": "Print the procps version"
+    }
+  ]
+}

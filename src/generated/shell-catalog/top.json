@@ -1,0 +1,61 @@
+{
+  "names": [
+    "top"
+  ],
+  "detail": "Display Linux tasks",
+  "flags": [
+    {
+      "names": [
+        "-h",
+        "-v"
+      ],
+      "detail": "Show library version and usage prompt"
+    },
+    {
+      "names": [
+        "-b"
+      ],
+      "detail": "Starts top in Batch mode",
+      "arg": {
+        "label": "operation"
+      }
+    },
+    {
+      "names": [
+        "-c"
+      ],
+      "detail": "Starts top with last remembered c state reversed",
+      "arg": {
+        "label": "toggle"
+      }
+    },
+    {
+      "names": [
+        "-i"
+      ],
+      "detail": "Starts top with the last remembered 'i' state reversed. When this toggle is Off, tasks that are idled or zombied will not be displayed",
+      "arg": {
+        "label": "toggle"
+      }
+    },
+    {
+      "names": [
+        "-s"
+      ],
+      "detail": "Starts top with secure mode forced",
+      "arg": {
+        "label": "delay"
+      }
+    },
+    {
+      "names": [
+        "-pid"
+      ],
+      "detail": "Monitor pids",
+      "arg": {
+        "label": "process ids",
+        "isVariadic": true
+      }
+    }
+  ]
+}

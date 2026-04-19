@@ -19,4 +19,41 @@ export default defineConfig(({ command }) => ({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.replace(/\\/g, '/');
+
+          if (
+            normalizedId.includes('/node_modules/vue/') ||
+            normalizedId.includes('/node_modules/vue-router/') ||
+            normalizedId.includes('/node_modules/pinia/')
+          ) {
+            return 'vendor-core';
+          }
+
+          if (normalizedId.includes('/node_modules/monaco-editor/')) {
+            return 'vendor-monaco';
+          }
+
+          if (normalizedId.includes('/node_modules/@xterm/')) {
+            return 'vendor-xterm';
+          }
+
+          if (
+            normalizedId.includes('/node_modules/web-tree-sitter/') ||
+            normalizedId.includes('/node_modules/tree-sitter-bash/') ||
+            normalizedId.includes('/node_modules/@wasm-fmt/shfmt/') ||
+            normalizedId.includes('/src/utils/shell-completion.ts') ||
+            normalizedId.includes('/src/constants/shell-command-catalog.ts') ||
+            normalizedId.includes('/src/generated/fig-shell-command-catalog.ts') ||
+            normalizedId.includes('/src/utils/shfmt.ts')
+          ) {
+            return 'vendor-shell-analysis';
+          }
+        },
+      },
+    },
+  },
 }));

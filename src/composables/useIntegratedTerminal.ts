@@ -46,12 +46,18 @@ const POST_RUN_PROMPT_DETECTION_BUFFER_LIMIT = 512;
 const POST_RUN_PROMPT_CHECK_DELAY_MS = 180;
 const POST_RUN_PROMPT_CHECK_RETRY_MS = 260;
 const POST_RUN_PROMPT_MAX_REFRESH_ATTEMPTS = 2;
-const ANSI_ESCAPE_PATTERN = new RegExp(String.raw`\u001b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])`, 'g');
-const SHELL_PROMPT_PATTERN = /(?:^|[\r\n])[^\r\n]*[#$>] ?$/;
+const MAX_PENDING_MARKER_BODY_LENGTH = 512;
+
+const ANSI_ESCAPE_PATTERN = new RegExp(
+  String.raw`\u001b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])`,
+  'g',
+);
+const SHELL_PROMPT_PATTERN = /[\r\n][^\r\n]{0,200}[#$>]\s*$/;
 const TERMINAL_STREAM_HIDDEN_MARKER_PATTERN = new RegExp(
   String.raw`\u001b\]SH_EDITOR:SH_EDITOR_RUN_(?:BEGIN|END):[^\u0007]*\u0007`,
   'g',
 );
+
 const createTerminalTheme = (theme: TThemeMode) =>
   theme === 'light'
     ? {
@@ -110,20 +116,19 @@ const createTerminalTheme = (theme: TThemeMode) =>
 const resolveErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback;
 
-const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegExp = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const stripTerminalHiddenMarkers = (value: string): string =>
   value.replace(TERMINAL_STREAM_HIDDEN_MARKER_PATTERN, '');
 
 const resolveTerminalMarkerSearchTailLength = (value: string): number => {
   const maxTailLength = Math.min(value.length, TERMINAL_STREAM_MARKER_PREFIX.length - 1);
-
   for (let tailLength = maxTailLength; tailLength > 0; tailLength -= 1) {
     if (TERMINAL_STREAM_MARKER_PREFIX.startsWith(value.slice(-tailLength))) {
       return tailLength;
     }
   }
-
   return 0;
 };
 
@@ -143,17 +148,22 @@ const splitTerminalMarkerChunk = (
       remainder: value.slice(value.length - tailLength),
     };
   }
-
   const markerContentStartIndex = markerStartIndex + TERMINAL_STREAM_MARKER_PREFIX.length;
   const markerEndIndex = value.indexOf(TERMINAL_STREAM_MARKER_SUFFIX, markerContentStartIndex);
   if (markerEndIndex === -1) {
+    if (value.length - markerContentStartIndex > MAX_PENDING_MARKER_BODY_LENGTH) {
+      return {
+        before: value,
+        markerToken: null,
+        remainder: '',
+      };
+    }
     return {
       before: value.slice(0, markerStartIndex),
       markerToken: null,
       remainder: value.slice(markerStartIndex),
     };
   }
-
   return {
     before: value.slice(0, markerStartIndex),
     markerToken: value.slice(markerContentStartIndex, markerEndIndex),
@@ -165,14 +175,11 @@ const sanitizeCapturedTerminalNoise = (value: string, runId: string | null): str
   if (!value) {
     return value;
   }
-
   const sanitizedValue = stripTerminalHiddenMarkers(value);
   if (!runId) {
     return sanitizedValue;
   }
-
   const escapedRunId = escapeRegExp(runId);
-
   return sanitizedValue
     .replace(
       new RegExp(
@@ -209,14 +216,15 @@ const resolveInteger = (
   if (!Number.isFinite(numeric)) {
     return fallback;
   }
-
   const integer = Math.trunc(numeric);
   if (!Number.isFinite(integer)) {
     return fallback;
   }
-
   return Math.min(max, Math.max(min, integer));
 };
+
+const isPrintableTerminalInput = (data: string): boolean =>
+  data.length > 0 && !/^[\x00-\x1f\x7f]/.test(data);
 
 type TUseIntegratedTerminalOptions = {
   visible: Ref<boolean>;
@@ -250,37 +258,71 @@ let windowFocusCleanup: (() => void) | null = null;
 let windowResizeCleanup: (() => void) | null = null;
 let webglContextLossCleanup: { dispose(): void } | null = null;
 let resizeObserver: ResizeObserver | null = null;
+
 let layoutDebounceTimeoutId: number | null = null;
 let layoutFrameId: number | null = null;
 let layoutSettleTimeoutId: number | null = null;
 let viewportFrameId: number | null = null;
+
 let shouldClearTextureAtlasOnViewportSync = false;
 let shouldRefreshViewportOnViewportSync = false;
 let shouldScrollToBottomOnViewportSync = false;
+
 let dataUnlisten: UnlistenFn | null = null;
 let exitUnlisten: UnlistenFn | null = null;
+let eventListenerRegistration: Promise<void> | null = null;
+
 let runStartMarkerTimeoutId: number | null = null;
 let programmaticScrollReleaseFrameId: number | null = null;
 let terminalWriteFrameId: number | null = null;
 let terminalWriteTimeoutId: number | null = null;
 let scrollRecoveryTimeoutId: number | null = null;
+
 let isTerminalWriteInFlight = false;
 let isProgrammaticScrollSync = false;
 let isAutoFollowEnabled = true;
 let bufferedTerminalWrite = '';
 let pendingScrollToBottomAfterWrite = false;
 let shouldFitBeforeNextVisibleWrite = false;
+
 const pendingTerminalWriteCallbacks: Array<() => void> = [];
 const replaySuppressedRunIds = new Set<string>();
+
 let terminalStreamBuffer = '';
 let expectedRunId: string | null = null;
 let activeRunId: string | null = null;
 let capturedRunOutput = '';
+
 let pendingPromptRestoreRunId: string | null = null;
 let pendingPromptRestoreBuffer = '';
 let promptRestoreAttemptCount = 0;
 let promptRestoreTimeoutId: number | null = null;
+
 let webglRendererBlocked = false;
+let previousHostSize = { width: 0, height: 0 };
+
+const didHostSizeChange = (width: number, height: number): boolean => {
+  const normalizedWidth = Math.round(width);
+  const normalizedHeight = Math.round(height);
+
+  if (normalizedWidth <= 0 || normalizedHeight <= 0) {
+    return false;
+  }
+
+  if (
+    previousHostSize.width === normalizedWidth &&
+    previousHostSize.height === normalizedHeight
+  ) {
+    return false;
+  }
+
+  previousHostSize = {
+    width: normalizedWidth,
+    height: normalizedHeight,
+  };
+
+  return true;
+};
 
 export const useIntegratedTerminal = ({
   visible,
@@ -304,6 +346,19 @@ export const useIntegratedTerminal = ({
   const fitAddonRef = sharedFitAddonRef;
   const webglAddonRef = sharedWebglAddonRef;
 
+  const buildRunCompletePayload = (
+    runId: string,
+    exitCode: number | null,
+    output: string,
+  ): ITerminalRunCompletePayload =>
+  ({
+    sessionId,
+    runId,
+    exitCode,
+    output,
+    finishedAt: new Date().toISOString(),
+  } as ITerminalRunCompletePayload);
+
   const emitStatus = (state: TTerminalConnectionState, message: string): void => {
     status.value = state;
     statusMessage.value = message;
@@ -326,42 +381,36 @@ export const useIntegratedTerminal = ({
       layoutDebounceTimeoutId = null;
     }
   };
-
   const clearLayoutFrame = (): void => {
     if (layoutFrameId !== null) {
       cancelAnimationFrame(layoutFrameId);
       layoutFrameId = null;
     }
   };
-
   const clearViewportFrame = (): void => {
     if (viewportFrameId !== null) {
       cancelAnimationFrame(viewportFrameId);
       viewportFrameId = null;
     }
   };
-
   const clearLayoutSettleTimeout = (): void => {
     if (layoutSettleTimeoutId !== null) {
       window.clearTimeout(layoutSettleTimeoutId);
       layoutSettleTimeoutId = null;
     }
   };
-
   const clearTerminalWriteFrame = (): void => {
     if (terminalWriteFrameId !== null) {
       cancelAnimationFrame(terminalWriteFrameId);
       terminalWriteFrameId = null;
     }
   };
-
   const clearTerminalWriteTimeout = (): void => {
     if (terminalWriteTimeoutId !== null) {
       window.clearTimeout(terminalWriteTimeoutId);
       terminalWriteTimeoutId = null;
     }
   };
-
   const clearScrollRecoveryTimeout = (): void => {
     if (scrollRecoveryTimeoutId !== null) {
       window.clearTimeout(scrollRecoveryTimeoutId);
@@ -373,7 +422,6 @@ export const useIntegratedTerminal = ({
     if (pendingTerminalWriteCallbacks.length === 0) {
       return;
     }
-
     const callbacks = pendingTerminalWriteCallbacks.splice(0, pendingTerminalWriteCallbacks.length);
     callbacks.forEach((callback) => {
       callback();
@@ -387,10 +435,8 @@ export const useIntegratedTerminal = ({
     if (options?.afterWrite) {
       pendingTerminalWriteCallbacks.push(options.afterWrite);
     }
-
     clearTerminalWriteFrame();
     clearTerminalWriteTimeout();
-
     const terminal = terminalRef.value;
     if (!terminal) {
       if (!isTerminalWriteInFlight) {
@@ -398,40 +444,34 @@ export const useIntegratedTerminal = ({
       }
       return;
     }
-
     if (isTerminalWriteInFlight) {
       return;
     }
-
     if (!bufferedTerminalWrite) {
-      if (options?.forceLayout) {
+      if (options?.forceLayout || shouldFitBeforeNextVisibleWrite) {
         syncTerminalLayout();
+        shouldFitBeforeNextVisibleWrite = false;
         scheduleViewportSync({ refresh: true, scrollToBottom: true });
       }
       flushPendingTerminalWriteCallbacks();
       return;
     }
-
     if (options?.forceLayout || shouldFitBeforeNextVisibleWrite) {
       syncTerminalLayout();
       shouldFitBeforeNextVisibleWrite = false;
     }
-
     const chunk = bufferedTerminalWrite;
     const shouldScrollToBottom = pendingScrollToBottomAfterWrite;
     bufferedTerminalWrite = '';
     pendingScrollToBottomAfterWrite = false;
     isTerminalWriteInFlight = true;
-
     terminal.write(chunk, () => {
       isTerminalWriteInFlight = false;
       scheduleViewportSync({ refresh: true, scrollToBottom: shouldScrollToBottom });
-
       if (bufferedTerminalWrite) {
         flushTerminalWriteBufferNow();
         return;
       }
-
       flushPendingTerminalWriteCallbacks();
     });
   };
@@ -443,11 +483,9 @@ export const useIntegratedTerminal = ({
         flushTerminalWriteBufferNow();
       });
     }
-
     if (terminalWriteTimeoutId !== null) {
       return;
     }
-
     terminalWriteTimeoutId = window.setTimeout(() => {
       terminalWriteTimeoutId = null;
       flushTerminalWriteBufferNow();
@@ -463,12 +501,10 @@ export const useIntegratedTerminal = ({
     if (!value) {
       return;
     }
-
     bufferedTerminalWrite += value;
     if (options?.scrollToBottom) {
       pendingScrollToBottomAfterWrite = true;
     }
-
     scheduleTerminalWriteFlush();
   };
 
@@ -478,7 +514,6 @@ export const useIntegratedTerminal = ({
     if (hostRef.value) {
       hostRef.value.style.backgroundColor = background;
     }
-
     if (terminalRef.value?.element) {
       terminalRef.value.element.style.setProperty('--terminal-fill', background);
       terminalRef.value.element.style.backgroundColor = background;
@@ -497,7 +532,6 @@ export const useIntegratedTerminal = ({
       webglAddonRef.value.clearTextureAtlas();
       return;
     }
-
     terminalRef.value?.clearTextureAtlas();
   };
 
@@ -512,7 +546,6 @@ export const useIntegratedTerminal = ({
     if (!terminal || webglAddonRef.value || !canUseWebglRenderer()) {
       return;
     }
-
     try {
       const addon = new WebglAddon();
       webglContextLossCleanup = addon.onContextLoss(() => {
@@ -536,19 +569,15 @@ export const useIntegratedTerminal = ({
     const shouldClearTextureAtlas = shouldClearTextureAtlasOnViewportSync;
     const shouldRefresh = shouldRefreshViewportOnViewportSync || shouldClearTextureAtlas;
     const shouldScrollToBottom = shouldScrollToBottomOnViewportSync;
-
     shouldClearTextureAtlasOnViewportSync = false;
     shouldRefreshViewportOnViewportSync = false;
     shouldScrollToBottomOnViewportSync = false;
-
     if (!terminal) {
       return;
     }
-
     if (shouldClearTextureAtlas) {
       clearTerminalTextureAtlas();
     }
-
     if (
       shouldScrollToBottom &&
       isTerminalVisible() &&
@@ -559,7 +588,6 @@ export const useIntegratedTerminal = ({
         terminal.scrollToBottom();
       });
     }
-
     if (shouldRefresh) {
       terminal.refresh(0, Math.max(terminal.rows - 1, 0));
     }
@@ -613,15 +641,12 @@ export const useIntegratedTerminal = ({
     if (options?.clearTextureAtlas) {
       shouldClearTextureAtlasOnViewportSync = true;
     }
-
     if (options?.refresh) {
       shouldRefreshViewportOnViewportSync = true;
     }
-
     if (options?.scrollToBottom) {
       shouldScrollToBottomOnViewportSync = true;
     }
-
     clearViewportFrame();
     viewportFrameId = requestAnimationFrame(() => {
       viewportFrameId = null;
@@ -648,20 +673,17 @@ export const useIntegratedTerminal = ({
     if (!terminal || !fitAddon || !hostElement) {
       return;
     }
-
     if (
       hostElement.clientWidth < MIN_RENDERABLE_TERMINAL_WIDTH ||
       hostElement.clientHeight < MIN_RENDERABLE_TERMINAL_HEIGHT
     ) {
       return;
     }
-
     try {
       fitAddon.fit();
     } catch (error) {
       console.warn('终端尺寸同步失败', error);
     }
-
     scheduleViewportSync({ refresh: true, scrollToBottom: true });
   };
 
@@ -690,11 +712,9 @@ export const useIntegratedTerminal = ({
     clearRunStartMarkerTimeout();
     runStartMarkerTimeoutId = window.setTimeout(() => {
       runStartMarkerTimeoutId = null;
-
       if (expectedRunId !== runId || activeRunId === runId) {
         return;
       }
-
       clearTrackedRunState(runId);
     }, TERMINAL_RUN_START_MARKER_WAIT_TIMEOUT_MS);
   };
@@ -702,29 +722,21 @@ export const useIntegratedTerminal = ({
   const clearTrackedRunState = (runId?: string): void => {
     const matchesExpectedRun = !runId || expectedRunId === runId;
     const matchesActiveRun = !runId || activeRunId === runId;
-
     if (!matchesExpectedRun && !matchesActiveRun) {
       return;
     }
-
     clearRunStartMarkerTimeout();
-
     terminalStreamBuffer = '';
-
+    const affectedRunId = runId ?? expectedRunId ?? activeRunId;
     if (matchesExpectedRun) {
       expectedRunId = null;
     }
-
     if (matchesActiveRun) {
       activeRunId = null;
     }
-
-    if (runId) {
-      replaySuppressedRunIds.delete(runId);
-    } else {
-      replaySuppressedRunIds.clear();
+    if (affectedRunId) {
+      replaySuppressedRunIds.delete(affectedRunId);
     }
-
     capturedRunOutput = '';
   };
 
@@ -737,7 +749,7 @@ export const useIntegratedTerminal = ({
   };
 
   const normalizeTerminalOutputForPromptCheck = (value: string): string =>
-    value.replace(ANSI_ESCAPE_PATTERN, '');
+    `\n${value.replace(ANSI_ESCAPE_PATTERN, '')}`;
 
   const clearPendingPromptRestore = (): void => {
     pendingPromptRestoreRunId = null;
@@ -751,26 +763,21 @@ export const useIntegratedTerminal = ({
     if (!pendingPromptRestoreRunId || !session.value) {
       return;
     }
-
     const delay =
       promptRestoreAttemptCount === 0
         ? POST_RUN_PROMPT_CHECK_DELAY_MS
         : POST_RUN_PROMPT_CHECK_RETRY_MS;
-
     promptRestoreTimeoutId = window.setTimeout(() => {
       promptRestoreTimeoutId = null;
-
       if (!pendingPromptRestoreRunId || !session.value) {
         return;
       }
-
       if (
         SHELL_PROMPT_PATTERN.test(normalizeTerminalOutputForPromptCheck(pendingPromptRestoreBuffer))
       ) {
         clearPendingPromptRestore();
         return;
       }
-
       if (promptRestoreAttemptCount >= POST_RUN_PROMPT_MAX_REFRESH_ATTEMPTS) {
         void tauriService.writeTerminalInput({ sessionId, data: '\u0003' }).catch(() => {
           // Ignore recovery failures when the shell has already detached.
@@ -778,7 +785,6 @@ export const useIntegratedTerminal = ({
         clearPendingPromptRestore();
         return;
       }
-
       promptRestoreAttemptCount += 1;
       void tauriService.writeTerminalInput({ sessionId, data: '\n' }).catch(() => {
         clearPendingPromptRestore();
@@ -791,7 +797,6 @@ export const useIntegratedTerminal = ({
     if (!pendingPromptRestoreRunId || !output) {
       return;
     }
-
     pendingPromptRestoreBuffer = `${pendingPromptRestoreBuffer}${output}`.slice(
       -POST_RUN_PROMPT_DETECTION_BUFFER_LIMIT,
     );
@@ -814,22 +819,20 @@ export const useIntegratedTerminal = ({
   ): {
     visibleOutput: string;
     capturedOutput: string;
-    completedRun: ITerminalRunCompletePayload | null;
+    completedRuns: ITerminalRunCompletePayload[];
   } => {
     terminalStreamBuffer += chunk;
     const visibleChunks: string[] = [];
     const capturedChunks: string[] = [];
-    let completedRun: ITerminalRunCompletePayload | null = null;
+    const completedRuns: ITerminalRunCompletePayload[] = [];
 
     const appendRunOutput = (value: string): void => {
       if (!value) {
         return;
       }
-
       if (activeRunId && replaySuppressedRunIds.has(activeRunId)) {
         return;
       }
-
       visibleChunks.push(value);
       capturedChunks.push(value);
       capturedRunOutput += value;
@@ -841,32 +844,29 @@ export const useIntegratedTerminal = ({
         if (markerChunk.before) {
           appendRunOutput(markerChunk.before);
         }
-
         terminalStreamBuffer = markerChunk.remainder;
         if (!markerChunk.markerToken) {
           break;
         }
-
         const completedRunId = activeRunId;
         const endMarkerPrefix = `${TERMINAL_STREAM_END_MARKER_PREFIX}${completedRunId}:`;
         if (markerChunk.markerToken.startsWith(endMarkerPrefix)) {
           const exitCodeRaw = markerChunk.markerToken.slice(endMarkerPrefix.length);
           const parsedExitCode = Number.parseInt(exitCodeRaw, 10);
-          completedRun = {
-            runId: completedRunId,
-            exitCode: Number.isFinite(parsedExitCode) ? parsedExitCode : null,
-            output: capturedRunOutput,
-            finishedAt: new Date().toISOString(),
-          };
+          const wasSuppressed = replaySuppressedRunIds.has(completedRunId);
+          const completedRun = buildRunCompletePayload(
+            completedRunId,
+            Number.isFinite(parsedExitCode) ? parsedExitCode : null,
+            capturedRunOutput,
+          );
           activeRunId = null;
           capturedRunOutput = '';
-
-          if (replaySuppressedRunIds.has(completedRunId)) {
+          if (wasSuppressed) {
             replaySuppressedRunIds.delete(completedRunId);
-            completedRun = null;
+          } else {
+            completedRuns.push(completedRun);
           }
         }
-
         continue;
       }
 
@@ -876,19 +876,16 @@ export const useIntegratedTerminal = ({
           visibleChunks.push(markerChunk.before);
           capturedChunks.push(markerChunk.before);
         }
-
         terminalStreamBuffer = markerChunk.remainder;
         if (!markerChunk.markerToken) {
           break;
         }
-
         if (markerChunk.markerToken === `${TERMINAL_STREAM_START_MARKER_PREFIX}${expectedRunId}`) {
           clearRunStartMarkerTimeout();
           activeRunId = expectedRunId;
           expectedRunId = null;
           capturedRunOutput = '';
         }
-
         continue;
       }
 
@@ -897,7 +894,6 @@ export const useIntegratedTerminal = ({
         visibleChunks.push(markerChunk.before);
         capturedChunks.push(markerChunk.before);
       }
-
       terminalStreamBuffer = markerChunk.remainder;
       if (!markerChunk.markerToken) {
         break;
@@ -905,12 +901,16 @@ export const useIntegratedTerminal = ({
     }
 
     const noiseSuppressionRunId =
-      pendingPromptRestoreRunId ?? activeRunId ?? expectedRunId ?? completedRun?.runId ?? null;
+      pendingPromptRestoreRunId ??
+      activeRunId ??
+      expectedRunId ??
+      completedRuns[completedRuns.length - 1]?.runId ??
+      null;
 
     return {
       visibleOutput: stripTerminalHiddenMarkers(visibleChunks.join('')),
       capturedOutput: sanitizeCapturedTerminalNoise(capturedChunks.join(''), noiseSuppressionRunId),
-      completedRun,
+      completedRuns,
     };
   };
 
@@ -918,9 +918,13 @@ export const useIntegratedTerminal = ({
     if (typeof ResizeObserver === 'undefined' || !hostRef.value) {
       return;
     }
-
     resizeObserver?.disconnect();
-    resizeObserver = new ResizeObserver(() => {
+    resizeObserver = new ResizeObserver((entries) => {
+      const targetEntry = entries[0];
+      if (!targetEntry || !didHostSizeChange(targetEntry.contentRect.width, targetEntry.contentRect.height)) {
+        return;
+      }
+
       if (isTerminalVisible()) {
         scheduleLayoutSync();
       }
@@ -930,16 +934,18 @@ export const useIntegratedTerminal = ({
     if (windowResizeCleanup) {
       return;
     }
-
     const handleWindowResize = (): void => {
       if (!isTerminalVisible()) {
+        return;
+      }
+
+      if (!hostRef.value || !didHostSizeChange(hostRef.value.clientWidth, hostRef.value.clientHeight)) {
         return;
       }
 
       scheduleLayoutSync();
       scheduleViewportSync({ refresh: true });
     };
-
     window.addEventListener('resize', handleWindowResize);
     windowResizeCleanup = () => {
       window.removeEventListener('resize', handleWindowResize);
@@ -953,12 +959,10 @@ export const useIntegratedTerminal = ({
         if (!isTerminalVisible()) {
           return;
         }
-
         ensurePreferredRenderer();
         scheduleLayoutSync();
         scheduleViewportSync({ clearTextureAtlas: true, refresh: true, scrollToBottom: true });
       };
-
       window.addEventListener('focus', handleWindowFocus);
       windowFocusCleanup = () => {
         window.removeEventListener('focus', handleWindowFocus);
@@ -971,12 +975,10 @@ export const useIntegratedTerminal = ({
         if (document.visibilityState !== 'visible' || !isTerminalVisible()) {
           return;
         }
-
         ensurePreferredRenderer();
         scheduleLayoutSync();
         scheduleViewportSync({ clearTextureAtlas: true, refresh: true, scrollToBottom: true });
       };
-
       document.addEventListener('visibilitychange', handleVisibilityChange);
       visibilityChangeCleanup = () => {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -987,23 +989,19 @@ export const useIntegratedTerminal = ({
     if (fontLoadingCleanup || typeof document === 'undefined' || !('fonts' in document)) {
       return;
     }
-
     const fontSet = document.fonts;
     const handleFontMetricsReady = (): void => {
       if (!isTerminalVisible()) {
         return;
       }
-
       ensurePreferredRenderer();
       scheduleLayoutSync();
       scheduleViewportSync({ refresh: true });
     };
-
     const readyPromise = fontSet.ready;
     void readyPromise.then(() => {
       handleFontMetricsReady();
     });
-
     fontSet.addEventListener('loadingdone', handleFontMetricsReady);
     fontLoadingCleanup = () => {
       fontSet.removeEventListener('loadingdone', handleFontMetricsReady);
@@ -1017,16 +1015,13 @@ export const useIntegratedTerminal = ({
       emitStatus('error', '内置终端仅支持 Tauri 桌面端。');
       return;
     }
-
     const terminal = terminalRef.value;
     if (!terminal) {
       return;
     }
-
     emitStatus('connecting', '正在连接 WSL2 终端…');
     await nextTick();
     syncTerminalLayout();
-
     try {
       const payload = await tauriService.ensureTerminalSession({
         sessionId,
@@ -1034,12 +1029,10 @@ export const useIntegratedTerminal = ({
         cols: resolveInteger(terminal.cols, DEFAULT_COLS, 2, 5000),
         rows: resolveInteger(terminal.rows, DEFAULT_ROWS, 1, 3000),
       });
-
       session.value = payload;
       emitStatus('ready', `${payload.shellLabel} 已连接`);
       ensurePreferredRenderer();
       scheduleViewportSync({ refresh: true, scrollToBottom: true });
-
       if (visible.value) {
         focusTerminal();
       }
@@ -1052,41 +1045,34 @@ export const useIntegratedTerminal = ({
     }
   };
 
-  const registerEventListeners = async (): Promise<void> => {
-    if (dataUnlisten && exitUnlisten) {
+  const handleTerminalDataEvent = (event: { payload: ITerminalDataEvent }): void => {
+    if (event.payload.sessionId !== sessionId) {
       return;
     }
+    const terminal = terminalRef.value;
+    if (!terminal) {
+      return;
+    }
+    const processed = processTerminalData(event.payload.data);
 
-    dataUnlisten = await listen<ITerminalDataEvent>('terminal:data', (event) => {
-      if (event.payload.sessionId !== sessionId) {
-        return;
+    if (processed.completedRuns.length > 0) {
+      beginPromptRestore(processed.completedRuns[processed.completedRuns.length - 1].runId);
+    }
+
+    if (processed.visibleOutput) {
+      queueTerminalWrite(processed.visibleOutput, { scrollToBottom: true });
+      trackPostRunPrompt(processed.visibleOutput);
+    }
+
+    if (processed.capturedOutput) {
+      emitOutput(processed.capturedOutput);
+    }
+
+    if (processed.completedRuns.length > 0) {
+      if (isTerminalVisible()) {
+        focusTerminal();
       }
-
-      const terminal = terminalRef.value;
-      if (!terminal) {
-        return;
-      }
-
-      const processed = processTerminalData(event.payload.data);
-
-      if (processed.completedRun) {
-        beginPromptRestore(processed.completedRun.runId);
-      }
-
-      if (processed.visibleOutput) {
-        queueTerminalWrite(processed.visibleOutput, { scrollToBottom: true });
-        trackPostRunPrompt(processed.visibleOutput);
-      }
-
-      if (processed.capturedOutput) {
-        emitOutput(processed.capturedOutput);
-      }
-
-      if (processed.completedRun) {
-        const completedRun = processed.completedRun;
-        if (isTerminalVisible()) {
-          focusTerminal();
-        }
+      for (const completedRun of processed.completedRuns) {
         flushTerminalWriteBufferNow({
           afterWrite: () => {
             scheduleViewportSync({ refresh: true, scrollToBottom: true });
@@ -1095,36 +1081,72 @@ export const useIntegratedTerminal = ({
           forceLayout: true,
         });
       }
+    }
+  };
+
+  const handleTerminalExitEvent = (event: { payload: ITerminalExitEvent }): void => {
+    if (event.payload.sessionId !== sessionId) {
+      return;
+    }
+    session.value = null;
+    const message =
+      event.payload.exitCode === null
+        ? 'WSL2 终端已断开。'
+        : `WSL2 终端已退出（代码 ${event.payload.exitCode}）。`;
+    if (activeRunId) {
+      emitRunComplete(
+        buildRunCompletePayload(activeRunId, event.payload.exitCode ?? -1, capturedRunOutput),
+      );
+      resetTerminalRunCapture();
+    } else {
+      clearPendingPromptRestore();
+    }
+    queueTerminalWrite(`\r\n\x1b[90m${message}\x1b[0m\r\n`, { scrollToBottom: true });
+    flushTerminalWriteBufferNow();
+    scheduleViewportSync({ refresh: true, scrollToBottom: true });
+    emitStatus('closed', message);
+  };
+
+  const registerEventListeners = (): Promise<void> => {
+    if (dataUnlisten && exitUnlisten) {
+      return Promise.resolve();
+    }
+    if (eventListenerRegistration) {
+      return eventListenerRegistration;
+    }
+    eventListenerRegistration = (async () => {
+      const [nextDataUnlisten, nextExitUnlisten] = await Promise.all([
+        listen<ITerminalDataEvent>('terminal:data', handleTerminalDataEvent),
+        listen<ITerminalExitEvent>('terminal:exit', handleTerminalExitEvent),
+      ]);
+      dataUnlisten = nextDataUnlisten;
+      exitUnlisten = nextExitUnlisten;
+    })().finally(() => {
+      eventListenerRegistration = null;
     });
+    return eventListenerRegistration;
+  };
 
-    exitUnlisten = await listen<ITerminalExitEvent>('terminal:exit', (event) => {
-      if (event.payload.sessionId !== sessionId) {
-        return;
-      }
-
-      session.value = null;
-      const message =
-        event.payload.exitCode === null
-          ? 'WSL2 终端已断开。'
-          : `WSL2 终端已退出（代码 ${event.payload.exitCode}）。`;
-
-      if (activeRunId) {
-        emitRunComplete({
-          runId: activeRunId,
-          exitCode: event.payload.exitCode ?? -1,
-          output: capturedRunOutput,
-          finishedAt: new Date().toISOString(),
-        });
-        resetTerminalRunCapture();
-      } else {
-        clearPendingPromptRestore();
-      }
-
-      queueTerminalWrite(`\r\n\x1b[90m${message}\x1b[0m\r\n`, { scrollToBottom: true });
-      flushTerminalWriteBufferNow();
-      scheduleViewportSync({ refresh: true, scrollToBottom: true });
-      emitStatus('closed', message);
-    });
+  const attachTerminalToHost = (): void => {
+    const terminal = terminalRef.value;
+    const host = hostRef.value;
+    if (!terminal || !host) {
+      return;
+    }
+    if (!terminal.element) {
+      terminal.open(host);
+    } else if (terminal.element.parentElement !== host) {
+      host.replaceChildren(terminal.element);
+    }
+    previousHostSize = {
+      width: Math.round(host.clientWidth),
+      height: Math.round(host.clientHeight),
+    };
+    bindResizeObserver();
+    ensurePreferredRenderer();
+    syncTerminalSurfaceTone();
+    scheduleLayoutSync();
+    scheduleViewportSync({ clearTextureAtlas: true, refresh: true, scrollToBottom: true });
   };
 
   const createTerminal = (): void => {
@@ -1132,89 +1154,70 @@ export const useIntegratedTerminal = ({
       return;
     }
 
-    if (terminalRef.value) {
-      if (terminalRef.value.element) {
-        if (terminalRef.value.element.parentElement !== hostRef.value) {
-          hostRef.value.replaceChildren(terminalRef.value.element);
-        }
-      } else {
-        terminalRef.value.open(hostRef.value);
-      }
+    if (!terminalRef.value) {
+      const terminal = new Terminal({
+        allowTransparency: false,
+        convertEol: true,
+        cursorBlink: false,
+        cursorStyle: 'bar',
+        drawBoldTextInBrightColors: true,
+        fontFamily:
+          "Berkeley Mono, JetBrains Mono, 'SFMono-Regular', Consolas, 'Courier New', monospace",
+        fontSize: 13,
+        letterSpacing: 0,
+        lineHeight: 1.38,
+        rows: DEFAULT_ROWS,
+        cols: DEFAULT_COLS,
+        scrollOnUserInput: true,
+        scrollback: TERMINAL_SCROLLBACK_LIMIT,
+        scrollSensitivity: 1,
+        fastScrollSensitivity: 1,
+        smoothScrollDuration: 0,
+        theme: createTerminalTheme(theme.value),
+      });
+      const fitAddon = new FitAddon();
+      terminal.loadAddon(fitAddon);
+      terminalRef.value = terminal;
+      fitAddonRef.value = fitAddon;
 
-      bindResizeObserver();
-      ensurePreferredRenderer();
-      syncTerminalSurfaceTone();
-      scheduleLayoutSync();
-      scheduleViewportSync({ clearTextureAtlas: true, refresh: true, scrollToBottom: true });
-      return;
+      terminal.onData((data) => {
+        if (!session.value) {
+          return;
+        }
+        if (isPrintableTerminalInput(data) || data === '\r' || data === '\n') {
+          isAutoFollowEnabled = true;
+        }
+        void tauriService.writeTerminalInput({ sessionId, data }).catch((error) => {
+          emitStatus('error', resolveErrorMessage(error, '终端输入发送失败。'));
+        });
+      });
+      terminal.onScroll(() => {
+        if (isProgrammaticScrollSync) {
+          return;
+        }
+        const current = terminalRef.value;
+        if (!current) {
+          return;
+        }
+        isAutoFollowEnabled = isViewportNearBottom(current);
+        if (isAutoFollowEnabled) {
+          clearScrollRecoveryTimeout();
+          return;
+        }
+        scheduleScrollRecovery();
+      });
+      terminal.onResize(({ cols, rows }) => {
+        scheduleViewportSync({ refresh: true, scrollToBottom: true });
+        if (!session.value) {
+          return;
+        }
+        void tauriService.resizeTerminalSession({ sessionId, cols, rows }).catch(() => {
+          // 终端在关闭或窗口隐藏时可能触发瞬时 resize，这里忽略即可。
+        });
+      });
     }
 
-    const terminal = new Terminal({
-      allowTransparency: false,
-      convertEol: true,
-      cursorBlink: false,
-      cursorStyle: 'bar',
-      drawBoldTextInBrightColors: true,
-      fontFamily:
-        "Berkeley Mono, JetBrains Mono, 'SFMono-Regular', Consolas, 'Courier New', monospace",
-      fontSize: 13,
-      letterSpacing: 0,
-      lineHeight: 1.38,
-      rows: DEFAULT_ROWS,
-      cols: DEFAULT_COLS,
-      scrollOnUserInput: true,
-      scrollback: TERMINAL_SCROLLBACK_LIMIT,
-      scrollSensitivity: 1,
-      fastScrollSensitivity: 1,
-      smoothScrollDuration: 0,
-      theme: createTerminalTheme(theme.value),
-    });
-
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminalRef.value = terminal;
-    fitAddonRef.value = fitAddon;
-    createTerminal();
-    ensurePreferredRenderer();
-    syncTerminalSurfaceTone();
-
-    terminal.onData((data) => {
-      if (!session.value) {
-        return;
-      }
-
-      isAutoFollowEnabled = true;
-
-      void tauriService.writeTerminalInput({ sessionId, data }).catch((error) => {
-        emitStatus('error', resolveErrorMessage(error, '终端输入发送失败。'));
-      });
-    });
-
-    terminal.onScroll(() => {
-      if (isProgrammaticScrollSync) {
-        return;
-      }
-
-      isAutoFollowEnabled = isViewportNearBottom(terminal);
-      if (isAutoFollowEnabled) {
-        clearScrollRecoveryTimeout();
-        return;
-      }
-
-      scheduleScrollRecovery();
-    });
-
-    terminal.onResize(({ cols, rows }) => {
-      scheduleViewportSync({ refresh: true, scrollToBottom: true });
-
-      if (!session.value) {
-        return;
-      }
-
-      void tauriService.resizeTerminalSession({ sessionId, cols, rows }).catch(() => {
-        // 终端在关闭或窗口隐藏时可能触发瞬时 resize，这里忽略即可。
-      });
-    });
+    attachTerminalToHost();
   };
 
   const retry = async (): Promise<void> => {
@@ -1238,7 +1241,6 @@ export const useIntegratedTerminal = ({
       if (!terminal) {
         return;
       }
-
       terminal.options.theme = createTerminalTheme(nextTheme);
       syncTerminalSurfaceTone();
       scheduleViewportSync({ clearTextureAtlas: true, refresh: true });
@@ -1251,7 +1253,6 @@ export const useIntegratedTerminal = ({
       if (!nextVisible) {
         return;
       }
-
       await nextTick();
       createTerminal();
       ensurePreferredRenderer();
@@ -1268,7 +1269,10 @@ export const useIntegratedTerminal = ({
       if (!nextRunId) {
         return;
       }
-
+      if (activeRunId && activeRunId !== nextRunId) {
+        emitRunComplete(buildRunCompletePayload(activeRunId, -1, capturedRunOutput));
+      }
+      clearTrackedRunState();
       expectedRunId = nextRunId;
       activeRunId = null;
       capturedRunOutput = '';
@@ -1289,7 +1293,6 @@ export const useIntegratedTerminal = ({
       if (!nextReplayRequest) {
         return;
       }
-
       replaySuppressedRunIds.add(nextReplayRequest.runId);
       if (expectedRunId !== nextReplayRequest.runId && activeRunId !== nextReplayRequest.runId) {
         expectedRunId = nextReplayRequest.runId;
@@ -1298,7 +1301,6 @@ export const useIntegratedTerminal = ({
         terminalStreamBuffer = '';
         scheduleRunStartMarkerTimeout(nextReplayRequest.runId);
       }
-
       if (nextReplayRequest.content) {
         shouldFitBeforeNextVisibleWrite = true;
         queueTerminalWrite(nextReplayRequest.content, { scrollToBottom: true });
@@ -1314,7 +1316,6 @@ export const useIntegratedTerminal = ({
       } else if (nextReplayRequest.restorePrompt) {
         beginPromptRestore(nextReplayRequest.runId);
       }
-
       editorStore.queueTerminalReplayOutput(null);
     },
   );
@@ -1327,6 +1328,15 @@ export const useIntegratedTerminal = ({
 
     resizeObserver?.disconnect();
     resizeObserver = null;
+    windowResizeCleanup?.();
+    windowFocusCleanup?.();
+    visibilityChangeCleanup?.();
+    fontLoadingCleanup?.();
+
+    dataUnlisten?.();
+    exitUnlisten?.();
+    dataUnlisten = null;
+    exitUnlisten = null;
 
     clearLayoutDebounceTimeout();
     clearLayoutFrame();
@@ -1336,6 +1346,18 @@ export const useIntegratedTerminal = ({
     clearTerminalWriteFrame();
     clearTerminalWriteTimeout();
     clearScrollRecoveryTimeout();
+    clearRunStartMarkerTimeout();
+    clearPromptRestoreTimeout();
+
+    resetTerminalRunCapture();
+    bufferedTerminalWrite = '';
+    pendingTerminalWriteCallbacks.length = 0;
+    isTerminalWriteInFlight = false;
+    pendingScrollToBottomAfterWrite = false;
+    shouldFitBeforeNextVisibleWrite = false;
+    previousHostSize = { width: 0, height: 0 };
+
+    disposeWebglRenderer();
   });
 
   return {

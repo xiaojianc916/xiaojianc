@@ -1,13 +1,7 @@
 <template>
-  <ScriptEditor
-    ref="innerEditorRef"
-    :model-value="modelValue"
-    :theme="theme"
-    :analysis="analysisState"
-    @update:model-value="handleModelValueChange"
-    @cursor-position-change="handleCursorPositionChange"
-    @format-request="emit('format-request')"
-  />
+  <ScriptEditor ref="innerEditorRef" :model-value="modelValue" :theme="theme" :analysis="analysisState"
+    @update:model-value="handleModelValueChange" @cursor-position-change="handleCursorPositionChange"
+    @format-request="emit('format-request')" />
 </template>
 
 <script setup lang="ts">
@@ -17,6 +11,9 @@ import type { TThemeMode } from '@/types/app';
 import type { IAnalyzeScriptPayload } from '@/types/editor';
 import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+
+const ANALYSIS_INITIAL_DELAY_MS = 90;
+const ANALYSIS_TYPING_DELAY_MS = 420;
 
 interface IEditorExpose {
   focusEditor: () => void;
@@ -122,22 +119,30 @@ const runAnalysis = async (): Promise<void> => {
   }
 };
 
-const scheduleAnalysis = (): void => {
+const scheduleAnalysis = (delayMs = ANALYSIS_TYPING_DELAY_MS): void => {
   clearPendingAnalysisTimer();
   pendingAnalysisTimerId = window.setTimeout(() => {
     pendingAnalysisTimerId = null;
     void runAnalysis();
-  }, 320);
+  }, delayMs);
 };
 
 onMounted(() => {
-  scheduleAnalysis();
+  scheduleAnalysis(ANALYSIS_INITIAL_DELAY_MS);
 });
 
 watch(
   () => [props.documentId, props.documentPath, props.documentName, props.modelValue],
-  () => {
-    scheduleAnalysis();
+  (nextValue, previousValue) => {
+    const documentIdentityChanged =
+      !previousValue ||
+      nextValue[0] !== previousValue[0] ||
+      nextValue[1] !== previousValue[1] ||
+      nextValue[2] !== previousValue[2];
+
+    scheduleAnalysis(
+      documentIdentityChanged ? ANALYSIS_INITIAL_DELAY_MS : ANALYSIS_TYPING_DELAY_MS,
+    );
   },
 );
 

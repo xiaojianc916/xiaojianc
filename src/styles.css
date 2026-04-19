@@ -1,24 +1,95 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-@import 'tailwindcss';
-@import 'tw-animate-css';
+/* ============================================================
+ * Tailwind v4 + shadcn-vue  |  .dark class-driven theme
+ * ============================================================ */
 
-@plugin 'tailwindcss-animate';
+@import 'tailwindcss';
+
 @custom-variant dark (&:is(.dark *));
-@config "../tailwind.config.ts";
+
+/* ============================================================
+ * 1. Design tokens
+ * ============================================================ */
+
+@theme inline {
+  --font-heading: var(--font-sans);
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-chrome-950: #08090a;
+  --color-chrome-900: #0f1011;
+  --color-chrome-800: #151618;
+  --color-chrome-700: #191a1b;
+  --color-chrome-600: #28282c;
+
+  --color-text-primary: #f7f8f8;
+  --color-text-secondary: #d0d6e0;
+  --color-text-tertiary: #8a8f98;
+  --color-text-quaternary: #62666d;
+
+  --color-accent-default: #5e6ad2;
+  --color-accent-bright: #7170ff;
+  --color-accent-hover: #828fff;
+
+  --shadow-linear: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 16px 48px rgba(0, 0, 0, 0.35);
+  --shadow-inset:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    inset 0 0 18px rgba(0, 0, 0, 0.18);
+
+  --font-sans:
+    'Inter Variable', 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    sans-serif;
+  --font-mono:
+    'Berkeley Mono', 'JetBrains Mono', 'SFMono-Regular', 'Consolas', 'ui-monospace', monospace;
+}
+
+/* ============================================================
+ * 2. Root variables — dark (default)
+ * ============================================================ */
 
 :root {
   color-scheme: dark;
-  font-family:
-    Inter Variable,
-    Inter,
-    'SF Pro Display',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
+  font-family: var(--font-sans);
   font-feature-settings:
     'cv01' 1,
     'ss03' 1;
+
   --app-bg: #0d0f12;
   --titlebar-bg: #181a1f;
   --activity-bg: #111318;
@@ -48,7 +119,76 @@
   --success: #22c55e;
   --warning: #f3c969;
   --danger: #ff6b7a;
+
   --radius: 0.625rem;
+
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* ============================================================
+ * 3. Light theme overrides
+ * ============================================================ */
+
+.light,
+[data-theme='light'] {
+  color-scheme: light;
+
+  --app-bg: #f3f5f8;
+  --titlebar-bg: #f6f7fb;
+  --activity-bg: #edf1f8;
+  --sidebar-bg: #f7f9fc;
+  --editor-bg: #ffffff;
+  --editor-surface: #ffffff;
+  --panel-bg: #f5f7fb;
+  --panel-muted: #eef2f8;
+  --tabbar-bg: #f3f5fa;
+  --tab-active-bg: #ffffff;
+  --tab-hover-bg: #eef2f8;
+  --statusbar-bg: #dbe7ff;
+  --statusbar-accent: #335cff;
+  --surface-hover: rgba(15, 23, 42, 0.06);
+  --surface-soft: rgba(15, 23, 42, 0.04);
+  --surface-soft-strong: rgba(15, 23, 42, 0.08);
+  --border-subtle: rgba(15, 23, 42, 0.08);
+  --border-strong: rgba(15, 23, 42, 0.14);
+  --shell-divider: rgba(15, 23, 42, 0.12);
+  --text-primary: #111827;
+  --text-secondary: #334155;
+  --text-tertiary: #64748b;
+  --text-quaternary: #94a3b8;
+  --accent: #4c6fff;
+  --accent-strong: #335cff;
+  --accent-muted: rgba(76, 111, 255, 0.14);
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -80,6 +220,10 @@
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
 }
+
+/* ============================================================
+ * 4. Base / reset
+ * ============================================================ */
 
 html,
 body,
@@ -127,7 +271,7 @@ button:disabled,
 [aria-disabled='true'],
 .is-disabled,
 .is-inert-control {
-  cursor: default !important;
+  cursor: not-allowed;
 }
 
 ::-webkit-scrollbar {
@@ -146,35 +290,19 @@ button:disabled,
   background-clip: padding-box;
 }
 
-[data-theme='light'] {
-  color-scheme: light;
-  --app-bg: #f3f5f8;
-  --titlebar-bg: #f6f7fb;
-  --activity-bg: #edf1f8;
-  --sidebar-bg: #f7f9fc;
-  --editor-bg: #ffffff;
-  --editor-surface: #ffffff;
-  --panel-bg: #f5f7fb;
-  --panel-muted: #eef2f8;
-  --tabbar-bg: #f3f5fa;
-  --tab-active-bg: #ffffff;
-  --tab-hover-bg: #eef2f8;
-  --statusbar-bg: #dbe7ff;
-  --statusbar-accent: #335cff;
-  --surface-hover: rgba(15, 23, 42, 0.06);
-  --surface-soft: rgba(15, 23, 42, 0.04);
-  --surface-soft-strong: rgba(15, 23, 42, 0.08);
-  --border-subtle: rgba(15, 23, 42, 0.08);
-  --border-strong: rgba(15, 23, 42, 0.14);
-  --shell-divider: rgba(15, 23, 42, 0.12);
-  --text-primary: #111827;
-  --text-secondary: #334155;
-  --text-tertiary: #64748b;
-  --text-quaternary: #94a3b8;
-  --accent: #4c6fff;
-  --accent-strong: #335cff;
-  --accent-muted: rgba(76, 111, 255, 0.14);
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
 }
+
+/* ============================================================
+ * 5. App shell
+ * ============================================================ */
 
 .app-surface {
   background: var(--app-bg);
@@ -266,14 +394,12 @@ button:disabled,
 }
 
 .mono-text {
-  font-family:
-    Berkeley Mono,
-    JetBrains Mono,
-    SFMono-Regular,
-    Consolas,
-    'Courier New',
-    monospace;
+  font-family: var(--font-mono);
 }
+
+/* ============================================================
+ * 6. Titlebar
+ * ============================================================ */
 
 .window-titlebar {
   background: var(--titlebar-bg);
@@ -297,102 +423,6 @@ button:disabled,
 .window-control-button:hover {
   background: var(--surface-hover);
   color: var(--text-primary);
-}
-
-.activity-button {
-  display: flex;
-  position: relative;
-  height: 44px;
-  width: 100%;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-quaternary);
-  transition:
-    color 0.18s ease,
-    background 0.18s ease;
-}
-
-.activity-button::before {
-  position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  background: transparent;
-  content: '';
-}
-
-.activity-button:hover {
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-secondary);
-}
-
-.activity-button.is-active {
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-primary);
-}
-
-.activity-button.is-active:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-primary);
-}
-
-.activity-button.is-active::before {
-  background: var(--accent-strong);
-}
-
-.activity-button.is-bottom {
-  margin-top: auto;
-}
-
-.activity-settings-trigger {
-  display: inline-flex;
-  width: 18px;
-  height: 18px;
-  margin-top: auto;
-  margin-bottom: 12px;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-quaternary);
-  background: transparent;
-  transition: color 0.18s ease;
-}
-
-.activity-settings-trigger:hover {
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.activity-settings-icon {
-  transform-origin: center;
-  will-change: transform;
-  backface-visibility: hidden;
-  transition: transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.icon-button {
-  display: inline-flex;
-  height: 28px;
-  width: 28px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  color: var(--text-tertiary);
-  transition:
-    background 0.18s ease,
-    color 0.18s ease;
-}
-
-.icon-button:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-primary);
-}
-
-.icon-button.is-inert-control:hover,
-.icon-button[aria-disabled='true']:hover,
-.icon-button:disabled:hover {
-  background: transparent;
-  color: var(--text-tertiary);
 }
 
 .window-command-bar {
@@ -472,6 +502,109 @@ button:disabled,
     color 0.18s ease,
     transform 0.18s ease;
 }
+
+/* ============================================================
+ * 7. Activity bar / icon buttons
+ * ============================================================ */
+
+.activity-button {
+  display: flex;
+  position: relative;
+  height: 44px;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-quaternary);
+  transition:
+    color 0.18s ease,
+    background 0.18s ease;
+}
+
+.activity-button::before {
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: transparent;
+  content: '';
+}
+
+.activity-button:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+}
+
+.activity-button.is-active {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+}
+
+.activity-button.is-active:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.activity-button.is-active::before {
+  background: var(--accent-strong);
+}
+
+.activity-button.is-bottom {
+  margin-top: auto;
+}
+
+.activity-settings-trigger {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  margin-top: auto;
+  margin-bottom: 12px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-quaternary);
+  background: transparent;
+  transition: color 0.18s ease;
+}
+
+.activity-settings-trigger:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.activity-settings-icon {
+  transform-origin: center;
+  backface-visibility: hidden;
+  transition: transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.icon-button {
+  display: inline-flex;
+  height: 28px;
+  width: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+}
+
+.icon-button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.icon-button.is-inert-control:hover,
+.icon-button[aria-disabled='true']:hover,
+.icon-button:disabled:hover {
+  background: transparent;
+  color: var(--text-tertiary);
+}
+
+/* ============================================================
+ * 8. Tooltip / dropdown
+ * ============================================================ */
 
 .app-tooltip-target {
   position: relative;
@@ -608,6 +741,10 @@ button:disabled,
   color: var(--text-secondary);
 }
 
+/* ============================================================
+ * 9. Window resize handles
+ * ============================================================ */
+
 .window-resize-handle {
   position: absolute;
   z-index: 45;
@@ -680,6 +817,10 @@ button:disabled,
   cursor: nwse-resize;
 }
 
+/* ============================================================
+ * 10. Sidebar / explorer
+ * ============================================================ */
+
 .sidebar-section-title {
   font-size: 11px;
   font-weight: 600;
@@ -695,14 +836,7 @@ button:disabled,
   gap: 6px;
   min-height: 26px;
   padding-right: 12px;
-  font-family:
-    Inter Variable,
-    Inter,
-    'SF Pro Text',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
+  font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.01em;
@@ -758,7 +892,8 @@ button:disabled,
   border-radius: 8px;
   background:
     linear-gradient(45deg, transparent 50%, var(--text-quaternary) 50%),
-    linear-gradient(135deg, var(--text-quaternary) 50%, transparent 50%), rgba(255, 255, 255, 0.04);
+    linear-gradient(135deg, var(--text-quaternary) 50%, transparent 50%),
+    rgba(255, 255, 255, 0.04);
   background-position:
     calc(100% - 14px) calc(50% - 2px),
     calc(100% - 9px) calc(50% - 2px),
@@ -776,6 +911,10 @@ button:disabled,
   outline: 1px solid rgba(94, 106, 210, 0.45);
   outline-offset: 0;
 }
+
+/* ============================================================
+ * 11. Editor tabs
+ * ============================================================ */
 
 .editor-tabbar {
   background: color-mix(in srgb, var(--tabbar-bg) 92%, #0b0d11);
@@ -896,34 +1035,41 @@ button:disabled,
   color: #f7f8fb;
 }
 
+.light .editor-file-tab,
 [data-theme='light'] .editor-file-tab {
   background: #e9ebf0;
   color: #555555;
 }
 
+.light .editor-file-tab:hover,
 [data-theme='light'] .editor-file-tab:hover {
   background: #dee2e8;
   color: #222222;
 }
 
+.light .editor-file-tab.is-active,
 [data-theme='light'] .editor-file-tab.is-active {
   background: #c9cdd4;
   color: #111111;
 }
 
+.light .editor-file-tab-icon,
 [data-theme='light'] .editor-file-tab-icon {
   background: transparent;
 }
 
+.light .editor-file-tab-indicator,
 [data-theme='light'] .editor-file-tab-indicator {
   background: #4c6fff;
   box-shadow: 0 0 0 3px rgba(76, 111, 255, 0.12);
 }
 
+.light .editor-file-tab-close,
 [data-theme='light'] .editor-file-tab-close {
   color: #888888;
 }
 
+.light .editor-file-tab-close:hover,
 [data-theme='light'] .editor-file-tab-close:hover {
   background: #d0d0d0;
   color: #222222;
@@ -937,6 +1083,10 @@ button:disabled,
   max-width: 100%;
   backdrop-filter: saturate(1.04);
 }
+
+/* ============================================================
+ * 12. Terminal
+ * ============================================================ */
 
 .terminal-resize-handle {
   display: flex;
@@ -959,14 +1109,7 @@ button:disabled,
 
 .run-panel-tab {
   border-bottom: 2px solid transparent;
-  font-family:
-    Inter Variable,
-    Inter,
-    'SF Pro Text',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
+  font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.01em;
@@ -1006,7 +1149,8 @@ button:disabled,
   min-height: 0;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.014), rgba(255, 255, 255, 0)), var(--panel-bg);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.014), rgba(255, 255, 255, 0)),
+    var(--panel-bg);
 }
 
 .embedded-terminal-host {
@@ -1020,7 +1164,7 @@ button:disabled,
   box-sizing: border-box;
   overflow: hidden;
   background: var(--terminal-fill, var(--panel-bg));
-  contain: layout paint size;
+  contain: layout paint;
   overscroll-behavior: contain;
   isolation: isolate;
 }
@@ -1091,9 +1235,7 @@ button:disabled,
 }
 
 .embedded-terminal-shell:hover .embedded-terminal-host .xterm-viewport::-webkit-scrollbar-thumb,
-.embedded-terminal-shell:focus-within
-  .embedded-terminal-host
-  .xterm-viewport::-webkit-scrollbar-thumb {
+.embedded-terminal-shell:focus-within .embedded-terminal-host .xterm-viewport::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.14);
 }
 
@@ -1113,6 +1255,10 @@ button:disabled,
 .embedded-terminal-host .xterm .xterm-helpers textarea {
   opacity: 0;
 }
+
+/* ============================================================
+ * 13. Skeletons / terminal overlays
+ * ============================================================ */
 
 .app-skeleton {
   position: relative;
@@ -1146,8 +1292,7 @@ button:disabled,
   gap: 14px;
   width: 100%;
   height: 100%;
-  padding: clamp(14px, 1.8vw, 18px) clamp(20px, 2.4vw, 26px) clamp(16px, 2vw, 20px)
-    clamp(10px, 1.3vw, 14px);
+  padding: clamp(14px, 1.8vw, 18px) clamp(20px, 2.4vw, 26px) clamp(16px, 2vw, 20px) clamp(10px, 1.3vw, 14px);
 }
 
 .embedded-terminal-skeleton-layout {
@@ -1666,6 +1811,10 @@ button:disabled,
   }
 }
 
+/* ============================================================
+ * 14. Structured-linear cards
+ * ============================================================ */
+
 .structured-linear-grid {
   display: grid;
   gap: 10px;
@@ -1791,7 +1940,7 @@ button:disabled,
   padding: 8px 0;
 }
 
-.structured-linear-step-item + .structured-linear-step-item {
+.structured-linear-step-item+.structured-linear-step-item {
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -1833,7 +1982,7 @@ button:disabled,
   color: var(--text-secondary);
 }
 
-.structured-linear-console-line + .structured-linear-console-line {
+.structured-linear-console-line+.structured-linear-console-line {
   margin-top: 4px;
 }
 
@@ -1848,7 +1997,7 @@ button:disabled,
   color: var(--text-secondary);
 }
 
-.structured-linear-hint-line + .structured-linear-hint-line {
+.structured-linear-hint-line+.structured-linear-hint-line {
   margin-top: 4px;
 }
 
@@ -1895,6 +2044,10 @@ button:disabled,
   text-align: center;
 }
 
+/* ============================================================
+ * 15. Image preview
+ * ============================================================ */
+
 .image-preview-frame {
   display: flex;
   align-items: center;
@@ -1904,7 +2057,8 @@ button:disabled,
   border: 1px solid var(--border-subtle);
   border-radius: 18px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)), #0f1318;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)),
+    #0f1318;
 }
 
 .image-preview-asset {
@@ -1916,6 +2070,10 @@ button:disabled,
   object-fit: contain;
   border-radius: 12px;
 }
+
+/* ============================================================
+ * 16. Status bar
+ * ============================================================ */
 
 .workbench-statusbar {
   background: color-mix(in srgb, var(--statusbar-bg) 92%, var(--panel-muted));
@@ -1972,6 +2130,10 @@ button:disabled,
   background: color-mix(in srgb, var(--accent-strong) 10%, transparent);
   color: #c7d2fe;
 }
+
+/* ============================================================
+ * 17. Shell diagnostic overlay
+ * ============================================================ */
 
 .shell-diagnostic-overlay {
   position: absolute;
@@ -2129,6 +2291,10 @@ button:disabled,
   color: rgba(255, 255, 255, 0.46);
 }
 
+/* ============================================================
+ * 18. Element Plus overrides
+ * ============================================================ */
+
 .el-message {
   border-radius: 10px !important;
   border: 1px solid var(--border-strong) !important;
@@ -2171,6 +2337,10 @@ button:disabled,
   color: var(--text-primary) !important;
 }
 
+/* ============================================================
+ * 19. Root stage / splash
+ * ============================================================ */
+
 .app-root-stage {
   position: relative;
   min-height: 100vh;
@@ -2190,7 +2360,6 @@ button:disabled,
   visibility: hidden;
   transform: translateY(14px) scale(0.992);
   transform-origin: center top;
-  will-change: opacity, transform;
   transition:
     opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1),
     transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
@@ -2216,7 +2385,6 @@ button:disabled,
   background: transparent;
   opacity: 1;
   visibility: visible;
-  will-change: opacity;
   transition:
     opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1),
     visibility 0s linear 0.32s;
@@ -2263,7 +2431,6 @@ button:disabled,
   transform: translateY(0) scale(1) translateZ(0);
   transform-origin: center center;
   backface-visibility: hidden;
-  will-change: opacity, transform;
   transition:
     opacity 0.26s cubic-bezier(0.22, 1, 0.36, 1),
     transform 0.32s cubic-bezier(0.22, 1, 0.36, 1),
@@ -2339,7 +2506,7 @@ button:disabled,
   padding: 32px;
   background: #15171a;
   color: #d1d5db;
-  font-family: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+  font-family: var(--font-mono);
   font-size: 15px;
   line-height: 1.9;
 }
@@ -2350,7 +2517,7 @@ button:disabled,
   padding: 26px 32px 18px;
   background: #15171a;
   color: #d1d5db;
-  font-family: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+  font-family: var(--font-mono);
 }
 
 .splash-log-line {
@@ -2513,6 +2680,7 @@ button:disabled,
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .app-content-entry,
   .splash-screen,
   .splash-progress {
@@ -2522,88 +2690,5 @@ button:disabled,
   .splash-cursor,
   .splash-spinner {
     animation: none;
-  }
-}
-
-@theme inline {
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-foreground: var(--foreground);
-  --color-background: var(--background);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-
-  body {
-    @apply bg-background text-foreground;
   }
 }

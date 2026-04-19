@@ -1,0 +1,50 @@
+{
+  "names": [
+    "uname"
+  ],
+  "detail": "Print operating system name",
+  "flags": [
+    {
+      "names": [
+        "-a"
+      ],
+      "detail": "Print all available system information"
+    },
+    {
+      "names": [
+        "-m"
+      ],
+      "detail": "Print the machine hardware name"
+    },
+    {
+      "names": [
+        "-n"
+      ],
+      "detail": "Print the system hostname"
+    },
+    {
+      "names": [
+        "-p"
+      ],
+      "detail": "Print the machine processor architecture name"
+    },
+    {
+      "names": [
+        "-r"
+      ],
+      "detail": "Print the operating system release"
+    },
+    {
+      "names": [
+        "-s"
+      ],
+      "detail": "Print the operating system name"
+    },
+    {
+      "names": [
+        "-v"
+      ],
+      "detail": "Print the operating system version"
+    }
+  ]
+}

@@ -1,0 +1,572 @@
+{
+  "names": [
+    "lsof"
+  ],
+  "detail": "List open files",
+  "args": [
+    {
+      "label": "names",
+      "detail": "Select named files or files on named file systems",
+      "isOptional": true,
+      "isVariadic": true
+    }
+  ],
+  "flags": [
+    {
+      "names": [
+        "-?",
+        "-h",
+        "--help"
+      ],
+      "detail": "Help"
+    },
+    {
+      "names": [
+        "-a"
+      ],
+      "detail": "Apply AND to the selections (defaults to OR)"
+    },
+    {
+      "names": [
+        "-b"
+      ],
+      "detail": "Avoid kernel blocks"
+    },
+    {
+      "names": [
+        "-c"
+      ],
+      "detail": "Select the listing of files for processes executing a command",
+      "arg": {
+        "label": "string or regexp (optional ending with /i /b /x)"
+      }
+    },
+    {
+      "names": [
+        "+c"
+      ],
+      "detail": "COMMAND width (9)",
+      "arg": {
+        "label": "number"
+      }
+    },
+    {
+      "names": [
+        "+d"
+      ],
+      "detail": "Search for all open instances/files/directories of directory",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "-d"
+      ],
+      "detail": "Specify a list of file descriptors (FDs) to exclude from or include in the output listing",
+      "arg": {
+        "label": "File descriptor number"
+      }
+    },
+    {
+      "names": [
+        "+D"
+      ],
+      "detail": "Search tree for all open instances/files/directories of directory. *SLOW?*",
+      "arg": {
+        "label": "file"
+      }
+    },
+    {
+      "names": [
+        "+f"
+      ],
+      "detail": "Enable path name arguments to be interpreted",
+      "arg": {
+        "label": "flags",
+        "isOptional": true,
+        "suggestions": [
+          {
+            "names": [
+              "c"
+            ],
+            "detail": "File structure use count"
+          },
+          {
+            "names": [
+              "g"
+            ],
+            "detail": "File flag abbreviations"
+          },
+          {
+            "names": [
+              "G"
+            ],
+            "detail": "File flags in hexadecimal"
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "-f"
+      ],
+      "detail": "Inhibit path name arguments to be interpreted",
+      "arg": {
+        "label": "flags",
+        "suggestions": [
+          {
+            "names": [
+              "c"
+            ],
+            "detail": "File structure use count"
+          },
+          {
+            "names": [
+              "g"
+            ],
+            "detail": "File flag abbreviations"
+          },
+          {
+            "names": [
+              "G"
+            ],
+            "detail": "File flags in hexadecimal"
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "-F"
+      ],
+      "detail": "Select fields to output",
+      "arg": {
+        "label": "options",
+        "isVariadic": true,
+        "suggestions": [
+          {
+            "names": [
+              "a"
+            ],
+            "detail": "Access: r = read; w = write; u = read/write"
+          },
+          {
+            "names": [
+              "c"
+            ],
+            "detail": "Command name"
+          },
+          {
+            "names": [
+              "C"
+            ],
+            "detail": "File struct share count"
+          },
+          {
+            "names": [
+              "d"
+            ],
+            "detail": "Device character code"
+          },
+          {
+            "names": [
+              "D"
+            ],
+            "detail": "Major/minor device number as 0x<hex>"
+          },
+          {
+            "names": [
+              "f"
+            ],
+            "detail": "File descriptor (always selected)"
+          },
+          {
+            "names": [
+              "G"
+            ],
+            "detail": "File flaGs"
+          },
+          {
+            "names": [
+              "i"
+            ],
+            "detail": "Inode number"
+          },
+          {
+            "names": [
+              "k"
+            ],
+            "detail": "Link count"
+          },
+          {
+            "names": [
+              "K"
+            ],
+            "detail": "Task ID (TID)"
+          },
+          {
+            "names": [
+              "l"
+            ],
+            "detail": "Lock: r/R = read; w/W = write; u = read/write"
+          },
+          {
+            "names": [
+              "L"
+            ],
+            "detail": "Login name"
+          },
+          {
+            "names": [
+              "m"
+            ],
+            "detail": "Marker between repeated output"
+          },
+          {
+            "names": [
+              "M"
+            ],
+            "detail": "Task comMand name"
+          },
+          {
+            "names": [
+              "n"
+            ],
+            "detail": "Comment, name, Internet addresses"
+          },
+          {
+            "names": [
+              "o"
+            ],
+            "detail": "File offset as 0t<dec> or 0x<hex>"
+          },
+          {
+            "names": [
+              "p"
+            ],
+            "detail": "Process ID (PID)"
+          },
+          {
+            "names": [
+              "g"
+            ],
+            "detail": "Process group ID (PGID)"
+          },
+          {
+            "names": [
+              "P"
+            ],
+            "detail": "Protocol name"
+          },
+          {
+            "names": [
+              "r"
+            ],
+            "detail": "Raw device number as 0x<hex>"
+          },
+          {
+            "names": [
+              "R"
+            ],
+            "detail": "PaRent PID"
+          },
+          {
+            "names": [
+              "s"
+            ],
+            "detail": "File size"
+          },
+          {
+            "names": [
+              "S"
+            ],
+            "detail": "Stream module and device names"
+          },
+          {
+            "names": [
+              "t"
+            ],
+            "detail": "File type"
+          },
+          {
+            "names": [
+              "T"
+            ],
+            "detail": "TCP/TPI info"
+          },
+          {
+            "names": [
+              "u"
+            ],
+            "detail": "User ID (UID)"
+          },
+          {
+            "names": [
+              "0"
+            ],
+            "detail": "(zero) use NUL field terminator instead of N"
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "-F?"
+      ],
+      "detail": "Show fields for -F"
+    },
+    {
+      "names": [
+        "-g"
+      ],
+      "detail": "Exclude or select by process group IDs (PGID)",
+      "arg": {
+        "label": "PGID",
+        "detail": "Process Group ID (comma separated)"
+      }
+    },
+    {
+      "names": [
+        "-i"
+      ],
+      "detail": "Selects files by [46][protocol][@hostname|hostaddr][:service|port]",
+      "arg": {
+        "label": "options"
+      }
+    },
+    {
+      "names": [
+        "-l"
+      ],
+      "detail": "Inhibit conversion of user IDs to login names"
+    },
+    {
+      "names": [
+        "+L"
+      ],
+      "detail": "Enable listing of file link counts",
+      "arg": {
+        "label": "number",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-L"
+      ],
+      "detail": "Disable listing of file link counts",
+      "arg": {
+        "label": "number",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "+M"
+      ],
+      "detail": "Enable portMap registration"
+    },
+    {
+      "names": [
+        "-M"
+      ],
+      "detail": "Disable portMap registration"
+    },
+    {
+      "names": [
+        "-n"
+      ],
+      "detail": "No host names"
+    },
+    {
+      "names": [
+        "-N"
+      ],
+      "detail": "Select NFS files"
+    },
+    {
+      "names": [
+        "-o"
+      ],
+      "detail": "List file offset"
+    },
+    {
+      "names": [
+        "-O"
+      ],
+      "detail": "No overhead *RISKY*"
+    },
+    {
+      "names": [
+        "-p"
+      ],
+      "detail": "Exclude or select process identification numbers (PIDs)",
+      "arg": {
+        "label": "PIDs",
+        "detail": "PIDs to select or exclude ( with ^)"
+      }
+    },
+    {
+      "names": [
+        "-P"
+      ],
+      "detail": "No port names"
+    },
+    {
+      "names": [
+        "+r"
+      ],
+      "detail": "Repeat every t seconds (15) until no files",
+      "arg": {
+        "label": "time (seconds)",
+        "detail": "Time per repeat"
+      }
+    },
+    {
+      "names": [
+        "-r"
+      ],
+      "detail": "Repeat every t seconds (15) forever",
+      "arg": {
+        "label": "time (seconds)",
+        "detail": "Time per repeat"
+      }
+    },
+    {
+      "names": [
+        "-R"
+      ],
+      "detail": "List parent PID"
+    },
+    {
+      "names": [
+        "-s"
+      ],
+      "detail": "List file size or exclude/select protocol",
+      "arg": {
+        "label": "protocol:state",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-S"
+      ],
+      "detail": "Stat timeout in seconds (lstat/readlink/stat)",
+      "arg": {
+        "label": "timeout (seconds)",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-T"
+      ],
+      "detail": "Disable TCP/TPI info",
+      "arg": {
+        "label": "info",
+        "suggestions": [
+          {
+            "names": [
+              "f"
+            ],
+            "detail": "Selects reporting of socket options/states/values and tcp flag values"
+          },
+          {
+            "names": [
+              "q"
+            ],
+            "detail": "Selects queue length reporting"
+          },
+          {
+            "names": [
+              "s"
+            ],
+            "detail": "Selects connection state reporting"
+          },
+          {
+            "names": [
+              "w"
+            ],
+            "detail": "Selects window size reporting"
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "-t"
+      ],
+      "detail": "Specify terse listing"
+    },
+    {
+      "names": [
+        "-u"
+      ],
+      "detail": "Exclude/select login|UID set",
+      "arg": {
+        "label": "UIDs"
+      }
+    },
+    {
+      "names": [
+        "-U"
+      ],
+      "detail": "Select Unix socket"
+    },
+    {
+      "names": [
+        "-v"
+      ],
+      "detail": "List version info"
+    },
+    {
+      "names": [
+        "-V"
+      ],
+      "detail": "Verbose search"
+    },
+    {
+      "names": [
+        "+w"
+      ],
+      "detail": "Enable warnings"
+    },
+    {
+      "names": [
+        "-w"
+      ],
+      "detail": "Disable warnings"
+    },
+    {
+      "names": [
+        "-x"
+      ],
+      "detail": "Cross over +d|+D File systems or symbolic links",
+      "arg": {
+        "label": "cross-over option",
+        "suggestions": [
+          {
+            "names": [
+              "f"
+            ],
+            "detail": "File system mount point cross-over processing"
+          },
+          {
+            "names": [
+              "l"
+            ],
+            "detail": "Symbolic link cross-over processing"
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "-X"
+      ],
+      "detail": "File descriptor table only"
+    }
+  ]
+}

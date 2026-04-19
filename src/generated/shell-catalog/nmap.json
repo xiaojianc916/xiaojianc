@@ -1,0 +1,166 @@
+{
+  "names": [
+    "nmap"
+  ],
+  "detail": "Network exploration tool and security / port scanner",
+  "flags": [
+    {
+      "names": [
+        "-iL"
+      ],
+      "detail": "Input from list of hosts/networks"
+    },
+    {
+      "names": [
+        "-iR"
+      ],
+      "detail": "Choose random targets"
+    },
+    {
+      "names": [
+        "--exclude"
+      ],
+      "detail": "Excluide hosts/networks"
+    },
+    {
+      "names": [
+        "--excludefile"
+      ],
+      "detail": "Exclude list from file"
+    },
+    {
+      "names": [
+        "-sS"
+      ],
+      "detail": "TCP SYN scan"
+    },
+    {
+      "names": [
+        "-sT"
+      ],
+      "detail": "TCP scan"
+    },
+    {
+      "names": [
+        "-sA"
+      ],
+      "detail": "TCP ACK scan"
+    },
+    {
+      "names": [
+        "-sW"
+      ],
+      "detail": "TCP Window scan"
+    },
+    {
+      "names": [
+        "-sM"
+      ],
+      "detail": "TCP Maimon scan"
+    },
+    {
+      "names": [
+        "-sU"
+      ],
+      "detail": "UDP scan"
+    },
+    {
+      "names": [
+        "-sP"
+      ],
+      "detail": "Ping scan"
+    },
+    {
+      "names": [
+        "-sN"
+      ],
+      "detail": "TCP Null scan"
+    },
+    {
+      "names": [
+        "-sF"
+      ],
+      "detail": "FIN scan"
+    },
+    {
+      "names": [
+        "-sX"
+      ],
+      "detail": "Xmas scan"
+    },
+    {
+      "names": [
+        "-sO"
+      ],
+      "detail": "IP protocol scan"
+    },
+    {
+      "names": [
+        "-p"
+      ],
+      "detail": "Scan specified ports"
+    },
+    {
+      "names": [
+        "-v",
+        "-vv"
+      ],
+      "detail": "Increase verbosity level"
+    },
+    {
+      "names": [
+        "-O"
+      ],
+      "detail": "Enable OS detection"
+    },
+    {
+      "names": [
+        "--osscan-limit"
+      ],
+      "detail": "Limit OS detection to promising targets"
+    },
+    {
+      "names": [
+        "---osscan-guess"
+      ],
+      "detail": "Guess OS more aggressively"
+    },
+    {
+      "names": [
+        "-A"
+      ],
+      "detail": "Enable a full detection"
+    },
+    {
+      "names": [
+        "-6"
+      ],
+      "detail": "Enable IPV6 scanning"
+    },
+    {
+      "names": [
+        "-V"
+      ],
+      "detail": "Print version number"
+    },
+    {
+      "names": [
+        "-privileged"
+      ],
+      "detail": "Assume that user is fully privileges"
+    },
+    {
+      "names": [
+        "-unprivileged"
+      ],
+      "detail": "Assume that user lacks raw socket privileges"
+    },
+    {
+      "names": [
+        "--help",
+        "-h"
+      ],
+      "detail": "Show help for nmap"
+    }
+  ]
+}

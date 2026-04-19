@@ -1,0 +1,3368 @@
+{
+  "names": [
+    "npm"
+  ],
+  "detail": "Node package manager",
+  "subcommands": [
+    {
+      "names": [
+        "install",
+        "i",
+        "add"
+      ],
+      "detail": "Install a package and its dependencies",
+      "args": [
+        {
+          "label": "package",
+          "isOptional": true,
+          "isVariadic": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-P",
+            "--save-prod"
+          ],
+          "detail": "Package will appear in your `dependencies`. This is the default unless `-D` or `-O` are present"
+        },
+        {
+          "names": [
+            "-D",
+            "--save-dev"
+          ],
+          "detail": "Package will appear in your `devDependencies`"
+        },
+        {
+          "names": [
+            "-O",
+            "--save-optional"
+          ],
+          "detail": "Package will appear in your `optionalDependencies`"
+        },
+        {
+          "names": [
+            "--no-save"
+          ],
+          "detail": "Prevents saving to `dependencies`"
+        },
+        {
+          "names": [
+            "-E",
+            "--save-exact"
+          ],
+          "detail": "Saved dependencies will be configured with an exact version rather than using npm's default semver range operator"
+        },
+        {
+          "names": [
+            "-B",
+            "--save-bundle"
+          ],
+          "detail": "Saved dependencies will also be added to your bundleDependencies list"
+        },
+        {
+          "names": [
+            "-g",
+            "--global"
+          ],
+          "detail": "Operates in 'global' mode, so that packages are installed into the prefix folder instead of the current working directory"
+        },
+        {
+          "names": [
+            "--global-style"
+          ],
+          "detail": "Causes npm to install the package into your local node_modules folder with the same layout it uses with the global node_modules folder"
+        },
+        {
+          "names": [
+            "--legacy-bundling"
+          ],
+          "detail": "Causes npm to install the package such that versions of npm prior to 1.4, such as the one included with node 0.8, can install the package"
+        },
+        {
+          "names": [
+            "--legacy-peer-deps"
+          ],
+          "detail": "Bypass peerDependency auto-installation. Emulate install behavior of NPM v4 through v6"
+        },
+        {
+          "names": [
+            "--strict-peer-deps"
+          ],
+          "detail": "If set to true, and --legacy-peer-deps is not set, then any conflicting peerDependencies will be treated as an install failure"
+        },
+        {
+          "names": [
+            "--no-package-lock"
+          ],
+          "detail": "Ignores package-lock.json files when installing"
+        },
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        },
+        {
+          "names": [
+            "--verbose"
+          ],
+          "detail": "Show extra information",
+          "arg": {
+            "label": "verbose"
+          }
+        },
+        {
+          "names": [
+            "--omit"
+          ],
+          "detail": "Dependency types to omit from the installation tree on disk",
+          "arg": {
+            "label": "Package type",
+            "suggestions": [
+              {
+                "names": [
+                  "dev"
+                ]
+              },
+              {
+                "names": [
+                  "optional"
+                ]
+              },
+              {
+                "names": [
+                  "peer"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "names": [
+            "--ignore-scripts"
+          ],
+          "detail": "If true, npm does not run scripts specified in package.json files"
+        },
+        {
+          "names": [
+            "--no-audit"
+          ],
+          "detail": "Submit audit reports alongside the current npm command to the default registry and all registries configured for scopes"
+        },
+        {
+          "names": [
+            "--no-bin-links"
+          ],
+          "detail": "Tells npm to not create symlinks (or .cmd shims on Windows) for package executables"
+        },
+        {
+          "names": [
+            "--no-fund"
+          ],
+          "detail": "Hides the message at the end of each npm install acknowledging the number of dependencies looking for funding"
+        },
+        {
+          "names": [
+            "--dry-run"
+          ],
+          "detail": "Indicates that you don't want npm to make any changes and that it should only report what it would have done"
+        },
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        }
+      ]
+    },
+    {
+      "names": [
+        "run",
+        "run-script"
+      ],
+      "detail": "Run arbitrary package scripts",
+      "args": [
+        {
+          "label": "script",
+          "detail": "Script to run from your package.json"
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        },
+        {
+          "names": [
+            "--if-present"
+          ],
+          "detail": "Npm will not exit with an error code when run-script is invoked for a script that isn't defined in the scripts section of package.json"
+        },
+        {
+          "names": [
+            "--silent"
+          ]
+        },
+        {
+          "names": [
+            "--ignore-scripts"
+          ],
+          "detail": "If true, npm does not run scripts specified in package.json files"
+        },
+        {
+          "names": [
+            "--script-shell"
+          ],
+          "detail": "The shell to use for scripts run with the npm exec, npm run and npm init <pkg> commands",
+          "arg": {
+            "label": "script-shell"
+          }
+        },
+        {
+          "names": [
+            "--"
+          ],
+          "arg": {
+            "label": "args",
+            "isVariadic": true
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "init"
+      ],
+      "detail": "Trigger the initialization",
+      "flags": [
+        {
+          "names": [
+            "-y",
+            "--yes"
+          ],
+          "detail": "Automatically answer 'yes' to any prompts that npm might print on the command line"
+        },
+        {
+          "names": [
+            "-w"
+          ],
+          "detail": "Create the folders and boilerplate expected while also adding a reference to your project workspaces property",
+          "arg": {
+            "label": "dir"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "access"
+      ],
+      "detail": "Set access controls on private packages"
+    },
+    {
+      "names": [
+        "adduser",
+        "login"
+      ],
+      "detail": "Add a registry user account",
+      "flags": [
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        },
+        {
+          "names": [
+            "--scope"
+          ],
+          "detail": "Associate an operation with a scope for a scoped registry",
+          "arg": {
+            "label": "scope",
+            "detail": "Scope name"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "audit"
+      ],
+      "detail": "Run a security audit",
+      "flags": [
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        },
+        {
+          "names": [
+            "--audit-level"
+          ],
+          "detail": "The minimum level of vulnerability for npm audit to exit with a non-zero exit code",
+          "arg": {
+            "label": "audit",
+            "suggestions": [
+              {
+                "names": [
+                  "info"
+                ]
+              },
+              {
+                "names": [
+                  "low"
+                ]
+              },
+              {
+                "names": [
+                  "moderate"
+                ]
+              },
+              {
+                "names": [
+                  "high"
+                ]
+              },
+              {
+                "names": [
+                  "critical"
+                ]
+              },
+              {
+                "names": [
+                  "none"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "names": [
+            "--package-lock-only"
+          ],
+          "detail": "Current operation will only use the package-lock.json, ignoring node_modules"
+        },
+        {
+          "names": [
+            "--json"
+          ],
+          "detail": "Show output in json format"
+        },
+        {
+          "names": [
+            "--omit"
+          ],
+          "detail": "Dependency types to omit from the installation tree on disk",
+          "arg": {
+            "label": "Package type",
+            "suggestions": [
+              {
+                "names": [
+                  "dev"
+                ]
+              },
+              {
+                "names": [
+                  "optional"
+                ]
+              },
+              {
+                "names": [
+                  "peer"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "subcommands": [
+        {
+          "names": [
+            "fix"
+          ],
+          "detail": "If the fix argument is provided, then remediations will be applied to the package tree",
+          "flags": [
+            {
+              "names": [
+                "--dry-run"
+              ],
+              "detail": "Indicates that you don't want npm to make any changes and that it should only report what it would have done"
+            },
+            {
+              "names": [
+                "-f",
+                "--force"
+              ],
+              "detail": "Removes various protections against unfortunate side effects, common mistakes, unnecessary performance degradation, and malicious input"
+            },
+            {
+              "names": [
+                "-w",
+                "--workspace"
+              ],
+              "detail": "Enable running a command in the context of the configured workspaces of the current project",
+              "arg": {
+                "label": "workspace",
+                "isVariadic": true
+              }
+            },
+            {
+              "names": [
+                "-ws",
+                "--workspaces"
+              ],
+              "detail": "Enable running a command in the context of all the configured workspaces"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "names": [
+        "bin"
+      ],
+      "detail": "Print the folder where npm will install executables",
+      "flags": [
+        {
+          "names": [
+            "-g",
+            "--global"
+          ],
+          "detail": "Operates in 'global' mode, so that packages are installed into the prefix folder instead of the current working directory"
+        }
+      ]
+    },
+    {
+      "names": [
+        "bugs",
+        "issues"
+      ],
+      "detail": "Report bugs for a package in a web browser",
+      "args": [
+        {
+          "label": "package",
+          "isOptional": true,
+          "isVariadic": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "--no-browser"
+          ],
+          "detail": "Display in command line instead of browser"
+        },
+        {
+          "names": [
+            "--browser"
+          ],
+          "detail": "The browser that is called by the npm bugs command to open websites",
+          "arg": {
+            "label": "browser"
+          }
+        },
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "cache"
+      ],
+      "detail": "Manipulates packages cache",
+      "flags": [
+        {
+          "names": [
+            "--cache"
+          ],
+          "detail": "The location of npm's cache directory",
+          "arg": {
+            "label": "cache"
+          }
+        }
+      ],
+      "subcommands": [
+        {
+          "names": [
+            "add"
+          ],
+          "detail": "Add the specified packages to the local cache"
+        },
+        {
+          "names": [
+            "clean"
+          ],
+          "detail": "Delete all data out of the cache folder"
+        },
+        {
+          "names": [
+            "verify"
+          ],
+          "detail": "Verify the contents of the cache folder, garbage collecting any unneeded data, and verifying the integrity of the cache index and all cached data"
+        }
+      ]
+    },
+    {
+      "names": [
+        "ci",
+        "clean-install",
+        "install-clean"
+      ],
+      "detail": "Install a project with a clean slate",
+      "flags": [
+        {
+          "names": [
+            "--audit"
+          ],
+          "detail": "When \"true\" submit audit reports alongside the current npm command to the default registry and all registries configured for scopes",
+          "arg": {
+            "label": "audit",
+            "suggestions": [
+              {
+                "names": [
+                  "true"
+                ]
+              },
+              {
+                "names": [
+                  "false"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "names": [
+            "--no-audit"
+          ],
+          "detail": "Do not submit audit reports alongside the current npm command"
+        },
+        {
+          "names": [
+            "--ignore-scripts"
+          ],
+          "detail": "If true, npm does not run scripts specified in package.json files"
+        },
+        {
+          "names": [
+            "--script-shell"
+          ],
+          "detail": "The shell to use for scripts run with the npm exec, npm run and npm init <pkg> commands",
+          "arg": {
+            "label": "script-shell"
+          }
+        },
+        {
+          "names": [
+            "--verbose"
+          ],
+          "detail": "Show extra information",
+          "arg": {
+            "label": "verbose"
+          }
+        },
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "cit"
+      ],
+      "detail": "Install a project with a clean slate and run tests"
+    },
+    {
+      "names": [
+        "clean-install-test"
+      ],
+      "detail": "Install a project with a clean slate and run tests"
+    },
+    {
+      "names": [
+        "completion"
+      ],
+      "detail": "Tab completion for npm"
+    },
+    {
+      "names": [
+        "config",
+        "c"
+      ],
+      "detail": "Manage the npm configuration files",
+      "subcommands": [
+        {
+          "names": [
+            "set"
+          ],
+          "detail": "Sets the config key to the value",
+          "args": [
+            {
+              "label": "key"
+            },
+            {
+              "label": "value"
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "-g",
+                "--global"
+              ],
+              "detail": "Sets it globally"
+            }
+          ]
+        },
+        {
+          "names": [
+            "get"
+          ],
+          "detail": "Echo the config value to stdout",
+          "args": [
+            {
+              "label": "key"
+            }
+          ]
+        },
+        {
+          "names": [
+            "list"
+          ],
+          "detail": "Show all the config settings",
+          "flags": [
+            {
+              "names": [
+                "-g"
+              ],
+              "detail": "Lists globally installed packages"
+            },
+            {
+              "names": [
+                "-l"
+              ],
+              "detail": "Also shows defaults"
+            },
+            {
+              "names": [
+                "--json"
+              ],
+              "detail": "Show output in json format"
+            }
+          ]
+        },
+        {
+          "names": [
+            "delete"
+          ],
+          "detail": "Deletes the key from all configuration files",
+          "args": [
+            {
+              "label": "key"
+            }
+          ]
+        },
+        {
+          "names": [
+            "edit"
+          ],
+          "detail": "Opens the config file in an editor",
+          "flags": [
+            {
+              "names": [
+                "--global"
+              ],
+              "detail": "Edits the global config"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "names": [
+        "create"
+      ],
+      "detail": "Create a package.json file"
+    },
+    {
+      "names": [
+        "dedupe",
+        "ddp"
+      ],
+      "detail": "Reduce duplication in the package tree"
+    },
+    {
+      "names": [
+        "deprecate"
+      ],
+      "detail": "Deprecate a version of a package",
+      "flags": [
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "dist-tag"
+      ],
+      "detail": "Modify package distribution tags"
+    },
+    {
+      "names": [
+        "docs",
+        "home"
+      ],
+      "detail": "Open documentation for a package in a web browser",
+      "args": [
+        {
+          "label": "package",
+          "isOptional": true,
+          "isVariadic": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        },
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        },
+        {
+          "names": [
+            "--no-browser"
+          ],
+          "detail": "Display in command line instead of browser"
+        },
+        {
+          "names": [
+            "--browser"
+          ],
+          "detail": "The browser that is called by the npm docs command to open websites",
+          "arg": {
+            "label": "browser"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "doctor"
+      ],
+      "detail": "Check your npm environment",
+      "flags": [
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "edit"
+      ],
+      "detail": "Edit an installed package",
+      "flags": [
+        {
+          "names": [
+            "--editor"
+          ],
+          "detail": "The command to run for npm edit or npm config edit"
+        }
+      ]
+    },
+    {
+      "names": [
+        "explore"
+      ],
+      "detail": "Browse an installed package",
+      "args": [
+        {
+          "label": "package"
+        }
+      ]
+    },
+    {
+      "names": [
+        "fund"
+      ],
+      "detail": "Retrieve funding information"
+    },
+    {
+      "names": [
+        "get"
+      ],
+      "detail": "Echo the config value to stdout"
+    },
+    {
+      "names": [
+        "help"
+      ],
+      "detail": "Get help on npm",
+      "args": [
+        {
+          "label": "term",
+          "detail": "Terms to search for",
+          "isVariadic": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "--viewer"
+          ],
+          "detail": "The program to use to view help content",
+          "arg": {
+            "label": "viewer"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "help-search"
+      ],
+      "detail": "Search npm help documentation",
+      "args": [
+        {
+          "label": "text",
+          "detail": "Text to search for"
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-l",
+            "--long"
+          ],
+          "detail": "Show extended information"
+        }
+      ]
+    },
+    {
+      "names": [
+        "hook"
+      ],
+      "detail": "Manage registry hooks"
+    },
+    {
+      "names": [
+        "install-ci-test"
+      ],
+      "detail": "Install a project with a clean slate and run tests"
+    },
+    {
+      "names": [
+        "install-test"
+      ],
+      "detail": "Install package(s) and run tests"
+    },
+    {
+      "names": [
+        "it"
+      ],
+      "detail": "Install package(s) and run tests"
+    },
+    {
+      "names": [
+        "link"
+      ],
+      "detail": "Symlink a package folder",
+      "args": [
+        {
+          "label": "path"
+        }
+      ]
+    },
+    {
+      "names": [
+        "ln"
+      ],
+      "detail": "Symlink a package folder"
+    },
+    {
+      "names": [
+        "logout"
+      ],
+      "detail": "Log out of the registry",
+      "flags": [
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        },
+        {
+          "names": [
+            "--scope"
+          ],
+          "detail": "Associate an operation with a scope for a scoped registry",
+          "arg": {
+            "label": "scope",
+            "detail": "Scope name"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "ls",
+        "list"
+      ],
+      "detail": "List installed packages",
+      "args": [
+        {
+          "label": "[@scope]/pkg",
+          "isVariadic": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-a",
+            "-all"
+          ],
+          "detail": "Show all outdated or installed packages"
+        },
+        {
+          "names": [
+            "--json"
+          ],
+          "detail": "Show output in json format"
+        },
+        {
+          "names": [
+            "-l",
+            "--long"
+          ],
+          "detail": "Show extended information"
+        },
+        {
+          "names": [
+            "-p",
+            "--parseable"
+          ],
+          "detail": "Output parseable results from commands that write to standard output"
+        },
+        {
+          "names": [
+            "--depth"
+          ],
+          "detail": "The depth to go when recursing packages",
+          "arg": {
+            "label": "depth"
+          }
+        },
+        {
+          "names": [
+            "--link"
+          ],
+          "detail": "Limits output to only those packages that are linked"
+        },
+        {
+          "names": [
+            "--package-lock-only"
+          ],
+          "detail": "Current operation will only use the package-lock.json, ignoring node_modules"
+        },
+        {
+          "names": [
+            "--no-unicode"
+          ],
+          "detail": "Uses unicode characters in the tree output"
+        },
+        {
+          "names": [
+            "-g",
+            "--global"
+          ],
+          "detail": "Operates in 'global' mode, so that packages are installed into the prefix folder instead of the current working directory"
+        },
+        {
+          "names": [
+            "--omit"
+          ],
+          "detail": "Dependency types to omit from the installation tree on disk",
+          "arg": {
+            "label": "Package type",
+            "suggestions": [
+              {
+                "names": [
+                  "dev"
+                ]
+              },
+              {
+                "names": [
+                  "optional"
+                ]
+              },
+              {
+                "names": [
+                  "peer"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        }
+      ]
+    },
+    {
+      "names": [
+        "org"
+      ],
+      "detail": "Manage orgs",
+      "subcommands": [
+        {
+          "names": [
+            "set"
+          ],
+          "detail": "Add a user to an org or manage roles",
+          "args": [
+            {
+              "label": "orgname",
+              "detail": "Organization name"
+            },
+            {
+              "label": "username",
+              "detail": "User name"
+            },
+            {
+              "label": "role",
+              "isOptional": true,
+              "suggestions": [
+                {
+                  "names": [
+                    "developer"
+                  ]
+                },
+                {
+                  "names": [
+                    "admin"
+                  ]
+                },
+                {
+                  "names": [
+                    "owner"
+                  ]
+                }
+              ]
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            },
+            {
+              "names": [
+                "--otp"
+              ],
+              "detail": "One-time password from a two-factor authenticator",
+              "arg": {
+                "label": "otp"
+              }
+            }
+          ]
+        },
+        {
+          "names": [
+            "rm"
+          ],
+          "detail": "Remove a user from an org",
+          "args": [
+            {
+              "label": "orgname",
+              "detail": "Organization name"
+            },
+            {
+              "label": "username",
+              "detail": "User name"
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            },
+            {
+              "names": [
+                "--otp"
+              ],
+              "detail": "One-time password from a two-factor authenticator",
+              "arg": {
+                "label": "otp"
+              }
+            }
+          ]
+        },
+        {
+          "names": [
+            "ls"
+          ],
+          "detail": "List users in an org or see what roles a particular user has in an org",
+          "args": [
+            {
+              "label": "orgname",
+              "detail": "Organization name"
+            },
+            {
+              "label": "username",
+              "detail": "User name",
+              "isOptional": true
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            },
+            {
+              "names": [
+                "--otp"
+              ],
+              "detail": "One-time password from a two-factor authenticator",
+              "arg": {
+                "label": "otp"
+              }
+            },
+            {
+              "names": [
+                "--json"
+              ],
+              "detail": "Show output in json format"
+            },
+            {
+              "names": [
+                "-p",
+                "--parseable"
+              ],
+              "detail": "Output parseable results from commands that write to standard output"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "names": [
+        "outdated"
+      ],
+      "detail": "Check for outdated packages",
+      "args": [
+        {
+          "label": "[<@scope>/]<pkg>",
+          "isOptional": true,
+          "isVariadic": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-a",
+            "-all"
+          ],
+          "detail": "Show all outdated or installed packages"
+        },
+        {
+          "names": [
+            "--json"
+          ],
+          "detail": "Show output in json format"
+        },
+        {
+          "names": [
+            "-l",
+            "--long"
+          ],
+          "detail": "Show extended information"
+        },
+        {
+          "names": [
+            "-p",
+            "--parseable"
+          ],
+          "detail": "Output parseable results from commands that write to standard output"
+        },
+        {
+          "names": [
+            "-g"
+          ],
+          "detail": "Checks globally"
+        },
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        }
+      ]
+    },
+    {
+      "names": [
+        "owner",
+        "author"
+      ],
+      "detail": "Manage package owners",
+      "subcommands": [
+        {
+          "names": [
+            "ls"
+          ],
+          "detail": "List all the users who have access to modify a package and push new versions. Handy when you need to know who to bug for help",
+          "args": [
+            {
+              "label": "[@scope/]pkg"
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            }
+          ]
+        },
+        {
+          "names": [
+            "add"
+          ],
+          "detail": "Add a new user as a maintainer of a package. This user is enabled to modify metadata, publish new versions, and add other owners",
+          "args": [
+            {
+              "label": "user"
+            },
+            {
+              "label": "[@scope/]pkg"
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            },
+            {
+              "names": [
+                "--otp"
+              ],
+              "detail": "One-time password from a two-factor authenticator",
+              "arg": {
+                "label": "otp"
+              }
+            }
+          ]
+        },
+        {
+          "names": [
+            "rm"
+          ],
+          "detail": "Remove a user from the package owner list. This immediately revokes their privileges",
+          "args": [
+            {
+              "label": "user"
+            },
+            {
+              "label": "[@scope/]pkg"
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            },
+            {
+              "names": [
+                "--otp"
+              ],
+              "detail": "One-time password from a two-factor authenticator",
+              "arg": {
+                "label": "otp"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "names": [
+        "pack"
+      ],
+      "detail": "Create a tarball from a package",
+      "args": [
+        {
+          "label": "[<@scope>/]<pkg>"
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "--json"
+          ],
+          "detail": "Show output in json format"
+        },
+        {
+          "names": [
+            "--dry-run"
+          ],
+          "detail": "Indicates that you don't want npm to make any changes and that it should only report what it would have done"
+        },
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        },
+        {
+          "names": [
+            "--pack-destination"
+          ],
+          "detail": "Directory in which npm pack will save tarballs",
+          "arg": {
+            "label": "pack-destination"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "ping"
+      ],
+      "detail": "Ping npm registry",
+      "flags": [
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "pkg"
+      ],
+      "detail": "Manages your package.json",
+      "subcommands": [
+        {
+          "names": [
+            "get"
+          ],
+          "detail": "Retrieves a value key, defined in your package.json file. It is possible to get multiple values and values for child fields",
+          "args": [
+            {
+              "label": "field",
+              "detail": "Name of the field to get. You can view child fields by separating them with a period",
+              "isVariadic": true
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--json"
+              ],
+              "detail": "Show output in json format"
+            },
+            {
+              "names": [
+                "-w",
+                "--workspace"
+              ],
+              "detail": "Enable running a command in the context of the configured workspaces of the current project",
+              "arg": {
+                "label": "workspace",
+                "isVariadic": true
+              }
+            },
+            {
+              "names": [
+                "-ws",
+                "--workspaces"
+              ],
+              "detail": "Enable running a command in the context of all the configured workspaces"
+            }
+          ]
+        },
+        {
+          "names": [
+            "set"
+          ],
+          "detail": "Sets a value in your package.json based on the field value. It is possible to set multiple values and values for child fields",
+          "args": [
+            {
+              "label": "field",
+              "detail": "Name of the field to set. You can set child fields by separating them with a period",
+              "isVariadic": true
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--json"
+              ],
+              "detail": "Show output in json format"
+            },
+            {
+              "names": [
+                "-w",
+                "--workspace"
+              ],
+              "detail": "Enable running a command in the context of the configured workspaces of the current project",
+              "arg": {
+                "label": "workspace",
+                "isVariadic": true
+              }
+            },
+            {
+              "names": [
+                "-ws",
+                "--workspaces"
+              ],
+              "detail": "Enable running a command in the context of all the configured workspaces"
+            },
+            {
+              "names": [
+                "-f",
+                "--force"
+              ],
+              "detail": "Removes various protections against unfortunate side effects, common mistakes, unnecessary performance degradation, and malicious input. Allow clobbering existing values in npm pkg"
+            }
+          ]
+        },
+        {
+          "names": [
+            "delete"
+          ],
+          "detail": "Deletes a key from your package.json",
+          "args": [
+            {
+              "label": "key",
+              "detail": "Name of the key to delete. You can delete child fields by separating them with a period",
+              "isVariadic": true
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "-w",
+                "--workspace"
+              ],
+              "detail": "Enable running a command in the context of the configured workspaces of the current project",
+              "arg": {
+                "label": "workspace",
+                "isVariadic": true
+              }
+            },
+            {
+              "names": [
+                "-ws",
+                "--workspaces"
+              ],
+              "detail": "Enable running a command in the context of all the configured workspaces"
+            },
+            {
+              "names": [
+                "-f",
+                "--force"
+              ],
+              "detail": "Removes various protections against unfortunate side effects, common mistakes, unnecessary performance degradation, and malicious input. Allow clobbering existing values in npm pkg"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "names": [
+        "prefix"
+      ],
+      "detail": "Display prefix",
+      "flags": [
+        {
+          "names": [
+            "-g",
+            "--global"
+          ],
+          "detail": "Print the global prefix to standard out"
+        }
+      ]
+    },
+    {
+      "names": [
+        "profile"
+      ],
+      "detail": "Change settings on your registry profile",
+      "subcommands": [
+        {
+          "names": [
+            "get"
+          ],
+          "detail": "Display all of the properties of your profile, or one or more specific properties",
+          "args": [
+            {
+              "label": "property",
+              "detail": "Property name",
+              "isOptional": true
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            },
+            {
+              "names": [
+                "--json"
+              ],
+              "detail": "Show output in json format"
+            },
+            {
+              "names": [
+                "-p",
+                "--parseable"
+              ],
+              "detail": "Output parseable results from commands that write to standard output"
+            },
+            {
+              "names": [
+                "--otp"
+              ],
+              "detail": "One-time password from a two-factor authenticator",
+              "arg": {
+                "label": "otp"
+              }
+            }
+          ]
+        },
+        {
+          "names": [
+            "set"
+          ],
+          "detail": "Set the value of a profile property",
+          "args": [
+            {
+              "label": "property",
+              "detail": "Property name",
+              "suggestions": [
+                {
+                  "names": [
+                    "email"
+                  ]
+                },
+                {
+                  "names": [
+                    "fullname"
+                  ]
+                },
+                {
+                  "names": [
+                    "homepage"
+                  ]
+                },
+                {
+                  "names": [
+                    "freenode"
+                  ]
+                },
+                {
+                  "names": [
+                    "twitter"
+                  ]
+                },
+                {
+                  "names": [
+                    "github"
+                  ]
+                }
+              ]
+            },
+            {
+              "label": "value",
+              "detail": "Property value"
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            },
+            {
+              "names": [
+                "--json"
+              ],
+              "detail": "Show output in json format"
+            },
+            {
+              "names": [
+                "-p",
+                "--parseable"
+              ],
+              "detail": "Output parseable results from commands that write to standard output"
+            },
+            {
+              "names": [
+                "--otp"
+              ],
+              "detail": "One-time password from a two-factor authenticator",
+              "arg": {
+                "label": "otp"
+              }
+            }
+          ],
+          "subcommands": [
+            {
+              "names": [
+                "password"
+              ],
+              "detail": "Change your password. This is interactive, you'll be prompted for your current password and a new password"
+            }
+          ]
+        },
+        {
+          "names": [
+            "enable-2fa"
+          ],
+          "detail": "Enables two-factor authentication",
+          "args": [
+            {
+              "label": "mode",
+              "detail": "Mode for two-factor authentication. Defaults to auth-and-writes mode",
+              "isOptional": true,
+              "suggestions": [
+                {
+                  "names": [
+                    "auth-only"
+                  ],
+                  "detail": "Require an OTP when logging in or making changes to your account's authentication"
+                },
+                {
+                  "names": [
+                    "auth-and-writes"
+                  ],
+                  "detail": "Requires an OTP at all the times auth-only does, and also requires one when publishing a module, setting the latest dist-tag, or changing access via npm access and npm owner"
+                }
+              ]
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            },
+            {
+              "names": [
+                "--otp"
+              ],
+              "detail": "One-time password from a two-factor authenticator",
+              "arg": {
+                "label": "otp"
+              }
+            }
+          ]
+        },
+        {
+          "names": [
+            "disable-2fa"
+          ],
+          "detail": "Disables two-factor authentication",
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            },
+            {
+              "names": [
+                "--otp"
+              ],
+              "detail": "One-time password from a two-factor authenticator",
+              "arg": {
+                "label": "otp"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "names": [
+        "prune"
+      ],
+      "detail": "Remove extraneous packages",
+      "args": [
+        {
+          "label": "[<@scope>/]<pkg>",
+          "isOptional": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "--omit"
+          ],
+          "detail": "Dependency types to omit from the installation tree on disk",
+          "arg": {
+            "label": "Package type",
+            "suggestions": [
+              {
+                "names": [
+                  "dev"
+                ]
+              },
+              {
+                "names": [
+                  "optional"
+                ]
+              },
+              {
+                "names": [
+                  "peer"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "names": [
+            "--dry-run"
+          ],
+          "detail": "Indicates that you don't want npm to make any changes and that it should only report what it would have done"
+        },
+        {
+          "names": [
+            "--json"
+          ],
+          "detail": "Show output in json format"
+        },
+        {
+          "names": [
+            "--production"
+          ],
+          "detail": "Remove the packages specified in your devDependencies"
+        },
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        }
+      ]
+    },
+    {
+      "names": [
+        "publish"
+      ],
+      "detail": "Publish a package",
+      "args": [
+        {
+          "label": "tarball|folder",
+          "detail": "A url or file path to a gzipped tar archive containing a single folder with a package.json file inside | A folder containing a package.json file",
+          "isOptional": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "--tag"
+          ],
+          "detail": "Registers the published package with the given tag",
+          "arg": {
+            "label": "tag"
+          }
+        },
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        },
+        {
+          "names": [
+            "--access"
+          ],
+          "detail": "Sets scoped package to be publicly viewable if set to 'public'",
+          "arg": {
+            "label": "value",
+            "suggestions": [
+              {
+                "names": [
+                  "restricted"
+                ]
+              },
+              {
+                "names": [
+                  "public"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "names": [
+            "--dry-run"
+          ],
+          "detail": "Indicates that you don't want npm to make any changes and that it should only report what it would have done"
+        },
+        {
+          "names": [
+            "--otp"
+          ],
+          "detail": "One-time password from a two-factor authenticator",
+          "arg": {
+            "label": "otp"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "rebuild",
+        "rb"
+      ],
+      "detail": "Rebuild a package",
+      "args": [
+        {
+          "label": "[<@scope>/]<pkg>[@<version>]"
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-g",
+            "--global"
+          ],
+          "detail": "Operates in 'global' mode, so that packages are installed into the prefix folder instead of the current working directory"
+        },
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        },
+        {
+          "names": [
+            "--ignore-scripts"
+          ],
+          "detail": "If true, npm does not run scripts specified in package.json files"
+        },
+        {
+          "names": [
+            "--no-bin-links"
+          ],
+          "detail": "Tells npm to not create symlinks (or .cmd shims on Windows) for package executables"
+        }
+      ]
+    },
+    {
+      "names": [
+        "repo"
+      ],
+      "detail": "Open package repository page in the browser",
+      "args": [
+        {
+          "label": "package",
+          "isOptional": true,
+          "isVariadic": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        },
+        {
+          "names": [
+            "--no-browser"
+          ],
+          "detail": "Display in command line instead of browser"
+        },
+        {
+          "names": [
+            "--browser"
+          ],
+          "detail": "The browser that is called by the npm repo command to open websites",
+          "arg": {
+            "label": "browser"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "restart"
+      ],
+      "detail": "Restart a package",
+      "flags": [
+        {
+          "names": [
+            "--ignore-scripts"
+          ],
+          "detail": "If true, npm does not run scripts specified in package.json files"
+        },
+        {
+          "names": [
+            "--script-shell"
+          ],
+          "detail": "The shell to use for scripts run with the npm exec, npm run and npm init <pkg> commands",
+          "arg": {
+            "label": "script-shell"
+          }
+        },
+        {
+          "names": [
+            "--"
+          ],
+          "arg": {
+            "label": "arg",
+            "detail": "Arguments to be passed to the restart script"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "root"
+      ],
+      "detail": "Display npm root",
+      "flags": [
+        {
+          "names": [
+            "-g",
+            "--global"
+          ],
+          "detail": "Print the effective global node_modules folder to standard out"
+        }
+      ]
+    },
+    {
+      "names": [
+        "search",
+        "s",
+        "se",
+        "find"
+      ],
+      "detail": "Search for packages",
+      "args": [
+        {
+          "label": "search terms",
+          "isVariadic": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-l",
+            "--long"
+          ],
+          "detail": "Show extended information"
+        },
+        {
+          "names": [
+            "--json"
+          ],
+          "detail": "Show output in json format"
+        },
+        {
+          "names": [
+            "--color"
+          ],
+          "detail": "Show colors",
+          "arg": {
+            "label": "always",
+            "detail": "Always show colors",
+            "suggestions": [
+              {
+                "names": [
+                  "always"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "names": [
+            "--no-color"
+          ],
+          "detail": "Do not show colors"
+        },
+        {
+          "names": [
+            "-p",
+            "--parseable"
+          ],
+          "detail": "Output parseable results from commands that write to standard output"
+        },
+        {
+          "names": [
+            "--no-description"
+          ],
+          "detail": "Do not show descriptions"
+        },
+        {
+          "names": [
+            "--searchopts"
+          ],
+          "detail": "Space-separated options that are always passed to search",
+          "arg": {
+            "label": "searchopts"
+          }
+        },
+        {
+          "names": [
+            "--searchexclude"
+          ],
+          "detail": "Space-separated options that limit the results from search",
+          "arg": {
+            "label": "searchexclude"
+          }
+        },
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        },
+        {
+          "names": [
+            "--prefer-online"
+          ],
+          "detail": "If true, staleness checks for cached data will be forced, making the CLI look for updates immediately even for fresh package data"
+        },
+        {
+          "names": [
+            "--prefer-offline"
+          ],
+          "detail": "If true, staleness checks for cached data will be bypassed, but missing data will be requested from the server"
+        },
+        {
+          "names": [
+            "--offline"
+          ],
+          "detail": "Force offline mode: no network requests will be done during install"
+        }
+      ]
+    },
+    {
+      "names": [
+        "set"
+      ],
+      "detail": "Sets the config key to the value"
+    },
+    {
+      "names": [
+        "set-script"
+      ],
+      "detail": "Set tasks in the scripts section of package.json",
+      "args": [
+        {
+          "label": "script",
+          "detail": "Name of the task to be added to the scripts section of package.json"
+        },
+        {
+          "label": "command",
+          "detail": "Command to run when script is called"
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        }
+      ]
+    },
+    {
+      "names": [
+        "shrinkwrap"
+      ],
+      "detail": "Lock down dependency versions for publication"
+    },
+    {
+      "names": [
+        "star"
+      ],
+      "detail": "Mark your favorite packages",
+      "args": [
+        {
+          "label": "pkg",
+          "detail": "Package to mark as favorite"
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        },
+        {
+          "names": [
+            "--no-unicode"
+          ],
+          "detail": "Do not use unicode characters in the tree output"
+        }
+      ]
+    },
+    {
+      "names": [
+        "stars"
+      ],
+      "detail": "View packages marked as favorites",
+      "args": [
+        {
+          "label": "user",
+          "detail": "View packages marked as favorites by <user>",
+          "isOptional": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "start"
+      ],
+      "detail": "Start a package",
+      "flags": [
+        {
+          "names": [
+            "--ignore-scripts"
+          ],
+          "detail": "If true, npm does not run scripts specified in package.json files"
+        },
+        {
+          "names": [
+            "--script-shell"
+          ],
+          "detail": "The shell to use for scripts run with the npm exec, npm run and npm init <pkg> commands",
+          "arg": {
+            "label": "script-shell"
+          }
+        },
+        {
+          "names": [
+            "--"
+          ],
+          "arg": {
+            "label": "arg",
+            "detail": "Arguments to be passed to the start script"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "stop"
+      ],
+      "detail": "Stop a package",
+      "flags": [
+        {
+          "names": [
+            "--ignore-scripts"
+          ],
+          "detail": "If true, npm does not run scripts specified in package.json files"
+        },
+        {
+          "names": [
+            "--script-shell"
+          ],
+          "detail": "The shell to use for scripts run with the npm exec, npm run and npm init <pkg> commands",
+          "arg": {
+            "label": "script-shell"
+          }
+        },
+        {
+          "names": [
+            "--"
+          ],
+          "arg": {
+            "label": "arg",
+            "detail": "Arguments to be passed to the stop script"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "team"
+      ],
+      "detail": "Manage organization teams and team memberships",
+      "subcommands": [
+        {
+          "names": [
+            "create"
+          ],
+          "args": [
+            {
+              "label": "scope:team"
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            },
+            {
+              "names": [
+                "--otp"
+              ],
+              "detail": "One-time password from a two-factor authenticator",
+              "arg": {
+                "label": "otp"
+              }
+            }
+          ]
+        },
+        {
+          "names": [
+            "destroy"
+          ],
+          "args": [
+            {
+              "label": "scope:team"
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            },
+            {
+              "names": [
+                "--otp"
+              ],
+              "detail": "One-time password from a two-factor authenticator",
+              "arg": {
+                "label": "otp"
+              }
+            }
+          ]
+        },
+        {
+          "names": [
+            "add"
+          ],
+          "args": [
+            {
+              "label": "scope:team"
+            },
+            {
+              "label": "user"
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            },
+            {
+              "names": [
+                "--otp"
+              ],
+              "detail": "One-time password from a two-factor authenticator",
+              "arg": {
+                "label": "otp"
+              }
+            }
+          ]
+        },
+        {
+          "names": [
+            "rm"
+          ],
+          "args": [
+            {
+              "label": "scope:team"
+            },
+            {
+              "label": "user"
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            },
+            {
+              "names": [
+                "--otp"
+              ],
+              "detail": "One-time password from a two-factor authenticator",
+              "arg": {
+                "label": "otp"
+              }
+            }
+          ]
+        },
+        {
+          "names": [
+            "ls"
+          ],
+          "args": [
+            {
+              "label": "scope|scope:team"
+            }
+          ],
+          "flags": [
+            {
+              "names": [
+                "--registry"
+              ],
+              "detail": "The base URL of the npm registry",
+              "arg": {
+                "label": "registry"
+              }
+            },
+            {
+              "names": [
+                "--json"
+              ],
+              "detail": "Show output in json format"
+            },
+            {
+              "names": [
+                "-p",
+                "--parseable"
+              ],
+              "detail": "Output parseable results from commands that write to standard output"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "names": [
+        "test",
+        "tst",
+        "t"
+      ],
+      "detail": "Test a package",
+      "flags": [
+        {
+          "names": [
+            "--ignore-scripts"
+          ],
+          "detail": "If true, npm does not run scripts specified in package.json files"
+        },
+        {
+          "names": [
+            "--script-shell"
+          ],
+          "detail": "The shell to use for scripts run with the npm exec, npm run and npm init <pkg> commands",
+          "arg": {
+            "label": "script-shell"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "token"
+      ],
+      "detail": "Manage your authentication tokens",
+      "flags": [
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        },
+        {
+          "names": [
+            "--otp"
+          ],
+          "detail": "One-time password from a two-factor authenticator",
+          "arg": {
+            "label": "otp"
+          }
+        }
+      ],
+      "subcommands": [
+        {
+          "names": [
+            "list"
+          ],
+          "detail": "Shows a table of all active authentication tokens",
+          "flags": [
+            {
+              "names": [
+                "--json"
+              ],
+              "detail": "Show output in json format"
+            },
+            {
+              "names": [
+                "-p",
+                "--parseable"
+              ],
+              "detail": "Output parseable results from commands that write to standard output"
+            }
+          ]
+        },
+        {
+          "names": [
+            "create"
+          ],
+          "detail": "Create a new authentication token",
+          "flags": [
+            {
+              "names": [
+                "--read-only"
+              ],
+              "detail": "This is used to mark a token as unable to publish when configuring limited access tokens with the npm token create command"
+            },
+            {
+              "names": [
+                "--cidr"
+              ],
+              "detail": "This is a list of CIDR address to be used when configuring limited access tokens with the npm token create command",
+              "arg": {
+                "label": "cidr"
+              }
+            }
+          ]
+        },
+        {
+          "names": [
+            "revoke"
+          ],
+          "detail": "Immediately removes an authentication token from the registry. You will no longer be able to use it",
+          "args": [
+            {
+              "label": "idtoken"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "names": [
+        "uninstall"
+      ],
+      "detail": "Uninstall a package",
+      "args": [
+        {
+          "label": "package",
+          "isVariadic": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-S",
+            "--save"
+          ],
+          "detail": "Package will be removed from your dependencies"
+        },
+        {
+          "names": [
+            "-D",
+            "--save-dev"
+          ],
+          "detail": "Package will appear in your `devDependencies`"
+        },
+        {
+          "names": [
+            "-O",
+            "--save-optional"
+          ],
+          "detail": "Package will appear in your `optionalDependencies`"
+        },
+        {
+          "names": [
+            "--no-save"
+          ],
+          "detail": "Prevents saving to `dependencies`"
+        },
+        {
+          "names": [
+            "-g"
+          ],
+          "detail": "Uninstall global package"
+        },
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        }
+      ]
+    },
+    {
+      "names": [
+        "r",
+        "rm"
+      ],
+      "detail": "Uninstall a package",
+      "args": [
+        {
+          "label": "package",
+          "isVariadic": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-S",
+            "--save"
+          ],
+          "detail": "Package will be removed from your dependencies"
+        },
+        {
+          "names": [
+            "-D",
+            "--save-dev"
+          ],
+          "detail": "Package will appear in your `devDependencies`"
+        },
+        {
+          "names": [
+            "-O",
+            "--save-optional"
+          ],
+          "detail": "Package will appear in your `optionalDependencies`"
+        },
+        {
+          "names": [
+            "--no-save"
+          ],
+          "detail": "Prevents saving to `dependencies`"
+        },
+        {
+          "names": [
+            "-g"
+          ],
+          "detail": "Uninstall global package"
+        },
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        }
+      ]
+    },
+    {
+      "names": [
+        "un"
+      ],
+      "detail": "Uninstall a package",
+      "args": [
+        {
+          "label": "package",
+          "isVariadic": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-S",
+            "--save"
+          ],
+          "detail": "Package will be removed from your dependencies"
+        },
+        {
+          "names": [
+            "-D",
+            "--save-dev"
+          ],
+          "detail": "Package will appear in your `devDependencies`"
+        },
+        {
+          "names": [
+            "-O",
+            "--save-optional"
+          ],
+          "detail": "Package will appear in your `optionalDependencies`"
+        },
+        {
+          "names": [
+            "--no-save"
+          ],
+          "detail": "Prevents saving to `dependencies`"
+        },
+        {
+          "names": [
+            "-g"
+          ],
+          "detail": "Uninstall global package"
+        },
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        }
+      ]
+    },
+    {
+      "names": [
+        "remove"
+      ],
+      "detail": "Uninstall a package",
+      "args": [
+        {
+          "label": "package",
+          "isVariadic": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-S",
+            "--save"
+          ],
+          "detail": "Package will be removed from your dependencies"
+        },
+        {
+          "names": [
+            "-D",
+            "--save-dev"
+          ],
+          "detail": "Package will appear in your `devDependencies`"
+        },
+        {
+          "names": [
+            "-O",
+            "--save-optional"
+          ],
+          "detail": "Package will appear in your `optionalDependencies`"
+        },
+        {
+          "names": [
+            "--no-save"
+          ],
+          "detail": "Prevents saving to `dependencies`"
+        },
+        {
+          "names": [
+            "-g"
+          ],
+          "detail": "Uninstall global package"
+        },
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        }
+      ]
+    },
+    {
+      "names": [
+        "unlink"
+      ],
+      "detail": "Uninstall a package",
+      "args": [
+        {
+          "label": "package",
+          "isVariadic": true
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "-S",
+            "--save"
+          ],
+          "detail": "Package will be removed from your dependencies"
+        },
+        {
+          "names": [
+            "-D",
+            "--save-dev"
+          ],
+          "detail": "Package will appear in your `devDependencies`"
+        },
+        {
+          "names": [
+            "-O",
+            "--save-optional"
+          ],
+          "detail": "Package will appear in your `optionalDependencies`"
+        },
+        {
+          "names": [
+            "--no-save"
+          ],
+          "detail": "Prevents saving to `dependencies`"
+        },
+        {
+          "names": [
+            "-g"
+          ],
+          "detail": "Uninstall global package"
+        },
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        }
+      ]
+    },
+    {
+      "names": [
+        "unpublish"
+      ],
+      "detail": "Remove a package from the registry",
+      "args": [
+        {
+          "label": "[<@scope>/]<pkg>[@<version>]"
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "--dry-run"
+          ],
+          "detail": "Indicates that you don't want npm to make any changes and that it should only report what it would have done"
+        },
+        {
+          "names": [
+            "-f",
+            "--force"
+          ],
+          "detail": "Allow unpublishing all versions of a published package. Removes various protections against unfortunate side effects, common mistakes, unnecessary performance degradation, and malicious input"
+        },
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        }
+      ]
+    },
+    {
+      "names": [
+        "unstar"
+      ],
+      "detail": "Remove an item from your favorite packages",
+      "args": [
+        {
+          "label": "pkg",
+          "detail": "Package to unmark as favorite"
+        }
+      ],
+      "flags": [
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        },
+        {
+          "names": [
+            "--otp"
+          ],
+          "detail": "One-time password from a two-factor authenticator",
+          "arg": {
+            "label": "otp"
+          }
+        },
+        {
+          "names": [
+            "--no-unicode"
+          ],
+          "detail": "Do not use unicode characters in the tree output"
+        }
+      ]
+    },
+    {
+      "names": [
+        "update",
+        "upgrade",
+        "up"
+      ],
+      "detail": "Update a package",
+      "flags": [
+        {
+          "names": [
+            "-g"
+          ],
+          "detail": "Update global package"
+        },
+        {
+          "names": [
+            "--global-style"
+          ],
+          "detail": "Causes npm to install the package into your local node_modules folder with the same layout it uses with the global node_modules folder"
+        },
+        {
+          "names": [
+            "--legacy-bundling"
+          ],
+          "detail": "Causes npm to install the package such that versions of npm prior to 1.4, such as the one included with node 0.8, can install the package"
+        },
+        {
+          "names": [
+            "--strict-peer-deps"
+          ],
+          "detail": "If set to true, and --legacy-peer-deps is not set, then any conflicting peerDependencies will be treated as an install failure"
+        },
+        {
+          "names": [
+            "--no-package-lock"
+          ],
+          "detail": "Ignores package-lock.json files when installing"
+        },
+        {
+          "names": [
+            "--omit"
+          ],
+          "detail": "Dependency types to omit from the installation tree on disk",
+          "arg": {
+            "label": "Package type",
+            "suggestions": [
+              {
+                "names": [
+                  "dev"
+                ]
+              },
+              {
+                "names": [
+                  "optional"
+                ]
+              },
+              {
+                "names": [
+                  "peer"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "names": [
+            "--ignore-scripts"
+          ],
+          "detail": "If true, npm does not run scripts specified in package.json files"
+        },
+        {
+          "names": [
+            "--no-audit"
+          ],
+          "detail": "Submit audit reports alongside the current npm command to the default registry and all registries configured for scopes"
+        },
+        {
+          "names": [
+            "--no-bin-links"
+          ],
+          "detail": "Tells npm to not create symlinks (or .cmd shims on Windows) for package executables"
+        },
+        {
+          "names": [
+            "--no-fund"
+          ],
+          "detail": "Hides the message at the end of each npm install acknowledging the number of dependencies looking for funding"
+        },
+        {
+          "names": [
+            "--save"
+          ],
+          "detail": "Update the semver values of direct dependencies in your project package.json"
+        },
+        {
+          "names": [
+            "--dry-run"
+          ],
+          "detail": "Indicates that you don't want npm to make any changes and that it should only report what it would have done"
+        },
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        }
+      ]
+    },
+    {
+      "names": [
+        "version"
+      ],
+      "detail": "Bump a package version",
+      "flags": [
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        },
+        {
+          "names": [
+            "--json"
+          ],
+          "detail": "Show output in json format"
+        },
+        {
+          "names": [
+            "--allow-same-version"
+          ],
+          "detail": "Prevents throwing an error when npm version is used to set the new version to the same value as the current version"
+        },
+        {
+          "names": [
+            "--no-commit-hooks"
+          ],
+          "detail": "Do not run git commit hooks when using the npm version command"
+        },
+        {
+          "names": [
+            "--no-git-tag-version"
+          ],
+          "detail": "Do not tag the commit when using the npm version command"
+        },
+        {
+          "names": [
+            "--preid"
+          ],
+          "detail": "The \"prerelease identifier\" to use as a prefix for the \"prerelease\" part of a semver. Like the rc in 1.2.0-rc.8",
+          "arg": {
+            "label": "prerelease-id"
+          }
+        },
+        {
+          "names": [
+            "--sign-git-tag"
+          ],
+          "detail": "If set to true, then the npm version command will tag the version using -s to add a signature"
+        }
+      ]
+    },
+    {
+      "names": [
+        "view",
+        "v",
+        "info",
+        "show"
+      ],
+      "detail": "View registry info",
+      "flags": [
+        {
+          "names": [
+            "-w",
+            "--workspace"
+          ],
+          "detail": "Enable running a command in the context of the configured workspaces of the current project",
+          "arg": {
+            "label": "workspace",
+            "isVariadic": true
+          }
+        },
+        {
+          "names": [
+            "-ws",
+            "--workspaces"
+          ],
+          "detail": "Enable running a command in the context of all the configured workspaces"
+        },
+        {
+          "names": [
+            "--json"
+          ],
+          "detail": "Show output in json format"
+        }
+      ]
+    },
+    {
+      "names": [
+        "whoami"
+      ],
+      "detail": "Display npm username",
+      "flags": [
+        {
+          "names": [
+            "--registry"
+          ],
+          "detail": "The base URL of the npm registry",
+          "arg": {
+            "label": "registry"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,43 +1,19 @@
 <template>
-  <AppShellLayout
-    :is-desktop-runtime="isDesktopRuntime"
-    :sidebar-visible="isSidebarVisible"
-    :terminal-visible="isTerminalVisible"
-    :terminal-height="terminalHeight"
-    @update:terminal-height="terminalHeight = $event"
-  >
+  <AppShellLayout :is-desktop-runtime="isDesktopRuntime" :sidebar-visible="isSidebarVisible"
+    :terminal-visible="isTerminalVisible" :terminal-height="terminalHeight"
+    @update:terminal-height="terminalHeight = $event">
     <template #titlebar>
-      <WindowTitleBar
-        :document-name="editorStore.document.name"
-        :is-dirty="editorStore.document.isDirty"
-        :has-active-document="editorStore.hasActiveDocument"
-        :document-kind="editorStore.document.kind"
-        :theme="appStore.theme"
-        :is-running="editorStore.isRunning"
-        :can-run="canRun"
-        :can-save="canSave"
-        :is-desktop-runtime="isDesktopRuntime"
-        :is-terminal-visible="isTerminalVisible"
-        :is-diagnostics-visible="isDiagnosticsPanelVisible"
-        :can-toggle-diagnostics="canToggleDiagnosticsPanel"
-        :diagnostic-issue-count="diagnosticIssueCount"
-        :command-templates="commandTemplates"
-        :comment-templates="commentTemplates"
-        @new="createNewDocument"
-        @open="openDocument"
-        @open-folder="openFolder"
-        @close-workspace="requestCloseWorkspace"
-        @save="saveDocument"
-        @save-as="saveDocumentAs"
-        @close-request="requestCloseApplication"
-        @run="handleRunScript"
-        @format-document="handleFormatDocument"
-        @open-terminal="openTerminal"
-        @hide-terminal="hideTerminal"
-        @toggle-diagnostics="toggleDiagnosticsPanel"
-        @toggle-theme="toggleTheme"
-        @insert-template="handleInsertTemplate"
-      />
+      <WindowTitleBar :document-name="editorStore.document.name" :is-dirty="editorStore.document.isDirty"
+        :has-active-document="editorStore.hasActiveDocument" :document-kind="editorStore.document.kind"
+        :theme="appStore.theme" :is-running="editorStore.isRunning" :can-run="canRun" :can-save="canSave"
+        :is-desktop-runtime="isDesktopRuntime" :is-terminal-visible="isTerminalVisible"
+        :is-diagnostics-visible="isDiagnosticsPanelVisible" :can-toggle-diagnostics="canToggleDiagnosticsPanel"
+        :diagnostic-issue-count="diagnosticIssueCount" :command-templates="commandTemplates"
+        :comment-templates="commentTemplates" @new="createNewDocument" @open="openDocument" @open-folder="openFolder"
+        @close-workspace="requestCloseWorkspace" @save="saveDocument" @save-as="saveDocumentAs"
+        @close-request="requestCloseApplication" @run="handleRunScript" @format-document="handleFormatDocument"
+        @open-terminal="openTerminal" @hide-terminal="hideTerminal" @toggle-diagnostics="toggleDiagnosticsPanel"
+        @toggle-theme="toggleTheme" @insert-template="handleInsertTemplate" />
     </template>
 
     <template #activity>
@@ -45,52 +21,27 @@
     </template>
 
     <template #sidebar>
-      <AppSidebar
-        :document="editorStore.document"
-        :view="activeSidebarView"
-        :is-desktop-runtime="isDesktopRuntime"
-        :workspace-root-path="editorStore.workspaceRootPath"
-        :preloaded-workspace-root="startupWorkspaceRoot"
-        @open-file="openDocumentByPath"
-      />
+      <AppSidebar :document="editorStore.document" :view="activeSidebarView" :is-desktop-runtime="isDesktopRuntime"
+        :workspace-root-path="editorStore.workspaceRootPath" :preloaded-workspace-root="startupWorkspaceRoot"
+        @open-file="openDocumentByPath" />
     </template>
 
     <template #header>
-      <WorkbenchHeader
-        :documents="editorStore.documents"
-        :active-document-id="editorStore.activeDocumentId"
-        :file-path="editorStore.hasActiveDocument ? editorStore.document.path : null"
-        @select-tab="activateDocument"
-        @close-tab="requestCloseDocument"
-      />
+      <WorkbenchHeader :documents="editorStore.documents" :active-document-id="editorStore.activeDocumentId"
+        :file-path="editorStore.hasActiveDocument ? editorStore.document.path : null" @select-tab="activateDocument"
+        @close-tab="requestCloseDocument" />
     </template>
 
-    <div
-      ref="editorViewportRef"
+    <div ref="editorViewportRef"
       class="workbench-editor-viewport relative h-full min-h-0 overflow-hidden bg-(--editor-bg)"
-      :data-diagnostics-resizing="diagnosticsTransitionsEnabled ? 'false' : 'true'"
-    >
+      :data-diagnostics-resizing="diagnosticsTransitionsEnabled ? 'false' : 'true'">
       <div class="h-full min-h-0">
-        <div
-          v-if="!editorStore.hasActiveDocument"
-          class="flex h-full min-h-0 items-center justify-center px-6"
-        >
-          <div
-            class="flex max-w-md flex-col items-center gap-4 text-center text-(--text-quaternary)"
-          >
+        <div v-if="!editorStore.hasActiveDocument" class="flex h-full min-h-0 items-center justify-center px-6">
+          <div class="flex max-w-md flex-col items-center gap-4 text-center text-(--text-quaternary)">
             <div
-              class="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/8 bg-white/3 text-(--text-secondary)"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                class="h-8 w-8"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.7"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
+              class="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/8 bg-white/3 text-(--text-secondary)">
+              <svg viewBox="0 0 24 24" class="h-8 w-8" fill="none" stroke="currentColor" stroke-width="1.7"
+                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M14 3H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9z" />
                 <path d="M14 3v6h6" />
               </svg>
@@ -108,76 +59,47 @@
           </div>
         </div>
 
-        <SmartScriptEditor
-          v-else-if="editorStore.document.kind === 'text'"
-          ref="editorRef"
-          :document-id="editorStore.document.id"
-          :document-path="editorStore.document.path"
-          :document-name="editorStore.document.name"
-          :model-value="editorStore.document.content"
-          :theme="appStore.theme"
-          @update:model-value="updateContent"
-          @cursor-position-change="handleCursorPositionChange"
-          @diagnostics-change="handleDiagnosticsChange"
-          @format-request="handleFormatDocument"
-        />
+        <SmartScriptEditor v-else-if="editorStore.document.kind === 'text'" ref="editorRef"
+          :document-id="editorStore.document.id" :document-path="editorStore.document.path"
+          :document-name="editorStore.document.name" :model-value="editorStore.document.content" :theme="appStore.theme"
+          @update:model-value="updateContent" @cursor-position-change="handleCursorPositionChange"
+          @diagnostics-change="handleDiagnosticsChange" @format-request="handleFormatDocument" />
 
-        <ImageAssetPreview
-          v-else-if="editorStore.document.path"
-          :path="editorStore.document.path"
-          :name="editorStore.document.name"
-        />
+        <ImageAssetPreview v-else-if="editorStore.document.path" :path="editorStore.document.path"
+          :name="editorStore.document.name" />
       </div>
 
-      <div
-        v-if="shouldRenderDiagnosticsPanel"
+      <div v-if="shouldRenderDiagnosticsPanel"
         class="diagnostics-overlay-panel absolute inset-y-0 right-0 z-20 max-w-full overflow-hidden border-l border-(--shell-divider) bg-(--panel-bg) shadow-[-24px_0_48px_rgba(0,0,0,0.28)]"
-        :style="diagnosticsPanelStyle"
-        :class="[
+        :style="diagnosticsPanelStyle" :class="[
           diagnosticsPanelMotionClass,
           isDiagnosticsPanelVisible
             ? 'pointer-events-auto translate-x-0 opacity-100'
             : 'pointer-events-none translate-x-3 opacity-0',
-        ]"
-      >
+        ]">
         <div class="h-full">
-          <DiagnosticsPanel
-            :analysis="editorStore.activeScriptAnalysis"
-            :content="editorStore.document.content"
-            :document-name="editorStore.document.name"
-            @select-diagnostic="handleSelectDiagnostic"
-          />
+          <DiagnosticsPanel :analysis="editorStore.activeScriptAnalysis" :content="editorStore.document.content"
+            :document-name="editorStore.document.name" @select-diagnostic="handleSelectDiagnostic" />
         </div>
       </div>
     </div>
 
     <template #terminal>
-      <RunPanel
-        :terminal-output="editorStore.terminalOutput"
-        :run-logs="editorStore.runLogs"
-        :last-run-result="editorStore.lastRunResult"
-        :is-running="editorStore.isRunning"
-        :executor="editorStore.selectedExecutor"
-        :theme="appStore.theme"
-        :visible="isTerminalVisible"
-        @hide="hideTerminal"
-        @terminal-output="appendTerminalOutput"
-        @terminal-run-complete="handleIntegratedTerminalRunComplete"
-      />
+      <RunPanel :terminal-output-version="editorStore.terminalOutputVersion"
+        :resolve-terminal-output="editorStore.getTerminalOutputSnapshot" :run-logs="editorStore.runLogs"
+        :last-run-result="editorStore.lastRunResult" :is-running="editorStore.isRunning"
+        :executor="editorStore.selectedExecutor" :document-name="editorStore.document.name"
+        :document-path="editorStore.document.path" :workspace-root-path="editorStore.workspaceRootPath"
+        :theme="appStore.theme" :visible="isTerminalVisible" @hide="hideTerminal"
+        @terminal-output="appendTerminalOutput" @terminal-run-complete="handleIntegratedTerminalRunComplete" />
     </template>
 
     <template #statusbar>
-      <WorkbenchStatusBar
-        :has-active-document="editorStore.hasActiveDocument"
-        :document-kind="editorStore.document.kind"
-        :is-running="editorStore.isRunning"
-        :encoding="editorStore.document.encoding"
-        :executor="editorStore.selectedExecutor"
-        :cursor-line="editorStore.cursorLine"
-        :cursor-column="editorStore.cursorColumn"
-        :char-count="editorStore.document.charCount"
-        @change-encoding="updateEncoding"
-      />
+      <WorkbenchStatusBar :has-active-document="editorStore.hasActiveDocument"
+        :document-kind="editorStore.document.kind" :is-running="editorStore.isRunning"
+        :encoding="editorStore.document.encoding" :executor="editorStore.selectedExecutor"
+        :cursor-line="editorStore.cursorLine" :cursor-column="editorStore.cursorColumn"
+        :char-count="editorStore.document.charCount" @change-encoding="updateEncoding" />
     </template>
   </AppShellLayout>
 </template>
@@ -196,10 +118,12 @@ import { useWorkbench } from '@/composables/useWorkbench';
 import AppShellLayout from '@/layouts/AppShellLayout.vue';
 import type { TWorkbenchSidebarView } from '@/types/app';
 import type {
-    IAnalyzeScriptPayload,
-    ICommandTemplate,
-    IWorkspaceDirectoryPayload,
+  IAnalyzeScriptPayload,
+  ICommandTemplate,
+  IWorkspaceDirectoryPayload,
 } from '@/types/editor';
+import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
+import { consumeProgrammaticWindowCloseAllowance } from '@/utils/window-close';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const emit = defineEmits<{
@@ -227,6 +151,7 @@ const hasEmittedReady = ref(false);
 let editorViewportResizeObserver: ResizeObserver | null = null;
 let diagnosticsResizeSettleTimerId: number | null = null;
 let editorViewportResizeFrameId: number | null = null;
+let nativeCloseRequestedUnlisten: (() => void) | null = null;
 let previousEditorViewportSize = { width: 0, height: 0 };
 let pendingEditorViewportSize: { width: number; height: number } | null = null;
 
@@ -497,6 +422,23 @@ const initializeWorkbench = async (): Promise<void> => {
   await emitWorkbenchReady();
 };
 
+const bindNativeWindowCloseRequest = async (): Promise<void> => {
+  const runtimeReady = await waitForDesktopRuntime(400);
+  if (!runtimeReady) {
+    return;
+  }
+
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  nativeCloseRequestedUnlisten = await getCurrentWindow().onCloseRequested(async (event) => {
+    if (consumeProgrammaticWindowCloseAllowance()) {
+      return;
+    }
+
+    event.preventDefault();
+    await requestCloseApplication();
+  });
+};
+
 const handleRunScript = async (): Promise<void> => {
   if (isDiagnosticsPanelVisible.value) {
     closeDiagnosticsPanel(false);
@@ -538,10 +480,13 @@ onMounted(() => {
     editorViewportResizeObserver.observe(editorViewportRef.value);
   }
 
+  void bindNativeWindowCloseRequest();
   void initializeWorkbench();
 });
 
 onBeforeUnmount(() => {
+  nativeCloseRequestedUnlisten?.();
+  nativeCloseRequestedUnlisten = null;
   editorViewportResizeObserver?.disconnect();
 
   if (editorViewportResizeFrameId !== null) {

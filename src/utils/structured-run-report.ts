@@ -3,42 +3,52 @@ import { formatTime } from '@/utils/date';
 
 export type TInsightTone = 'neutral' | 'success' | 'warning' | 'error' | 'running';
 export type TInsightStepStatus = 'done' | 'running' | 'warning' | 'error';
+export type TInsightAccent = 'red' | 'orange' | 'yellow' | 'green' | 'teal' | 'blue';
+export type TInsightDetailTone = 'default' | 'success' | 'warning' | 'error' | 'muted';
 
-export interface IStructuredRunStep {
-  id: string;
-  title: string;
-  detail: string;
-  status: TInsightStepStatus;
-  timestamp: string;
+export interface IStructuredRunDetailLine {
+  text: string;
+  tone: TInsightDetailTone;
 }
 
-export interface IStructuredInsightBadge {
-  label: string;
-  value: string;
-  tone?: TInsightTone;
+export interface IStructuredRunSession {
+  pathPrefix: string;
+  fileLabel: string;
+  meta: string;
+}
+
+export interface IStructuredRunSummary {
+  tone: TInsightTone;
+  statusLabel: string;
+  phaseLabel: string;
+  elapsedLabel: string;
+  progress: number;
+  counts: {
+    success: number;
+    warning: number;
+    error: number;
+    running: number;
+  };
+}
+
+export interface IStructuredRunTimelineItem {
+  id: string;
+  tag: string;
+  accent: TInsightAccent;
+  title: string;
+  description: string;
+  status: TInsightStepStatus;
+  timestamp: string;
+  detailsLabel?: string;
+  details?: IStructuredRunDetailLine[];
+  gapWeight: number;
 }
 
 export interface IStructuredRunReport {
   hasContent: boolean;
-  steps: IStructuredRunStep[];
-  result: {
-    tone: TInsightTone;
-    title: string;
-    summary: string;
-    badges: IStructuredInsightBadge[];
-    highlights: string[];
-  };
-  diagnosis: {
-    tone: TInsightTone;
-    title: string;
-    summary: string;
-    hints: string[];
-    evidence: string[];
-  };
-  summary: Array<{
-    label: string;
-    value: string;
-  }>;
+  session: IStructuredRunSession;
+  summary: IStructuredRunSummary;
+  timeline: IStructuredRunTimelineItem[];
 }
 
 type TBuildStructuredRunReportOptions = {
@@ -47,6 +57,13 @@ type TBuildStructuredRunReportOptions = {
   lastRunResult: IRunResult | null;
   isRunning: boolean;
   executor: TExecutorKind;
+  documentName: string;
+  documentPath: string | null;
+  workspaceRootPath: string | null;
+};
+
+type TInternalTimelineItem = Omit<IStructuredRunTimelineItem, 'gapWeight'> & {
+  createdAtMs: number | null;
 };
 
 const RUN_START_MARKER = '[sh-editor] Running current script...';
@@ -62,9 +79,51 @@ const HEREDOC_START_PATTERN = /cat\s+<<'SH_EDITOR_EOF_\d+'/i;
 const HEREDOC_END_PATTERN = /^__SH_EDITOR_EOF_\d+__$/;
 const TEMP_SCRIPT_PATTERN = /\.sh-editor-[\w.-]+\.tmp\.sh/i;
 const INTERNAL_SCRIPT_PATTERN = /__sh_editor_status|unset\s+__sh_editor_status/i;
-const RUN_RELATED_LOG_PATTERN = /执行|运行|终端|失败|成功|error|fail|run|terminal|script|shell/i;
+const RUN_FLOW_LOG_TITLE_PATTERN =
+  /^(开始执行|已发送到集成终端|临时脚本文件|执行完成|执行失败|终端执行状态异常|脚本执行失败)$/;
+const FINAL_LOG_TITLE_PATTERN = /^(执行完成|执行失败|终端执行状态异常|脚本执行失败)$/;
+const WARNING_PATTERN = /warning|warn|deprecated|注意|提醒/i;
+const ERROR_PATTERN =
+  /error|failed|failure|denied|not found|no such file|syntax|traceback|exception|未找到|失败|错误|异常/i;
 
 const stripAnsi = (value: string): string => value.replace(ANSI_PATTERN, '');
+
+const normalizePath = (value: string | null | undefined): string =>
+  (value ?? '')
+    .replace(/\\/g, '/')
+    .replace(/\/+/g, '/')
+    .replace(/\/$/, '');
+
+const getPathSegments = (value: string | null | undefined): string[] =>
+  normalizePath(value)
+    .split('/')
+    .filter(Boolean);
+
+const getPathLeaf = (value: string | null | undefined): string => {
+  const segments = getPathSegments(value);
+  return segments[segments.length - 1] ?? '';
+};
+
+const getRelativePath = (fullPath: string | null, rootPath: string | null): string | null => {
+  const normalizedFullPath = normalizePath(fullPath);
+  const normalizedRootPath = normalizePath(rootPath);
+
+  if (!normalizedFullPath || !normalizedRootPath) {
+    return null;
+  }
+
+  const lowerFullPath = normalizedFullPath.toLowerCase();
+  const lowerRootPath = normalizedRootPath.toLowerCase();
+  if (lowerFullPath === lowerRootPath) {
+    return '';
+  }
+
+  if (!lowerFullPath.startsWith(`${lowerRootPath}/`)) {
+    return null;
+  }
+
+  return normalizedFullPath.slice(normalizedRootPath.length + 1);
+};
 
 const normalizeOutput = (value: string): string =>
   stripAnsi(value)
@@ -83,15 +142,177 @@ const sortLogsAscending = (runLogs: IRunLogEntry[]): IRunLogEntry[] =>
     (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
   );
 
-const mapLogLevelToStepStatus = (level: IRunLogEntry['level']): TInsightStepStatus => {
-  switch (level) {
-    case 'success':
-      return 'done';
-    case 'error':
-      return 'error';
-    default:
-      return 'running';
+const collectRunFlowLogs = (runLogs: IRunLogEntry[]): IRunLogEntry[] =>
+  sortLogsAscending(runLogs).filter((item) => RUN_FLOW_LOG_TITLE_PATTERN.test(item.title));
+
+const parseTimestamp = (value: string | null | undefined): number | null => {
+  if (!value) {
+    return null;
   }
+
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+};
+
+const formatElapsed = (durationMs: number | null): string => {
+  if (durationMs === null || durationMs < 0) {
+    return '—';
+  }
+
+  const totalSeconds = durationMs / 1000;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = (totalSeconds % 60).toFixed(1).padStart(4, '0');
+  return `${String(minutes).padStart(2, '0')}:${seconds}s`;
+};
+
+const resolveTimelineStatus = (value: string): TInsightStepStatus => {
+  if (ERROR_PATTERN.test(value)) {
+    return 'error';
+  }
+
+  if (WARNING_PATTERN.test(value)) {
+    return 'warning';
+  }
+
+  return 'done';
+};
+
+const resolveDetailTone = (value: string): TInsightDetailTone => {
+  if (ERROR_PATTERN.test(value)) {
+    return 'error';
+  }
+
+  if (WARNING_PATTERN.test(value)) {
+    return 'warning';
+  }
+
+  if (/^(?:✓|✔|ok\b|success\b|完成|已完成)/i.test(value)) {
+    return 'success';
+  }
+
+  if (/^(?:\$|\[sh-editor\]|#\s+(?:stdout|stderr))/i.test(value)) {
+    return 'muted';
+  }
+
+  return 'default';
+};
+
+const buildDetailLines = (lines: string[]): IStructuredRunDetailLine[] =>
+  lines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-8)
+    .map((line) => ({
+      text: line,
+      tone: resolveDetailTone(line),
+    }));
+
+const resolveShellName = (commandLine: string | null): string | null => {
+  if (!commandLine) {
+    return null;
+  }
+
+  const normalizedCommandLine = commandLine.trim();
+  if (!normalizedCommandLine) {
+    return null;
+  }
+
+  const firstToken = normalizedCommandLine.split(/\s+/)[0] ?? '';
+  if (!firstToken) {
+    return null;
+  }
+
+  return firstToken.split('/').pop()?.replace(/\.exe$/i, '') ?? null;
+};
+
+const resolveCommandLine = (
+  lastRunResult: IRunResult | null,
+  runLogs: IRunLogEntry[],
+): string | null => {
+  if (lastRunResult?.commandLine) {
+    return lastRunResult.commandLine;
+  }
+
+  for (let index = runLogs.length - 1; index >= 0; index -= 1) {
+    if (runLogs[index].title === '已发送到集成终端') {
+      return runLogs[index].detail;
+    }
+  }
+
+  return null;
+};
+
+const resolveSession = (
+  documentName: string,
+  documentPath: string | null,
+  workspaceRootPath: string | null,
+  lastRunResult: IRunResult | null,
+  runLogs: IRunLogEntry[],
+  executor: TExecutorKind,
+): IStructuredRunSession => {
+  const workspaceLabel = getPathLeaf(workspaceRootPath) || 'builtin-workspace';
+  const fallbackFileLabel = documentName.trim() || getPathLeaf(documentPath) || 'startup.sh';
+  const relativePath = getRelativePath(documentPath, workspaceRootPath);
+  const relativeSegments = relativePath
+    ? relativePath.split('/').filter(Boolean)
+    : [];
+
+  if (relativeSegments.length === 0) {
+    relativeSegments.push(fallbackFileLabel);
+  } else {
+    relativeSegments[relativeSegments.length - 1] = fallbackFileLabel;
+  }
+
+  const fileLabel = relativeSegments[relativeSegments.length - 1] ?? fallbackFileLabel;
+  const pathPrefix = [workspaceLabel, ...relativeSegments.slice(0, -1)].join(' / ');
+  const executorLabel = lastRunResult?.executorLabel ?? executor.toUpperCase();
+  const shellName = resolveShellName(resolveCommandLine(lastRunResult, runLogs)) ?? 'terminal';
+
+  return {
+    pathPrefix,
+    fileLabel,
+    meta: `${executorLabel} · ${shellName}`,
+  };
+};
+
+const resolveScopedRunLogs = (runLogs: IRunLogEntry[]): IRunLogEntry[] => {
+  const orderedLogs = sortLogsAscending(runLogs);
+  const runFlowLogs = orderedLogs.filter((item) => RUN_FLOW_LOG_TITLE_PATTERN.test(item.title));
+
+  if (runFlowLogs.length === 0) {
+    return [];
+  }
+
+  let startIndex = -1;
+  for (let index = orderedLogs.length - 1; index >= 0; index -= 1) {
+    if (orderedLogs[index].title === '开始执行') {
+      startIndex = index;
+      break;
+    }
+  }
+
+  if (startIndex === -1) {
+    for (let index = orderedLogs.length - 1; index >= 0; index -= 1) {
+      if (orderedLogs[index].title === '已发送到集成终端') {
+        startIndex = index;
+        break;
+      }
+    }
+  }
+
+  if (startIndex === -1) {
+    return runFlowLogs.slice(Math.max(0, runFlowLogs.length - 6));
+  }
+
+  const scopedLogs = orderedLogs
+    .slice(startIndex)
+    .filter((item) => RUN_FLOW_LOG_TITLE_PATTERN.test(item.title));
+
+  if (scopedLogs.length > 0) {
+    return scopedLogs;
+  }
+
+  return runFlowLogs.slice(Math.max(0, runFlowLogs.length - 6));
 };
 
 const findLastRunMarkerIndex = (lines: string[]): number => {
@@ -237,317 +458,318 @@ const collectStepLines = (outputLines: string[]): string[] =>
     )
     .slice(0, 5);
 
-const formatDuration = (durationMs: number | null | undefined): string => {
-  if (!durationMs || durationMs <= 0) {
-    return '—';
-  }
-
-  if (durationMs < 1000) {
-    return `${durationMs} ms`;
-  }
-
-  return `${Math.max(1, Math.round(durationMs / 100)) / 10} s`;
-};
-
-const resolveCause = (
-  text: string,
-  exitCode: number | null,
-): {
-  title: string;
-  summary: string;
-  hints: string[];
-} => {
-  const normalizedText = text.toLowerCase();
-
-  if (exitCode === 127 || normalizedText.includes('command not found')) {
-    return {
-      title: '命令或依赖缺失',
-      summary: '终端返回了 command not found，说明脚本依赖的命令在当前执行环境中不可用。',
-      hints: ['确认 PATH 中已安装对应命令。', '如果依赖仅存在于特定 shell，请切换到正确执行器。'],
-    };
-  }
-
-  if (exitCode === 126 || normalizedText.includes('permission denied')) {
-    return {
-      title: '权限不足',
-      summary: '脚本或其依赖资源缺少可执行/可访问权限，导致流程中断。',
-      hints: ['检查目标文件是否可执行。', '确认当前用户对涉及目录和文件具备访问权限。'],
-    };
-  }
-
-  if (normalizedText.includes('no such file or directory')) {
-    return {
-      title: '路径或文件不存在',
-      summary: '脚本引用了不存在的文件、目录或命令路径，需要先校正输入或工作目录。',
-      hints: ['确认工作目录是否正确。', '检查脚本中的路径拼接和相对路径是否有效。'],
-    };
-  }
-
-  if (normalizedText.includes('syntax error') || normalizedText.includes('unexpected token')) {
-    return {
-      title: '脚本语法错误',
-      summary: 'Shell 在解析脚本时遇到了语法问题，当前命令没有被正常执行。',
-      hints: ['检查 if/for/case 等语句是否闭合。', '确认引号、括号和 here-doc 分隔符是否完整。'],
-    };
-  }
-
-  if (normalizedText.includes('unbound variable')) {
-    return {
-      title: '变量未定义',
-      summary: '在严格模式下读取了未声明变量，脚本因此提前退出。',
-      hints: ['检查变量默认值。', '在读取参数前先做空值保护。'],
-    };
-  }
-
-  if (normalizedText.includes('timed out') || normalizedText.includes('超时')) {
-    return {
-      title: '执行超时或流程阻塞',
-      summary: '脚本没有在预期时间内结束，可能在等待输入、网络响应或长耗时任务。',
-      hints: ['确认脚本是否需要交互输入。', '排查网络、SSH、远端命令等外部依赖。'],
-    };
-  }
-
-  return {
-    title: '需要人工复核',
-    summary: '已捕获异常输出，但暂时无法稳定归类为单一原因，建议结合关键日志逐步定位。',
-    hints: ['优先查看下方关键证据。', '从最后一条错误信息向前追溯触发步骤。'],
-  };
-};
-
-const buildSteps = (
-  runLogs: IRunLogEntry[],
-  outputLines: string[],
-  isRunning: boolean,
-): IStructuredRunStep[] => {
-  const orderedLogs = sortLogsAscending(runLogs)
-    .filter((item) => item.level !== 'info' || RUN_RELATED_LOG_PATTERN.test(item.title))
-    .slice(-4);
-  const logSteps = orderedLogs.map((item) => ({
-    id: item.id,
-    title: item.title,
-    detail: item.detail,
-    status: mapLogLevelToStepStatus(item.level),
-    timestamp: formatTime(item.createdAt),
-  }));
-
-  const outputSteps = collectStepLines(outputLines).map((line, index) => ({
-    id: `output-step-${index}`,
-    title: index === 0 ? '终端关键输出' : `终端反馈 ${index + 1}`,
-    detail: line,
-    status: isRunning ? 'running' : 'done',
-    timestamp: '实时',
-  }));
-
-  const metaSteps = outputLines
-    .filter((line) => line === RUN_START_MARKER)
-    .slice(0, 2)
-    .map((line, index) => ({
-      id: `meta-step-${index}`,
-      title: '执行阶段',
-      detail: line,
-      status: isRunning ? 'running' : 'done',
-      timestamp: '实时',
-    }));
-
-  const steps = [...metaSteps, ...outputSteps, ...logSteps];
-  if (steps.length > 0) {
-    return steps;
-  }
-
-  if (isRunning) {
-    return [
-      {
-        id: 'pending-run',
-        title: '执行已发起',
-        detail: '终端正在接收脚本并等待更多运行反馈。',
-        status: 'running',
-        timestamp: '实时',
-      },
-    ];
-  }
-
-  return [
-    {
-      id: 'idle-step',
-      title: '暂无执行日志',
-      detail: '运行脚本后，这里会自动整理执行步骤与关键信息。',
-      status: 'done',
-      timestamp: '—',
-    },
-  ];
-};
-
-const buildResult = (
-  lastRunResult: IRunResult | null,
-  exitCodeFromOutput: number | null,
-  outputLines: string[],
-  isRunning: boolean,
-  executor: TExecutorKind,
-): IStructuredRunReport['result'] => {
-  const highlights = outputLines
-    .filter((line) => !EXIT_CODE_LINE_PATTERN.test(line))
-    .filter((line) => line === RUN_START_MARKER || line.length > 0)
-    .slice(-4);
-
-  if (isRunning) {
-    return {
-      tone: 'running',
-      title: '执行进行中',
-      summary: '脚本已经发往终端，正在等待更多输出与结束状态。',
-      badges: [
-        { label: '执行器', value: executor.toUpperCase() },
-        { label: '状态', value: '执行中', tone: 'running' },
-      ],
-      highlights,
-    };
-  }
-
-  if (lastRunResult) {
-    return {
-      tone: lastRunResult.success ? 'success' : 'error',
-      title: lastRunResult.success ? '执行完成' : '执行失败',
-      summary: lastRunResult.success
-        ? '脚本已完成执行，关键输出已整理为可读结论。'
-        : '脚本执行过程中出现异常，建议优先查看下方错误归因与关键证据。',
-      badges: [
-        {
-          label: '退出码',
-          value: String(lastRunResult.exitCode ?? '未知'),
-          tone: lastRunResult.success ? 'success' : 'error',
-        },
-        { label: '执行器', value: lastRunResult.executorLabel },
-        { label: '耗时', value: formatDuration(lastRunResult.durationMs) },
-      ],
-      highlights,
-    };
-  }
-
-  if (exitCodeFromOutput !== null) {
-    return {
-      tone: exitCodeFromOutput === 0 ? 'success' : 'error',
-      title: exitCodeFromOutput === 0 ? '终端执行完成' : '终端执行异常结束',
-      summary:
-        exitCodeFromOutput === 0
-          ? '已从终端实时输出中识别到脚本结束状态。'
-          : '已从终端输出中识别到非零退出码，请结合异常诊断继续排查。',
-      badges: [
-        {
-          label: '退出码',
-          value: String(exitCodeFromOutput),
-          tone: exitCodeFromOutput === 0 ? 'success' : 'error',
-        },
-        { label: '执行器', value: executor.toUpperCase() },
-      ],
-      highlights,
-    };
-  }
-
-  return {
-    tone: 'neutral',
-    title: '等待执行结果',
-    summary: '当前尚未捕获到完整的退出状态，可以继续查看步骤流或终端实时输出。',
-    badges: [{ label: '执行器', value: executor.toUpperCase() }],
-    highlights,
-  };
-};
-
-const buildDiagnosis = (
-  lastRunResult: IRunResult | null,
-  exitCodeFromOutput: number | null,
-  outputLines: string[],
-): IStructuredRunReport['diagnosis'] => {
-  const errorSource = [
-    lastRunResult?.stderr ?? '',
-    lastRunResult?.combinedOutput ?? '',
-    outputLines.join('\n'),
-  ]
-    .filter(Boolean)
-    .join('\n')
+const resolveOutputTitle = (line: string): string => {
+  const normalizedLine = line
+    .replace(/^(?:\[\s*step\s*\]|\[\s*\d+\/\d+\s*\]|step\s*\d+\s*[:：.-]?|==>|->)\s*/i, '')
     .trim();
 
-  if (!errorSource) {
-    return {
-      tone: 'neutral',
-      title: '暂无异常信号',
-      summary: '当前没有识别到明显错误输出，执行链路整体保持稳定。',
-      hints: ['如果你需要更细粒度排查，可以继续观察后续终端输出。'],
-      evidence: [],
-    };
+  if (!normalizedLine) {
+    return '终端反馈';
   }
 
-  const evidence = errorSource
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(
-      (line) =>
-        Boolean(line) &&
-        /error|failed|denied|not found|no such file|syntax|traceback|exception|未找到|失败|错误|异常/i.test(
-          line,
-        ),
-    )
-    .slice(0, 4);
+  return normalizedLine.length > 26 ? `${normalizedLine.slice(0, 26)}…` : normalizedLine;
+};
 
-  if ((lastRunResult?.success ?? false) && evidence.length === 0) {
-    return {
-      tone: 'success',
-      title: '未发现影响执行的异常',
-      summary: '虽然存在终端输出，但没有识别到会影响结果的错误模式。',
-      hints: ['如果结果仍不符合预期，建议检查业务输出是否完整。'],
-      evidence: [],
-    };
+const buildLogTimelineItem = (
+  item: IRunLogEntry,
+  outputLines: string[],
+): TInternalTimelineItem => {
+  let tag = 'trace';
+  let accent: TInsightAccent = 'yellow';
+  let status: TInsightStepStatus = 'done';
+
+  if (item.title === '开始执行') {
+    tag = 'start';
+    accent = 'red';
+  } else if (item.title === '临时脚本文件') {
+    tag = 'load';
+    accent = 'orange';
+    status = 'warning';
+  } else if (item.title === '已发送到集成终端') {
+    tag = 'exec';
+    accent = 'teal';
+  } else if (item.title === '执行完成') {
+    tag = 'done';
+    accent = 'green';
+  } else if (item.level === 'error' || ERROR_PATTERN.test(item.title)) {
+    tag = 'error';
+    accent = 'red';
+    status = 'error';
+  } else if (WARNING_PATTERN.test(item.title)) {
+    tag = 'warn';
+    accent = 'yellow';
+    status = 'warning';
   }
 
-  const cause = resolveCause(errorSource, lastRunResult?.exitCode ?? exitCodeFromOutput);
+  const detailLines = item.title === '已发送到集成终端'
+    ? buildDetailLines([item.detail])
+    : FINAL_LOG_TITLE_PATTERN.test(item.title)
+      ? buildDetailLines(outputLines.length > 0 ? outputLines : [item.detail])
+      : item.detail.includes('\n')
+        ? buildDetailLines(item.detail.split('\n'))
+        : [];
+
   return {
-    tone: 'error',
-    title: cause.title,
-    summary: cause.summary,
-    hints: cause.hints,
-    evidence,
+    id: item.id,
+    tag,
+    accent,
+    title: item.title,
+    description: item.detail,
+    status,
+    timestamp: formatTime(item.createdAt),
+    detailsLabel: detailLines.length > 0 ? (item.title === '已发送到集成终端' ? '查看命令' : '查看输出') : undefined,
+    details: detailLines.length > 0 ? detailLines : undefined,
+    createdAtMs: parseTimestamp(item.createdAt),
   };
+};
+
+const buildOutputTimelineItems = (
+  outputLines: string[],
+  isRunning: boolean,
+): TInternalTimelineItem[] =>
+  collectStepLines(outputLines).map((line, index) => ({
+    id: `output-step-${index}`,
+    tag: 'check',
+    accent: resolveTimelineStatus(line) === 'error' ? 'red' : 'yellow',
+    title: resolveOutputTitle(line),
+    description: line,
+    status: resolveTimelineStatus(line) === 'done' && isRunning ? 'running' : resolveTimelineStatus(line),
+    timestamp: '实时',
+    createdAtMs: null,
+  }));
+
+const buildSyntheticOutcomeItem = (
+  lastRunResult: IRunResult | null,
+  exitCodeFromOutput: number | null,
+  outputLines: string[],
+): TInternalTimelineItem | null => {
+  if (lastRunResult) {
+    const exitCode = typeof lastRunResult.exitCode === 'number'
+      ? lastRunResult.exitCode
+      : exitCodeFromOutput;
+    const detailLines = outputLines.length > 0
+      ? buildDetailLines(outputLines)
+      : lastRunResult.commandLine
+        ? buildDetailLines([lastRunResult.commandLine])
+        : [];
+
+    return {
+      id: `synthetic-outcome-${lastRunResult.finishedAt}`,
+      tag: lastRunResult.success ? 'done' : 'error',
+      accent: lastRunResult.success ? 'green' : 'red',
+      title: lastRunResult.success ? '执行完成' : '执行失败',
+      description: `执行器：${lastRunResult.executorLabel}，退出码：${exitCode ?? '未知'}，耗时：${lastRunResult.durationMs}ms。`,
+      status: lastRunResult.success ? 'done' : 'error',
+      timestamp: formatTime(lastRunResult.finishedAt),
+      detailsLabel: detailLines.length > 0 ? (outputLines.length > 0 ? '查看输出' : '查看命令') : undefined,
+      details: detailLines.length > 0 ? detailLines : undefined,
+      createdAtMs: parseTimestamp(lastRunResult.finishedAt),
+    };
+  }
+
+  if (exitCodeFromOutput === null) {
+    return null;
+  }
+
+  const isSuccess = exitCodeFromOutput === 0;
+  return {
+    id: `synthetic-outcome-${exitCodeFromOutput}`,
+    tag: isSuccess ? 'done' : 'error',
+    accent: isSuccess ? 'green' : 'red',
+    title: isSuccess ? '终端执行完成' : '终端执行异常结束',
+    description: isSuccess
+      ? '已从终端输出中识别到脚本结束状态。'
+      : `终端返回非零退出码 ${exitCodeFromOutput}，请继续检查输出。`,
+    status: isSuccess ? 'done' : 'error',
+    timestamp: '实时',
+    detailsLabel: outputLines.length > 0 ? '查看输出' : undefined,
+    details: outputLines.length > 0 ? buildDetailLines(outputLines) : undefined,
+    createdAtMs: null,
+  };
+};
+
+const buildRunningTimelineItem = (outputLines: string[]): TInternalTimelineItem => {
+  const latestOutputLine = [...outputLines]
+    .reverse()
+    .find((line) => !isMetaOutputLine(line));
+
+  return {
+    id: 'running-now',
+    tag: 'running',
+    accent: 'blue',
+    title: latestOutputLine ? resolveOutputTitle(latestOutputLine) : '正在等待更多终端输出…',
+    description: latestOutputLine
+      ? `最新终端反馈：${latestOutputLine}`
+      : '脚本命令已发往集成终端，正在等待退出状态。',
+    status: 'running',
+    timestamp: '实时',
+    detailsLabel: outputLines.length > 0 ? '查看输出' : undefined,
+    details: outputLines.length > 0 ? buildDetailLines(outputLines) : undefined,
+    createdAtMs: null,
+  };
+};
+
+const assignGapWeights = (
+  items: TInternalTimelineItem[],
+): IStructuredRunTimelineItem[] =>
+  items.map((item, index) => {
+    const nextItem = items[index + 1];
+    let gapWeight = 1;
+
+    if (item.createdAtMs !== null && nextItem?.createdAtMs !== null) {
+      const diffMs = Math.max(0, nextItem.createdAtMs - item.createdAtMs);
+      gapWeight = diffMs >= 3000 ? 3 : diffMs >= 1200 ? 2 : 1;
+    }
+
+    return {
+      id: item.id,
+      tag: item.tag,
+      accent: item.accent,
+      title: item.title,
+      description: item.description,
+      status: item.status,
+      timestamp: item.timestamp,
+      detailsLabel: item.detailsLabel,
+      details: item.details,
+      gapWeight,
+    };
+  });
+
+const buildTimeline = (
+  runLogs: IRunLogEntry[],
+  outputLines: string[],
+  lastRunResult: IRunResult | null,
+  exitCodeFromOutput: number | null,
+  isRunning: boolean,
+): IStructuredRunTimelineItem[] => {
+  const logItems = runLogs.map((item) => buildLogTimelineItem(item, outputLines));
+  const finalLogItems = logItems.filter((item) => FINAL_LOG_TITLE_PATTERN.test(item.title));
+  const primaryLogItems = logItems.filter((item) => !FINAL_LOG_TITLE_PATTERN.test(item.title));
+  const timelineItems: TInternalTimelineItem[] = [
+    ...primaryLogItems,
+    ...buildOutputTimelineItems(outputLines, isRunning),
+    ...finalLogItems,
+  ];
+
+  const syntheticOutcomeItem = buildSyntheticOutcomeItem(lastRunResult, exitCodeFromOutput, outputLines);
+  if (syntheticOutcomeItem && finalLogItems.length === 0) {
+    timelineItems.push(syntheticOutcomeItem);
+  }
+
+  if (isRunning) {
+    timelineItems.push(buildRunningTimelineItem(outputLines));
+  }
+
+  return assignGapWeights(timelineItems);
+};
+
+const resolveElapsedMs = (
+  lastRunResult: IRunResult | null,
+  scopedRunLogs: IRunLogEntry[],
+  isRunning: boolean,
+): number | null => {
+  if (typeof lastRunResult?.durationMs === 'number' && lastRunResult.durationMs > 0) {
+    return lastRunResult.durationMs;
+  }
+
+  const startedAtMs = parseTimestamp(lastRunResult?.startedAt) ?? parseTimestamp(scopedRunLogs[0]?.createdAt);
+  if (startedAtMs === null) {
+    return null;
+  }
+
+  if (isRunning) {
+    return Math.max(0, Date.now() - startedAtMs);
+  }
+
+  const finishedAtMs = parseTimestamp(lastRunResult?.finishedAt) ?? parseTimestamp(scopedRunLogs[scopedRunLogs.length - 1]?.createdAt);
+  if (finishedAtMs === null) {
+    return null;
+  }
+
+  return Math.max(0, finishedAtMs - startedAtMs);
+};
+
+const resolveSummaryTone = (
+  isRunning: boolean,
+  lastRunResult: IRunResult | null,
+  exitCodeFromOutput: number | null,
+  counts: IStructuredRunSummary['counts'],
+): TInsightTone => {
+  if (isRunning || counts.running > 0) {
+    return 'running';
+  }
+
+  if ((lastRunResult && !lastRunResult.success) || (exitCodeFromOutput !== null && exitCodeFromOutput !== 0) || counts.error > 0) {
+    return 'error';
+  }
+
+  if (counts.warning > 0) {
+    return 'warning';
+  }
+
+  if (lastRunResult?.success || exitCodeFromOutput === 0 || counts.success > 0) {
+    return 'success';
+  }
+
+  return 'neutral';
 };
 
 const buildSummary = (
+  timeline: IStructuredRunTimelineItem[],
+  scopedRunLogs: IRunLogEntry[],
   lastRunResult: IRunResult | null,
   exitCodeFromOutput: number | null,
-  runLogs: IRunLogEntry[],
-  outputLines: string[],
-  executor: TExecutorKind,
-): IStructuredRunReport['summary'] => {
-  const orderedLogs = sortLogsAscending(runLogs);
-  const lastLog = orderedLogs.length > 0 ? orderedLogs[orderedLogs.length - 1] : undefined;
+  isRunning: boolean,
+): IStructuredRunSummary => {
+  const counts = timeline.reduce(
+    (accumulator, item) => {
+      if (item.status === 'done') {
+        accumulator.success += 1;
+      } else if (item.status === 'warning') {
+        accumulator.warning += 1;
+      } else if (item.status === 'error') {
+        accumulator.error += 1;
+      } else {
+        accumulator.running += 1;
+      }
 
-  return [
-    {
-      label: '当前执行器',
-      value: lastRunResult?.executorLabel ?? executor.toUpperCase(),
+      return accumulator;
     },
     {
-      label: '退出状态',
-      value:
-        lastRunResult?.exitCode !== null && lastRunResult?.exitCode !== undefined
-          ? String(lastRunResult.exitCode)
-          : exitCodeFromOutput !== null
-            ? String(exitCodeFromOutput)
-            : '待确认',
+      success: 0,
+      warning: 0,
+      error: 0,
+      running: 0,
     },
-    {
-      label: '执行耗时',
-      value: formatDuration(lastRunResult?.durationMs),
-    },
-    {
-      label: '最近反馈',
-      value: lastRunResult?.finishedAt
-        ? formatTime(lastRunResult.finishedAt)
-        : lastLog
-          ? formatTime(lastLog.createdAt)
-          : '—',
-    },
-    {
-      label: '输出行数',
-      value: String(outputLines.length),
-    },
-  ];
+  );
+
+  const tone = resolveSummaryTone(isRunning, lastRunResult, exitCodeFromOutput, counts);
+  const totalSteps = timeline.length;
+  const weightedCompletedSteps = counts.success + counts.warning + counts.error + (counts.running > 0 ? 0.35 : 0);
+  const progress = totalSteps === 0
+    ? 0
+    : tone === 'success' || tone === 'warning' || tone === 'error'
+      ? 100
+      : Math.max(12, Math.min(92, Math.round((weightedCompletedSteps / totalSteps) * 100)));
+
+  return {
+    tone,
+    statusLabel:
+      tone === 'running'
+        ? '运行中'
+        : tone === 'error'
+          ? '执行异常'
+          : tone === 'warning'
+            ? '已完成'
+            : tone === 'success'
+              ? '已完成'
+              : '待执行',
+    phaseLabel:
+      totalSteps === 0 ? '等待运行' : isRunning ? `第 ${totalSteps} 步，共 ${totalSteps} 步` : `共 ${totalSteps} 步`,
+    elapsedLabel: formatElapsed(resolveElapsedMs(lastRunResult, scopedRunLogs, isRunning)),
+    progress,
+    counts,
+  };
 };
 
 export const buildStructuredRunReport = ({
@@ -556,31 +778,34 @@ export const buildStructuredRunReport = ({
   lastRunResult,
   isRunning,
   executor,
+  documentName,
+  documentPath,
+  workspaceRootPath,
 }: TBuildStructuredRunReportOptions): IStructuredRunReport => {
-  const safeRunLogs = Array.isArray(runLogs) ? runLogs : [];
+  const sourceRunLogs = Array.isArray(runLogs) ? runLogs : [];
+  const rawRunFlowLogs = collectRunFlowLogs(sourceRunLogs);
+  const safeRunLogs = resolveScopedRunLogs(sourceRunLogs);
   const safeOutput = typeof terminalOutput === 'string' ? terminalOutput : '';
   const outputLines = collectExecutionOutputLines(safeOutput);
   const exitCodeFromOutput = parseExitCodeFromOutput(outputLines.join('\n'));
-  const steps = buildSteps(safeRunLogs, outputLines, isRunning);
-  const result = buildResult(lastRunResult, exitCodeFromOutput, outputLines, isRunning, executor);
-  const diagnosis = buildDiagnosis(lastRunResult, exitCodeFromOutput, outputLines);
-  const summary = buildSummary(
-    lastRunResult,
-    exitCodeFromOutput,
-    safeRunLogs,
-    outputLines,
-    executor,
-  );
+  const timeline = buildTimeline(safeRunLogs, outputLines, lastRunResult, exitCodeFromOutput, isRunning);
 
   return {
     hasContent:
       safeRunLogs.length > 0 ||
+      rawRunFlowLogs.length > 0 ||
       outputLines.length > 0 ||
       Boolean(lastRunResult) ||
       Boolean(isRunning),
-    steps,
-    result,
-    diagnosis,
-    summary,
+    session: resolveSession(
+      documentName,
+      documentPath,
+      workspaceRootPath,
+      lastRunResult,
+      safeRunLogs,
+      executor,
+    ),
+    summary: buildSummary(timeline, safeRunLogs, lastRunResult, exitCodeFromOutput, isRunning),
+    timeline,
   };
 };

@@ -7,6 +7,7 @@ use std::{
     borrow::Cow,
     cmp::Ordering,
     collections::HashMap,
+    ffi::OsString,
     env, fs,
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -303,6 +304,7 @@ struct ExecutorCandidate {
 
 struct ShellCheckCandidate {
     executable: PathBuf,
+    arguments: Vec<OsString>,
     use_wsl: bool,
 }
 
@@ -1345,10 +1347,9 @@ fn resolve_shellcheck_candidate() -> Option<ShellCheckCandidate> {
     if let Some(configured_path) = env::var_os("SHELLCHECK_BIN") {
         let configured_path = PathBuf::from(configured_path);
         if configured_path.exists() {
-            return Some(ShellCheckCandidate {
-                executable: configured_path,
-                use_wsl: false,
-            });
+            if let Some(candidate) = build_wrapped_shellcheck_candidate(configured_path) {
+                return Some(candidate);
+            }
         }
     }
 
@@ -1357,25 +1358,46 @@ fn resolve_shellcheck_candidate() -> Option<ShellCheckCandidate> {
         .map(Path::to_path_buf);
     let local_binary_name = if cfg!(windows) { "shellcheck.exe" } else { "shellcheck" };
     if let Some(repo_root) = repo_root {
-        let local_binary = repo_root
-            .join("node_modules")
-            .join("shellcheck")
-            .join("bin")
-            .join(local_binary_name);
-        if local_binary.exists() {
-            return Some(ShellCheckCandidate {
-                executable: local_binary,
-                use_wsl: false,
-            });
+        let local_candidates = [
+            repo_root
+                .join("node_modules")
+                .join("shellcheck")
+                .join("bin")
+                .join("shellcheck.js"),
+            repo_root
+                .join("node_modules")
+                .join(".bin")
+                .join(if cfg!(windows) { "shellcheck.cmd" } else { "shellcheck" }),
+            repo_root
+                .join("node_modules")
+                .join("shellcheck")
+                .join("bin")
+                .join(local_binary_name),
+        ];
+
+        for local_candidate in local_candidates {
+            if !local_candidate.exists() {
+                continue;
+            }
+
+            if let Some(candidate) = build_wrapped_shellcheck_candidate(local_candidate) {
+                return Some(candidate);
+            }
         }
     }
 
-    let shellcheck_command = if cfg!(windows) { "shellcheck.exe" } else { "shellcheck" };
-    if let Some(system_binary) = find_command_path(shellcheck_command, &[]) {
-        return Some(ShellCheckCandidate {
-            executable: system_binary,
-            use_wsl: false,
-        });
+    let system_commands: &[&str] = if cfg!(windows) {
+        &["shellcheck.exe", "shellcheck.cmd"]
+    } else {
+        &["shellcheck"]
+    };
+
+    for command_name in system_commands {
+        if let Some(system_binary) = find_command_path(command_name, &[]) {
+            if let Some(candidate) = build_wrapped_shellcheck_candidate(system_binary) {
+                return Some(candidate);
+            }
+        }
     }
 
     let wsl_path = find_command_path("wsl.exe", &["C:\\Windows\\System32\\wsl.exe"])?;
@@ -1389,8 +1411,62 @@ fn resolve_shellcheck_candidate() -> Option<ShellCheckCandidate> {
     {
         return Some(ShellCheckCandidate {
             executable: wsl_path,
+            arguments: Vec::new(),
             use_wsl: true,
         });
+    }
+
+    None
+}
+
+fn build_wrapped_shellcheck_candidate(executable: PathBuf) -> Option<ShellCheckCandidate> {
+    let extension = executable
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
+
+    match extension.as_deref() {
+        Some("js" | "mjs" | "cjs") => {
+            let node_executable = resolve_node_command_path()?;
+            Some(ShellCheckCandidate {
+                executable: node_executable,
+                arguments: vec![executable.into_os_string()],
+                use_wsl: false,
+            })
+        }
+        Some("cmd" | "bat") => {
+            let command_shell = resolve_cmd_command_path()?;
+            Some(ShellCheckCandidate {
+                executable: command_shell,
+                arguments: vec![OsString::from("/C"), executable.into_os_string()],
+                use_wsl: false,
+            })
+        }
+        _ => Some(ShellCheckCandidate {
+            executable,
+            arguments: Vec::new(),
+            use_wsl: false,
+        }),
+    }
+}
+
+fn resolve_node_command_path() -> Option<PathBuf> {
+    if cfg!(windows) {
+        return find_command_path(
+            "node.exe",
+            &[
+                "C:\\Program Files\\nodejs\\node.exe",
+                "C:\\Program Files (x86)\\nodejs\\node.exe",
+            ],
+        );
+    }
+
+    find_command_path("node", &[])
+}
+
+fn resolve_cmd_command_path() -> Option<PathBuf> {
+    if cfg!(windows) {
+        return find_command_path("cmd.exe", &["C:\\Windows\\System32\\cmd.exe"]);
     }
 
     None
@@ -1452,6 +1528,7 @@ async fn run_shellcheck(
         ]);
     } else {
         command
+            .args(&candidate.arguments)
             .args(["--format=json1", "--shell", dialect])
             .arg(script_path);
     }
@@ -1865,6 +1942,19 @@ fn find_command_path(file_name: &str, extra_candidates: &[&str]) -> Option<PathB
             let candidate = directory.join(file_name);
             if candidate.exists() {
                 return Some(candidate);
+            }
+        }
+    }
+
+    if cfg!(windows) {
+        if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
+            let winget_link = PathBuf::from(local_app_data)
+                .join("Microsoft")
+                .join("WinGet")
+                .join("Links")
+                .join(file_name);
+            if winget_link.exists() {
+                return Some(winget_link);
             }
         }
     }

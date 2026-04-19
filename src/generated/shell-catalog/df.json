@@ -1,0 +1,83 @@
+{
+  "names": [
+    "df"
+  ],
+  "detail": "Display free disk space",
+  "args": [
+    {
+      "label": "file or filesystem"
+    }
+  ],
+  "flags": [
+    {
+      "names": [
+        "-a"
+      ],
+      "detail": "Show all mount points"
+    },
+    {
+      "names": [
+        "-b",
+        "-P"
+      ],
+      "detail": "Use 512-byte blocks (default)"
+    },
+    {
+      "names": [
+        "-g"
+      ],
+      "detail": "Use 1073741824-byte (1-Gbyte) blocks"
+    },
+    {
+      "names": [
+        "-m"
+      ],
+      "detail": "Use 1048576-byte (1-Mbyte) blocks"
+    },
+    {
+      "names": [
+        "-k"
+      ],
+      "detail": "Use 1024-byte (1-Kbyte) blocks"
+    },
+    {
+      "names": [
+        "-H"
+      ],
+      "detail": "\"Human-readable\" output, uses base 10 unit suffixes"
+    },
+    {
+      "names": [
+        "-h"
+      ],
+      "detail": "\"Human-readable\" output, uses base 2 unit suffixes"
+    },
+    {
+      "names": [
+        "-i"
+      ],
+      "detail": "Include the number of free inodes"
+    },
+    {
+      "names": [
+        "-l"
+      ],
+      "detail": "Only display information about locally-mounted filesystems"
+    },
+    {
+      "names": [
+        "-n"
+      ],
+      "detail": "Print out the previously obtained statistics"
+    },
+    {
+      "names": [
+        "-T"
+      ],
+      "detail": "Only print out statistics for filesystems of the specified types (comma separated)",
+      "arg": {
+        "label": "filesystem"
+      }
+    }
+  ]
+}

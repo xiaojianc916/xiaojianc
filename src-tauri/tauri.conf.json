@@ -19,7 +19,6 @@
         "minWidth": 1220,
         "minHeight": 760,
         "decorations": false,
-        "backgroundColor": "#00000000",
         "transparent": true,
         "shadow": true,
         "resizable": true,
@@ -34,7 +33,25 @@
   },
   "bundle": {
     "active": true,
-    "targets": "nsis",
+    "targets": [
+      "nsis"
+    ],
+    "publisher": "xiaojianc",
+    "copyright": "© 2026 xiaojianc",
+    "category": "DeveloperTool",
+    "shortDescription": "面向 WSL2 的 Shell 脚本编辑器",
+    "longDescription": "SH 编辑器：在 Windows 上以原生体验编写、格式化、诊断并运行 Shell 脚本，执行环境统一由 WSL2 驱动。",
+    "fileAssociations": [
+      {
+        "ext": [
+          "sh",
+          "bash"
+        ],
+        "name": "Shell Script",
+        "description": "Shell 脚本文件",
+        "role": "Editor"
+      }
+    ],
     "icon": [
       "icons/app-generated.ico"
     ]

@@ -8,6 +8,30 @@ export interface IRuntimeErrorState {
 
 export const runtimeErrorState = ref<IRuntimeErrorState | null>(null);
 
+const readErrorLikeField = (error: unknown, field: 'name' | 'message'): string | null => {
+  if (error instanceof Error) {
+    return error[field];
+  }
+
+  if (typeof error === 'object' && error !== null && field in error) {
+    const value = (error as Record<string, unknown>)[field];
+    return typeof value === 'string' ? value : null;
+  }
+
+  return typeof error === 'string' ? error : null;
+};
+
+const isExpectedCancellationError = (error: unknown): boolean => {
+  const name = readErrorLikeField(error, 'name');
+  const message = readErrorLikeField(error, 'message');
+
+  return (
+    (name === 'Canceled' && message === 'Canceled') ||
+    name === 'AbortError' ||
+    message === 'AbortError'
+  );
+};
+
 const normalizeErrorDetail = (error: unknown): string => {
   if (error instanceof Error) {
     return error.stack ?? error.message;
@@ -38,6 +62,11 @@ export const registerRuntimeDiagnostics = (): void => {
   });
 
   window.addEventListener('unhandledrejection', (event) => {
+    if (isExpectedCancellationError(event.reason)) {
+      event.preventDefault();
+      return;
+    }
+
     setRuntimeError('未处理的异步错误', event.reason);
   });
 };

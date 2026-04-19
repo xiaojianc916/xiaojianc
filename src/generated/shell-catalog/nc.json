@@ -1,0 +1,365 @@
+{
+  "names": [
+    "nc"
+  ],
+  "detail": "Arbitrary TCP and UDP connections and listens",
+  "args": [
+    {
+      "label": "hostname",
+      "detail": "Hostname or IP address to listen on or connect to",
+      "isOptional": true
+    },
+    {
+      "label": "port",
+      "detail": "Port to listen on or connect to",
+      "isOptional": true,
+      "isVariadic": true
+    }
+  ],
+  "flags": [
+    {
+      "names": [
+        "-4"
+      ],
+      "detail": "Forces nc to use IPv4 addresses only",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-6"
+      ],
+      "detail": "Forces nc to use IPv6 addresses only",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-A"
+      ],
+      "detail": "Set SO_RECV_ANYIF on socket",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-b"
+      ],
+      "detail": "Specifies the interface to bind the socket to",
+      "arg": {
+        "label": "boundif"
+      }
+    },
+    {
+      "names": [
+        "-c"
+      ],
+      "detail": "Send CRLF as line-ending",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-D"
+      ],
+      "detail": "Enable debugging on the socket",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-C"
+      ],
+      "detail": "Force nc not to use cellular data context",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-d"
+      ],
+      "detail": "Do not attempt to read from stdin",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-h"
+      ],
+      "detail": "Prints out nc help",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-i"
+      ],
+      "detail": "Specifies a delay time interval between lines of text sent and received",
+      "arg": {
+        "label": "interval"
+      }
+    },
+    {
+      "names": [
+        "-G"
+      ],
+      "detail": "TCP connection timeout in seconds",
+      "arg": {
+        "label": "conntimeout"
+      }
+    },
+    {
+      "names": [
+        "-H"
+      ],
+      "detail": "Initial TCP keep alive timeout in seconds",
+      "arg": {
+        "label": "keepidle"
+      }
+    },
+    {
+      "names": [
+        "-I"
+      ],
+      "detail": "Interval for repeating TCP keep alive timeout in seconds",
+      "arg": {
+        "label": "keepintvl"
+      }
+    },
+    {
+      "names": [
+        "-J"
+      ],
+      "detail": "Number of times to repeat TCP keep alive packets",
+      "arg": {
+        "label": "keepcnt"
+      }
+    },
+    {
+      "names": [
+        "-k"
+      ],
+      "detail": "Force nc to stay listening for another connection after its current connection is completed",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-l"
+      ],
+      "detail": "Used to specify that nc should listen for an incoming connection rather than initiate a connection to a remote host",
+      "arg": {
+        "label": "port"
+      }
+    },
+    {
+      "names": [
+        "-L"
+      ],
+      "detail": "Number of prbes to send to the peer before declaring that the peer is not reachable",
+      "arg": {
+        "label": "num_probes"
+      }
+    },
+    {
+      "names": [
+        "-n"
+      ],
+      "detail": "Do not do any DNS or service lookups on any specified addresses, hostnames or ports",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-p"
+      ],
+      "detail": "Specifies the source port nc should use, subject to privilege restrictions and availability",
+      "arg": {
+        "label": "source_port"
+      }
+    },
+    {
+      "names": [
+        "-r"
+      ],
+      "detail": "Specifies that source and/or destination ports should be chosen randomly instead of sequentially within a range or in the order that the system assigns them",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-s"
+      ],
+      "detail": "Specifies the IP of the interface which is used to send the packets",
+      "arg": {
+        "label": "source_ip_address"
+      }
+    },
+    {
+      "names": [
+        "-t"
+      ],
+      "detail": "Causes nc to send RFC 854 DON'T and WON'T responses to RFC 854 DO and WILL requests",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-U"
+      ],
+      "detail": "Specifies to use Unix Domain Sockets",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-u"
+      ],
+      "detail": "Use UDP instead of the default option of TCP",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-v"
+      ],
+      "detail": "Have nc give more verbose output",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "-w"
+      ],
+      "detail": "If a connection and stdin are idle for more than timeout seconds, then the connection is silently closed",
+      "arg": {
+        "label": "timeout"
+      }
+    },
+    {
+      "names": [
+        "-X"
+      ],
+      "detail": "Requests that nc should use the specified protocol when talking to the proxy server",
+      "arg": {
+        "label": "proxy_version"
+      }
+    },
+    {
+      "names": [
+        "-x"
+      ],
+      "detail": "Requests that nc should connect to hostname using a proxy at proxy_address and port",
+      "arg": {
+        "label": "proxy_address[:port]"
+      }
+    },
+    {
+      "names": [
+        "-z"
+      ],
+      "detail": "Specifies that nc should just scan for listening daemons, without sending any data to them",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "--apple-delegate-pid"
+      ],
+      "detail": "Requests that nc should delegate the socket for the specified PID",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "--apple-delegate-uuid"
+      ],
+      "detail": "Requests that nc should delegate the socket for the specified UUID",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "--apple-ext-bk-idle"
+      ],
+      "detail": "Requests that nc marks its socket for extended background idle time when the process becomes suspended",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "--apple-nowakefromsleep"
+      ],
+      "detail": "When the parameter n is greater than 0, requests that nc marks its socket to exlude the local port from the list of opened ports that is queried by drivers when the system goes to sleep args",
+      "arg": {
+        "label": "value",
+        "isOptional": true
+      }
+    },
+    {
+      "names": [
+        "--ecn"
+      ],
+      "detail": "Requests that nc marks to use the socket option TCP_ECN_MODE to set the ECN mode",
+      "arg": {
+        "label": "value",
+        "isOptional": true,
+        "suggestions": [
+          {
+            "names": [
+              "default"
+            ]
+          },
+          {
+            "names": [
+              "enable"
+            ]
+          },
+          {
+            "names": [
+              "disable"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

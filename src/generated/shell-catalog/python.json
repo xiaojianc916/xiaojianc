@@ -1,0 +1,229 @@
+{
+  "names": [
+    "python"
+  ],
+  "detail": "Run the python interpreter",
+  "args": [
+    {
+      "label": "python script"
+    }
+  ],
+  "flags": [
+    {
+      "names": [
+        "-c"
+      ],
+      "detail": "Execute the Python code in command. command can be one or more statements separated by newlines, with significant leading whitespace as in normal module code",
+      "arg": {
+        "label": "command"
+      }
+    },
+    {
+      "names": [
+        "-m"
+      ],
+      "detail": "Module",
+      "arg": {
+        "label": "python module",
+        "suggestions": [
+          {
+            "names": [
+              "http.server"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "-?",
+        "-h",
+        "--help"
+      ],
+      "detail": "Print a short description of all command line options"
+    },
+    {
+      "names": [
+        "-V",
+        "--version"
+      ],
+      "detail": "Print the Python version number and exit"
+    },
+    {
+      "names": [
+        "-b"
+      ],
+      "detail": "Issue a warning when comparing bytes or bytearray with str or bytes with int. Issue an error when the option is given twice (-bb)"
+    },
+    {
+      "names": [
+        "-B"
+      ],
+      "detail": "If given, Python won’t try to write .pyc files on the import of source modules"
+    },
+    {
+      "names": [
+        "--check-hash-based-pycs"
+      ],
+      "detail": "Control the validation behavior of hash-based .pyc files. See Cached bytecode invalidation",
+      "arg": {
+        "label": "value",
+        "suggestions": [
+          {
+            "names": [
+              "default"
+            ]
+          },
+          {
+            "names": [
+              "always"
+            ]
+          },
+          {
+            "names": [
+              "never"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "names": [
+        "-d"
+      ],
+      "detail": "Turn on parser debugging output (for expert only, depending on compilation options)"
+    },
+    {
+      "names": [
+        "-E"
+      ],
+      "detail": "Ignore all PYTHON* environment variables, e.g. PYTHONPATH and PYTHONHOME, that might be set"
+    },
+    {
+      "names": [
+        "-i"
+      ],
+      "detail": "When a script is passed as first argument or the -c option is used, enter interactive mode after executing the script or the command, even when sys.stdin does not appear to be a terminal"
+    },
+    {
+      "names": [
+        "-I"
+      ],
+      "detail": "Run Python in isolated mode. This also implies -E and -s. In isolated mode sys.path contains neither the script’s directory nor the user’s site-packages directory"
+    },
+    {
+      "names": [
+        "-O"
+      ],
+      "detail": "Remove assert statements and any code conditional on the value of __debug__"
+    },
+    {
+      "names": [
+        "-OO"
+      ],
+      "detail": "Do -O and also discard docstrings"
+    },
+    {
+      "names": [
+        "-g"
+      ],
+      "detail": "Don’t display the copyright and version messages even in interactive mode"
+    },
+    {
+      "names": [
+        "-R"
+      ],
+      "detail": "Turn on hash randomization. This option only has an effect if the PYTHONHASHSEED environment variable is set to 0, since hash randomization is enabled by default"
+    },
+    {
+      "names": [
+        "-s"
+      ],
+      "detail": "Don’t add the user site-packages directory to sys.path"
+    },
+    {
+      "names": [
+        "-S"
+      ],
+      "detail": "Disable the import of the module site and the site-dependent manipulations of sys.path that it entails"
+    },
+    {
+      "names": [
+        "-u"
+      ],
+      "detail": "Force the stdout and stderr streams to be unbuffered. This option has no effect on the stdin stream"
+    },
+    {
+      "names": [
+        "-v"
+      ],
+      "detail": "Print a message each time a module is initialized, showing the place (filename or built-in module) from which it is loaded"
+    },
+    {
+      "names": [
+        "-W"
+      ],
+      "detail": "Warning control. Python’s warning machinery by default prints warning messages to sys.stderr",
+      "arg": {
+        "label": "value"
+      }
+    },
+    {
+      "names": [
+        "-x"
+      ],
+      "detail": "Skip the first line of the source, allowing use of non-Unix forms of #!cmd. This is intended for a DOS specific hack only"
+    },
+    {
+      "names": [
+        "-X"
+      ],
+      "detail": "Reserved for various implementation-specific options",
+      "arg": {
+        "label": "value",
+        "suggestions": [
+          {
+            "names": [
+              "faulthandler"
+            ]
+          },
+          {
+            "names": [
+              "showrefcount"
+            ]
+          },
+          {
+            "names": [
+              "tracemalloc"
+            ]
+          },
+          {
+            "names": [
+              "showalloccount"
+            ]
+          },
+          {
+            "names": [
+              "importtime"
+            ]
+          },
+          {
+            "names": [
+              "dev"
+            ]
+          },
+          {
+            "names": [
+              "utf8"
+            ]
+          },
+          {
+            "names": [
+              "pycache_prefix=PATH"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

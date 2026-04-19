@@ -1,0 +1,78 @@
+{
+  "names": [
+    "find"
+  ],
+  "detail": "Walk a file hierarchy",
+  "args": [
+    {
+      "label": "path",
+      "isOptional": true,
+      "isVariadic": true
+    },
+    {
+      "label": "expression",
+      "detail": "Composition of primaries and operands",
+      "isOptional": true,
+      "isVariadic": true
+    }
+  ],
+  "flags": [
+    {
+      "names": [
+        "-E"
+      ],
+      "detail": "Interpret regular expressions followed by -regex and -iregex primaries as extended"
+    },
+    {
+      "names": [
+        "-H"
+      ],
+      "detail": "Cause the file information and file type returned for each symbolic link specified to be those referenced by the link"
+    },
+    {
+      "names": [
+        "-L"
+      ],
+      "detail": "Cause the file information and file type returned for each symbolic link to be those of the file referenced by the link"
+    },
+    {
+      "names": [
+        "-P"
+      ],
+      "detail": "Cause the file information and file type returned for each symbolic link to be those for the link itself"
+    },
+    {
+      "names": [
+        "-X"
+      ],
+      "detail": "Permit find to be safely used in conjunction with xargs"
+    },
+    {
+      "names": [
+        "-d"
+      ],
+      "detail": "Cause find to perform a depth-first traversal"
+    },
+    {
+      "names": [
+        "-f"
+      ],
+      "detail": "Specify a file hierarch for find to traverse",
+      "arg": {
+        "label": "path"
+      }
+    },
+    {
+      "names": [
+        "-s"
+      ],
+      "detail": "Cause find to traverse the file hierarchies in lexicographical order"
+    },
+    {
+      "names": [
+        "-x"
+      ],
+      "detail": "Prevent find from descending into directories that have a device number different than that of the file from which the descent began"
+    }
+  ]
+}

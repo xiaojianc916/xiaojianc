@@ -1,0 +1,139 @@
+{
+  "names": [
+    "dig"
+  ],
+  "detail": "Domain Information Groper",
+  "subcommands": [
+    {
+      "names": [
+        "A"
+      ],
+      "detail": "Query Domain A Record",
+      "flags": [
+        {
+          "names": [
+            "+short"
+          ],
+          "detail": "Only print meaningful results",
+          "arg": {
+            "label": "value"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "MX"
+      ],
+      "detail": "Query Domain MX Record",
+      "flags": [
+        {
+          "names": [
+            "+short"
+          ],
+          "detail": "Only print meaningful results",
+          "arg": {
+            "label": "value"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "CNAME"
+      ],
+      "detail": "Query Domain CNAME Record",
+      "flags": [
+        {
+          "names": [
+            "+short"
+          ],
+          "detail": "Only print meaningful results",
+          "arg": {
+            "label": "value"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "TXT"
+      ],
+      "detail": "Query Domain TXT Record",
+      "flags": [
+        {
+          "names": [
+            "+short"
+          ],
+          "detail": "Only print meaningful results",
+          "arg": {
+            "label": "value"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "NS"
+      ],
+      "detail": "Query MX Record",
+      "flags": [
+        {
+          "names": [
+            "+short"
+          ],
+          "detail": "Only print meaningful results",
+          "arg": {
+            "label": "value"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "SOA"
+      ],
+      "detail": "Query SOA Record",
+      "flags": [
+        {
+          "names": [
+            "+short"
+          ],
+          "detail": "Only print meaningful results",
+          "arg": {
+            "label": "value"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "TTL"
+      ],
+      "detail": "Query TTL Record",
+      "flags": [
+        {
+          "names": [
+            "+short"
+          ],
+          "detail": "Only print meaningful results",
+          "arg": {
+            "label": "value"
+          }
+        }
+      ]
+    },
+    {
+      "names": [
+        "ANY +noall +answer"
+      ],
+      "detail": "Query ALL DNS Records"
+    },
+    {
+      "names": [
+        "+nocomments +noquestion +noauthority +noadditional +nostats"
+      ],
+      "detail": "Query only answer section"
+    }
+  ]
+}
