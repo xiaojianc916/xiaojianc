@@ -13,7 +13,8 @@
                         </div>
 
                         <div class="empty-editor-state__rows">
-                            <div v-for="(row, index) in previewRows" :key="index" class="empty-editor-state__row"
+                            <div
+v-for="(row, index) in previewRows" :key="index" class="empty-editor-state__row"
                                 :class="[row.widthClass, row.indentClass, row.toneClass]" />
 
                             <div class="empty-editor-state__caret-row">
@@ -39,7 +40,8 @@
                     <Button variant="outline" size="sm" class="empty-editor-state__action" @click="emit('open')">
                         打开文件
                     </Button>
-                    <Button v-if="showOpenFolderAction" variant="ghost" size="sm" class="empty-editor-state__action"
+                    <Button
+v-if="showOpenFolderAction" variant="ghost" size="sm" class="empty-editor-state__action"
                         @click="emit('open-folder')">
                         打开文件夹
                     </Button>

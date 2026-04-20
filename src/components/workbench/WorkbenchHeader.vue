@@ -1,7 +1,8 @@
 <template>
   <header class="editor-tabbar flex h-10 items-center justify-between border-b border-(--shell-divider) px-1">
     <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden pr-2">
-      <button v-for="item in documents" :key="item.id" type="button" class="editor-file-tab app-tooltip-target" :class="{
+      <button
+v-for="item in documents" :key="item.id" type="button" class="editor-file-tab app-tooltip-target" :class="{
         'is-active': item.id === activeDocumentId,
         'is-dirty': item.isDirty,
       }" :data-tooltip="item.name" data-tooltip-placement="bottom" @click="$emit('select-tab', item.id)">

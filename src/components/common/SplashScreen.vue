@@ -1,6 +1,7 @@
 <template>
   <div class="splash-screen" :class="{ 'is-leaving': isLeaving }">
-    <div class="splash-editor" :class="{ 'is-error': Boolean(error) }" :role="error ? 'alert' : 'status'"
+    <div
+class="splash-editor" :class="{ 'is-error': Boolean(error) }" :role="error ? 'alert' : 'status'"
       aria-live="polite">
       <div class="splash-editor-top">
         <span class="splash-dot splash-dot-red" />
@@ -32,7 +33,8 @@
       </div>
 
       <div class="splash-progress-wrap">
-        <div class="splash-progress-bar" :class="{ 'is-error': Boolean(error) }" role="progressbar"
+        <div
+class="splash-progress-bar" :class="{ 'is-error': Boolean(error) }" role="progressbar"
           :aria-valuenow="Math.round(roundedProgress)" aria-valuemin="0" aria-valuemax="100">
           <div class="splash-progress" :style="{ transform: `scaleX(${progressScale})` }" />
         </div>

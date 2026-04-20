@@ -2,7 +2,8 @@
   <DialogRoot :open="Boolean(dialogState)" @update:open="handleOpenChange">
     <DialogPortal v-if="dialogState">
       <DialogOverlay class="app-dialog-overlay" />
-      <DialogContent ref="dialogPanelRef" class="app-dialog-panel" role="alertdialog" aria-modal="true" tabindex="-1"
+      <DialogContent
+ref="dialogPanelRef" class="app-dialog-panel" role="alertdialog" aria-modal="true" tabindex="-1"
         :data-variant="dialogState.variant" :aria-labelledby="titleId" :aria-describedby="descriptionId"
         @open-auto-focus="handleOpenAutoFocus">
         <div class="app-dialog-copy">
@@ -14,11 +15,13 @@
           </DialogDescription>
         </div>
         <div class="app-dialog-footer">
-          <Button variant="ghost" size="sm" class="app-dialog-button app-dialog-secondary-button"
+          <Button
+variant="ghost" size="sm" class="app-dialog-button app-dialog-secondary-button"
             @click="handleAction('cancel')">
             {{ dialogState.cancelText }}
           </Button>
-          <Button variant="ghost" size="sm" class="app-dialog-button app-dialog-secondary-button"
+          <Button
+variant="ghost" size="sm" class="app-dialog-button app-dialog-secondary-button"
             @click="handleAction('dismiss')">
             {{ dialogState.dismissText }}
           </Button>

@@ -1,22 +1,26 @@
 <template>
   <div class="app-surface h-screen">
-    <div ref="shellRef"
+    <div
+ref="shellRef"
       class="app-window-shell relative flex h-full flex-col overflow-hidden border border-(--shell-divider)"
       :data-layout-resizing="layoutTransitionsEnabled ? 'false' : 'true'">
       <template v-if="isDesktopRuntime">
-        <div v-for="handle in resizeHandles" :key="handle.direction" class="window-resize-handle"
+        <div
+v-for="handle in resizeHandles" :key="handle.direction" class="window-resize-handle"
           :class="handle.className" @mousedown.prevent.stop="startWindowResize(handle.direction, $event)" />
       </template>
 
       <slot name="titlebar" />
 
-      <div class="grid min-h-0 flex-1 overflow-hidden"
+      <div
+class="grid min-h-0 flex-1 overflow-hidden"
         :class="layoutTransitionsEnabled ? layoutGridTransitionClass : 'transition-none'" :style="shellGridStyle">
         <div class="border-r border-(--shell-divider) bg-(--activity-bg)">
           <slot name="activity" />
         </div>
 
-        <div class="app-shell-pane min-w-0 overflow-hidden bg-(--sidebar-bg)" :class="[
+        <div
+class="app-shell-pane min-w-0 overflow-hidden bg-(--sidebar-bg)" :class="[
           layoutTransitionsEnabled ? surfaceTransitionClass : 'transition-none',
           props.sidebarVisible
             ? 'translate-x-0 border-r border-(--shell-divider) opacity-100'
@@ -27,13 +31,15 @@
 
         <div class="app-shell-pane flex min-h-0 flex-col bg-(--editor-bg)">
           <slot name="header" />
-          <main ref="mainRef" class="grid min-h-0 flex-1"
+          <main
+ref="mainRef" class="grid min-h-0 flex-1"
             :class="layoutTransitionsEnabled ? layoutRowsTransitionClass : 'transition-none'" :style="mainGridStyle">
             <section class="app-shell-pane min-h-0 editor-surface">
               <slot />
             </section>
 
-            <button type="button" class="terminal-resize-handle" :class="[
+            <button
+type="button" class="terminal-resize-handle" :class="[
               layoutTransitionsEnabled ? surfaceTransitionClass : 'transition-none',
               props.terminalVisible
                 ? 'translate-y-0 opacity-100'
@@ -42,7 +48,8 @@
               <span class="terminal-resize-handle-bar" />
             </button>
 
-            <section class="app-shell-pane min-h-0 overflow-hidden bg-(--panel-bg)" :class="[
+            <section
+class="app-shell-pane min-h-0 overflow-hidden bg-(--panel-bg)" :class="[
               layoutTransitionsEnabled ? surfaceTransitionClass : 'transition-none',
               props.terminalVisible
                 ? 'translate-y-0 opacity-100'

@@ -17,29 +17,34 @@
 
     <div class="flex h-full items-center gap-0.5">
       <template v-if="hasActiveDocument && documentKind === 'text'">
-        <span class="statusbar-segment statusbar-segment-button app-tooltip-target"
+        <span
+class="statusbar-segment statusbar-segment-button app-tooltip-target"
           :data-tooltip="cursorPositionTooltip" data-tooltip-placement="top">
           {{ cursorLine }}:{{ cursorColumn }}
         </span>
-        <span class="statusbar-segment statusbar-segment-button app-tooltip-target" :data-tooltip="charCountTooltip"
+        <span
+class="statusbar-segment statusbar-segment-button app-tooltip-target" :data-tooltip="charCountTooltip"
           data-tooltip-placement="top">
           {{ charCount }} char
         </span>
-        <span class="statusbar-segment statusbar-segment-button app-tooltip-target" data-tooltip="LF 行尾序列"
+        <span
+class="statusbar-segment statusbar-segment-button app-tooltip-target" data-tooltip="LF 行尾序列"
           data-tooltip-placement="top">
           LF
         </span>
 
         <AppDropdownMenu :items="encodingItems" align="right" :min-width="118" @select="handleEncodingChange">
           <template #trigger="{ open }">
-            <button type="button" class="statusbar-segment statusbar-segment-button app-tooltip-target"
+            <button
+type="button" class="statusbar-segment statusbar-segment-button app-tooltip-target"
               :class="{ 'is-open': open }" :data-tooltip="encodingTooltip" data-tooltip-placement="top">
               {{ encodingLabel }}
             </button>
           </template>
         </AppDropdownMenu>
 
-        <span class="statusbar-segment app-tooltip-target" :class="{ 'statusbar-segment-passive': !isTerminalReady }"
+        <span
+class="statusbar-segment app-tooltip-target" :class="{ 'statusbar-segment-passive': !isTerminalReady }"
           :data-tooltip="executorTooltip" data-tooltip-placement="top">
           {{ executorLabel }}
         </span>

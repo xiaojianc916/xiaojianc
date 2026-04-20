@@ -5,11 +5,13 @@
     </DropdownMenuTrigger>
 
     <DropdownMenuPortal>
-      <DropdownMenuContent class="dropdown-menu-panel z-[1250] overflow-hidden outline-none" :align="contentAlign"
+      <DropdownMenuContent
+class="dropdown-menu-panel z-[1250] overflow-hidden outline-none" :align="contentAlign"
         :side-offset="8" :collision-padding="8" :style="{ minWidth: `${props.minWidth}px` }">
         <template v-for="item in props.items" :key="item.key">
           <DropdownMenuSeparator v-if="item.separatorBefore" class="mx-2 border-t border-white/8" />
-          <DropdownMenuItem class="dropdown-menu-item w-full text-left outline-none" :class="{
+          <DropdownMenuItem
+class="dropdown-menu-item w-full text-left outline-none" :class="{
             'is-danger': item.tone === 'danger',
             'is-disabled': item.disabled,
             'is-selected': item.selected,
@@ -21,7 +23,8 @@
               </span>
             </span>
             <span v-if="item.selected" class="dropdown-menu-item-check" aria-hidden="true">
-              <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8"
+              <svg
+viewBox="0 0 16 16" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8"
                 stroke-linecap="round" stroke-linejoin="round">
                 <path d="m3.5 8.2 2.7 2.7 6.3-6.4" />
               </svg>
