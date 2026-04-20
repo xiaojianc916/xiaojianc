@@ -54,6 +54,12 @@ export interface ITerminalDataEvent {
   data: string;
 }
 
+export interface ITerminalRunOutputEvent {
+  sessionId: string;
+  runId: string;
+  data: string;
+}
+
 export interface ITerminalExitEvent {
   sessionId: string;
   exitCode: number | null;

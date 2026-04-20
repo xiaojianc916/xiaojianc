@@ -7,6 +7,8 @@
 <script setup lang="ts">
 import type { TThemeMode } from '@/types/app';
 import type { IAnalyzeScriptPayload, TScriptDiagnosticSeverity } from '@/types/editor';
+import type { IGitFileBaselinePayload } from '@/types/git';
+import { computeGitLineChanges } from '@/utils/git-diff';
 import { applyMonacoTheme, monaco } from '@/utils/monaco';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
@@ -28,11 +30,13 @@ const props = withDefaults(
     modelValue?: string;
     theme?: TThemeMode;
     analysis?: IAnalyzeScriptPayload;
+    gitBaseline?: IGitFileBaselinePayload | null;
   }>(),
   {
     modelValue: '',
     theme: 'dark',
     analysis: undefined,
+    gitBaseline: null,
   },
 );
 
@@ -52,6 +56,7 @@ let editorLayoutFrameId: number | null = null;
 let shellCompletionRegistrationTimerId: number | null = null;
 let shellCompletionRegistrationPromise: Promise<void> | null = null;
 let previousContainerSize = { width: 0, height: 0 };
+let gitDecorationIds: string[] = [];
 
 const toMarkerSeverity = (level: TScriptDiagnosticSeverity): monaco.MarkerSeverity => {
   switch (level) {
@@ -74,18 +79,94 @@ const syncMarkers = (): void => {
 
   const markers = analysisState.value.available
     ? analysisState.value.diagnostics.map((item) => ({
-        startLineNumber: item.line,
-        endLineNumber: item.endLine,
-        startColumn: item.column,
-        endColumn: Math.max(item.column + 1, item.endColumn),
-        severity: toMarkerSeverity(item.level),
-        message: `${item.code} · ${item.message}`,
-        source: 'ShellCheck',
-        code: item.code,
-      }))
+      startLineNumber: item.line,
+      endLineNumber: item.endLine,
+      startColumn: item.column,
+      endColumn: Math.max(item.column + 1, item.endColumn),
+      severity: toMarkerSeverity(item.level),
+      message: `${item.code} · ${item.message}`,
+      source: 'ShellCheck',
+      code: item.code,
+    }))
     : [];
 
   monaco.editor.setModelMarkers(model, 'shellcheck', markers);
+};
+
+const buildGitDecorations = (): monaco.editor.IModelDeltaDecoration[] => {
+  const currentContent = props.modelValue ?? '';
+  const gitBaseline = props.gitBaseline;
+
+  if (!gitBaseline?.available || !gitBaseline.repositoryRootPath) {
+    return [];
+  }
+
+  const lineChanges = !gitBaseline.isTracked
+    ? (() => {
+      const lineCount = currentContent.length === 0 ? 0 : currentContent.split('\n').length;
+      return lineCount === 0
+        ? []
+        : [{ type: 'added', startLine: 1, endLine: lineCount }];
+    })()
+    : gitBaseline.content === null
+      ? []
+      : computeGitLineChanges(gitBaseline.content, currentContent);
+
+  return lineChanges.map((change) => {
+    const gutterClassName = `git-diff-gutter git-diff-gutter-${change.type}`;
+    const range = new monaco.Range(change.startLine, 1, change.endLine, 1);
+
+    switch (change.type) {
+      case 'added':
+        return {
+          range,
+          options: {
+            isWholeLine: true,
+            className: 'git-diff-line-added',
+            linesDecorationsClassName: gutterClassName,
+            overviewRuler: {
+              color: '#22c55e99',
+              position: monaco.editor.OverviewRulerLane.Left,
+            },
+          },
+        };
+      case 'deleted':
+        return {
+          range,
+          options: {
+            isWholeLine: true,
+            className: 'git-diff-line-deleted',
+            linesDecorationsClassName: gutterClassName,
+            overviewRuler: {
+              color: '#ff6b7a88',
+              position: monaco.editor.OverviewRulerLane.Left,
+            },
+          },
+        };
+      default:
+        return {
+          range,
+          options: {
+            isWholeLine: true,
+            className: 'git-diff-line-modified',
+            linesDecorationsClassName: gutterClassName,
+            overviewRuler: {
+              color: '#6f7cff99',
+              position: monaco.editor.OverviewRulerLane.Left,
+            },
+          },
+        };
+    }
+  });
+};
+
+const syncGitDecorations = (): void => {
+  if (!editorInstance) {
+    gitDecorationIds = [];
+    return;
+  }
+
+  gitDecorationIds = editorInstance.deltaDecorations(gitDecorationIds, buildGitDecorations());
 };
 
 const layoutEditor = (): void => {
@@ -214,6 +295,7 @@ const createEditor = (): void => {
   }
 
   syncMarkers();
+  syncGitDecorations();
   scheduleShellCompletionRegistration();
 
   requestAnimationFrame(() => {
@@ -236,6 +318,8 @@ watch(
       editorInstance.setValue(value);
       suppressModelValueEmit = false;
     }
+
+    syncGitDecorations();
   },
 );
 
@@ -250,6 +334,14 @@ watch(
   () => props.analysis,
   () => {
     syncMarkers();
+  },
+  { deep: true },
+);
+
+watch(
+  () => props.gitBaseline,
+  () => {
+    syncGitDecorations();
   },
   { deep: true },
 );
@@ -292,6 +384,10 @@ onBeforeUnmount(() => {
   const model = editorInstance?.getModel();
   if (model) {
     monaco.editor.setModelMarkers(model, 'shellcheck', []);
+  }
+
+  if (editorInstance) {
+    gitDecorationIds = editorInstance.deltaDecorations(gitDecorationIds, []);
   }
 
   resizeObserver?.disconnect();

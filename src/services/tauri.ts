@@ -10,6 +10,13 @@ import type {
   IStartupWorkspacePayload,
   IWorkspaceDirectoryPayload,
 } from '@/types/editor';
+import type {
+  IGitCommitRequest,
+  IGitCommitResultPayload,
+  IGitFileBaselinePayload,
+  IGitPathOperationRequest,
+  IGitRepositoryStatusPayload,
+} from '@/types/git';
 import type { ITauriService } from '@/types/tauri';
 import type {
   ICloseTerminalSessionRequest,
@@ -184,6 +191,40 @@ export const tauriService: ITauriService & {
     return runTauriCommand<IWorkspaceDirectoryPayload>('读取工作区目录', 'list_workspace_entries', {
       path,
       rootPath,
+    });
+  },
+
+  getGitRepositoryStatus(workspaceRootPath) {
+    return runTauriCommand<IGitRepositoryStatusPayload>(
+      '读取 Git 仓库状态',
+      'get_git_repository_status',
+      {
+        workspaceRootPath,
+      },
+    );
+  },
+
+  getGitFileBaseline(path) {
+    return runTauriCommand<IGitFileBaselinePayload>('读取 Git 文件基线', 'get_git_file_baseline', {
+      path,
+    });
+  },
+
+  stageGitPaths(payload: IGitPathOperationRequest) {
+    return runTauriCommand<IGitRepositoryStatusPayload>('暂存 Git 变更', 'stage_git_paths', {
+      payload,
+    });
+  },
+
+  unstageGitPaths(payload: IGitPathOperationRequest) {
+    return runTauriCommand<IGitRepositoryStatusPayload>('取消暂存 Git 变更', 'unstage_git_paths', {
+      payload,
+    });
+  },
+
+  commitGitIndex(payload: IGitCommitRequest) {
+    return runTauriCommand<IGitCommitResultPayload>('创建 Git 提交', 'commit_git_index', {
+      payload,
     });
   },
 

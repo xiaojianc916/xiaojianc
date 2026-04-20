@@ -3,6 +3,7 @@ import { useMessage } from '@/composables/useMessage';
 import { tauriService } from '@/services/tauri';
 import { useAppStore } from '@/store/app';
 import { useEditorStore } from '@/store/editor';
+import { useGitStore } from '@/store/git';
 import type {
   ICommandTemplate,
   IEditorDocument,
@@ -11,7 +12,11 @@ import type {
   IWorkspaceDirectoryPayload,
   TDocumentEncoding,
 } from '@/types/editor';
-import { DEFAULT_TERMINAL_SESSION_ID, type ITerminalRunCompletePayload } from '@/types/terminal';
+import {
+  DEFAULT_TERMINAL_SESSION_ID,
+  type ITerminalRunCompletePayload,
+  type ITerminalRunOutputEvent,
+} from '@/types/terminal';
 import { desktopRuntimeReady, waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import { getFileBaseName, isImageAssetPath } from '@/utils/file-assets';
 import {
@@ -36,6 +41,7 @@ const EMPTY_ENVIRONMENT: IExecutionEnvironment = {
 const DEFAULT_TERMINAL_COLS = 120;
 const DEFAULT_TERMINAL_ROWS = 28;
 const TERMINAL_OUTPUT_BATCH_INTERVAL_MS = 16;
+const TERMINAL_RUN_COMPLETION_TIMEOUT_MS = 30 * 60 * 1000;
 
 const formatShellScriptWithWasm = async (
   source: string,
@@ -113,8 +119,10 @@ const resolveCloseConfirmMessage = (
 export const useWorkbench = () => {
   const appStore = useAppStore();
   const editorStore = useEditorStore();
+  const gitStore = useGitStore();
   let bufferedTerminalOutput = '';
   let bufferedTerminalOutputTimerId: number | null = null;
+  let terminalRunFallbackTimerId: number | null = null;
   let isDisposed = false;
   let activeTerminalRunMeta: {
     runId: string;
@@ -139,6 +147,22 @@ export const useWorkbench = () => {
     () => editorStore.hasActiveDocument && isTextDocument(editorStore.document),
   );
 
+  const refreshGitRepositoryStatus = async (
+    workspaceRootPath: string | null = editorStore.workspaceRootPath,
+  ): Promise<void> => {
+    if (!workspaceRootPath) {
+      gitStore.reset();
+      return;
+    }
+
+    try {
+      await gitStore.refreshRepositoryStatus(workspaceRootPath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '刷新 Git 状态失败';
+      editorStore.appendLog('error', '刷新 Git 状态失败', message);
+    }
+  };
+
   const getAppWindow = async () => {
     const runtimeReady = await waitForDesktopRuntime();
     if (!runtimeReady) {
@@ -156,6 +180,15 @@ export const useWorkbench = () => {
 
     window.clearTimeout(bufferedTerminalOutputTimerId);
     bufferedTerminalOutputTimerId = null;
+  };
+
+  const clearTerminalRunFallbackTimer = (): void => {
+    if (terminalRunFallbackTimerId === null) {
+      return;
+    }
+
+    window.clearTimeout(terminalRunFallbackTimerId);
+    terminalRunFallbackTimerId = null;
   };
 
   const flushBufferedTerminalOutput = (): void => {
@@ -177,6 +210,26 @@ export const useWorkbench = () => {
   const resetBufferedTerminalOutput = (): void => {
     clearBufferedTerminalOutputTimer();
     bufferedTerminalOutput = '';
+  };
+
+  const scheduleTerminalRunCompletionTimeout = (runId: string): void => {
+    clearTerminalRunFallbackTimer();
+    terminalRunFallbackTimerId = window.setTimeout(() => {
+      terminalRunFallbackTimerId = null;
+
+      if (isDisposed || editorStore.pendingTerminalRunId !== runId) {
+        return;
+      }
+
+      resetBufferedTerminalOutput();
+      editorStore.isRunning = false;
+      editorStore.setPendingTerminalRunId(null);
+      activeTerminalRunMeta = null;
+
+      const message = '终端运行超时，已停止等待完成事件，请检查终端状态。';
+      editorStore.appendLog('error', '终端运行超时', message);
+      useMessage().error(message);
+    }, TERMINAL_RUN_COMPLETION_TIMEOUT_MS);
   };
 
   const ensureIntegratedTerminalSession = async (): Promise<void> => {
@@ -300,6 +353,7 @@ export const useWorkbench = () => {
 
     const runtimeReady = await waitForDesktopRuntime();
     if (!runtimeReady) {
+      gitStore.reset();
       editorStore.setEnvironment(EMPTY_ENVIRONMENT);
       editorStore.selectedExecutor = DEFAULT_EXECUTOR;
       editorStore.appendLog(
@@ -344,6 +398,7 @@ export const useWorkbench = () => {
       }
 
       editorStore.setWorkspaceRootPath(startupWorkspace.rootPath);
+      void refreshGitRepositoryStatus(startupWorkspace.rootPath);
 
       if (startupWorkspace.defaultFilePath) {
         await loadDocumentFromPath(startupWorkspace.defaultFilePath, '加载默认工作区');
@@ -402,6 +457,7 @@ export const useWorkbench = () => {
 
       editorStore.clearDocuments();
       editorStore.setWorkspaceRootPath(path);
+      void refreshGitRepositoryStatus(path);
       editorStore.appendLog('success', '打开文件夹', buildLogDetail('资源目录', path));
       useMessage().success(`已打开文件夹 ${getPathName(path)}`);
     } catch (error) {
@@ -502,6 +558,8 @@ export const useWorkbench = () => {
         editorStore.applyDocumentPayload(existingDocument.id, savedPayload);
       }
 
+      void refreshGitRepositoryStatus();
+
       editorStore.appendLog(
         'success',
         'shfmt 格式化',
@@ -547,6 +605,7 @@ export const useWorkbench = () => {
       });
 
       editorStore.applyDocumentPayload(documentId, payload);
+      void refreshGitRepositoryStatus();
       editorStore.appendLog('success', '另存为成功', buildLogDetail('保存路径', payload.path));
       useMessage().success('脚本已另存为');
       return true;
@@ -581,6 +640,7 @@ export const useWorkbench = () => {
       });
 
       editorStore.applyDocumentPayload(documentId, payload);
+      void refreshGitRepositoryStatus();
       editorStore.appendLog('success', '保存成功', buildLogDetail('保存路径', payload.path));
       useMessage().success('脚本已保存');
       return true;
@@ -653,6 +713,7 @@ export const useWorkbench = () => {
     }
 
     editorStore.clearWorkspaceSession();
+    gitStore.reset();
     useMessage().success('工作区已关闭');
   };
 

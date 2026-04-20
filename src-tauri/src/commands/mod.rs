@@ -1,3 +1,10 @@
+mod git;
+
+pub use git::{
+    commit_git_index, get_git_file_baseline, get_git_repository_status, stage_git_paths,
+    unstage_git_paths,
+};
+
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::Utc;
 use encoding_rs::{GB18030, UTF_16BE, UTF_16LE, UTF_8};
@@ -1711,7 +1718,24 @@ fn resolve_workspace_root(selected_root: Option<String>) -> Result<PathBuf, Stri
         .map_err(|error| format!("读取工作区目录失败：{error}"))
 }
 
+fn resolve_development_startup_workspace() -> Option<(PathBuf, Option<PathBuf>)> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+
+    let workspace_root = resolve_workspace_root(None).ok()?;
+    if git2::Repository::discover(&workspace_root).is_err() {
+        return None;
+    }
+
+    Some((workspace_root, None))
+}
+
 fn ensure_startup_workspace(app: &AppHandle) -> Result<(PathBuf, Option<PathBuf>), String> {
+    if let Some(workspace) = resolve_development_startup_workspace() {
+        return Ok(workspace);
+    }
+
     let app_data_dir = app
         .path()
         .app_data_dir()

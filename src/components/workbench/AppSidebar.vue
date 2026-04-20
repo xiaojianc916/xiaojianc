@@ -68,6 +68,14 @@
         <div v-else class="h-full" />
       </template>
 
+      <SourceControlPanel
+        v-else-if="isSourceControlView"
+        :is-desktop-runtime="isDesktopRuntime"
+        :workspace-root-path="workspaceRootPath"
+        :active-path="document.path"
+        @open-file="handleOpenFile"
+      />
+
       <div v-else class="space-y-3 px-3 py-2">
         <section class="rounded-xl border border-(--border-subtle) bg-white/3 p-3">
           <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-(--text-quaternary)">
@@ -110,6 +118,7 @@
 <script setup lang="ts">
 import FileEntryIcon from '@/components/common/FileEntryIcon.vue';
 import { Button } from '@/components/ui/button';
+import SourceControlPanel from '@/components/workbench/SourceControlPanel.vue';
 import WorkspaceTreeNode from '@/components/workbench/WorkspaceTreeNode.vue';
 import { useMessage } from '@/composables/useMessage';
 import { tauriService } from '@/services/tauri';
@@ -203,6 +212,7 @@ const SIDEBAR_META: Record<
 };
 
 const isExplorerView = computed(() => props.view === 'explorer');
+const isSourceControlView = computed(() => props.view === 'source-control');
 const panelMeta = computed(() => SIDEBAR_META[props.view]);
 
 const rootEntries = computed(() => {

@@ -13,6 +13,13 @@ import type {
   IWorkspaceDirectoryPayload,
 } from './editor';
 import type {
+  IGitCommitRequest,
+  IGitCommitResultPayload,
+  IGitFileBaselinePayload,
+  IGitPathOperationRequest,
+  IGitRepositoryStatusPayload,
+} from './git';
+import type {
   ICloseTerminalSessionRequest,
   IDispatchTerminalScriptPayload,
   IDispatchTerminalScriptRequest,
@@ -34,6 +41,11 @@ export interface ITauriService {
   detectEnvironment(): Promise<IExecutionEnvironment>;
   runScript(payload: IRunScriptRequest): Promise<IRunResult>;
   listWorkspaceEntries(path?: string, rootPath?: string): Promise<IWorkspaceDirectoryPayload>;
+  getGitRepositoryStatus(workspaceRootPath?: string | null): Promise<IGitRepositoryStatusPayload>;
+  getGitFileBaseline(path: string): Promise<IGitFileBaselinePayload>;
+  stageGitPaths(payload: IGitPathOperationRequest): Promise<IGitRepositoryStatusPayload>;
+  unstageGitPaths(payload: IGitPathOperationRequest): Promise<IGitRepositoryStatusPayload>;
+  commitGitIndex(payload: IGitCommitRequest): Promise<IGitCommitResultPayload>;
   ensureTerminalSession(payload: IEnsureTerminalSessionRequest): Promise<ITerminalSessionPayload>;
   dispatchScriptToTerminal(
     payload: IDispatchTerminalScriptRequest,
