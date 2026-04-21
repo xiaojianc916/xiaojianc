@@ -26,7 +26,7 @@ use std::{
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-use tauri::{AppHandle, Emitter, LogicalSize, Manager, Size, State};
+use tauri::{window::Color, AppHandle, Emitter, LogicalSize, Manager, Size, State};
 use tokio::{
     io::AsyncWriteExt,
     process::Command,
@@ -37,12 +37,15 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(4);
 const EXEC_TIMEOUT: Duration = Duration::from_secs(120);
 const SHELLCHECK_TIMEOUT: Duration = Duration::from_secs(12);
 const SHFMT_TIMEOUT: Duration = Duration::from_secs(12);
+const TERMINAL_RUN_STATUS_WATCHER_TIMEOUT: Duration = Duration::from_secs(60 * 60 * 6);
+const TERMINAL_RUN_STATUS_EMIT_DELAY: Duration = Duration::from_millis(96);
 const SPLASH_WINDOW_WIDTH: f64 = 780.0;
 const SPLASH_WINDOW_HEIGHT: f64 = 520.0;
 const MAIN_WINDOW_WIDTH: f64 = 1500.0;
 const MAIN_WINDOW_HEIGHT: f64 = 960.0;
 const MAIN_WINDOW_MIN_WIDTH: f64 = 1220.0;
 const MAIN_WINDOW_MIN_HEIGHT: f64 = 760.0;
+const MAIN_WINDOW_BACKGROUND: Color = Color(0x0D, 0x0F, 0x12, 0xFF);
 const WSL_TEMP_DIRECTORY: &str = "/tmp";
 const TERMINAL_DISPATCH_RUNNER_PREFIX: &str = "/tmp/sh-editor-dispatch";
 const TERMINAL_RUN_MARKER_PREFIX: &str = "\u{001b}]SH_EDITOR:";
@@ -337,6 +340,7 @@ struct TerminalDispatchCommand {
     raw_command: String,
     display_command: String,
     used_temp_file: bool,
+    status_path: String,
 }
 
 struct TerminalSession {
@@ -364,6 +368,12 @@ struct TerminalMarkerChunk<'a> {
     remainder: &'a str,
 }
 
+enum TerminalRunMarkerToken<'a> {
+    Start(&'a str),
+    End { run_id: &'a str, exit_code: Option<i32> },
+    Unknown,
+}
+
 struct TerminalUtf8ChunkDecoder {
     pending: Vec<u8>,
 }
@@ -382,6 +392,16 @@ pub struct TerminalSessionState {
     creation_guard: Arc<Mutex<()>>,
 }
 
+fn apply_window_background(
+    window: &tauri::WebviewWindow,
+    color: Option<Color>,
+    scene: &str,
+) -> Result<(), String> {
+    window
+        .set_background_color(color)
+        .map_err(|error| format!("failed to set {scene} window background: {error}"))
+}
+
 #[tauri::command]
 pub fn apply_window_stage(app: AppHandle, stage: String) -> Result<(), String> {
     let window = app
@@ -392,6 +412,7 @@ pub fn apply_window_stage(app: AppHandle, stage: String) -> Result<(), String> {
         "splash" => {
             let splash_size =
                 Size::Logical(LogicalSize::new(SPLASH_WINDOW_WIDTH, SPLASH_WINDOW_HEIGHT));
+            apply_window_background(&window, None, "startup")?;
             window
                 .set_min_size(Some(splash_size))
                 .map_err(|error| format!("设置欢迎窗最小尺寸失败：{error}"))?;
@@ -412,6 +433,7 @@ pub fn apply_window_stage(app: AppHandle, stage: String) -> Result<(), String> {
                 MAIN_WINDOW_MIN_HEIGHT,
             ));
 
+            apply_window_background(&window, Some(MAIN_WINDOW_BACKGROUND), "main")?;
             window
                 .set_resizable(true)
                 .map_err(|error| format!("恢复主窗口缩放失败：{error}"))?;
@@ -441,6 +463,7 @@ pub fn show_startup_window(app: AppHandle) -> Result<(), String> {
         .ok_or_else(|| "未找到主窗口。".to_string())?;
 
     let splash_size = Size::Logical(LogicalSize::new(SPLASH_WINDOW_WIDTH, SPLASH_WINDOW_HEIGHT));
+    apply_window_background(&window, None, "startup")?;
     window
         .set_min_size(Some(splash_size))
         .map_err(|error| format!("设置欢迎窗最小尺寸失败：{error}"))?;
@@ -832,6 +855,7 @@ pub async fn run_script(payload: RunScriptRequest) -> Result<RunScriptResponse, 
 
 #[tauri::command]
 pub fn dispatch_script_to_terminal(
+    app: AppHandle,
     state: State<TerminalSessionState>,
     payload: DispatchTerminalScriptRequest,
 ) -> Result<DispatchTerminalScriptPayload, String> {
@@ -850,6 +874,13 @@ pub fn dispatch_script_to_terminal(
         .and_then(|_| writer.write_all(b"\n"))
         .and_then(|_| writer.flush())
         .map_err(|error| format!("发送脚本到终端失败：{error}"))?;
+
+    spawn_terminal_run_status_watcher(
+        app,
+        payload.session_id.clone(),
+        payload.run_id.clone(),
+        command.status_path.clone(),
+    );
 
     Ok(DispatchTerminalScriptPayload {
         session_id: payload.session_id,
@@ -1092,6 +1123,12 @@ fn build_terminal_dispatch_runner_path() -> Result<String, String> {
     Ok(format!("{TERMINAL_DISPATCH_RUNNER_PREFIX}-{suffix}.sh"))
 }
 
+fn build_terminal_dispatch_status_path() -> Result<String, String> {
+    let suffix = build_temp_file_suffix()?;
+
+    Ok(format!("{WSL_TEMP_DIRECTORY}/sh-editor-run-status-{suffix}.tmp"))
+}
+
 fn build_temp_file_suffix() -> Result<String, String> {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1135,6 +1172,60 @@ fn emit_terminal_run_complete(app: &AppHandle, payload: TerminalRunCompleteEvent
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.emit("terminal:run-complete", payload);
     }
+}
+
+fn spawn_terminal_run_status_watcher(
+    app: AppHandle,
+    session_id: String,
+    run_id: String,
+    status_path: String,
+) {
+    thread::spawn(move || {
+        let wsl_command_path = match resolve_wsl_command_path() {
+            Ok(path) => path,
+            Err(_) => return,
+        };
+        let quoted_status_path = bash_quote(&status_path);
+        let mut command = StdCommand::new(wsl_command_path);
+        command.arg("--");
+        command.arg("/bin/bash");
+        command.arg("-lc");
+        command.arg(format!(
+            "deadline=$((SECONDS+{})); while [ ! -f {} ]; do if [ \"$SECONDS\" -ge \"$deadline\" ]; then exit 124; fi; sleep 0.1; done; cat {}; rm -f {}",
+            TERMINAL_RUN_STATUS_WATCHER_TIMEOUT.as_secs(),
+            quoted_status_path,
+            quoted_status_path,
+            quoted_status_path,
+        ));
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::null());
+
+        let output = match command.output() {
+            Ok(output) => output,
+            Err(_) => return,
+        };
+
+        if !output.status.success() {
+            return;
+        }
+
+        let exit_code = String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .parse::<i32>()
+            .ok();
+
+        thread::sleep(TERMINAL_RUN_STATUS_EMIT_DELAY);
+
+        emit_terminal_run_complete(
+            &app,
+            TerminalRunCompleteEvent {
+                session_id,
+                run_id,
+                exit_code,
+                finished_at: Utc::now().to_rfc3339(),
+            },
+        );
+    });
 }
 
 fn flush_terminal_data_buffer(
@@ -1432,7 +1523,38 @@ fn split_terminal_marker_chunk(value: &str) -> TerminalMarkerChunk<'_> {
     }
 }
 
+fn parse_terminal_run_marker_token(value: &str) -> TerminalRunMarkerToken<'_> {
+    if let Some(run_id) = value.strip_prefix(TERMINAL_RUN_START_MARKER_PREFIX) {
+        return TerminalRunMarkerToken::Start(run_id);
+    }
+
+    if let Some(rest) = value.strip_prefix(TERMINAL_RUN_END_MARKER_PREFIX) {
+        if let Some((run_id, exit_code)) = rest.rsplit_once(':') {
+            return TerminalRunMarkerToken::End {
+                run_id,
+                exit_code: exit_code.parse::<i32>().ok(),
+            };
+        }
+    }
+
+    TerminalRunMarkerToken::Unknown
+}
+
 impl TerminalRunStreamParser {
+    fn push_completed_run(
+        update: &mut TerminalRunStreamUpdate,
+        session_id: &str,
+        run_id: String,
+        exit_code: Option<i32>,
+    ) {
+        update.completed_runs.push(TerminalRunCompleteEvent {
+            session_id: session_id.to_string(),
+            run_id,
+            exit_code,
+            finished_at: Utc::now().to_rfc3339(),
+        });
+    }
+
     fn push_chunk(
         &mut self,
         session_id: &str,
@@ -1463,18 +1585,31 @@ impl TerminalRunStreamParser {
                     break;
                 };
 
-                let end_marker_prefix = format!("{TERMINAL_RUN_END_MARKER_PREFIX}{run_id}:");
-                if marker_token.starts_with(&end_marker_prefix) {
-                    let exit_code = marker_token[end_marker_prefix.len()..]
-                        .parse::<i32>()
-                        .ok();
-                    update.completed_runs.push(TerminalRunCompleteEvent {
-                        session_id: session_id.to_string(),
-                        run_id,
+                match parse_terminal_run_marker_token(&marker_token) {
+                    TerminalRunMarkerToken::Start(next_run_id) => {
+                        if run_id != next_run_id {
+                            Self::push_completed_run(&mut update, session_id, run_id, None);
+                        }
+                        self.active_run_id = Some(next_run_id.to_string());
+                    }
+                    TerminalRunMarkerToken::End {
+                        run_id: completed_run_id,
                         exit_code,
-                        finished_at: Utc::now().to_rfc3339(),
-                    });
-                    self.active_run_id = None;
+                    } => {
+                        if run_id != completed_run_id {
+                            Self::push_completed_run(&mut update, session_id, run_id, None);
+                        }
+                        Self::push_completed_run(
+                            &mut update,
+                            session_id,
+                            completed_run_id.to_string(),
+                            exit_code,
+                        );
+                        self.active_run_id = None;
+                    }
+                    TerminalRunMarkerToken::Unknown => {
+                        self.active_run_id = Some(run_id);
+                    }
                 }
 
                 continue;
@@ -1491,8 +1626,19 @@ impl TerminalRunStreamParser {
                 break;
             };
 
-            if let Some(run_id) = marker_token.strip_prefix(TERMINAL_RUN_START_MARKER_PREFIX) {
-                self.active_run_id = Some(run_id.to_string());
+            match parse_terminal_run_marker_token(&marker_token) {
+                TerminalRunMarkerToken::Start(run_id) => {
+                    self.active_run_id = Some(run_id.to_string());
+                }
+                TerminalRunMarkerToken::End { run_id, exit_code } => {
+                    Self::push_completed_run(
+                        &mut update,
+                        session_id,
+                        run_id.to_string(),
+                        exit_code,
+                    );
+                }
+                TerminalRunMarkerToken::Unknown => {}
             }
         }
 
@@ -1532,6 +1678,87 @@ impl TerminalRunStreamParser {
 
         update
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        TerminalRunMarkerToken, TerminalRunStreamParser, TERMINAL_RUN_END_MARKER_PREFIX,
+        TERMINAL_RUN_MARKER_PREFIX, TERMINAL_RUN_MARKER_SUFFIX, TERMINAL_RUN_START_MARKER_PREFIX,
+        parse_terminal_run_marker_token,
+    };
+
+    fn build_marker(token: &str) -> String {
+        format!(
+            "{TERMINAL_RUN_MARKER_PREFIX}{token}{TERMINAL_RUN_MARKER_SUFFIX}"
+        )
+    }
+
+    #[test]
+    fn parse_terminal_run_marker_token_recognizes_end_marker() {
+        let token = format!("{TERMINAL_RUN_END_MARKER_PREFIX}run-1:0");
+
+        match parse_terminal_run_marker_token(&token) {
+            TerminalRunMarkerToken::End { run_id, exit_code } => {
+                assert_eq!(run_id, "run-1");
+                assert_eq!(exit_code, Some(0));
+            }
+            _ => panic!("expected end marker"),
+        }
+    }
+
+    #[test]
+    fn parser_completes_run_when_only_end_marker_is_seen() {
+        let run_id = "terminal-run-short";
+        let mut parser = TerminalRunStreamParser::default();
+        let update = parser.push_chunk(
+            "session-1",
+            &format!(
+                "111\n{}$ ",
+                build_marker(&format!("{TERMINAL_RUN_END_MARKER_PREFIX}{run_id}:0")),
+            ),
+        );
+
+        assert_eq!(update.visible_output, "111\n$ ");
+        assert!(update.run_output_events.is_empty());
+        assert_eq!(update.completed_runs.len(), 1);
+        assert_eq!(update.completed_runs[0].run_id, run_id);
+        assert_eq!(update.completed_runs[0].exit_code, Some(0));
+    }
+
+    #[test]
+    fn parser_keeps_normal_start_output_end_flow() {
+        let run_id = "terminal-run-normal";
+        let mut parser = TerminalRunStreamParser::default();
+
+        let start_update = parser.push_chunk(
+            "session-1",
+            &format!(
+                "$ /bin/bash /tmp/sh-editor-dispatch.sh\n{}",
+                build_marker(&format!("{TERMINAL_RUN_START_MARKER_PREFIX}{run_id}")),
+            ),
+        );
+        assert_eq!(start_update.visible_output, "$ /bin/bash /tmp/sh-editor-dispatch.sh\n");
+        assert!(start_update.completed_runs.is_empty());
+
+        let output_update = parser.push_chunk("session-1", "111\n");
+        assert_eq!(output_update.run_output_events.len(), 1);
+        assert_eq!(output_update.run_output_events[0].run_id, run_id);
+        assert_eq!(output_update.run_output_events[0].data, "111\n");
+
+        let end_update = parser.push_chunk(
+            "session-1",
+            &format!(
+                "{}$ ",
+                build_marker(&format!("{TERMINAL_RUN_END_MARKER_PREFIX}{run_id}:0")),
+            ),
+        );
+        assert_eq!(end_update.visible_output, "$ ");
+        assert_eq!(end_update.completed_runs.len(), 1);
+        assert_eq!(end_update.completed_runs[0].run_id, run_id);
+        assert_eq!(end_update.completed_runs[0].exit_code, Some(0));
+    }
+
 }
 
 fn build_script_payload(path: PathBuf, content: String, encoding: String) -> ScriptFilePayload {
@@ -2415,18 +2642,21 @@ fn build_terminal_run_command(
     terminal_working_directory: &str,
 ) -> Result<TerminalDispatchCommand, String> {
     let prepared = prepare_terminal_dispatch_script(payload, terminal_working_directory)?;
-    let runner_path = create_terminal_dispatch_runner(payload, &prepared)?;
+    let status_path = build_terminal_dispatch_status_path()?;
+    let runner_path = create_terminal_dispatch_runner(payload, &prepared, &status_path)?;
 
     Ok(TerminalDispatchCommand {
         raw_command: format!("/bin/bash {}", bash_quote(&runner_path)),
         display_command: format!("/bin/bash {}", bash_quote(&runner_path)),
         used_temp_file: prepared.used_temp_file,
+        status_path,
     })
 }
 
 fn create_terminal_dispatch_runner(
     payload: &DispatchTerminalScriptRequest,
     prepared: &TerminalPreparedScript,
+    status_path: &str,
 ) -> Result<String, String> {
     let runner_path = build_terminal_dispatch_runner_path()?;
     let cleanup_command = if prepared.cleanup_path.is_some() {
@@ -2441,6 +2671,7 @@ trap '{}' EXIT\n\
 i={}\n\
 t={}\n\
 wd={}\n\
+    s={}\n\
 printf '%b%s%s%b' {} {} \"$i\" {}\n\
 if cd \"$wd\"; then\n\
   bash \"$t\"\n\
@@ -2449,12 +2680,14 @@ else\n\
   e=$?\n\
 fi\n\
 printf '%b%s%s:%s%b' {} {} \"$i\" \"$e\" {}\n\
+    printf '%s' \"$e\" > \"$s\"\n\
 exit \"$e\"\n\
 ",
         cleanup_command,
         bash_quote(&payload.run_id),
         bash_quote(&prepared.execution_path),
         bash_quote(&prepared.working_directory),
+        bash_quote(status_path),
         bash_quote(TERMINAL_RUN_MARKER_ESCAPED_PREFIX),
         bash_quote(TERMINAL_RUN_START_MARKER_PREFIX),
         bash_quote(TERMINAL_RUN_MARKER_ESCAPED_SUFFIX),

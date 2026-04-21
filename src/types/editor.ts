@@ -10,6 +10,7 @@ export type TDocumentKind = 'text' | 'image';
 export type TExecutorKind = 'wsl';
 export type TLogLevel = 'info' | 'success' | 'error';
 export type TScriptDiagnosticSeverity = 'error' | 'warning' | 'info' | 'style';
+export type TRunHistoryStatus = 'success' | 'failed' | 'canceled';
 
 export interface IEditorDocument {
   id: string;
@@ -54,6 +55,32 @@ export interface IRunLogEntry {
   title: string;
   detail: string;
   createdAt: string;
+}
+
+export interface IActiveRunSummary {
+  runId: string;
+  documentName: string;
+  documentPath: string | null;
+  commandLine: string;
+  executor: TExecutorKind;
+  executorLabel: string;
+  startedAt: string;
+  usedTempFile: boolean;
+}
+
+export interface IRunHistoryEntry {
+  id: string;
+  status: TRunHistoryStatus;
+  documentName: string;
+  documentPath: string | null;
+  commandLine: string;
+  executor: TExecutorKind;
+  executorLabel: string;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  exitCode: number | null;
+  usedTempFile: boolean;
 }
 
 export interface IWorkspaceEntry {

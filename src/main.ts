@@ -165,6 +165,7 @@ const safeStringify = (value: unknown): string => {
   try {
     return JSON.stringify(value, null, 2) ?? String(value);
   } catch {
+    // 循环引用等场景下 JSON.stringify 可能失败，退回 String 至少保留可见文本。
     return String(value);
   }
 };
@@ -371,6 +372,11 @@ const bootstrap = async (): Promise<void> => {
 
     // 先把样式加载好，避免 App 挂载瞬间出现 FOUC。
     await import('./styles.css');
+
+    // 主题系统：在 Vue 挂载前同步注入 CSS 变量，消除白屏闪烁（规范 §9.2）。
+    // 必须在 styles.css 之后、createApp 之前完成。
+    const { getThemeManager } = await import('./themes');
+    getThemeManager().init();
 
     const [{ createApp }, { createPinia }, { default: App }] = await Promise.all([
       import('vue'),

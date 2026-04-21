@@ -36,6 +36,7 @@ export const tryWriteClipboardText = async (value: string): Promise<boolean> => 
     await writeClipboardText(value);
     return true;
   } catch {
+    // 剪贴板权限或宿主能力缺失属于可预期失败，返回 false 交由调用方决定是否提示。
     return false;
   }
 };

@@ -16,6 +16,14 @@
         <span>{{ environmentParts[1] }}</span>
       </div>
 
+      <div
+        v-if="isFallbackReportActive"
+        class="terminal-log-fallback-badge"
+        :title="fallbackBadgeTitle"
+      >
+        基础视图
+      </div>
+
       <div class="terminal-log-header-actions">
         <button
           type="button"
@@ -186,17 +194,20 @@
 import { useMessage } from '@/composables/useMessage';
 import type { IRunLogEntry, IRunResult, TExecutorKind } from '@/types/editor';
 import { writeClipboardText } from '@/utils/clipboard';
+import { formatTime } from '@/utils/date';
 import { toErrorMessage } from '@/utils/error';
 import {
-    buildStructuredRunReport,
-    type IStructuredRunDetailLine,
-    type IStructuredRunReport,
-    type IStructuredRunTimelineItem,
+  buildStructuredRunReport,
+  type IStructuredRunDetailLine,
+  type IStructuredRunReport,
+  type IStructuredRunTimelineItem,
 } from '@/utils/structured-run-report';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
 const MAX_REPORT_CACHE_ENTRIES = 8;
 const REPORT_REBUILD_DELAY_MS = 240;
+const FALLBACK_BUILD_ERROR_REASON = '结构化日志构建失败，已切换到基础日志视图。';
+const FALLBACK_EMPTY_WITH_SIGNALS_REASON = '结构化日志未产出结果，但检测到了原始运行信号，已切换到基础日志视图。';
 
 const props = defineProps<{
   active: boolean;
@@ -225,6 +236,7 @@ const isAutoScrollEnabled = ref(true);
 
 const EMPTY_REPORT: IStructuredRunReport = {
   hasContent: false,
+  source: 'structured',
   session: {
     pathPrefix: 'builtin-workspace',
     fileLabel: 'startup.sh',
@@ -255,6 +267,266 @@ const liveReport = ref<IStructuredRunReport>(EMPTY_REPORT);
 const expandedItemIds = ref<Set<string>>(new Set());
 
 let reportBuildTimerId: number | null = null;
+let lastFallbackDiagnosticSignature: string | null = null;
+
+const hasRawRunSignals = computed(() => (
+  props.isRunning
+  || props.runLogs.length > 0
+  || props.lastRunResult !== null
+  || props.terminalOutputLength > 0
+));
+
+const ANSI_ESCAPE_PATTERN =
+  // eslint-disable-next-line no-control-regex
+  /\u001b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][\s\S]*?(?:\u0007|\u001b\\))/g;
+const EMERGENCY_PROMPT_ONLY_PATTERN = /^[\w.-]+@[\w.-]+:.*[$#]\s*$/;
+const EMERGENCY_DISPATCH_RUNNER_PATTERN = /\/tmp\/sh-editor-dispatch-[\w.-]+\.sh/i;
+
+const buildEmergencyDetailLines = (
+  value: string,
+  options?: {
+    stripTerminalNoise?: boolean;
+  },
+): IStructuredRunDetailLine[] => value
+  .replace(ANSI_ESCAPE_PATTERN, '')
+  .replace(/\r\n/g, '\n')
+  .replace(/\r/g, '\n')
+  .split('\n')
+  .map((line) => line.trim())
+  .filter(Boolean)
+  .filter((line) => {
+    if (!options?.stripTerminalNoise) {
+      return true;
+    }
+
+    if (EMERGENCY_DISPATCH_RUNNER_PATTERN.test(line)) {
+      return false;
+    }
+
+    if (EMERGENCY_PROMPT_ONLY_PATTERN.test(line)) {
+      return false;
+    }
+
+    return true;
+  })
+  .slice(-8)
+  .map((line) => ({
+    text: line,
+    tone: /error|failed|failure|exception|未找到|失败|错误|异常/i.test(line)
+      ? 'error'
+      : /warning|warn|deprecated|注意|提醒/i.test(line)
+        ? 'warning'
+        : 'default',
+  }));
+
+const buildEmergencyReport = (reason?: string): IStructuredRunReport => {
+  const sortedRunLogs = [...props.runLogs].sort(
+    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+  );
+  const rawOutput = props.resolveTerminalOutput().trim();
+  const timeline: IStructuredRunTimelineItem[] = [];
+
+  if (reason) {
+    timeline.push({
+      id: 'fallback-report-warning',
+      tag: 'warn',
+      accent: 'orange',
+      title: '已切换到基础日志视图',
+      description: reason,
+      status: 'warning',
+      timestamp: '实时',
+      detailsLabel: '查看说明',
+      details: buildEmergencyDetailLines(reason),
+      gapWeight: 1,
+    });
+  }
+
+  for (const item of sortedRunLogs) {
+    const status = item.level === 'error'
+      ? 'error'
+      : /执行失败|终端运行超时|终端执行状态异常|脚本执行失败/i.test(item.title)
+        ? 'error'
+        : props.isRunning && item.title === '开始执行'
+          ? 'running'
+          : 'done';
+    timeline.push({
+      id: `fallback-log-${item.id}`,
+      tag: status === 'error' ? 'error' : item.title === '已发送到集成终端' ? 'exec' : 'info',
+      accent: status === 'error' ? 'red' : item.title === '已发送到集成终端' ? 'teal' : 'blue',
+      title: item.title,
+      description: item.detail,
+      status,
+      timestamp: formatTime(item.createdAt),
+      detailsLabel: item.detail.trim() ? '查看详情' : undefined,
+      details: item.detail.trim() ? buildEmergencyDetailLines(item.detail) : undefined,
+      gapWeight: 1,
+    });
+  }
+
+  if (rawOutput) {
+    const terminalOutputDetails = buildEmergencyDetailLines(rawOutput, {
+      stripTerminalNoise: true,
+    });
+
+    if (terminalOutputDetails.length > 0) {
+      timeline.push({
+        id: 'fallback-terminal-output',
+        tag: props.isRunning ? 'running' : 'done',
+        accent: props.isRunning ? 'blue' : 'green',
+        title: props.isRunning ? '终端实时输出' : '终端输出',
+        description: props.isRunning ? '已捕获终端可见输出。' : '已保留本次运行的终端输出。',
+        status: props.isRunning ? 'running' : 'done',
+        timestamp: '实时',
+        detailsLabel: '查看输出',
+        details: terminalOutputDetails,
+        gapWeight: 1,
+      });
+    }
+  }
+
+  if (timeline.length === 0 && props.isRunning) {
+    timeline.push({
+      id: 'fallback-running-placeholder',
+      tag: 'running',
+      accent: 'blue',
+      title: '正在等待终端反馈…',
+      description: '运行请求已经发出，但尚未收到可用于构建结构化日志的反馈。',
+      status: 'running',
+      timestamp: '实时',
+      gapWeight: 1,
+    });
+  }
+
+  const counts = timeline.reduce(
+    (accumulator, item) => {
+      if (item.status === 'done') {
+        accumulator.success += 1;
+      } else if (item.status === 'warning') {
+        accumulator.warning += 1;
+      } else if (item.status === 'error') {
+        accumulator.error += 1;
+      } else {
+        accumulator.running += 1;
+      }
+
+      return accumulator;
+    },
+    {
+      success: 0,
+      warning: 0,
+      error: 0,
+      running: 0,
+    },
+  );
+
+  const tone = props.isRunning
+    ? 'running'
+    : props.lastRunResult?.success === false || counts.error > 0
+      ? 'error'
+      : props.lastRunResult?.success === true || counts.success > 0
+        ? 'success'
+        : counts.warning > 0
+          ? 'warning'
+          : hasRawRunSignals.value
+            ? 'running'
+            : 'neutral';
+
+  return {
+    hasContent: hasRawRunSignals.value,
+    source: 'fallback',
+    fallbackReason: reason ?? FALLBACK_EMPTY_WITH_SIGNALS_REASON,
+    session: {
+      pathPrefix: props.workspaceRootPath ?? 'builtin-workspace',
+      fileLabel: props.documentName || 'startup.sh',
+      meta: `${props.lastRunResult?.executorLabel ?? props.executor.toUpperCase()} · bash`,
+    },
+    summary: {
+      tone,
+      statusLabel:
+        tone === 'running'
+          ? '运行中'
+          : tone === 'error'
+            ? '执行异常'
+            : tone === 'warning'
+              ? '有警告'
+              : tone === 'success'
+                ? '已完成'
+                : '待执行',
+      phaseLabel: timeline.length > 0 ? `已捕获 ${timeline.length} 条事件` : '等待运行',
+      elapsedLabel: props.lastRunResult
+        ? `${Math.max(0, props.lastRunResult.durationMs / 1000).toFixed(1)}s`
+        : '—',
+      progress: tone === 'running' ? 24 : tone === 'neutral' ? 0 : 100,
+      counts,
+    },
+    timeline,
+  };
+};
+
+const buildReportDebugSample = (): Record<string, unknown> => {
+  const terminalOutput = props.resolveTerminalOutput();
+  const latestRunMarker = [...props.runLogs]
+    .reverse()
+    .find((item) => item.title === '开始执行' || item.title === '已发送到集成终端');
+
+  return {
+    documentPath: props.documentPath,
+    isRunning: props.isRunning,
+    latestRunMarkerId: latestRunMarker?.id ?? null,
+    runLogCount: props.runLogs.length,
+    runLogTitles: props.runLogs.slice(-6).map((item) => item.title),
+    lastRunResult: props.lastRunResult
+      ? {
+        success: props.lastRunResult.success,
+        exitCode: props.lastRunResult.exitCode,
+        startedAt: props.lastRunResult.startedAt,
+        finishedAt: props.lastRunResult.finishedAt,
+      }
+      : null,
+    terminalOutputLength: terminalOutput.length,
+    terminalOutputPreview: terminalOutput.slice(0, 240),
+  };
+};
+
+const resolveFallbackDiagnosticSignature = (reason: string): string => {
+  const latestRunMarker = [...props.runLogs]
+    .reverse()
+    .find((item) => item.title === '开始执行' || item.title === '已发送到集成终端');
+
+  return [
+    currentReportKey.value,
+    latestRunMarker?.id ?? props.lastRunResult?.startedAt ?? props.lastRunResult?.finishedAt ?? 'idle',
+    reason,
+  ].join('::');
+};
+
+const reportFallbackDiagnostic = (
+  level: 'warn' | 'error',
+  reason: string,
+  error?: unknown,
+): void => {
+  const signature = resolveFallbackDiagnosticSignature(reason);
+  if (lastFallbackDiagnosticSignature === signature) {
+    return;
+  }
+
+  lastFallbackDiagnosticSignature = signature;
+  const sample = buildReportDebugSample();
+
+  if (level === 'error') {
+    console.error('[structured-run-report] 构建失败，已切换到基础日志视图', {
+      reason,
+      error,
+      sample,
+    });
+    return;
+  }
+
+  console.warn('[structured-run-report] 结构化日志未产出结果，已切换到基础日志视图', {
+    reason,
+    sample,
+  });
+};
 
 const buildReportSafely = (): IStructuredRunReport => {
   try {
@@ -271,8 +543,8 @@ const buildReportSafely = (): IStructuredRunReport => {
       }) ?? EMPTY_REPORT
     );
   } catch (error) {
-    console.error('Failed to build structured run report', error);
-    return EMPTY_REPORT;
+    reportFallbackDiagnostic('error', FALLBACK_BUILD_ERROR_REASON, error);
+    return buildEmergencyReport(FALLBACK_BUILD_ERROR_REASON);
   }
 };
 
@@ -308,7 +580,16 @@ const cacheReport = (key: string, nextReport: IStructuredRunReport): void => {
 const updateLiveReport = (): void => {
   clearPendingReportBuild();
 
-  const nextReport = buildReportSafely();
+  let nextReport = buildReportSafely();
+  if (!nextReport.hasContent && hasRawRunSignals.value) {
+    reportFallbackDiagnostic('warn', FALLBACK_EMPTY_WITH_SIGNALS_REASON);
+    nextReport = buildEmergencyReport(FALLBACK_EMPTY_WITH_SIGNALS_REASON);
+  }
+
+  if (nextReport.source !== 'fallback') {
+    lastFallbackDiagnosticSignature = null;
+  }
+
   liveReport.value = nextReport;
 
   if (nextReport.hasContent) {
@@ -384,6 +665,10 @@ const displayedReport = computed<IStructuredRunReport>(() => {
 });
 
 const summaryTone = computed(() => displayedReport.value.summary.tone);
+const isFallbackReportActive = computed(() => (
+  displayedReport.value.hasContent && displayedReport.value.source === 'fallback'
+));
+const fallbackBadgeTitle = computed(() => displayedReport.value.fallbackReason ?? '当前已切换到基础日志视图。');
 
 const runIndicatorLabel = computed(() => {
   switch (summaryTone.value) {
@@ -746,6 +1031,21 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   color: var(--text-tertiary);
   font-size: 11px;
+  white-space: nowrap;
+}
+
+.terminal-log-fallback-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--warning) 38%, var(--border-subtle));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: color-mix(in srgb, var(--warning) 72%, var(--text-secondary));
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 

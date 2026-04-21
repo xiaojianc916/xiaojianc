@@ -38,7 +38,7 @@
               <line x1="14" y1="14" x2="11" y2="11" />
             </svg>
             <span class="source-control-setup-search-placeholder">搜索变更、分支......</span>
-            <span class="source-control-setup-kbd">⌘K</span>
+
           </div>
 
           <div class="source-control-setup-empty-state">
@@ -57,32 +57,20 @@
             </p>
 
             <div class="source-control-setup-actions">
-              <button
-                type="button"
-                class="source-control-setup-btn source-control-setup-btn-primary"
-                :disabled="isBusy || isLoading"
-                @click="handleInitRepository"
-              >
+              <button type="button" class="source-control-setup-btn source-control-setup-btn-primary"
+                :disabled="isBusy || isLoading" @click="handleInitRepository">
                 {{ initRepositoryButtonLabel }}
               </button>
 
-              <button
-                type="button"
-                class="source-control-setup-btn source-control-setup-btn-secondary"
-                :disabled="isBusy || isLoading"
-                @click="handleOpenCloneGuide"
-              >
+              <button type="button" class="source-control-setup-btn source-control-setup-btn-secondary"
+                :disabled="isBusy || isLoading" @click="handleOpenCloneGuide">
                 从远程克隆...
               </button>
             </div>
 
             <div class="source-control-setup-divider"></div>
 
-            <button
-              type="button"
-              class="source-control-setup-footnote"
-              @click="handleOpenGitGuide"
-            >
+            <button type="button" class="source-control-setup-footnote" @click="handleOpenGitGuide">
               <span>首次使用?查看 Git 入门指南</span>
               <svg viewBox="0 0 16 16" aria-hidden="true">
                 <path d="M6 3h7v7" />
@@ -115,7 +103,7 @@
             <path d="M20 20l-3.5-3.5" />
           </svg>
           <input v-model="searchQuery" type="text" placeholder="搜索变更、分支……" />
-          <span class="source-control-kbd">⌘K</span>
+
         </label>
       </div>
 
@@ -140,12 +128,8 @@
       </div>
 
       <nav class="source-control-nav" aria-label="源代码管理导航">
-        <div
-          v-for="item in navItems"
-          :key="item.key"
-          class="source-control-nav-item"
-          :class="{ 'is-active': item.active, 'is-inactive': !item.active }"
-        >
+        <div v-for="item in navItems" :key="item.key" class="source-control-nav-item"
+          :class="{ 'is-active': item.active, 'is-inactive': !item.active }">
           <svg v-if="item.key === 'changes'" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
             <path d="m7 10 5-5 5 5" />
@@ -187,17 +171,9 @@
           <p class="source-control-empty-text">{{ emptyChangesText }}</p>
         </section>
 
-        <section
-          v-for="section in filteredSections"
-          :key="section.key"
-          class="source-control-section"
-          :class="{ 'is-collapsed': collapsedSections[section.key] }"
-        >
-          <button
-            type="button"
-            class="source-control-section-header"
-            @click="toggleSectionCollapse(section.key)"
-          >
+        <section v-for="section in filteredSections" :key="section.key" class="source-control-section"
+          :class="{ 'is-collapsed': collapsedSections[section.key] }">
+          <button type="button" class="source-control-section-header" @click="toggleSectionCollapse(section.key)">
             <svg class="source-control-section-chevron" viewBox="0 0 24 24" aria-hidden="true">
               <polyline points="6 9 12 15 18 9" />
             </svg>
@@ -206,17 +182,10 @@
           </button>
 
           <div class="source-control-file-list">
-            <article
-              v-for="entry in section.entries"
-              :key="`${section.key}:${entry.path}`"
-              class="source-control-file"
-              :class="{ 'is-active': isActivePath(entry.path) }"
-            >
+            <article v-for="entry in section.entries" :key="`${section.key}:${entry.path}`" class="source-control-file"
+              :class="{ 'is-active': isActivePath(entry.path) }">
               <button type="button" class="source-control-file-main" @click="handleOpenFile(entry.path)">
-                <span
-                  class="source-control-file-tag"
-                  :class="`is-${resolveEntryTagTone(section.key, entry)}`"
-                >
+                <span class="source-control-file-tag" :class="`is-${resolveEntryTagTone(section.key, entry)}`">
                   {{ resolveEntryTag(section.key, entry) }}
                 </span>
 
@@ -227,16 +196,10 @@
               </button>
 
               <div v-if="resolveEntryActions(section.key, entry).length > 0" class="source-control-file-actions">
-                <button
-                  v-for="action in resolveEntryActions(section.key, entry)"
-                  :key="`${section.key}:${entry.path}:${action.key}`"
-                  type="button"
-                  class="source-control-icon-btn"
-                  :disabled="isBusy"
-                  :aria-label="action.title"
-                  :title="action.title"
-                  @click.stop="handleEntryAction(action.key, section.key, entry)"
-                >
+                <button v-for="action in resolveEntryActions(section.key, entry)"
+                  :key="`${section.key}:${entry.path}:${action.key}`" type="button" class="source-control-icon-btn"
+                  :disabled="isBusy" :aria-label="action.title" :title="action.title"
+                  @click.stop="handleEntryAction(action.key, section.key, entry)">
                   <svg v-if="action.icon === 'plus'" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M12 5v14" />
                     <path d="M5 12h14" />
@@ -256,34 +219,17 @@
       </div>
 
       <footer class="source-control-commit">
-        <textarea
-          v-model="commitMessage"
-          class="source-control-commit-input"
-          rows="3"
-          placeholder="提交信息（⌘↵ 提交）"
-          :disabled="isBusy"
-          @keydown.ctrl.enter.prevent="handleCommit"
-          @keydown.meta.enter.prevent="handleCommit"
-        />
+        <textarea v-model="commitMessage" class="source-control-commit-input" rows="3" placeholder="提交信息（⌘↵ 提交）"
+          :disabled="isBusy" @keydown.ctrl.enter.prevent="handleCommit" @keydown.meta.enter.prevent="handleCommit" />
 
         <div class="source-control-commit-actions">
-          <button
-            type="button"
-            class="source-control-btn source-control-btn-primary"
-            :disabled="!canCommit"
-            @click="handleCommit"
-          >
+          <button type="button" class="source-control-btn source-control-btn-primary" :disabled="!canCommit"
+            @click="handleCommit">
             {{ commitButtonLabel }}
           </button>
 
-          <button
-            type="button"
-            class="source-control-btn source-control-btn-icon"
-            :disabled="isBusy"
-            aria-label="更多选项"
-            title="更多选项"
-            @click="handleMoreActions"
-          >
+          <button type="button" class="source-control-btn source-control-btn-icon" :disabled="isBusy" aria-label="更多选项"
+            title="更多选项" @click="handleMoreActions">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <polyline points="6 9 12 15 18 9" />
             </svg>
@@ -499,18 +445,18 @@ const filteredSections = computed<IGitSection[]>(() => {
       const entries = matchesSection
         ? section.entries
         : section.entries.filter((entry) => {
-            const haystack = [
-              entry.fileName,
-              entry.relativePath,
-              entry.previousRelativePath ?? '',
-              entry.indexStatus ?? '',
-              entry.worktreeStatus ?? '',
-            ]
-              .join(' ')
-              .toLowerCase();
+          const haystack = [
+            entry.fileName,
+            entry.relativePath,
+            entry.previousRelativePath ?? '',
+            entry.indexStatus ?? '',
+            entry.worktreeStatus ?? '',
+          ]
+            .join(' ')
+            .toLowerCase();
 
-            return haystack.includes(keyword);
-          });
+          return haystack.includes(keyword);
+        });
 
       return {
         ...section,

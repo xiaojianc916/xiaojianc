@@ -47,6 +47,8 @@ export interface IStructuredRunTimelineItem {
 
 export interface IStructuredRunReport {
   hasContent: boolean;
+  source: 'structured' | 'fallback';
+  fallbackReason?: string;
   session: IStructuredRunSession;
   summary: IStructuredRunSummary;
   timeline: IStructuredRunTimelineItem[];
@@ -75,10 +77,12 @@ const ANSI_PATTERN =
   /\u001b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][\s\S]*?(?:\u0007|\u001b\\))/g;
 const STEP_LINE_PATTERN = /^(?:\[\s*step\s*\]|\[\s*\d+\/\d+\s*\]|step\s*\d+|==>|->)/i;
 const COMMAND_PROMPT_PATTERN = /^[\w.-]+@[\w.-]+:.*[$#]\s+/;
+const PROMPT_ONLY_PATTERN = /^[\w.-]+@[\w.-]+:.*[$#]\s*$/;
 const CONTINUATION_PROMPT_PATTERN = /^[\w.-]*>\s*/;
 const HEREDOC_START_PATTERN = /cat\s+<<'SH_EDITOR_EOF_\d+'/i;
 const HEREDOC_END_PATTERN = /^__SH_EDITOR_EOF_\d+__$/;
 const TEMP_SCRIPT_PATTERN = /\.sh-editor-[\w.-]+\.tmp\.sh/i;
+const DISPATCH_RUNNER_PATTERN = /\/tmp\/sh-editor-dispatch-[\w.-]+\.sh/i;
 const INTERNAL_SCRIPT_PATTERN = /__sh_editor_status|unset\s+__sh_editor_status/i;
 const RUN_FLOW_LOG_TITLE_PATTERN =
   /^(开始执行|已发送到集成终端|临时脚本文件|执行完成|执行失败|终端执行状态异常|脚本执行失败)$/;
@@ -338,7 +342,11 @@ const shouldSkipLine = (
     return { skip: true, nextInHeredoc: false };
   }
 
-  if (TEMP_SCRIPT_PATTERN.test(line) || INTERNAL_SCRIPT_PATTERN.test(line)) {
+  if (TEMP_SCRIPT_PATTERN.test(line) || DISPATCH_RUNNER_PATTERN.test(line) || INTERNAL_SCRIPT_PATTERN.test(line)) {
+    return { skip: true, nextInHeredoc: false };
+  }
+
+  if (PROMPT_ONLY_PATTERN.test(line)) {
     return { skip: true, nextInHeredoc: false };
   }
 
@@ -586,7 +594,9 @@ const assignGapWeights = (
     const nextItem = items[index + 1];
     let gapWeight = 1;
 
-    if (item.createdAtMs !== null && nextItem?.createdAtMs !== null) {
+    if (nextItem !== undefined &&
+      item.createdAtMs !== null &&
+      nextItem.createdAtMs !== null) {
       const diffMs = Math.max(0, nextItem.createdAtMs - item.createdAtMs);
       gapWeight = diffMs >= 3000 ? 3 : diffMs >= 1200 ? 2 : 1;
     }
@@ -767,6 +777,7 @@ export const buildStructuredRunReport = ({
       outputLines.length > 0 ||
       Boolean(lastRunResult) ||
       Boolean(isRunning),
+    source: 'structured',
     session: resolveSession(
       documentName,
       documentPath,

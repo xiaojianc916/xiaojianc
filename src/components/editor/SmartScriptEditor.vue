@@ -126,11 +126,15 @@ const loadGitBaseline = async (requestId: number): Promise<void> => {
     }
 
     gitBaseline.value = payload;
-  } catch {
+  } catch (error) {
     if (isUnmounted || requestId !== latestGitBaselineRequestId) {
       return;
     }
 
+    console.warn('加载 Git 基线失败，已回退为空基线', {
+      error,
+      documentPath,
+    });
     clearGitBaseline();
   }
 };

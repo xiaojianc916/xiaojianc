@@ -1,12 +1,9 @@
 <template>
-  <AppShellLayout
-:is-desktop-runtime="isDesktopRuntime" :sidebar-visible="isSidebarVisible"
+  <AppShellLayout :is-desktop-runtime="isDesktopRuntime" :sidebar-visible="isSidebarVisible"
     :terminal-visible="isTerminalVisible" :terminal-height="terminalHeight" :sidebar-width="sidebarWidth"
-    :content-overlay-visible="isSettingsView"
-    @update:terminal-height="handleTerminalHeightChange">
+    :content-overlay-visible="isSettingsView" @update:terminal-height="handleTerminalHeightChange">
     <template #titlebar>
-      <WindowTitleBar
-:document-name="editorStore.document.name" :is-dirty="editorStore.document.isDirty"
+      <WindowTitleBar :document-name="editorStore.document.name" :is-dirty="editorStore.document.isDirty"
         :has-active-document="editorStore.hasActiveDocument" :document-kind="editorStore.document.kind"
         :theme="appStore.theme" :is-running="editorStore.isRunning" :can-run="canRun" :can-save="canSave"
         :is-desktop-runtime="isDesktopRuntime" :is-terminal-visible="isTerminalVisible"
@@ -21,52 +18,47 @@
     </template>
 
     <template #activity>
-      <ActivityRail
-:active-view="activeSidebarView" :settings-active="isSettingsView"
+      <ActivityRail :active-view="activeSidebarView" :settings-active="isSettingsView"
         @select-view="handleSelectSidebarView" @toggle-settings="toggleSettingsView" />
     </template>
 
     <template #sidebar>
-      <AppSidebar
-v-show="isWorkbenchContentVisible" :document="editorStore.document" :view="activeSidebarView"
-        :is-desktop-runtime="isDesktopRuntime"
-        :workspace-root-path="editorStore.workspaceRootPath" :preloaded-workspace-root="startupWorkspaceRoot"
-        @open-file="openDocumentByPath" />
+      <AppSidebar v-show="isWorkbenchContentVisible" :document="editorStore.document" :view="activeSidebarView"
+        :is-desktop-runtime="isDesktopRuntime" :workspace-root-path="editorStore.workspaceRootPath"
+        :preloaded-workspace-root="startupWorkspaceRoot" :can-run="canRun" :is-running="editorStore.isRunning"
+        :active-run="editorStore.activeRunSummary" :run-history="editorStore.runHistory"
+        :command-templates="commandTemplates" :executor="editorStore.selectedExecutor" @open-file="openDocumentByPath"
+        @run="handleRunScript" @create-document="createNewDocument" @open-terminal="openTerminal"
+        @insert-template="handleInsertTemplate" @clear-run-history="clearTerminalLogs" />
     </template>
 
     <template #header>
-      <WorkbenchHeader
-v-show="isWorkbenchContentVisible" :documents="editorStore.documents"
+      <WorkbenchHeader v-show="isWorkbenchContentVisible" :documents="editorStore.documents"
         :active-document-id="editorStore.activeDocumentId"
         :file-path="editorStore.hasActiveDocument ? editorStore.document.path : null" @select-tab="activateDocument"
         @close-tab="requestCloseDocument" />
     </template>
 
-    <div
-v-show="isWorkbenchContentVisible" ref="editorViewportRef"
+    <div v-show="isWorkbenchContentVisible" ref="editorViewportRef"
       class="workbench-editor-viewport relative h-full min-h-0 overflow-hidden bg-(--editor-bg)"
       :data-diagnostics-resizing="diagnosticsTransitionsEnabled ? 'false' : 'true'">
       <div class="h-full min-h-0">
-        <EmptyEditorState
-v-if="!editorStore.hasActiveDocument" :has-workspace="Boolean(editorStore.workspaceRootPath)"
+        <EmptyEditorState v-if="!editorStore.hasActiveDocument" :has-workspace="Boolean(editorStore.workspaceRootPath)"
           :is-desktop-runtime="isDesktopRuntime" @create="createNewDocument" @open="openDocument"
           @open-folder="openFolder" />
 
-        <SmartScriptEditor
-v-else-if="editorStore.document.kind === 'text'" ref="editorRef"
+        <SmartScriptEditor v-else-if="editorStore.document.kind === 'text'" ref="editorRef"
           :document-id="editorStore.document.id" :document-path="editorStore.document.path"
           :document-name="editorStore.document.name" :model-value="editorStore.document.content" :theme="appStore.theme"
-          :editor-settings="appStore.settings.editor"
-          @update:model-value="updateContent" @cursor-position-change="handleCursorPositionChange"
-          @diagnostics-change="handleDiagnosticsChange" @format-request="handleFormatDocument" />
+          :editor-settings="appStore.settings.editor" @update:model-value="updateContent"
+          @cursor-position-change="handleCursorPositionChange" @diagnostics-change="handleDiagnosticsChange"
+          @format-request="handleFormatDocument" />
 
-        <ImageAssetPreview
-v-else-if="editorStore.document.path" :path="editorStore.document.path"
+        <ImageAssetPreview v-else-if="editorStore.document.path" :path="editorStore.document.path"
           :name="editorStore.document.name" />
       </div>
 
-      <div
-v-if="shouldRenderDiagnosticsPanel"
+      <div v-if="shouldRenderDiagnosticsPanel"
         class="diagnostics-overlay-panel absolute inset-y-0 right-0 z-20 max-w-full overflow-hidden border-l border-(--shell-divider) bg-(--panel-bg) shadow-[-24px_0_48px_rgba(0,0,0,0.28)]"
         :style="diagnosticsPanelStyle" :class="[
           diagnosticsPanelMotionClass,
@@ -75,8 +67,7 @@ v-if="shouldRenderDiagnosticsPanel"
             : 'pointer-events-none translate-x-3 opacity-0',
         ]">
         <div class="h-full">
-          <DiagnosticsPanel
-:analysis="editorStore.activeScriptAnalysis" :content="editorStore.document.content"
+          <DiagnosticsPanel :analysis="editorStore.activeScriptAnalysis" :content="editorStore.document.content"
             :document-name="editorStore.document.name" @select-diagnostic="handleSelectDiagnostic"
             @rerun-analysis="handleRerunDiagnostics" />
         </div>
@@ -84,38 +75,30 @@ v-if="shouldRenderDiagnosticsPanel"
     </div>
 
     <template #terminal>
-      <RunPanel
-v-show="isWorkbenchContentVisible" :terminal-output-length="editorStore.terminalOutputLength"
+      <RunPanel v-show="isWorkbenchContentVisible" :terminal-output-length="editorStore.terminalOutputLength"
         :terminal-output-version="editorStore.terminalOutputVersion"
         :resolve-terminal-output="editorStore.getTerminalOutputSnapshot" :run-logs="editorStore.runLogs"
         :last-run-result="editorStore.lastRunResult" :is-running="editorStore.isRunning"
         :executor="editorStore.selectedExecutor" :document-name="editorStore.document.name"
         :document-path="editorStore.document.path" :workspace-root-path="editorStore.workspaceRootPath"
         :theme="appStore.theme" :terminal-settings="appStore.settings.terminal"
-        :visible="isTerminalVisible && isWorkbenchContentVisible"
-        :is-maximized="isTerminalMaximized" @hide="hideTerminal"
-        @toggle-maximize="toggleTerminalMaximize" @clear-logs="clearTerminalLogs"
+        :visible="isTerminalVisible && isWorkbenchContentVisible" :is-maximized="isTerminalMaximized"
+        @hide="hideTerminal" @toggle-maximize="toggleTerminalMaximize" @clear-logs="clearTerminalLogs"
         @terminal-output="appendTerminalOutput" @terminal-run-complete="handleIntegratedTerminalRunComplete" />
     </template>
 
     <template #statusbar>
-      <WorkbenchStatusBar
-:has-active-document="editorStore.hasActiveDocument"
-        :document-kind="editorStore.document.kind"
-        :status-message="statusbarMessage"
+      <WorkbenchStatusBar :has-active-document="editorStore.hasActiveDocument"
+        :document-kind="editorStore.document.kind" :status-message="statusbarMessage"
         :encoding="editorStore.document.encoding" :executor="editorStore.selectedExecutor"
         :cursor-line="editorStore.cursorLine" :cursor-column="editorStore.cursorColumn"
-        :char-count="editorStore.document.charCount"
-        :git-branch-name="gitBranchName"
-        :git-added-count="gitAddedCount"
-        :git-removed-count="gitRemovedCount"
-        @change-encoding="updateEncoding"
+        :char-count="editorStore.document.charCount" :git-branch-name="gitBranchName" :git-added-count="gitAddedCount"
+        :git-removed-count="gitRemovedCount" @change-encoding="updateEncoding"
         @open-source-control="handleSelectSidebarView('source-control')" />
     </template>
 
     <template #overlay>
-      <WorkbenchSettingsOverlay
-ref="settingsOverlayRef" :open="isSettingsView" @close="closeSettingsView"
+      <WorkbenchSettingsOverlay ref="settingsOverlayRef" :open="isSettingsView" @close="closeSettingsView"
         @saved="handleSettingsSaved" />
     </template>
   </AppShellLayout>
@@ -138,9 +121,9 @@ import AppShellLayout from '@/layouts/AppShellLayout.vue';
 import { useGitStore } from '@/store/git';
 import type { TWorkbenchSidebarView } from '@/types/app';
 import type {
-    IAnalyzeScriptPayload,
-    ICommandTemplate,
-    IWorkspaceDirectoryPayload,
+  IAnalyzeScriptPayload,
+  ICommandTemplate,
+  IWorkspaceDirectoryPayload,
 } from '@/types/editor';
 import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import { consumeProgrammaticWindowCloseAllowance } from '@/utils/window-close';
@@ -182,6 +165,7 @@ const sidebarWidth = computed(() =>
   activeSidebarView.value === 'source-control'
     || activeSidebarView.value === 'explorer'
     || activeSidebarView.value === 'search'
+    || activeSidebarView.value === 'run'
     || activeSidebarView.value === 'extensions'
     ? 280
     : 240,

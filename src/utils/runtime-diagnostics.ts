@@ -1,5 +1,5 @@
-import { ref } from 'vue';
 import { toErrorMessage } from '@/utils/error';
+import { ref } from 'vue';
 
 export interface IRuntimeErrorState {
   title: string;
@@ -51,6 +51,7 @@ const normalizeErrorDetail = (error: unknown): string => {
   try {
     return JSON.stringify(error, null, 2);
   } catch {
+    // 循环引用或宿主对象 stringify 失败时，退回 String(error) 仍能保留基本上下文。
     return String(error);
   }
 };

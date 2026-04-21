@@ -1,7 +1,9 @@
 import type {
+  IActiveRunSummary,
   IAnalyzeScriptPayload,
   IEditorDocument,
   IExecutionEnvironment,
+  IRunHistoryEntry,
   IRunLogEntry,
   IRunResult,
   IScriptFilePayload,
@@ -17,6 +19,7 @@ import { computed, ref, watch } from 'vue';
 const MAX_TERMINAL_OUTPUT_LENGTH = 120_000;
 const MAX_TERMINAL_OUTPUT_CHUNK_LENGTH = 4_096;
 const MAX_RUN_LOG_ENTRIES = 500;
+const MAX_RUN_HISTORY_ENTRIES = 30;
 
 const countCharacters = (content: string): number => Array.from(content).length;
 
@@ -87,6 +90,7 @@ const createUniqueId = (prefix: string): string => {
 
 const createDocumentId = (): string => createUniqueId('document');
 const createLogId = (): string => createUniqueId('log');
+const createRunHistoryId = (): string => createUniqueId('run-history');
 
 const syncDocumentState = (document: IEditorDocument): IEditorDocument => {
   document.lineCount = document.content.length === 0 ? 1 : document.content.split('\n').length;
@@ -147,7 +151,9 @@ export const useEditorStore = defineStore('editor', () => {
   const terminalOutputLength = ref(0);
   const terminalOutputVersion = ref(0);
   const runLogs = ref<IRunLogEntry[]>([]);
+  const runHistory = ref<IRunHistoryEntry[]>([]);
   const lastRunResult = ref<IRunResult | null>(null);
+  const activeRunSummary = ref<IActiveRunSummary | null>(null);
   const isRunning = ref(false);
   const workspaceRootPath = ref<string | null>(null);
   const protectedWorkspaceRootPaths = ref<string[]>([]);
@@ -456,6 +462,21 @@ export const useEditorStore = defineStore('editor', () => {
     }
   };
 
+  const appendRunHistory = (entry: Omit<IRunHistoryEntry, 'id'>): void => {
+    runHistory.value.unshift({
+      id: createRunHistoryId(),
+      ...entry,
+    });
+
+    if (runHistory.value.length > MAX_RUN_HISTORY_ENTRIES) {
+      runHistory.value.length = MAX_RUN_HISTORY_ENTRIES;
+    }
+  };
+
+  const setActiveRunSummary = (value: IActiveRunSummary | null): void => {
+    activeRunSummary.value = value;
+  };
+
   const setWorkspaceRootPath = (path: string | null): void => {
     workspaceRootPath.value = path;
   };
@@ -474,6 +495,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   const clearLogs = (): void => {
     runLogs.value = [];
+    runHistory.value = [];
     setTerminalOutputChunks([]);
     lastRunResult.value = null;
   };
@@ -486,6 +508,7 @@ export const useEditorStore = defineStore('editor', () => {
     clearDocuments();
     workspaceRootPath.value = null;
     clearLogs();
+    activeRunSummary.value = null;
     isRunning.value = false;
     pendingTerminalRunId.value = null;
   };
@@ -502,7 +525,9 @@ export const useEditorStore = defineStore('editor', () => {
     terminalOutputLength,
     terminalOutputVersion,
     runLogs,
+    runHistory,
     lastRunResult,
+    activeRunSummary,
     isRunning,
     workspaceRootPath,
     protectedWorkspaceRootPaths,
@@ -534,9 +559,11 @@ export const useEditorStore = defineStore('editor', () => {
     getTerminalOutputSnapshot,
     setCursorPosition,
     appendLog,
+    appendRunHistory,
     setWorkspaceRootPath,
     setProtectedWorkspaceRootPaths,
     setPendingTerminalRunId,
+    setActiveRunSummary,
     setDocumentAnalysis,
     clearDocumentAnalysis,
     clearDocuments,

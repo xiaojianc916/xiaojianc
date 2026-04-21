@@ -1,3 +1,4 @@
+import { getThemeManager } from '@/themes';
 import {
   ACCENT_COLORS,
   RADIUS_PRESETS,
@@ -228,6 +229,7 @@ const readLegacyTheme = (): TThemePreference | null => {
     const raw = window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
     return isKnownTheme(raw) ? raw : null;
   } catch {
+    // localStorage 可能被禁用；保持 null 让后续逻辑继续走默认主题分支。
     return null;
   }
 };
@@ -239,8 +241,10 @@ const readStoredSettings = (): IAppSettings => {
     return defaults;
   }
 
+  let raw: string | null = null;
+
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       const legacyTheme = readLegacyTheme();
       if (legacyTheme) {
@@ -250,7 +254,12 @@ const readStoredSettings = (): IAppSettings => {
     }
 
     return normalizeSettings(JSON.parse(raw));
-  } catch {
+  } catch (error) {
+    console.warn('读取应用设置失败，已回退默认设置', {
+      error,
+      storageKey: STORAGE_KEY,
+      sample: raw?.slice(0, 180) ?? null,
+    });
     return defaults;
   }
 };
@@ -271,15 +280,19 @@ const applyThemeToDocument = (settings: IAppSettings, effectiveTheme: TThemeMode
   const root = document.documentElement;
   if (!root) return;
 
+  // ── 主题系统管道 ────────────────────────────────────────────────────────────
+  // 委托主题管理器完成基础颜色令牌注入（CSS 变量 + html class 切换）。
+  // main.ts 已在启动时调用 init()；此处的 set() 只处理运行时切换。
+  getThemeManager().set(effectiveTheme);
+
+  // ── 用户偏好覆盖（在管道结果之上叠加）──────────────────────────────────────
+  // 以下变量由用户设置动态控制，不进入主题变体文件
   const accentStyle = ACCENT_STYLE_MAP[settings.appearance.accentColor];
-  root.dataset.theme = effectiveTheme;
-  root.dataset.themePreference = settings.appearance.themePreference;
-  root.dataset.uiDensity = settings.appearance.uiDensity;
+  root.dataset['themePreference'] = settings.appearance.themePreference;
+  root.dataset['uiDensity'] = settings.appearance.uiDensity;
   root.classList.toggle('reduce-motion', settings.appearance.reduceMotion);
 
-  // classList 兼容一些只认 class 的 UI 库（Tailwind dark mode 等）
-  root.classList.toggle('dark', effectiveTheme === 'dark');
-  root.classList.toggle('light', effectiveTheme === 'light');
+  // accent 系列：覆盖主题管理器注入的默认值
   root.style.setProperty('--accent', accentStyle.accent);
   root.style.setProperty('--accent-strong', accentStyle.accentStrong);
   root.style.setProperty('--accent-muted', accentStyle.accentMuted);
@@ -326,8 +339,12 @@ const bindSettingsStorageSync = (onSettingsChange: (value: IAppSettings) => void
 
     try {
       onSettingsChange(normalizeSettings(JSON.parse(event.newValue)));
-    } catch {
-      // ignore malformed storage payload
+    } catch (error) {
+      console.warn('跨窗口同步应用设置失败，已忽略损坏的存储内容', {
+        error,
+        storageKey: STORAGE_KEY,
+        sample: event.newValue.slice(0, 180),
+      });
     }
   };
 

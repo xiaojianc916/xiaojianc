@@ -11,6 +11,7 @@ import type {
   IRunResult,
   IWorkspaceDirectoryPayload,
   TDocumentEncoding,
+  TRunHistoryStatus,
 } from '@/types/editor';
 import {
   DEFAULT_TERMINAL_SESSION_ID,
@@ -58,6 +59,18 @@ const trimTrailingWhitespace = (content: string): string =>
     .split('\n')
     .map((line) => line.replace(/[\t ]+$/u, ''))
     .join('\n');
+
+const resolveRunHistoryStatus = (exitCode: number | null): TRunHistoryStatus => {
+  if (exitCode === 0) {
+    return 'success';
+  }
+
+  if (exitCode === null || exitCode === -1 || exitCode === 130) {
+    return 'canceled';
+  }
+
+  return 'failed';
+};
 
 const isTextDocument = (document: IEditorDocument): boolean => document.kind === 'text';
 
@@ -286,6 +299,7 @@ export const useWorkbench = () => {
       resetBufferedTerminalOutput();
       editorStore.isRunning = false;
       editorStore.setPendingTerminalRunId(null);
+      editorStore.setActiveRunSummary(null);
       activeTerminalRunMeta = null;
 
       const message = '终端运行超时，已停止等待完成事件，请检查终端状态。';
@@ -820,36 +834,92 @@ export const useWorkbench = () => {
     }
 
     const runId = `terminal-run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const startedAt = new Date().toISOString();
+    const initialUsedTempFile = document.isDirty || !document.path;
+
     editorStore.setPendingTerminalRunId(runId);
-    activeTerminalRunMeta = null;
-
-    const dispatchResult = await dispatchScriptToIntegratedTerminal(document, runId);
-    if (isDisposed) {
-      return;
-    }
-
-    activeTerminalRunMeta = {
+    editorStore.setActiveRunSummary({
       runId,
-      startedAt: dispatchResult.startedAt,
-      commandLine: dispatchResult.commandLine,
-      usedTempFile: dispatchResult.usedTempFile,
-    };
-
+      documentName: document.name,
+      documentPath: document.path,
+      commandLine: '正在发送到集成终端…',
+      executor: DEFAULT_EXECUTOR,
+      executorLabel: getExecutorLabel(DEFAULT_EXECUTOR),
+      startedAt,
+      usedTempFile: initialUsedTempFile,
+    });
     resetBufferedTerminalOutput();
     editorStore.lastRunResult = null;
     editorStore.setTerminalOutput('');
-    editorStore.appendLog('success', '已发送到集成终端', dispatchResult.commandLine);
-
-    if (dispatchResult.usedTempFile) {
-      editorStore.appendLog(
-        'info',
-        '临时脚本文件',
-        '当前内容已写入临时 shell 脚本文件后执行。',
-      );
-    }
-
+    activeTerminalRunMeta = {
+      runId,
+      startedAt,
+      commandLine: 'bash',
+      usedTempFile: initialUsedTempFile,
+    };
     scheduleTerminalRunCompletionTimeout(runId);
-    useMessage().success('脚本已发送到集成终端。');
+
+    try {
+      const dispatchResult = await dispatchScriptToIntegratedTerminal(document, runId);
+      if (isDisposed) {
+        return;
+      }
+
+      const currentPendingRunId = editorStore.pendingTerminalRunId;
+      if (currentPendingRunId !== runId) {
+        return;
+      }
+
+      activeTerminalRunMeta = {
+        runId,
+        startedAt: dispatchResult.startedAt,
+        commandLine: dispatchResult.commandLine,
+        usedTempFile: dispatchResult.usedTempFile,
+      };
+      editorStore.setActiveRunSummary({
+        runId,
+        documentName: document.name,
+        documentPath: document.path,
+        commandLine: dispatchResult.commandLine,
+        executor: DEFAULT_EXECUTOR,
+        executorLabel: getExecutorLabel(DEFAULT_EXECUTOR),
+        startedAt: dispatchResult.startedAt,
+        usedTempFile: dispatchResult.usedTempFile,
+      });
+      editorStore.appendLog('success', '已发送到集成终端', dispatchResult.commandLine);
+
+      if (dispatchResult.usedTempFile) {
+        editorStore.appendLog(
+          'info',
+          '临时脚本文件',
+          '当前内容已写入临时 shell 脚本文件后执行。',
+        );
+      }
+
+      useMessage().success('脚本已发送到集成终端。');
+    } catch (error) {
+      if (isDisposed) {
+        return;
+      }
+
+      const currentPendingRunId = editorStore.pendingTerminalRunId;
+      const currentActiveRunId = activeTerminalRunMeta?.runId;
+      if (currentPendingRunId !== runId && currentActiveRunId !== runId) {
+        return;
+      }
+
+      resetBufferedTerminalOutput();
+      clearTerminalRunFallbackTimer();
+      editorStore.setPendingTerminalRunId(null);
+      editorStore.setActiveRunSummary(null);
+      activeTerminalRunMeta = null;
+      editorStore.isRunning = false;
+
+      const message = toErrorMessage(error, '脚本执行失败');
+      editorStore.appendLog('error', '脚本执行失败', message);
+      editorStore.setTerminalOutput(message);
+      useMessage().error(message);
+    }
   };
 
   const handleIntegratedTerminalRunComplete = (payload: ITerminalRunCompletePayload): void => {
@@ -862,10 +932,13 @@ export const useWorkbench = () => {
       return;
     }
 
+    const activeRun = activeTerminalRunMeta;
+    const activeRunSummary = editorStore.activeRunSummary;
+
+    editorStore.setPendingTerminalRunId(null);
     clearTerminalRunFallbackTimer();
     flushBufferedTerminalOutput();
 
-    const activeRun = activeTerminalRunMeta;
     const safeOutput = editorStore.getTerminalOutputSnapshot();
 
     const durationMs = activeRun
@@ -891,8 +964,21 @@ export const useWorkbench = () => {
     };
 
     editorStore.lastRunResult = runResult;
+    editorStore.appendRunHistory({
+      status: resolveRunHistoryStatus(runResult.exitCode),
+      documentName: activeRunSummary?.documentName ?? editorStore.document.name,
+      documentPath: activeRunSummary?.documentPath ?? editorStore.document.path,
+      commandLine: runResult.commandLine,
+      executor: runResult.executor,
+      executorLabel: runResult.executorLabel,
+      startedAt: runResult.startedAt,
+      finishedAt: runResult.finishedAt,
+      durationMs: runResult.durationMs,
+      exitCode: runResult.exitCode,
+      usedTempFile: runResult.usedTempFile,
+    });
     editorStore.isRunning = false;
-    editorStore.setPendingTerminalRunId(null);
+    editorStore.setActiveRunSummary(null);
     activeTerminalRunMeta = null;
 
     editorStore.appendLog(
@@ -934,12 +1020,13 @@ export const useWorkbench = () => {
     try {
       await runScriptInIntegratedTerminal(currentDocument);
     } catch (error) {
+      const message = toErrorMessage(error, '脚本执行失败');
       resetBufferedTerminalOutput();
       clearTerminalRunFallbackTimer();
       editorStore.setPendingTerminalRunId(null);
+      editorStore.setActiveRunSummary(null);
       activeTerminalRunMeta = null;
       editorStore.isRunning = false;
-      const message = toErrorMessage(error, '脚本执行失败');
       editorStore.appendLog('error', '脚本执行失败', message);
       editorStore.setTerminalOutput(message);
       useMessage().error(message);
@@ -992,6 +1079,7 @@ export const useWorkbench = () => {
     isDisposed = true;
     resetBufferedTerminalOutput();
     clearTerminalRunFallbackTimer();
+    editorStore.setActiveRunSummary(null);
     activeTerminalRunMeta = null;
   });
 

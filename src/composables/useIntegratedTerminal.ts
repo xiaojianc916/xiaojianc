@@ -12,8 +12,8 @@ import type {
   TTerminalConnectionState,
 } from '@/types/terminal';
 import { DEFAULT_TERMINAL_SESSION_ID } from '@/types/terminal';
-import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import { writeClipboardText } from '@/utils/clipboard';
+import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import { toErrorMessage } from '@/utils/error';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { FitAddon } from '@xterm/addon-fit';
@@ -38,6 +38,7 @@ const TERMINAL_ENABLE_WEBGL_RENDERER = false;
 const TERMINAL_WEBGL_RECOVERY_DELAY_MS = 180;
 const TERMINAL_LAYOUT_SETTLE_DELAY_MS = 72;
 const TERMINAL_OUTPUT_FLUSH_DELAY_MS = 16;
+const TERMINAL_RUN_COMPLETE_FLUSH_TIMEOUT_MS = 160;
 const TERMINAL_SCROLL_RECOVERY_DELAY_MS = 64;
 const TERMINAL_PROMPT_WAKE_DELAY_MS = 320;
 const DEFAULT_TERMINAL_FONT_FAMILY =
@@ -261,6 +262,7 @@ let pendingInitialPaintRecovery = true;
 
 const pendingTerminalWriteCallbacks: Array<() => void> = [];
 let activeRunId: string | null = null;
+let hasStructuredRunOutputForActiveRun = false;
 
 let webglRendererBlocked = false;
 let previousHostSize = { width: 0, height: 0 };
@@ -861,6 +863,7 @@ export const useIntegratedTerminal = ({
       return;
     }
     activeRunId = null;
+    hasStructuredRunOutputForActiveRun = false;
   };
 
   const resetTerminalRunCapture = (): void => {
@@ -1019,6 +1022,15 @@ export const useIntegratedTerminal = ({
     if (!event.payload.data) {
       return;
     }
+
+    if (activeRunId && !hasStructuredRunOutputForActiveRun) {
+      emitOutput({
+        sessionId,
+        runId: activeRunId,
+        data: event.payload.data,
+      });
+    }
+
     queueTerminalWrite(event.payload.data, { scrollToBottom: true });
   };
 
@@ -1026,6 +1038,7 @@ export const useIntegratedTerminal = ({
     if (event.payload.sessionId !== sessionId || !event.payload.data) {
       return;
     }
+    hasStructuredRunOutputForActiveRun = true;
     emitOutput(event.payload);
   };
 
@@ -1036,11 +1049,29 @@ export const useIntegratedTerminal = ({
       return;
     }
 
+    let didEmitRunComplete = false;
+    let runCompleteFallbackTimeoutId: number | null = null;
+    const finalizeRunComplete = (): void => {
+      if (didEmitRunComplete) {
+        return;
+      }
+      didEmitRunComplete = true;
+      if (runCompleteFallbackTimeoutId !== null) {
+        window.clearTimeout(runCompleteFallbackTimeoutId);
+        runCompleteFallbackTimeoutId = null;
+      }
+      emitRunComplete(payload);
+    };
+
+    runCompleteFallbackTimeoutId = window.setTimeout(() => {
+      finalizeRunComplete();
+    }, TERMINAL_RUN_COMPLETE_FLUSH_TIMEOUT_MS);
+
     focusTerminal();
     flushTerminalWriteBufferNow({
       afterWrite: () => {
         scheduleViewportSync({ scrollToBottom: true });
-        emitRunComplete(payload);
+        finalizeRunComplete();
       },
       forceLayout: true,
     });
@@ -1254,6 +1285,7 @@ export const useIntegratedTerminal = ({
         return;
       }
       activeRunId = nextRunId;
+      hasStructuredRunOutputForActiveRun = false;
       isAutoFollowEnabled = true;
       shouldFitBeforeNextVisibleWrite = true;
       scheduleLayoutSync();
