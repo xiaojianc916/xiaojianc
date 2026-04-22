@@ -2,13 +2,22 @@
   /* Resize 视觉撕裂抑制 —— ADR-20260422-window-resize-tearing 授权 !important 使用 */
   /* stylelint-disable declaration-no-important -- ADR-20260422-window-resize-tearing: 仅 resize 系统态允许覆盖组件动画 */
   html.is-resizing,
+  html.is-resizing body,
+  html.is-resizing #app,
+  html.is-resizing .app-root-stage,
   html.is-resizing * {
     transition: none !important;
     animation: none !important;
   }
 
   html.is-resizing .backdrop-blur,
-  html.is-resizing [class*='shadow-'] {
+  html.is-resizing [class*='shadow-'],
+  html.is-resizing .diagnostics-overlay-panel,
+  html.is-resizing .dropdown-menu-panel,
+  html.is-resizing .monaco-editor .suggest-widget,
+  html.is-resizing .monaco-editor .suggest-details,
+  html.is-resizing .monaco-editor .find-widget,
+  html.is-resizing .monaco-editor .parameter-hints-widget {
     backdrop-filter: none !important;
     box-shadow: none !important;
   }

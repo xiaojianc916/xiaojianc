@@ -116,6 +116,7 @@ const emit = defineEmits<{
 }>();
 
 const WINDOW_RESIZE_SETTLE_MS = 140;
+const WINDOW_RESIZE_START_EVENT = 'shell-window-resize-start';
 const mainRef = ref<HTMLElement | null>(null);
 const shellRef = ref<HTMLElement | null>(null);
 const layoutTransitionsEnabled = ref(true);
@@ -323,6 +324,9 @@ const startWindowResize = async (direction: TResizeDirection, event: MouseEvent)
   if (!props.isDesktopRuntime || event.button !== 0) {
     return;
   }
+
+  layoutTransitionsEnabled.value = false;
+  window.dispatchEvent(new Event(WINDOW_RESIZE_START_EVENT));
 
   try {
     const { getCurrentWindow } = await import('@tauri-apps/api/window');

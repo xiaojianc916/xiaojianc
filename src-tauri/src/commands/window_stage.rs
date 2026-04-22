@@ -6,7 +6,7 @@ const MAIN_WINDOW_WIDTH: f64 = 1500.0;
 const MAIN_WINDOW_HEIGHT: f64 = 960.0;
 const MAIN_WINDOW_MIN_WIDTH: f64 = 1220.0;
 const MAIN_WINDOW_MIN_HEIGHT: f64 = 760.0;
-const MAIN_WINDOW_BACKGROUND: Color = Color(0x0A, 0x0A, 0x0C, 0xFF);
+const MAIN_WINDOW_BACKGROUND: Color = Color(0x0D, 0x0F, 0x12, 0xFF);
 
 fn apply_window_background(
     window: &tauri::WebviewWindow,
@@ -28,7 +28,7 @@ pub fn apply_window_stage(app: AppHandle, stage: String) -> Result<(), String> {
         "splash" => {
             let splash_size =
                 Size::Logical(LogicalSize::new(SPLASH_WINDOW_WIDTH, SPLASH_WINDOW_HEIGHT));
-            apply_window_background(&window, None, "startup")?;
+            apply_window_background(&window, Some(MAIN_WINDOW_BACKGROUND), "startup")?;
             window
                 .set_min_size(Some(splash_size))
                 .map_err(|error| format!("设置欢迎窗最小尺寸失败：{error}"))?;
@@ -82,7 +82,7 @@ pub fn show_startup_window(app: AppHandle) -> Result<(), String> {
         .ok_or_else(|| "未找到主窗口。".to_string())?;
 
     let splash_size = Size::Logical(LogicalSize::new(SPLASH_WINDOW_WIDTH, SPLASH_WINDOW_HEIGHT));
-    apply_window_background(&window, None, "startup")?;
+    apply_window_background(&window, Some(MAIN_WINDOW_BACKGROUND), "startup")?;
     window
         .set_min_size(Some(splash_size))
         .map_err(|error| format!("设置欢迎窗最小尺寸失败：{error}"))?;

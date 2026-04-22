@@ -4,6 +4,7 @@ import { onScopeDispose } from 'vue';
 
 const RESET_DELAY_MS = 120;
 const TAURI_INTERNALS_KEY = '__TAURI_INTERNALS__';
+const WINDOW_RESIZE_START_EVENT = 'shell-window-resize-start';
 
 interface IResizeEventSource {
   onResized(handler: () => void): Promise<() => void>;
@@ -41,6 +42,7 @@ export const useWindowResizeState = () => {
   const html = document.documentElement;
   let timer: number | undefined;
   let unlisten: (() => void) | undefined;
+  let detachResizeStartListener: (() => void) | undefined;
   let isDisposed = false;
 
   const clearResizeTimer = (): void => {
@@ -65,8 +67,20 @@ export const useWindowResizeState = () => {
     isDisposed = true;
     clearResizeTimer();
     unlisten?.();
+    detachResizeStartListener?.();
     html.classList.remove('is-resizing');
   });
+
+  if (typeof window !== 'undefined') {
+    const handleResizeStart = (): void => {
+      markResizing();
+    };
+
+    window.addEventListener(WINDOW_RESIZE_START_EVENT, handleResizeStart);
+    detachResizeStartListener = () => {
+      window.removeEventListener(WINDOW_RESIZE_START_EVENT, handleResizeStart);
+    };
+  }
 
   if (!hasTauriWindowRuntime()) {
     return {

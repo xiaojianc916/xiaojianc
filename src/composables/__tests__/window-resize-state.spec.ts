@@ -93,4 +93,13 @@ describe('useWindowResizeState', () => {
 
     expect(getCurrentWindowMock).not.toHaveBeenCalled();
   });
+
+  it('收到 resize-start 事件时立即进入 is-resizing', () => {
+    Reflect.deleteProperty(window, '__TAURI_INTERNALS__');
+
+    scope.run(() => useWindowResizeState());
+    window.dispatchEvent(new Event('shell-window-resize-start'));
+
+    expect(document.documentElement.classList.contains('is-resizing')).toBe(true);
+  });
 });

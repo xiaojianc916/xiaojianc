@@ -3,7 +3,6 @@
  * ============================================================ */
 
 @import 'tailwindcss';
-@import './assets/css/shadcn-theme.css';
 @import './assets/css/tailwind.css';
 
 @custom-variant dark (&:is(.dark *));
@@ -90,7 +89,7 @@
     'cv01' 1,
     'ss03' 1;
 
-  --app-bg: var(--background);
+  --app-bg: #0d0f12;
   --titlebar-bg: #181a1f;
   --activity-bg: #111318;
   --sidebar-bg: #15181d;
@@ -167,7 +166,7 @@
 [data-theme='light'] {
   color-scheme: light;
 
-  --app-bg: var(--background);
+  --app-bg: #f3f5f8;
   --titlebar-bg: #f6f7fb;
   --activity-bg: #edf1f8;
   --sidebar-bg: #f7f9fc;
@@ -235,8 +234,8 @@ body,
 #app {
   margin: 0;
   min-height: 100%;
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--app-bg);
+  color: var(--text-primary);
 }
 
 html.splash-window-mode,
@@ -324,7 +323,7 @@ button:disabled,
 .diagnostics-overlay-panel {
   min-width: 0;
   min-height: 0;
-  contain: layout paint;
+  contain: layout;
   isolation: isolate;
 }
 
@@ -2904,7 +2903,7 @@ button:disabled,
   overflow: hidden;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--terminal-fill, var(--panel-bg)) 98%, rgba(255, 255, 255, 0.02)), var(--terminal-fill, var(--panel-bg)));
-  contain: layout paint;
+  contain: layout;
   overscroll-behavior: contain;
   isolation: isolate;
 }
