@@ -121,9 +121,6 @@ const sortLogsAscending = (runLogs: IRunLogEntry[]): IRunLogEntry[] =>
     (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
   );
 
-const collectRunFlowLogs = (runLogs: IRunLogEntry[]): IRunLogEntry[] =>
-  sortLogsAscending(runLogs).filter(isTerminalRunFlowLog);
-
 const parseTimestamp = (value: string | null | undefined): number | null => {
   if (!value) {
     return null;
@@ -256,15 +253,15 @@ const resolveSession = (
 
 const resolveTargetRunId = (
   lastRunResult: IRunResult | null,
-  orderedLogs: IRunLogEntry[],
+  runFlowLogs: IRunLogEntry[],
 ): string | null => {
   if (lastRunResult?.runId) {
     return lastRunResult.runId;
   }
 
-  for (let index = orderedLogs.length - 1; index >= 0; index -= 1) {
-    const item = orderedLogs[index];
-    if (isTerminalRunFlowLog(item) && item.runId) {
+  for (let index = runFlowLogs.length - 1; index >= 0; index -= 1) {
+    const item = runFlowLogs[index];
+    if (item.runId) {
       return item.runId;
     }
   }
@@ -273,21 +270,17 @@ const resolveTargetRunId = (
 };
 
 const resolveScopedRunLogs = (
-  runLogs: IRunLogEntry[],
+  orderedLogs: IRunLogEntry[],
+  runFlowLogs: IRunLogEntry[],
   lastRunResult: IRunResult | null,
 ): IRunLogEntry[] => {
-  const orderedLogs = sortLogsAscending(runLogs);
-  const runFlowLogs = orderedLogs.filter(isTerminalRunFlowLog);
-
   if (runFlowLogs.length === 0) {
     return [];
   }
 
-  const targetRunId = resolveTargetRunId(lastRunResult, orderedLogs);
+  const targetRunId = resolveTargetRunId(lastRunResult, runFlowLogs);
   if (targetRunId) {
-    const scopedByRunId = orderedLogs.filter(
-      (item) => isTerminalRunFlowLog(item) && item.runId === targetRunId,
-    );
+    const scopedByRunId = runFlowLogs.filter((item) => item.runId === targetRunId);
     if (scopedByRunId.length > 0) {
       return scopedByRunId;
     }
@@ -316,7 +309,7 @@ const resolveScopedRunLogs = (
 
   const scopedLogs = orderedLogs
     .slice(startIndex)
-    .filter((item) => RUN_FLOW_LOG_TITLE_PATTERN.test(item.title));
+    .filter(isTerminalRunFlowLog);
 
   if (scopedLogs.length > 0) {
     return scopedLogs;
@@ -557,16 +550,20 @@ const buildOutputTimelineItems = (
   outputLines: string[],
   isRunning: boolean,
 ): TInternalTimelineItem[] =>
-  collectStepLines(outputLines).map((line, index) => ({
-    id: `output-step-${index}`,
-    tag: 'check',
-    accent: resolveTimelineStatus(line) === 'error' ? 'red' : 'yellow',
-    title: resolveOutputTitle(line),
-    description: line,
-    status: resolveTimelineStatus(line) === 'done' && isRunning ? 'running' : resolveTimelineStatus(line),
-    timestamp: '实时',
-    createdAtMs: null,
-  }));
+  collectStepLines(outputLines).map((line, index) => {
+    const status = resolveTimelineStatus(line);
+
+    return {
+      id: `output-step-${index}`,
+      tag: 'check',
+      accent: status === 'error' ? 'red' : 'yellow',
+      title: resolveOutputTitle(line),
+      description: line,
+      status: status === 'done' && isRunning ? 'running' : status,
+      timestamp: '实时',
+      createdAtMs: null,
+    };
+  });
 
 const buildSyntheticOutcomeItem = (
   lastRunResult: IRunResult | null,
@@ -619,9 +616,14 @@ const buildSyntheticOutcomeItem = (
 };
 
 const buildRunningTimelineItem = (outputLines: string[]): TInternalTimelineItem => {
-  const latestOutputLine = [...outputLines]
-    .reverse()
-    .find((line) => !isMetaOutputLine(line));
+  let latestOutputLine: string | undefined;
+  for (let index = outputLines.length - 1; index >= 0; index -= 1) {
+    const line = outputLines[index];
+    if (line !== undefined && !isMetaOutputLine(line)) {
+      latestOutputLine = line;
+      break;
+    }
+  }
 
   return {
     id: 'running-now',
@@ -674,16 +676,18 @@ const buildTimeline = (
   exitCodeFromOutput: number | null,
   isRunning: boolean,
 ): IStructuredRunTimelineItem[] => {
-  const logItems = runLogs.map((item) => ({
-    item,
-    timelineItem: buildLogTimelineItem(item, outputLines),
-  }));
-  const finalLogItems = logItems
-    .filter(({ item }) => isTerminalRunFinalLog(item))
-    .map(({ timelineItem }) => timelineItem);
-  const primaryLogItems = logItems
-    .filter(({ item }) => !isTerminalRunFinalLog(item))
-    .map(({ timelineItem }) => timelineItem);
+  const primaryLogItems: TInternalTimelineItem[] = [];
+  const finalLogItems: TInternalTimelineItem[] = [];
+
+  for (const item of runLogs) {
+    const timelineItem = buildLogTimelineItem(item, outputLines);
+    if (isTerminalRunFinalLog(item)) {
+      finalLogItems.push(timelineItem);
+    } else {
+      primaryLogItems.push(timelineItem);
+    }
+  }
+
   const timelineItems: TInternalTimelineItem[] = [
     ...primaryLogItems,
     ...buildOutputTimelineItems(outputLines, isRunning),
@@ -822,8 +826,9 @@ export const buildStructuredRunReport = ({
   workspaceRootPath,
 }: TBuildStructuredRunReportOptions): IStructuredRunReport => {
   const sourceRunLogs = Array.isArray(runLogs) ? runLogs : [];
-  const rawRunFlowLogs = collectRunFlowLogs(sourceRunLogs);
-  const safeRunLogs = resolveScopedRunLogs(sourceRunLogs, lastRunResult);
+  const orderedLogs = sortLogsAscending(sourceRunLogs);
+  const rawRunFlowLogs = orderedLogs.filter(isTerminalRunFlowLog);
+  const safeRunLogs = resolveScopedRunLogs(orderedLogs, rawRunFlowLogs, lastRunResult);
   const safeOutput = typeof terminalOutput === 'string' ? terminalOutput : '';
   const outputLines = collectExecutionOutputLines(safeOutput);
   const exitCodeFromOutput = parseExitCodeFromOutput(outputLines.join('\n'));

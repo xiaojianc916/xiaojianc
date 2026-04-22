@@ -2,6 +2,8 @@ import { useDocumentLifecycle } from '@/composables/useDocumentLifecycle';
 import { useDocumentPersistence } from '@/composables/useDocumentPersistence';
 import { useMessage } from '@/composables/useMessage';
 import { useTerminalRun } from '@/composables/useTerminalRun';
+import { useTheme } from '@/composables/useTheme';
+import { useWindowResizeState } from '@/composables/useWindowResizeState';
 import { useWorkbenchDocumentIO } from '@/composables/useWorkbenchDocumentIO';
 import { saveSession } from '@/services/sessionStore';
 import { tauriService } from '@/services/tauri';
@@ -33,6 +35,8 @@ export const useWorkbench = () => {
   const editorStore = useEditorStore();
   const gitStore = useGitStore();
   const notifier = useMessage();
+  useTheme();
+  useWindowResizeState();
 
   const reportError = (scene: string, error: unknown, fallbackMessage: string): void => {
     const message = toErrorMessage(error, fallbackMessage);

@@ -182,11 +182,3 @@ export interface IFormatScriptPayload {
   lineCount: number;
   charCount: number;
 }
-
-export interface IRunScriptRequest {
-  path: string | null;
-  content: string;
-  encoding: TDocumentEncoding;
-  executor: TExecutorKind;
-  isDirty: boolean;
-}

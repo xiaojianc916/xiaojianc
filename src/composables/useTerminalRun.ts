@@ -4,6 +4,7 @@ import type { useEditorStore } from '@/store/editor';
 import type { IEditorDocument } from '@/types/editor';
 import {
   DEFAULT_TERMINAL_SESSION_ID,
+  type IDispatchTerminalScriptRequest,
   type ITerminalRunCompletePayload,
   type ITerminalRunOutputEvent,
 } from '@/types/terminal';
@@ -37,6 +38,20 @@ type TUseTerminalRunOptions = {
 
 const isTextDocument = (document: IEditorDocument): boolean => document.kind === 'text';
 
+const shouldDispatchDocumentContent = (document: IEditorDocument): boolean =>
+  document.isDirty || !document.path;
+
+const buildTerminalDispatchRequest = (
+  document: IEditorDocument,
+  runId: string,
+): IDispatchTerminalScriptRequest => ({
+  sessionId: DEFAULT_TERMINAL_SESSION_ID,
+  path: document.path,
+  content: shouldDispatchDocumentContent(document) ? document.content : '',
+  isDirty: document.isDirty,
+  runId,
+});
+
 export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) => {
   const notifier = useMessage();
 
@@ -45,6 +60,7 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
   let terminalRunFallbackTimerId: number | null = null;
   let isDisposed = false;
   let activeTerminalRunMeta: IActiveTerminalRunMeta | null = null;
+  let hasEnsuredTerminalSession = false;
 
   const clearBufferedTerminalOutputTimer = (): void => {
     if (bufferedTerminalOutputTimerId === null) {
@@ -161,6 +177,15 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
       cols: DEFAULT_TERMINAL_COLS,
       rows: DEFAULT_TERMINAL_ROWS,
     });
+    hasEnsuredTerminalSession = true;
+  };
+
+  const ensureIntegratedTerminalSessionBeforeDispatch = async (): Promise<void> => {
+    if (hasEnsuredTerminalSession) {
+      return;
+    }
+
+    await ensureIntegratedTerminalSession();
   };
 
   const shouldReconnectIntegratedTerminal = (error: unknown): boolean => {
@@ -169,27 +194,19 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
   };
 
   const dispatchScriptToIntegratedTerminal = async (document: IEditorDocument, runId: string) => {
+    await ensureIntegratedTerminalSessionBeforeDispatch();
+    const dispatchRequest = buildTerminalDispatchRequest(document, runId);
+
     try {
-      return await tauriService.dispatchScriptToTerminal({
-        sessionId: DEFAULT_TERMINAL_SESSION_ID,
-        path: document.path,
-        content: document.content,
-        isDirty: document.isDirty,
-        runId,
-      });
+      return await tauriService.dispatchScriptToTerminal(dispatchRequest);
     } catch (error) {
       if (!shouldReconnectIntegratedTerminal(error)) {
         throw error;
       }
 
+      hasEnsuredTerminalSession = false;
       await ensureIntegratedTerminalSession();
-      return tauriService.dispatchScriptToTerminal({
-        sessionId: DEFAULT_TERMINAL_SESSION_ID,
-        path: document.path,
-        content: document.content,
-        isDirty: document.isDirty,
-        runId,
-      });
+      return tauriService.dispatchScriptToTerminal(dispatchRequest);
     }
   };
 
@@ -223,6 +240,7 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
       throw new Error('当前文档不是可执行脚本文本。');
     }
 
+    await ensureIntegratedTerminalSessionBeforeDispatch();
     const runId = primeTerminalRun(document);
 
     try {
@@ -270,7 +288,7 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
         '脚本执行失败',
         TERMINAL_RUN_LOG_CODES.failed,
         {
-        writeMessageToTerminalOutput: true,
+          writeMessageToTerminalOutput: true,
         },
       );
     }

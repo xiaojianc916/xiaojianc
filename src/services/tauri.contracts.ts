@@ -240,30 +240,6 @@ export const tauriContracts = {
     inSchema: z.void(),
     outSchema: z.union([executionEnvironmentPayloadSchema, executionEnvironmentPayloadSnakeSchema]),
   },
-  runScript: {
-    inSchema: z.object({
-      path: z.string().nullable(),
-      content: z.string(),
-      encoding: documentEncodingSchema,
-      executor: executorKindSchema,
-      isDirty: z.boolean(),
-    }),
-    outSchema: z.object({
-      success: z.boolean(),
-      stdout: z.string(),
-      stderr: z.string(),
-      combinedOutput: z.string(),
-      exitCode: z.number().int().nullable(),
-      executor: executorKindSchema,
-      executorLabel: z.string(),
-      durationMs: z.number().nonnegative(),
-      startedAt: z.string(),
-      finishedAt: z.string(),
-      commandLine: z.string(),
-      logPath: z.string().nullable(),
-      usedTempFile: z.boolean(),
-    }),
-  },
   listWorkspaceEntries: {
     inSchema: z.object({
       path: z.string().optional(),

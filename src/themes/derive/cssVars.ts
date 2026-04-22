@@ -99,7 +99,8 @@ export function emitCssVars(roles: IRoles, tokens: IComponentTokens): void {
 
     // ── 规范化：供 Tailwind/Shadcn @theme inline 消费 ──────────────────────
     // (background/foreground/card/... 由 styles.css 的 :root 提供初值，
-    //  此处只同步与 L3 重叠的部分，避免 Shadcn 组件颜色漂移)
+    //  此处同步与 L3 重叠的部分，避免 Shadcn 组件颜色漂移)
+    set('--background', tokens.layout.app.background);
     set('--foreground', tokens.text.primary);
     set('--muted-foreground', tokens.text.tertiary);
     set('--border', tokens.border.subtle);

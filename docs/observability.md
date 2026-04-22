@@ -55,6 +55,14 @@
 
 ---
 
+## 已登记事件
+
+| event | level | scope | 说明 |
+|---|---|---|---|
+| `window.set_background.failed` | `warn` | `ipc` | 主题同步原生窗口底色失败；必须含 `traceId` / `code`，不得输出主题偏好细节。 |
+
+---
+
 ## 面板与责任人
 
 | 面板 | 链接 | 负责人 |

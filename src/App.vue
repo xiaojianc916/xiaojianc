@@ -15,6 +15,7 @@
 <script setup lang="ts">
 import AppDialogHost from '@/components/common/AppDialogHost.vue';
 import SplashScreen from '@/components/common/SplashScreen.vue';
+import { applyWindowStage } from '@/services/modules/window';
 import { runtimeErrorState, setRuntimeError } from '@/utils/runtime-diagnostics';
 import type { Component } from 'vue';
 import {
@@ -42,8 +43,6 @@ declare global {
   }
 }
 
-const MAIN_WINDOW_SIZE = { width: 1500, height: 960 } as const;
-const MAIN_WINDOW_MIN_SIZE = { width: 1220, height: 760 } as const;
 const MAIN_CONTENT_REVEAL_DELAY_MS = 50;
 const STARTUP_VEIL_FADE_DURATION_MS = 140;
 const SPLASH_MODE_CLASS = 'splash-window-mode';
@@ -66,39 +65,9 @@ let revealFlowVersion = 0;
 
 // ---------- Tauri window helpers ----------
 
-const applyNativeWindowStage = async (stage: 'splash' | 'main'): Promise<boolean> => {
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('apply_window_stage', { stage });
-    return true;
-  } catch (error) {
-    console.warn(`切换窗口阶段失败：${stage}`, error);
-    return false;
-  }
-};
-
-const applyMainWindowFrameFallback = async (): Promise<void> => {
-  const [{ getCurrentWindow }, { LogicalSize }] = await Promise.all([
-    import('@tauri-apps/api/window'),
-    import('@tauri-apps/api/dpi'),
-  ]);
-  const appWindow = getCurrentWindow();
-  await appWindow.setResizable(true);
-  await appWindow.setSize(new LogicalSize(MAIN_WINDOW_SIZE.width, MAIN_WINDOW_SIZE.height));
-  await appWindow.setMinSize(
-    new LogicalSize(MAIN_WINDOW_MIN_SIZE.width, MAIN_WINDOW_MIN_SIZE.height),
-  );
-  await appWindow.center();
-  await appWindow.setFocus();
-};
-
 const applyMainWindowFrame = async (): Promise<void> => {
   try {
-    if (await applyNativeWindowStage('main')) {
-      return;
-    }
-    // Rust 端 apply_window_stage 不可用时的纯前端回退（可能缺少装饰/置顶等副作用处理）
-    await applyMainWindowFrameFallback();
+    await applyWindowStage('main');
   } catch (error) {
     console.warn('恢复主窗口尺寸失败', error);
   }

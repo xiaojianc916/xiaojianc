@@ -348,7 +348,7 @@ export const useEditorStore = defineStore('editor', () => {
       return;
     }
 
-    const nextChunks = [...terminalOutputChunks.value];
+    const nextChunks = terminalOutputChunks.value;
     const lastChunkIndex = nextChunks.length - 1;
 
     if (

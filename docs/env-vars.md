@@ -18,6 +18,7 @@
 - 所有 `VITE_*` 变量 **会** 打入前端产物，MUST NOT 含密钥/令牌/内部地址
 - 非 `VITE_` 前缀的变量仅 Node 构建脚本可读，不进产物
 - 密钥/凭证 MUST NOT 在此登记，MUST 存 CI Secret 或 Tauri stronghold
+- ADR-20260422-window-resize-tearing 已审阅确认：本方案不新增环境变量
 
 ---
 

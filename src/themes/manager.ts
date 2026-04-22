@@ -37,6 +37,8 @@ const VARIANT_REGISTRY: readonly IThemeVariant[] = [
     { id: 'light', label: '浅色', mode: 'light', roles: light },
 ];
 
+const FALLBACK_VARIANT: IThemeVariant = { id: 'dark', label: '深色', mode: 'dark', roles: dark };
+
 const VARIANT_MAP = new Map<TVariantId, IThemeVariant>(
     VARIANT_REGISTRY.map((v) => [v.id, v]),
 );
@@ -88,6 +90,26 @@ const resolveSystemPreferredVariantId = (): TVariantId => {
     }
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 };
+
+export interface IResolvedTheme {
+    variant: 'dark' | 'light';
+    roles: Readonly<IRoles>;
+    window: {
+        background: string;
+    };
+}
+
+export function resolveTheme(base: TVariantId): IResolvedTheme {
+    const variant = VARIANT_MAP.get(base) ?? FALLBACK_VARIANT;
+
+    return {
+        variant: variant.mode,
+        roles: variant.roles,
+        window: {
+            background: variant.roles.surface.app,
+        },
+    };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ThemeManager

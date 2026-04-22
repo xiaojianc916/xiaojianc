@@ -13,7 +13,14 @@ import { useWorkbench } from '../useWorkbench';
 // ─────────────────────────────────────────────
 // Mock 变量（vi.hoisted 保证提升前可访问）
 // ─────────────────────────────────────────────
-const { mockTauriService, mockDialogConfirm, mockMessages, mockAppWindow, mockSessionStore } =
+const {
+  mockTauriService,
+  mockDialogConfirm,
+  mockMessages,
+  mockAppWindow,
+  mockSessionStore,
+  mockWindowService,
+} =
   vi.hoisted(() => ({
     mockTauriService: {
       detectEnvironment: vi.fn(),
@@ -41,11 +48,17 @@ const { mockTauriService, mockDialogConfirm, mockMessages, mockAppWindow, mockSe
     mockSessionStore: {
       saveSession: vi.fn(() => Promise.resolve()),
     },
+    mockWindowService: {
+      setWindowBackground: vi.fn(() => Promise.resolve()),
+      applyWindowStage: vi.fn(() => Promise.resolve()),
+    },
   }));
 
 vi.mock('@/services/tauri', () => ({
   tauriService: mockTauriService,
 }));
+
+vi.mock('@/services/modules/window', () => mockWindowService);
 
 vi.mock('@/services/sessionStore', () => ({
   saveSession: mockSessionStore.saveSession,

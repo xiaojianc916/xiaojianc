@@ -1,6 +1,6 @@
 use super::{
     AnalyzeScriptPayload, AnalyzeScriptRequest, FormatScriptPayload, FormatScriptRequest,
-    ScriptDiagnosticPayload, SHELLCHECK_TIMEOUT, SHFMT_TIMEOUT,
+    ScriptDiagnosticPayload,
 };
 use serde::Deserialize;
 use std::{
@@ -10,10 +10,13 @@ use std::{
     path::{Path, PathBuf},
     process::{Command as StdCommand, Stdio},
     sync::OnceLock,
+    time::Duration,
 };
 use tokio::{io::AsyncWriteExt, process::Command, time::timeout};
 
 const SHELLCHECK_ZH_MESSAGES_JSON: &str = include_str!("../../../resources/Messages_zh.json");
+const SHELLCHECK_TIMEOUT: Duration = Duration::from_secs(12);
+const SHFMT_TIMEOUT: Duration = Duration::from_secs(12);
 
 static SHELLCHECK_ZH_MESSAGES: OnceLock<HashMap<String, String>> = OnceLock::new();
 

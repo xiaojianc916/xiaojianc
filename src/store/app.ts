@@ -1,4 +1,3 @@
-import { applyResolvedThemeEffect } from '@/themes/effects';
 import {
   ACCENT_COLORS,
   RADIUS_PRESETS,
@@ -16,7 +15,7 @@ import {
   type TAppSettingsSectionKey,
 } from '@/types/settings';
 import { defineStore } from 'pinia';
-import { computed, onScopeDispose, ref, watch } from 'vue';
+import { computed, onScopeDispose, ref } from 'vue';
 import { APP_STORE_KEY } from './index';
 
 const DEFAULT_THEME: TThemeMode = 'dark';
@@ -176,18 +175,6 @@ export const useAppStore = defineStore(
         });
       }
     }
-
-    // ── DOM 副作用：主题变化时刷新 CSS 变量（写入由 effects.ts 完成）──────────
-    watch(
-      () => ({
-        settings: settings.value,
-        effectiveTheme: effectiveTheme.value,
-      }),
-      ({ settings: nextSettings, effectiveTheme: nextTheme }) => {
-        applyResolvedThemeEffect(nextSettings, nextTheme);
-      },
-      { deep: true, immediate: true },
-    );
 
     const applyTheme = (value: TThemePreference): void => {
       if (!isKnownThemePreference(value)) {

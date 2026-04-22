@@ -24,6 +24,7 @@
 | TD-0005 | `commands/mod.rs` 超 R-20.5.1 限(≤80) | xiaojianc | 2026-08-31 | R-20.5.1 | 🔴 豁免期内 |
 | TD-0006 | `style-src 'unsafe-inline'` CSP 放宽，需迁移到 nonce(参见 ADR-0004) | xiaojianc | 2026-08-31 | R-7.5.2 | 🟡 已登记 |
 | TD-0007 | `src/router/` 为休眠模块，src/router/index.ts 未挂载 | xiaojianc | 按需 | ADR-0006 | 🟡 有意为之 |
+| TD-0008 | 若未来切换到无边框自绘标题栏，需替代 ADR-20260422 的原生边框底色治理路径并重新评估 resize 行为 | xiaojianc | 按需 | ADR-20260422-window-resize-tearing | 🟡 观察中 |
 
 ---
 

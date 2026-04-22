@@ -1,14 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod error;
 
 use commands::{
     analyze_script, apply_window_stage, close_terminal_session, commit_git_index,
     detect_execution_environment, dispatch_script_to_terminal, ensure_terminal_session,
     format_script, get_git_file_baseline, get_git_repository_status, get_startup_workspace,
     init_git_repository, list_workspace_entries, load_image_asset, load_script,
-    resize_terminal_session, run_script, save_script, show_startup_window, stage_git_paths,
-    unstage_git_paths, write_terminal_input, TerminalSessionState,
+    resize_terminal_session, save_script, set_window_background, show_startup_window,
+    stage_git_paths, unstage_git_paths, write_terminal_input, TerminalSessionState,
 };
 use tauri::Manager;
 
@@ -26,6 +27,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             apply_window_stage,
+            set_window_background,
             show_startup_window,
             get_startup_workspace,
             load_script,
@@ -34,7 +36,6 @@ fn main() {
             analyze_script,
             format_script,
             detect_execution_environment,
-            run_script,
             dispatch_script_to_terminal,
             list_workspace_entries,
             get_git_repository_status,

@@ -1,5 +1,4 @@
-use super::{ExecutionEnvironment, ExecutionOption, RunScriptRequest, RunScriptResponse};
-use chrono::Utc;
+use super::{ExecutionEnvironment, ExecutionOption};
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -10,7 +9,6 @@ use std::{
 use tokio::{process::Command, time::timeout};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(4);
-const EXEC_TIMEOUT: Duration = Duration::from_secs(120);
 const EXECUTOR_CACHE_TTL: Duration = Duration::from_secs(30);
 
 #[derive(Clone)]
@@ -30,63 +28,10 @@ struct CachedExecutorCandidates {
 
 static EXECUTOR_CANDIDATES_CACHE: Mutex<Option<CachedExecutorCandidates>> = Mutex::new(None);
 
-struct PreparedScript {
-    execution_path: PathBuf,
-    working_directory: PathBuf,
-    used_temp_file: bool,
-    cleanup_path: Option<PathBuf>,
-}
-
 #[tauri::command]
 pub async fn detect_execution_environment() -> Result<ExecutionEnvironment, String> {
     let executors = collect_executor_candidates().await;
     Ok(build_execution_environment(&executors))
-}
-
-#[tauri::command]
-pub async fn run_script(payload: RunScriptRequest) -> Result<RunScriptResponse, String> {
-    let executors = collect_executor_candidates().await;
-    let executor = resolve_executor(&payload.executor, &executors)?;
-    let prepared = prepare_script(&payload)?;
-    let started_at = Utc::now();
-    let start_time = Instant::now();
-    let (mut command, command_line) = build_run_command(executor, &prepared)?;
-    let output = execute_command(&mut command, EXEC_TIMEOUT).await?;
-    let duration_ms = start_time.elapsed().as_millis();
-    let finished_at = Utc::now();
-
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    let combined_output = merge_output(&stdout, &stderr);
-    let success = output.status.success();
-    let log_path = write_run_log(
-        &started_at.to_rfc3339(),
-        &finished_at.to_rfc3339(),
-        &command_line,
-        &stdout,
-        &stderr,
-        output.status.code(),
-    )?;
-
-    if let Some(path) = prepared.cleanup_path {
-        let _ = fs::remove_file(path);
-    }
-
-    Ok(RunScriptResponse {
-        success,
-        stdout,
-        stderr,
-        combined_output,
-        exit_code: output.status.code(),
-        executor: executor.kind.to_string(),
-        executor_label: executor.label.to_string(),
-        duration_ms,
-        started_at: started_at.to_rfc3339(),
-        finished_at: finished_at.to_rfc3339(),
-        command_line,
-        log_path: Some(log_path.to_string_lossy().to_string()),
-        used_temp_file: prepared.used_temp_file,
-    })
 }
 
 pub(crate) fn line_count(content: &str) -> usize {
@@ -191,14 +136,6 @@ fn cache_executor_candidates(executors: &[ExecutorCandidate]) {
     }
 }
 
-fn find_preferred_available_executor(
-    executors: &[ExecutorCandidate],
-) -> Option<&ExecutorCandidate> {
-    executors
-        .iter()
-        .find(|item| item.kind == "wsl" && item.available)
-}
-
 fn build_execution_environment(executors: &[ExecutorCandidate]) -> ExecutionEnvironment {
     let has_any = executors.iter().any(|item| item.available);
 
@@ -243,133 +180,4 @@ async fn probe_executor(candidate: &ExecutorCandidate) -> bool {
                     .iter()
                     .any(|byte| !matches!(*byte, 0 | b' ' | b'\n' | b'\r' | b'\t'))
     )
-}
-
-fn resolve_executor<'a>(
-    requested: &str,
-    executors: &'a [ExecutorCandidate],
-) -> Result<&'a ExecutorCandidate, String> {
-    if requested != "wsl" {
-        return Err("当前版本仅支持 WSL2 执行环境。".into());
-    }
-
-    find_preferred_available_executor(executors)
-        .ok_or_else(|| "当前系统未检测到可用的 WSL2 运行环境。".into())
-}
-
-fn prepare_script(payload: &RunScriptRequest) -> Result<PreparedScript, String> {
-    let preferred_path = payload.path.as_ref().map(PathBuf::from);
-    let working_directory = preferred_path
-        .as_ref()
-        .and_then(|path| path.parent().map(Path::to_path_buf))
-        .unwrap_or_else(env::temp_dir);
-
-    let should_use_temp = payload.is_dirty
-        || preferred_path
-            .as_ref()
-            .map(|path| !path.exists())
-            .unwrap_or(true);
-
-    if should_use_temp {
-        let file_name = preferred_path
-            .as_ref()
-            .and_then(|path| path.file_name().and_then(|value| value.to_str()))
-            .unwrap_or("untitled.sh");
-        let temp_path = create_temp_script(
-            &working_directory,
-            file_name,
-            &payload.content,
-            &payload.encoding,
-        )?;
-        return Ok(PreparedScript {
-            execution_path: temp_path.clone(),
-            working_directory,
-            used_temp_file: true,
-            cleanup_path: Some(temp_path),
-        });
-    }
-
-    let execution_path = preferred_path.ok_or_else(|| "脚本路径无效。".to_string())?;
-    Ok(PreparedScript {
-        execution_path,
-        working_directory,
-        used_temp_file: false,
-        cleanup_path: None,
-    })
-}
-
-fn build_run_command(
-    executor: &ExecutorCandidate,
-    prepared: &PreparedScript,
-) -> Result<(Command, String), String> {
-    if executor.kind != "wsl" {
-        return Err(format!("不支持的执行器：{}", executor.kind));
-    }
-
-    let shell_path = executor
-        .path
-        .as_ref()
-        .ok_or_else(|| "未找到 WSL2 可执行文件。".to_string())?;
-    let script_path = super::to_wsl_path(&prepared.execution_path)?;
-    let working_directory = super::to_wsl_path(&prepared.working_directory)?;
-    let bash_script = format!(
-        "cd {} && bash {}",
-        super::bash_quote(&working_directory),
-        super::bash_quote(&script_path)
-    );
-    let mut command = Command::new(shell_path);
-    command.args(["--", "bash", "-lc", &bash_script]);
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
-
-    Ok((
-        command,
-        format!(
-            "{} -- bash -lc {}",
-            shell_path.to_string_lossy(),
-            super::bash_quote(&bash_script)
-        ),
-    ))
-}
-
-async fn execute_command(
-    command: &mut Command,
-    timeout_duration: Duration,
-) -> Result<std::process::Output, String> {
-    match timeout(timeout_duration, command.output()).await {
-        Ok(Ok(output)) => Ok(output),
-        Ok(Err(error)) => Err(format!("执行脚本失败：{error}")),
-        Err(_) => Err(format!(
-            "脚本执行超时（超过 {} 秒），请检查脚本是否阻塞。",
-            timeout_duration.as_secs()
-        )),
-    }
-}
-
-fn merge_output(stdout: &str, stderr: &str) -> String {
-    match (stdout.trim().is_empty(), stderr.trim().is_empty()) {
-        (false, false) => format!("# stdout\n{stdout}\n\n# stderr\n{stderr}"),
-        (false, true) => stdout.to_string(),
-        (true, false) => stderr.to_string(),
-        (true, true) => "# 脚本已执行，但未产生任何标准输出。".into(),
-    }
-}
-
-fn write_run_log(
-    started_at: &str,
-    finished_at: &str,
-    command_line: &str,
-    stdout: &str,
-    stderr: &str,
-    exit_code: Option<i32>,
-) -> Result<PathBuf, String> {
-    let file_name = format!("sh-editor-run-{}.log", Utc::now().format("%Y%m%d_%H%M%S"));
-    let log_path = env::temp_dir().join(file_name);
-    let log_content = format!(
-        "started_at={started_at}\nfinished_at={finished_at}\nexit_code={}\ncommand={command_line}\n\n[stdout]\n{stdout}\n\n[stderr]\n{stderr}\n",
-        exit_code
-            .map(|code| code.to_string())
-            .unwrap_or_else(|| "unknown".into())
-    );
-    fs::write(&log_path, log_content).map_err(|error| format!("写入运行日志失败：{error}"))?;
-    Ok(log_path)
 }

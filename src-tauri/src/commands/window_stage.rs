@@ -6,7 +6,7 @@ const MAIN_WINDOW_WIDTH: f64 = 1500.0;
 const MAIN_WINDOW_HEIGHT: f64 = 960.0;
 const MAIN_WINDOW_MIN_WIDTH: f64 = 1220.0;
 const MAIN_WINDOW_MIN_HEIGHT: f64 = 760.0;
-const MAIN_WINDOW_BACKGROUND: Color = Color(0x0D, 0x0F, 0x12, 0xFF);
+const MAIN_WINDOW_BACKGROUND: Color = Color(0x0A, 0x0A, 0x0C, 0xFF);
 
 fn apply_window_background(
     window: &tauri::WebviewWindow,
@@ -62,6 +62,9 @@ pub fn apply_window_stage(app: AppHandle, stage: String) -> Result<(), String> {
             window
                 .center()
                 .map_err(|error| format!("居中主窗口失败：{error}"))?;
+            window
+                .show()
+                .map_err(|error| format!("显示主窗口失败：{error}"))?;
             window
                 .set_focus()
                 .map_err(|error| format!("聚焦主窗口失败：{error}"))?;

@@ -5,8 +5,6 @@ import type {
   IFormatScriptPayload,
   IFormatScriptRequest,
   IImageAssetPayload,
-  IRunResult,
-  IRunScriptRequest,
   ISaveScriptRequest,
   IScriptFilePayload,
   IStartupWorkspacePayload,
@@ -37,7 +35,6 @@ export interface ITauriService {
   loadImageAsset(path: string): Promise<IImageAssetPayload>;
   saveScript(payload: ISaveScriptRequest): Promise<IScriptFilePayload>;
   detectEnvironment(): Promise<IExecutionEnvironment>;
-  runScript(payload: IRunScriptRequest): Promise<IRunResult>;
   listWorkspaceEntries(path?: string, rootPath?: string): Promise<IWorkspaceDirectoryPayload>;
   getGitRepositoryStatus(workspaceRootPath?: string | null): Promise<IGitRepositoryStatusPayload>;
   initGitRepository(workspaceRootPath?: string | null): Promise<IGitRepositoryStatusPayload>;

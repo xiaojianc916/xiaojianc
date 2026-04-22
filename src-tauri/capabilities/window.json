@@ -1,7 +1,7 @@
 {
     "$schema": "../gen/schemas/desktop-schema.json",
     "identifier": "window",
-    "description": "窗口管理域能力：标题栏拖动、最小化、最大化切换、关闭/销毁窗口。对应命令：apply_window_stage / show_startup_window。参见 ADR-0005。",
+    "description": "窗口管理域能力：标题栏拖动、最小化、最大化切换、关闭/销毁窗口、主窗口原生底色同步。对应命令：apply_window_stage / show_startup_window / set_window_background。参见 ADR-0005 与 ADR-20260422-window-resize-tearing。",
     "windows": [
         "main"
     ],

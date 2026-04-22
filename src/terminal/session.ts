@@ -41,6 +41,7 @@ const TERMINAL_SCROLL_RECOVERY_DELAY_MS = 64;
 const TERMINAL_PROMPT_WAKE_DELAY_MS = 320;
 const DEFAULT_TERMINAL_FONT_FAMILY =
     "Berkeley Mono, JetBrains Mono, 'SFMono-Regular', Consolas, 'Courier New', monospace";
+const DISPATCH_RUNNER_ECHO_PATTERN = /\/tmp\/sh-editor-dispatch-[^\s'"]+\.sh/i;
 
 type TTerminalBellStyle = 'none' | 'sound' | 'visual';
 type TTerminalLayoutSyncOptions = { settle?: boolean };
@@ -110,6 +111,19 @@ const isPrintableTerminalInput = (data: string): boolean => {
     if (data.length === 0) return false;
     const code = data.charCodeAt(0);
     return code >= 0x20 && code !== 0x7f;
+};
+
+const stripInternalDispatchEcho = (value: string): string => {
+    if (!DISPATCH_RUNNER_ECHO_PATTERN.test(value)) return value;
+    const segments = value.split(/(\r?\n)/);
+    let result = '';
+    for (let index = 0; index < segments.length; index += 2) {
+        const line = segments[index] ?? '';
+        const lineBreak = segments[index + 1] ?? '';
+        if (DISPATCH_RUNNER_ECHO_PATTERN.test(line)) continue;
+        result += `${line}${lineBreak}`;
+    }
+    return result;
 };
 
 // ─── 可注入的 Tauri PTY 服务接口（使 TerminalSession 可测试） ─────────────────
@@ -860,11 +874,14 @@ export class TerminalSession {
     private _handleDataEvent(event: { payload: ITerminalDataEvent }): void {
         if (event.payload.sessionId !== this.id || !event.payload.data) return;
         if (this._activeRunId && !this._hasStructuredRunOutputForActiveRun) {
-            this._emitOutput({
-                sessionId: this.id,
-                runId: this._activeRunId,
-                data: event.payload.data,
-            });
+            const fallbackOutput = stripInternalDispatchEcho(event.payload.data);
+            if (fallbackOutput) {
+                this._emitOutput({
+                    sessionId: this.id,
+                    runId: this._activeRunId,
+                    data: fallbackOutput,
+                });
+            }
         }
         this._queueTerminalWrite(event.payload.data, { scrollToBottom: true });
     }
@@ -872,6 +889,7 @@ export class TerminalSession {
     private _handleRunOutputEvent(event: { payload: ITerminalRunOutputEvent }): void {
         if (event.payload.sessionId !== this.id || !event.payload.data) return;
         this._hasStructuredRunOutputForActiveRun = true;
+        this._queueTerminalWrite(event.payload.data, { scrollToBottom: true });
         this._emitOutput(event.payload);
     }
 

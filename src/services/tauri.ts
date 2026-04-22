@@ -38,6 +38,11 @@ interface IIpcLogRecord {
   payloadSummary?: string;
 }
 
+interface IPayloadMetrics {
+  bytes: number;
+  summary?: string;
+}
+
 interface IDefineIpcOptions<TInSchema extends z.ZodTypeAny, TOutSchema extends z.ZodTypeAny> {
   name: string;
   guardHint: string;
@@ -47,6 +52,7 @@ interface IDefineIpcOptions<TInSchema extends z.ZodTypeAny, TOutSchema extends z
   idempotent?: boolean;
   audit?: TIpcAuditLevel;
   errorMap?: TErrorMap;
+  measureInput?: (input: z.output<TInSchema>) => IPayloadMetrics;
   mapArgs?: (
     input: z.output<TInSchema>,
     context: { traceId: string },
@@ -122,11 +128,6 @@ const serializeForLog = (value: unknown): string => {
   }
 };
 
-interface IPayloadMetrics {
-  bytes: number;
-  summary?: string;
-}
-
 const buildPayloadMetricsFromSerialized = (serialized: string): IPayloadMetrics => {
   if (!serialized) {
     return { bytes: 0 };
@@ -143,6 +144,44 @@ const buildPayloadMetricsFromSerialized = (serialized: string): IPayloadMetrics 
 
 const buildPayloadMetrics = (value: unknown): IPayloadMetrics =>
   buildPayloadMetricsFromSerialized(serializeForLog(value));
+
+const estimateTextBytes = (value: string): number => value.length;
+
+const buildPayloadMetricsOmittingTextFields = <T extends Record<string, unknown>>(
+  value: T,
+  omittedFields: readonly string[],
+): IPayloadMetrics => {
+  const omittedFieldSet = new Set(omittedFields);
+  let omittedBytes = 0;
+  const summaryValue: Record<string, unknown> = {};
+
+  for (const [field, fieldValue] of Object.entries(value)) {
+    if (omittedFieldSet.has(field) && typeof fieldValue === 'string') {
+      const bytes = estimateTextBytes(fieldValue);
+      omittedBytes += bytes;
+      summaryValue[field] = {
+        omitted: true,
+        chars: fieldValue.length,
+        estimatedBytes: bytes,
+      };
+      continue;
+    }
+
+    summaryValue[field] = fieldValue;
+  }
+
+  const summaryMetrics = buildPayloadMetrics(summaryValue);
+  return {
+    bytes: summaryMetrics.bytes + omittedBytes,
+    summary: summaryMetrics.summary,
+  };
+};
+
+const measureScriptContentInput = <T extends { content: string }>(value: T): IPayloadMetrics =>
+  buildPayloadMetricsOmittingTextFields(
+    value as unknown as Record<string, unknown>,
+    ['content'],
+  );
 
 const emitIpcLog = (record: IIpcLogRecord): void => {
   const serialized = JSON.stringify(record);
@@ -319,6 +358,7 @@ export const defineIpc = <TInSchema extends z.ZodTypeAny, TOutSchema extends z.Z
 ) => {
   const timeoutMs = options.timeoutMs ?? TAURI_IPC_DEFAULT_TIMEOUT_MS;
   const audit = options.audit ?? 'info';
+  const shouldAudit = audit !== 'none';
   const idempotent = options.idempotent ?? false;
   const errorMap = options.errorMap ?? {};
 
@@ -328,15 +368,28 @@ export const defineIpc = <TInSchema extends z.ZodTypeAny, TOutSchema extends z.Z
   ): Promise<z.output<TOutSchema>> => {
     const traceId = createTraceId();
     const startedAt = Date.now();
-    let inputMetrics = buildPayloadMetrics(input);
-    let inputBytes = inputMetrics.bytes;
+    let inputMetrics: IPayloadMetrics | null = null;
+    let inputBytes = 0;
     let outputBytes = 0;
     let payloadSummary: string | undefined;
+    const ensureInputMetrics = (): IPayloadMetrics => {
+      if (inputMetrics) {
+        return inputMetrics;
+      }
+
+      inputMetrics = buildPayloadMetrics(input);
+      inputBytes = inputMetrics.bytes;
+      return inputMetrics;
+    };
 
     try {
       const normalizedInput = options.inSchema.parse(input);
-      inputMetrics = buildPayloadMetrics(normalizedInput);
-      inputBytes = inputMetrics.bytes;
+      if (shouldAudit) {
+        inputMetrics = options.measureInput
+          ? options.measureInput(normalizedInput)
+          : buildPayloadMetrics(normalizedInput);
+        inputBytes = inputMetrics.bytes;
+      }
 
       if (callOptions.signal?.aborted) {
         throw createCanceledError(traceId);
@@ -355,12 +408,20 @@ export const defineIpc = <TInSchema extends z.ZodTypeAny, TOutSchema extends z.Z
         signal: callOptions.signal,
         traceId,
       });
-      const outputMetrics = buildPayloadMetrics(rawOutput);
-      outputBytes = outputMetrics.bytes;
-
       const parsedOutput = options.outSchema.safeParse(rawOutput);
+      let outputMetrics: IPayloadMetrics | null = null;
+      const ensureOutputMetrics = (): IPayloadMetrics => {
+        if (outputMetrics) {
+          return outputMetrics;
+        }
+
+        outputMetrics = buildPayloadMetrics(rawOutput);
+        outputBytes = outputMetrics.bytes;
+        return outputMetrics;
+      };
+
       if (!parsedOutput.success) {
-        payloadSummary = outputMetrics.summary;
+        payloadSummary = shouldAudit ? ensureOutputMetrics().summary : undefined;
         throw new AppError({
           code: 'ipc.contract-violation',
           message: payloadSummary
@@ -375,20 +436,23 @@ export const defineIpc = <TInSchema extends z.ZodTypeAny, TOutSchema extends z.Z
         });
       }
 
-      emitIpcLog({
-        timestamp: new Date().toISOString(),
-        level: 'info',
-        scope: 'ipc',
-        event: 'tauri.invoke',
-        traceId,
-        command: options.name,
-        audit,
-        idempotent,
-        durationMs: Date.now() - startedAt,
-        inputBytes,
-        outputBytes,
-        outcome: 'ok',
-      });
+      if (shouldAudit) {
+        ensureOutputMetrics();
+        emitIpcLog({
+          timestamp: new Date().toISOString(),
+          level: 'info',
+          scope: 'ipc',
+          event: 'tauri.invoke',
+          traceId,
+          command: options.name,
+          audit,
+          idempotent,
+          durationMs: Date.now() - startedAt,
+          inputBytes,
+          outputBytes,
+          outcome: 'ok',
+        });
+      }
 
       return parsedOutput.data;
     } catch (error) {
@@ -401,30 +465,33 @@ export const defineIpc = <TInSchema extends z.ZodTypeAny, TOutSchema extends z.Z
               traceId,
               cause: {
                 issues: error.issues,
-                payloadSummary: inputMetrics.summary,
+                payloadSummary: shouldAudit ? ensureInputMetrics().summary : undefined,
               },
             })
           : normalizeIpcError(error, { traceId, errorMap });
 
-      emitIpcLog({
-        timestamp: new Date().toISOString(),
-        level: 'error',
-        scope: 'ipc',
-        event: 'tauri.invoke',
-        traceId,
-        command: options.name,
-        audit,
-        idempotent,
-        durationMs: Date.now() - startedAt,
-        inputBytes,
-        outputBytes,
-        outcome: 'error',
-        errorCode: normalizedError.code,
-        payloadSummary:
-          payloadSummary ??
-          buildPayloadMetrics(normalizedError.cause).summary ??
-          inputMetrics.summary,
-      });
+      if (shouldAudit) {
+        const fallbackInputMetrics = inputMetrics ?? ensureInputMetrics();
+        emitIpcLog({
+          timestamp: new Date().toISOString(),
+          level: 'error',
+          scope: 'ipc',
+          event: 'tauri.invoke',
+          traceId,
+          command: options.name,
+          audit,
+          idempotent,
+          durationMs: Date.now() - startedAt,
+          inputBytes,
+          outputBytes,
+          outcome: 'error',
+          errorCode: normalizedError.code,
+          payloadSummary:
+            payloadSummary ??
+            buildPayloadMetrics(normalizedError.cause).summary ??
+            fallbackInputMetrics.summary,
+        });
+      }
 
       throw normalizedError;
     }
@@ -496,8 +563,6 @@ const detectEnvironmentIpc = defineContractIpc(
   { idempotent: true },
 );
 
-const runScriptIpc = definePayloadIpc('run_script', '运行脚本', tauriContracts.runScript);
-
 const listWorkspaceEntriesIpc = defineContractIpc(
   'list_workspace_entries',
   '读取工作区目录',
@@ -554,18 +619,21 @@ const dispatchScriptToTerminalIpc = definePayloadIpc(
   'dispatch_script_to_terminal',
   '在终端中执行脚本',
   tauriContracts.dispatchScriptToTerminal,
+  { measureInput: measureScriptContentInput },
 );
 
 const writeTerminalInputIpc = definePayloadIpc(
   'write_terminal_input',
   '写入终端输入',
   tauriContracts.writeTerminalInput,
+  { audit: 'none' },
 );
 
 const resizeTerminalSessionIpc = definePayloadIpc(
   'resize_terminal_session',
   '同步终端尺寸',
   tauriContracts.resizeTerminalSession,
+  { audit: 'none' },
 );
 
 const closeTerminalSessionIpc = definePayloadIpc(
@@ -625,8 +693,6 @@ export const tauriService: ITauriService & {
   saveScript: saveScriptIpc,
 
   detectEnvironment: () => detectEnvironmentIpc(undefined),
-
-  runScript: runScriptIpc,
 
   listWorkspaceEntries(path, rootPath) {
     return listWorkspaceEntriesIpc({ path, rootPath });
