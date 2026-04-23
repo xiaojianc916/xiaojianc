@@ -335,6 +335,11 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
   };
 
   const runScript = async (): Promise<void> => {
+    if (editorStore.isRunning) {
+      notifier.warning('已有脚本正在运行，请等待完成或先停止当前运行。');
+      return;
+    }
+
     if (!canRun.value) {
       notifier.warning(
         isTextDocument(editorStore.document)

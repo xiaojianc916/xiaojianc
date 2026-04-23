@@ -559,6 +559,7 @@ const terminalToggleTooltip = computed(() => {
 });
 
 let unlistenResize: UnlistenFn | null = null;
+let isTitlebarUnmounted = false;
 
 const getAppWindow = async () => {
   const runtimeReady = await waitForDesktopRuntime();
@@ -572,12 +573,15 @@ const getAppWindow = async () => {
 
 const syncWindowState = async (): Promise<void> => {
   const appWindow = await getAppWindow();
-  if (!appWindow) {
+  if (!appWindow || isTitlebarUnmounted) {
     return;
   }
 
   try {
-    isMaximized.value = await appWindow.isMaximized();
+    const nextIsMaximized = await appWindow.isMaximized();
+    if (!isTitlebarUnmounted) {
+      isMaximized.value = nextIsMaximized;
+    }
   } catch (error) {
     console.warn('读取窗口最大化状态失败', error);
   }
@@ -819,22 +823,37 @@ const handleStartWindowDrag = async (event: MouseEvent): Promise<void> => {
 };
 
 onMounted(async () => {
+  isTitlebarUnmounted = false;
+
   if (!props.isDesktopRuntime) {
     return;
   }
 
   const appWindow = await getAppWindow();
-  if (!appWindow) {
+  if (!appWindow || isTitlebarUnmounted) {
     return;
   }
 
   await syncWindowState();
-  unlistenResize = await appWindow.onResized(() => {
+  if (isTitlebarUnmounted) {
+    return;
+  }
+
+  const nextUnlistenResize = await appWindow.onResized(() => {
     void syncWindowState();
   });
+
+  if (isTitlebarUnmounted) {
+    nextUnlistenResize();
+    return;
+  }
+
+  unlistenResize = nextUnlistenResize;
 });
 
 onBeforeUnmount(() => {
+  isTitlebarUnmounted = true;
+
   if (unlistenResize) {
     unlistenResize();
     unlistenResize = null;

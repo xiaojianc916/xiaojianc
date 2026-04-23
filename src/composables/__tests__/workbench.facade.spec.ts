@@ -460,6 +460,20 @@ describe('useWorkbench 特征化快照', () => {
       expect(mockTauriService.dispatchScriptToTerminal).toHaveBeenCalledOnce();
     });
 
+    it('运行中重复触发时不重复派发脚本', async () => {
+      editorStore.createDocumentTab({ content: '#!/bin/bash\necho hi' });
+      editorStore.setEnvironment({ hasAny: true, executors: [], recommended: 'wsl' });
+      editorStore.isRunning = true;
+
+      await workbench.runScript();
+
+      expect(mockMessages.warning).toHaveBeenCalledWith(
+        '已有脚本正在运行，请等待完成或先停止当前运行。',
+      );
+      expect(mockTauriService.dispatchScriptToTerminal).not.toHaveBeenCalled();
+      expect(editorStore.isRunning).toBe(true);
+    });
+
     it('作用域销毁时清理运行中状态', async () => {
       editorStore.createDocumentTab({ content: '#!/bin/bash\necho hi' });
       editorStore.setEnvironment({ hasAny: true, executors: [], recommended: 'wsl' });

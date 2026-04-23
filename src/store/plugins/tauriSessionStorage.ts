@@ -1,5 +1,5 @@
 import type { StorageLike } from 'pinia-plugin-persistedstate';
-import { loadSession, saveSession } from '@/services/sessionStore';
+import { clearSession, loadSession, saveSession } from '@/services/sessionStore';
 import { SessionSnapshotSchema, type TSessionSnapshot } from '@/types/session';
 import { z } from 'zod';
 
@@ -10,6 +10,7 @@ const SAVE_DEBOUNCE_MS = 500;
 let cache: TSessionSnapshot | null = null;
 let isReady = false;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let persistQueue: Promise<void> = Promise.resolve();
 
 const PersistedEditorStoreSchema = z.object({
   sessionSnapshot: SessionSnapshotSchema,
@@ -45,23 +46,42 @@ export const hydrateSessionStorage = async (): Promise<void> => {
   isReady = true;
 };
 
-const schedulePersist = (value: TSessionSnapshot): void => {
+const logSessionPersistError = (event: string, error: unknown): void => {
+  const payload = {
+    timestamp: new Date().toISOString(),
+    level: 'error',
+    scope: 'session',
+    event,
+    detail: String(error),
+  };
+  console.error(JSON.stringify(payload));
+};
+
+const enqueuePersistOperation = (
+  operation: () => Promise<void>,
+  errorEvent: string,
+): void => {
+  persistQueue = persistQueue
+    .catch(() => undefined)
+    .then(operation)
+    .catch((error) => {
+      logSessionPersistError(errorEvent, error);
+    });
+};
+
+const clearSaveTimer = (): void => {
   if (saveTimer) {
     clearTimeout(saveTimer);
+    saveTimer = null;
   }
+};
+
+const schedulePersist = (value: TSessionSnapshot): void => {
+  clearSaveTimer();
 
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    void saveSession(value).catch((error) => {
-      const payload = {
-        timestamp: new Date().toISOString(),
-        level: 'error',
-        scope: 'session',
-        event: 'snapshot-save-failed',
-        detail: String(error),
-      };
-      console.error(JSON.stringify(payload));
-    });
+    enqueuePersistOperation(() => saveSession(value), 'snapshot-save-failed');
   }, SAVE_DEBOUNCE_MS);
 };
 
@@ -93,6 +113,9 @@ export const tauriSessionStorage: StorageLike = {
     if (key !== EDITOR_SESSION_KEY) {
       return;
     }
+
+    clearSaveTimer();
     cache = null;
+    enqueuePersistOperation(clearSession, 'snapshot-clear-failed');
   },
 };

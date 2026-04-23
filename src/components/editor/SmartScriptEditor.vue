@@ -105,14 +105,23 @@ const clearGitBaseline = (): void => {
   gitBaseline.value = null;
 };
 
+const isCurrentGitBaselineRequest = (requestId: number): boolean =>
+  !isUnmounted && requestId === latestGitBaselineRequestId;
+
 const loadGitBaseline = async (requestId: number): Promise<void> => {
   const documentPath = props.documentPath;
   if (!documentPath) {
-    clearGitBaseline();
+    if (isCurrentGitBaselineRequest(requestId)) {
+      clearGitBaseline();
+    }
     return;
   }
 
   const runtimeReady = await waitForDesktopRuntime(120);
+  if (!isCurrentGitBaselineRequest(requestId)) {
+    return;
+  }
+
   if (!runtimeReady) {
     clearGitBaseline();
     return;
@@ -120,13 +129,13 @@ const loadGitBaseline = async (requestId: number): Promise<void> => {
 
   try {
     const payload = await gitStore.getFileBaseline(documentPath);
-    if (isUnmounted || requestId !== latestGitBaselineRequestId) {
+    if (!isCurrentGitBaselineRequest(requestId)) {
       return;
     }
 
     gitBaseline.value = payload;
   } catch (error) {
-    if (isUnmounted || requestId !== latestGitBaselineRequestId) {
+    if (!isCurrentGitBaselineRequest(requestId)) {
       return;
     }
 
@@ -227,7 +236,6 @@ const rerunDiagnostics = (): void => {
 onMounted(() => {
   isUnmounted = false;
   scheduleAnalysis(ANALYSIS_INITIAL_DELAY_MS);
-  scheduleGitBaselineLoad();
 });
 
 watch(
