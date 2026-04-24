@@ -9,8 +9,8 @@ use commands::{
     ensure_terminal_session, finalize_startup_transition, format_script,
     get_git_file_baseline, get_git_repository_status, get_startup_workspace, init_git_repository,
     list_workspace_entries, load_image_asset, load_script, resize_terminal_session, save_script,
-    set_window_background, stage_git_paths, unstage_git_paths, write_terminal_input,
-    TerminalSessionState,
+    set_window_background, shutdown_all_terminal_sessions, stage_git_paths,
+    unstage_git_paths, write_terminal_input, TerminalSessionState,
 };
 use std::time::Duration;
 use tauri::{Manager, WindowEvent};
@@ -22,19 +22,15 @@ fn main() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .manage(TerminalSessionState::default())
         .on_window_event(|window, event| {
-            if window.label() != "welcome" {
-                return;
-            }
-
             if let WindowEvent::CloseRequested { .. } = event {
-                let main_visible = window
-                    .app_handle()
-                    .get_webview_window("main")
-                    .and_then(|main_window| main_window.is_visible().ok())
-                    .unwrap_or(false);
+                let app_handle = window.app_handle();
+                if window.label() == "main" {
+                    let terminal_state = app_handle.state::<TerminalSessionState>();
+                    if let Err(error) = shutdown_all_terminal_sessions(terminal_state.inner()) {
+                        eprintln!("failed to shutdown terminal sessions: {error}");
+                    }
 
-                if !main_visible {
-                    window.app_handle().exit(0);
+                    app_handle.exit(0);
                 }
             }
         })

@@ -382,6 +382,19 @@ pub fn close_terminal_session(
     terminate_terminal_session(session.as_ref())
 }
 
+pub fn shutdown_all_terminal_sessions(state: &TerminalSessionState) -> Result<(), String> {
+    let sessions = {
+        let mut sessions_map = lock_terminal_sessions(state)?;
+        sessions_map.drain().map(|(_, session)| session).collect::<Vec<_>>()
+    };
+
+    for session in sessions {
+        terminate_terminal_session(session.as_ref())?;
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub fn dispatch_script_to_terminal(
     state: State<TerminalSessionState>,
@@ -1388,12 +1401,11 @@ fn build_terminal_dispatch_runner_content(
             "__sh_editor_exit_code=0\n",
             "__sh_editor_finalized=0\n",
             "__sh_editor_finish() {{\n",
-            "  local exit_code=\"${{__sh_editor_exit_code:-$?}}\"\n",
-            "  if [ \"${{__sh_editor_finalized:-0}}\" -eq 1 ]; then\n",
+            "  if [ \"$__sh_editor_finalized\" -eq 1 ]; then\n",
             "    return\n",
             "  fi\n",
             "  __sh_editor_finalized=1\n",
-            "  printf '%b%s%s:%s%b' {} {} \"$i\" \"$exit_code\" {}\n",
+            "  printf '%b%s%s:%s%b' {} {} \"$i\" \"$__sh_editor_exit_code\" {}\n",
             "}}\n",
             "__sh_editor_cleanup() {{\n",
             "  __sh_editor_finish\n",
@@ -1426,7 +1438,6 @@ fn build_terminal_dispatch_runner_content(
         bash_quote(TERMINAL_RUN_MARKER_ESCAPED_SUFFIX),
     )
 }
-
 fn create_terminal_dispatch_runner(
     payload: &DispatchTerminalScriptRequest,
     prepared: &TerminalPreparedScript,

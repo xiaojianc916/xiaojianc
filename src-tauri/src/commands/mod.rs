@@ -26,7 +26,8 @@ pub use shell_tools::{analyze_script, format_script};
 pub(crate) use terminal::{build_temp_file_suffix, to_wsl_path};
 pub use terminal::{
     close_terminal_session, dispatch_script_to_terminal, ensure_terminal_session,
-    resize_terminal_session, write_terminal_input, TerminalSessionState,
+    resize_terminal_session, shutdown_all_terminal_sessions, write_terminal_input,
+    TerminalSessionState,
 };
 pub use window::set_window_background;
 pub use window_stage::{

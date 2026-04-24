@@ -149,6 +149,7 @@ function buildMonacoColors(
         focusBorder: accent,
         foreground: fgPrimary,
         descriptionForeground: fgTertiary,
+        disabledForeground: fgQuaternary,
         errorForeground: tokens.status.danger,
         'icon.foreground': fgSecondary,
         'selection.background': selection,
@@ -179,18 +180,18 @@ function buildMonacoColors(
 
         // ── 菜单 ──
         'menu.background': overlayBg,
-        'menu.foreground': fgPrimary,
-        'menu.selectionBackground': selection,
-        'menu.selectionForeground': fgPrimary,
-        'menu.selectionBorder': withAlpha(accent, '45'),
+        'menu.foreground': fgSecondary,
+        'menu.selectionBackground': tokens.accent.muted,
+        'menu.selectionForeground': isDark ? tokens.text.onAccent : fgPrimary,
+        'menu.selectionBorder': '#00000000',
         'menu.separatorBackground': borderSep,
         'menu.border': borderWeak,
 
         // ── Editor Action List ──
         'editorActionList.background': overlayBg,
-        'editorActionList.foreground': fgPrimary,
-        'editorActionList.focusBackground': selection,
-        'editorActionList.focusForeground': fgPrimary,
+        'editorActionList.foreground': fgSecondary,
+        'editorActionList.focusBackground': tokens.accent.muted,
+        'editorActionList.focusForeground': isDark ? tokens.text.onAccent : fgPrimary,
 
         // ── 编辑器 ──
         'editor.background': editorBg,

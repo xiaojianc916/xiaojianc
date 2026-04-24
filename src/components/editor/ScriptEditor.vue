@@ -5,17 +5,17 @@
 </template>
 
 <script setup lang="ts">
+import { useEditorStore } from '@/store/editor';
 import type { TThemeMode } from '@/types/app';
 import type { IAnalyzeScriptPayload, TScriptDiagnosticSeverity } from '@/types/editor';
 import type { IGitFileBaselinePayload } from '@/types/git';
 import type { IEditorSettings } from '@/types/settings';
-import { useEditorStore } from '@/store/editor';
 import { computeGitLineChanges } from '@/utils/git-diff';
 import { applyMonacoTheme, monaco } from '@/utils/monaco';
 import {
-  SHELL_WINDOW_RESIZE_END_EVENT,
-  SHELL_WINDOW_RESIZE_START_EVENT,
-  SHELL_WINDOW_RESIZE_SETTLED_EVENT,
+    SHELL_WINDOW_RESIZE_END_EVENT,
+    SHELL_WINDOW_RESIZE_SETTLED_EVENT,
+    SHELL_WINDOW_RESIZE_START_EVENT,
 } from '@/utils/window-resize-events';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
@@ -396,6 +396,7 @@ const createEditor = (): void => {
   editorInstance = monaco.editor.create(containerRef.value, {
     value: props.modelValue,
     language: 'shell',
+    useShadowDOM: false,
     automaticLayout: false,
     lineDecorationsWidth: 16,
     lineNumbersMinChars: 3,

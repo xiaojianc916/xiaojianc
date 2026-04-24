@@ -54,28 +54,6 @@ viewBox="0 0 16 16" aria-hidden="true" class="h-4 w-4" fill="none" stroke="curre
           </svg>
         </button>
 
-        <button
-type="button" class="icon-button relative app-tooltip-target border border-transparent"
-          :class="diagnosticsToggleButtonClass" :aria-disabled="!props.canToggleDiagnostics"
-          :data-tooltip="isDiagnosticsToggleDisabled ? undefined : diagnosticToggleTooltip"
-          data-tooltip-placement="bottom" :aria-label="diagnosticToggleTooltip" @click="handleDiagnosticsToggleClick">
-          <svg
-viewBox="0 0 16 16" aria-hidden="true" class="h-4 w-4" fill="none" stroke="currentColor"
-            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M2.5 3.5h11a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Z" />
-            <path d="M9 3.5v9" />
-            <path d="M11.1 6.1h1.8" />
-            <path d="M11.1 8.2h1.8" />
-            <path d="M11.1 10.3h1.1" />
-          </svg>
-
-          <span
-v-if="diagnosticIssueCount > 0"
-            class="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full border border-[#3a2f16] bg-[#2a2112] px-1 text-[9px] font-semibold leading-4 text-[#ffcc4d]">
-            {{ diagnosticCounterLabel }}
-          </span>
-        </button>
-
         <span
 class="app-tooltip-target inline-flex" :data-tooltip="isRunButtonDisabled ? undefined : runButtonTooltip"
           data-tooltip-placement="bottom">
@@ -214,32 +192,10 @@ const currentDocumentLabel = computed(() => {
   return props.documentName;
 });
 
-const diagnosticCounterLabel = computed(() =>
-  props.diagnosticIssueCount > 99 ? '99+' : String(props.diagnosticIssueCount),
-);
-
-const isDiagnosticsToggleDisabled = computed(() => !props.canToggleDiagnostics);
-
 const isTerminalToggleDisabled = computed(() => !props.isDesktopRuntime);
 const isRunButtonDisabled = computed(
   () => props.isRunning || !props.isDesktopRuntime || !props.canRun,
 );
-
-const diagnosticsToggleButtonClass = computed(() => {
-  if (isDiagnosticsToggleDisabled.value) {
-    return 'is-inert-control opacity-45';
-  }
-
-  if (props.isDiagnosticsVisible) {
-    return 'border-white/10 bg-white/[0.06] text-[var(--text-primary)]';
-  }
-
-  if (props.diagnosticIssueCount > 0) {
-    return 'text-[var(--warning)]';
-  }
-
-  return '';
-});
 
 const terminalToggleButtonClass = computed(() => {
   if (isTerminalToggleDisabled.value) {
@@ -549,26 +505,6 @@ const runButtonTooltip = computed(() => {
   return '运行脚本';
 });
 
-const diagnosticToggleTooltip = computed(() => {
-  if (!props.hasActiveDocument) {
-    return '请先打开脚本文件';
-  }
-
-  if (!props.canToggleDiagnostics) {
-    return '当前文件类型不支持代码检查面板';
-  }
-
-  if (props.isDiagnosticsVisible) {
-    return '关闭代码检查面板';
-  }
-
-  if (props.diagnosticIssueCount > 0) {
-    return `打开代码检查面板（${props.diagnosticIssueCount} 项问题）`;
-  }
-
-  return '打开代码检查面板';
-});
-
 const terminalToggleTooltip = computed(() => {
   if (!props.isDesktopRuntime) {
     return '仅桌面端可用';
@@ -716,14 +652,6 @@ const handleTerminalAction = (key: string): void => {
     default:
       showPendingMessage(resolveMenuItemLabel('terminal', key));
   }
-};
-
-const handleDiagnosticsToggleClick = (): void => {
-  if (!props.canToggleDiagnostics) {
-    return;
-  }
-
-  emit('toggle-diagnostics');
 };
 
 const handleHelpAction = (key: string): void => {

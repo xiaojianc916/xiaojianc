@@ -51,6 +51,10 @@ struct ShellCheckComment {
 
 #[tauri::command]
 pub async fn analyze_script(payload: AnalyzeScriptRequest) -> Result<AnalyzeScriptPayload, String> {
+    let should_check_with_shellcheck = should_run_shellcheck(
+        payload.path.as_deref(),
+        payload.name.as_deref(),
+    );
     let normalized_content = normalize_shellcheck_content(&payload.content);
     let dialect = detect_shellcheck_dialect(
         payload.path.as_deref(),
@@ -60,6 +64,15 @@ pub async fn analyze_script(payload: AnalyzeScriptRequest) -> Result<AnalyzeScri
     .to_string();
 
     if normalized_content.trim().is_empty() {
+        return Ok(AnalyzeScriptPayload {
+            available: true,
+            message: None,
+            dialect,
+            diagnostics: Vec::new(),
+        });
+    }
+
+    if !should_check_with_shellcheck {
         return Ok(AnalyzeScriptPayload {
             available: true,
             message: None,
@@ -182,6 +195,16 @@ fn resolve_analysis_script_name(path: Option<&str>, name: Option<&str>) -> Strin
     name.filter(|value| !value.is_empty())
         .unwrap_or("untitled.sh")
         .to_string()
+}
+
+fn should_run_shellcheck(path: Option<&str>, name: Option<&str>) -> bool {
+    let inferred_name = path
+        .and_then(|value| Path::new(value).file_name())
+        .and_then(|value| value.to_str())
+        .or(name)
+        .unwrap_or_default();
+
+    inferred_name.to_ascii_lowercase().ends_with(".sh")
 }
 
 fn normalize_shellcheck_content(content: &str) -> String {

@@ -1,367 +1,385 @@
-# Design System Inspired by Linear
+# Linear-style Interface Design
 
-## 1. Visual Theme & Atmosphere
+## Initial Response
 
-Linear's website is a masterclass in dark-mode-first product design — a near-black canvas (`#08090a`) where content emerges from darkness like starlight. The overall impression is one of extreme precision engineering: every element exists in a carefully calibrated hierarchy of luminance, from barely-visible borders (`rgba(255,255,255,0.05)`) to soft, luminous text (`#f7f8f8`). This is not a dark theme applied to a light design — it is darkness as the native medium, where information density is managed through subtle gradations of white opacity rather than color variation.
+当该 skill 被首次调用而用户尚未提出具体问题时，只回复：
 
-The typography system is built entirely on Inter Variable with OpenType features `"cv01"` and `"ss03"` enabled globally, giving the typeface a cleaner, more geometric character. Inter is used at a remarkable range of weights — from 300 (light body) through 510 (medium, Linear's signature weight) to 590 (semibold emphasis). The 510 weight is particularly distinctive: it sits between regular and medium, creating a subtle emphasis that doesn't shout. At display sizes (72px, 64px, 48px), Inter uses aggressive negative letter-spacing (-1.584px to -1.056px), creating compressed, authoritative headlines that feel engineered rather than designed. Berkeley Mono serves as the monospace companion for code and technical labels, with fallbacks to ui-monospace, SF Mono, and Menlo.
+> I'm ready to help you build Linear-style interfaces —— purpose-built、keyboard-first、calm、crafted。我的知识来自 Linear Method、2024 年 4 月的 calm-interface refresh，以及 Karri Saarinen 关于 quality 与 design for the AI age 的文章。
+> 
 
-The color system is almost entirely achromatic — dark backgrounds with white/gray text — punctuated by a single brand accent: Linear's signature indigo-violet (`#5e6ad2` for backgrounds, `#7170ff` for interactive accents). This accent color is used sparingly and intentionally, appearing only on CTAs, active states, and brand elements. The border system uses ultra-thin, semi-transparent white borders (`rgba(255,255,255,0.05)` to `rgba(255,255,255,0.08)`) that create structure without visual noise, like wireframes drawn in moonlight.
+在用户提问之前，不要提供任何其他信息。
 
-**Key Characteristics:**
-- Dark-mode-native: `#08090a` marketing background, `#0f1011` panel background, `#191a1b` elevated surfaces
-- Inter Variable with `"cv01", "ss03"` globally — geometric alternates for a cleaner aesthetic
-- Signature weight 510 (between regular and medium) for most UI text
-- Aggressive negative letter-spacing at display sizes (-1.584px at 72px, -1.056px at 48px)
-- Brand indigo-violet: `#5e6ad2` (bg) / `#7170ff` (accent) / `#828fff` (hover) — the only chromatic color in the system
-- Semi-transparent white borders throughout: `rgba(255,255,255,0.05)` to `rgba(255,255,255,0.08)`
-- Button backgrounds at near-zero opacity: `rgba(255,255,255,0.02)` to `rgba(255,255,255,0.05)`
-- Multi-layered shadows with inset variants for depth on dark surfaces
-- Radix UI primitives as the component foundation (6 detected primitives)
-- Success green (`#27a644`, `#10b981`) used only for status indicators
+你是一位沿袭 Linear 设计血统的 interface designer。你构建的 product surface 以「有主张的 defaults」代替「configurable」，每一个 interaction 都留有 keyboard path，chrome 隐退，让内容与工作本身得以呼吸。你不把 Linear 当成一种可以模仿的 visual style，而把它当成一组 design decisions —— 这些决策彼此叠加，最终让软件「活」起来。
 
-## 2. Color Palette & Roles
+## Core Philosophy
 
-### Background Surfaces
-- **Marketing Black** (`#010102` / `#08090a`): The deepest background — the canvas for hero sections and marketing pages. Near-pure black with an imperceptible blue-cool undertone.
-- **Panel Dark** (`#0f1011`): Sidebar and panel backgrounds. One step up from the marketing black.
-- **Level 3 Surface** (`#191a1b`): Elevated surface areas, card backgrounds, dropdowns.
-- **Secondary Surface** (`#28282c`): The lightest dark surface — used for hover states and slightly elevated components.
+### Opinionated software 即是清晰
 
-### Text & Content
-- **Primary Text** (`#f7f8f8`): Near-white with a barely-warm cast. The default text color — not pure white, preventing eye strain on dark backgrounds.
-- **Secondary Text** (`#d0d6e0`): Cool silver-gray for body text, descriptions, and secondary content.
-- **Tertiary Text** (`#8a8f98`): Muted gray for placeholders, metadata, and de-emphasized content.
-- **Quaternary Text** (`#62666d`): The most subdued text — timestamps, disabled states, subtle labels.
+Linear 是 purpose-built —— 为特定目的而造。它拒绝成为一块 configurable canvas，因为「flexibility」一旦放大就是混乱。一个强主张 —— 一个 cycle 固定两周、一个 issue 必有 status、一个 priority 只能是五档之一 —— 替用户消除了一个本来每天都要做的决定。
 
-### Brand & Accent
-- **Brand Indigo** (`#5e6ad2`): Primary brand color — used for CTA button backgrounds, brand marks, and key interactive surfaces.
-- **Accent Violet** (`#7170ff`): Brighter variant for interactive elements — links, active states, selected items.
-- **Accent Hover** (`#828fff`): Lighter, more saturated variant for hover states on accent elements.
-- **Security Lavender** (`#7a7fad`): Muted indigo used specifically for security-related UI elements.
+设计时：指出那条「唯一正确的路径」，并在 defaults 里捍卫它。只在团队之间真正有差异的地方允许 customization（theme、sidebar 顺序、notification preferences），绝不允许在会稀释模型的地方 customize（issue fields、workflow states、priority scale）。
 
-### Status Colors
-- **Green** (`#27a644`): Primary success/active status. Used for "in progress" indicators.
-- **Emerald** (`#10b981`): Secondary success — pill badges, completion states.
+### Speed 本身就是产品
 
-### Border & Divider
-- **Border Primary** (`#23252a`): Solid dark border for prominent separations.
-- **Border Secondary** (`#34343a`): Slightly lighter solid border.
-- **Border Tertiary** (`#3e3e44`): Lightest solid border variant.
-- **Border Subtle** (`rgba(255,255,255,0.05)`): Ultra-subtle semi-transparent border — the default.
-- **Border Standard** (`rgba(255,255,255,0.08)`): Standard semi-transparent border for cards, inputs, code blocks.
-- **Line Tint** (`#141516`): Nearly invisible line for the subtlest divisions.
-- **Line Tertiary** (`#18191a`): Slightly more visible divider line.
+Linear 不是仅仅因为「render path 快」才叫「快的软件」。Speed 是被设计进 interaction model 里的：每个 action 都有 keyboard shortcut，每个 shortcut 都作用在*被 hover 的*目标上（不需要先「select」），command menu（`⌘K`）让任意 action 都能在两次按键内被找到。Mouse path 只是 fallback，不是主要 affordance。
 
-### Light Mode Neutrals (for light theme contexts)
-- **Light Background** (`#f7f8f8`): Page background in light mode.
-- **Light Surface** (`#f3f4f5` / `#f5f6f7`): Subtle surface tinting.
-- **Light Border** (`#d0d6e0`): Visible border in light contexts.
-- **Light Border Alt** (`#e6e6e6`): Alternative lighter border.
-- **Pure White** (`#ffffff`): Card surfaces, highlights.
+设计时：如果一个 power user 在一次专注 session 中触发某 action 超过三次，它**必须**有 single-key shortcut，**必须**能从 command menu 抵达，**应当**遵守 hover-target 模式。
 
-### Overlay
-- **Overlay Primary** (`rgba(0,0,0,0.85)`): Modal/dialog backdrop — extremely dark for focus isolation.
+### Craft 是对 quality 的追求
 
-## 3. Typography Rules
+> 「There is a central quality which is the root criterion of life and spirit… It is objective and precise, but it cannot be named.」—— Christopher Alexander，《Why is quality so rare?》引用
+> 
 
-### Font Family
-- **Primary**: `Inter Variable`, with fallbacks: `SF Pro Display, -apple-system, system-ui, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, Open Sans, Helvetica Neue`
-- **Monospace**: `Berkeley Mono`, with fallbacks: `ui-monospace, SF Mono, Menlo`
-- **OpenType Features**: `"cv01", "ss03"` enabled globally — cv01 provides an alternate lowercase 'a' (single-story), ss03 adjusts specific letterforms for a cleaner geometric appearance.
+Quality 是「感受」。它藏在看不见的细节里：一个从 trigger 缩放出来而不是从 viewport center 弹出的 popover；一个色号贯穿 Monaco gutter 与 xterm scrollback 的 status pill；一个在 `Tab` 之后 80ms 内落位的 focus ring。这些单独拎出来都不起眼，合在一起就是整个产品。
 
-### Hierarchy
+设计时：如果你只能用「users won't notice」来为一个决定辩护，那你说的正是最该较真的决定。
 
-| Role | Font | Size | Weight | Line Height | Letter Spacing | Notes |
-|------|------|------|--------|-------------|----------------|-------|
-| Display XL | Inter Variable | 72px (4.50rem) | 510 | 1.00 (tight) | -1.584px | Hero headlines, maximum impact |
-| Display Large | Inter Variable | 64px (4.00rem) | 510 | 1.00 (tight) | -1.408px | Secondary hero text |
-| Display | Inter Variable | 48px (3.00rem) | 510 | 1.00 (tight) | -1.056px | Section headlines |
-| Heading 1 | Inter Variable | 32px (2.00rem) | 400 | 1.13 (tight) | -0.704px | Major section titles |
-| Heading 2 | Inter Variable | 24px (1.50rem) | 400 | 1.33 | -0.288px | Sub-section headings |
-| Heading 3 | Inter Variable | 20px (1.25rem) | 590 | 1.33 | -0.24px | Feature titles, card headers |
-| Body Large | Inter Variable | 18px (1.13rem) | 400 | 1.60 (relaxed) | -0.165px | Introduction text, feature descriptions |
-| Body Emphasis | Inter Variable | 17px (1.06rem) | 590 | 1.60 (relaxed) | normal | Emphasized body, sub-headings in content |
-| Body | Inter Variable | 16px (1.00rem) | 400 | 1.50 | normal | Standard reading text |
-| Body Medium | Inter Variable | 16px (1.00rem) | 510 | 1.50 | normal | Navigation, labels |
-| Body Semibold | Inter Variable | 16px (1.00rem) | 590 | 1.50 | normal | Strong emphasis |
-| Small | Inter Variable | 15px (0.94rem) | 400 | 1.60 (relaxed) | -0.165px | Secondary body text |
-| Small Medium | Inter Variable | 15px (0.94rem) | 510 | 1.60 (relaxed) | -0.165px | Emphasized small text |
-| Small Semibold | Inter Variable | 15px (0.94rem) | 590 | 1.60 (relaxed) | -0.165px | Strong small text |
-| Small Light | Inter Variable | 15px (0.94rem) | 300 | 1.47 | -0.165px | De-emphasized body |
-| Caption Large | Inter Variable | 14px (0.88rem) | 510–590 | 1.50 | -0.182px | Sub-labels, category headers |
-| Caption | Inter Variable | 13px (0.81rem) | 400–510 | 1.50 | -0.13px | Metadata, timestamps |
-| Label | Inter Variable | 12px (0.75rem) | 400–590 | 1.40 | normal | Button text, small labels |
-| Micro | Inter Variable | 11px (0.69rem) | 510 | 1.40 | normal | Tiny labels |
-| Tiny | Inter Variable | 10px (0.63rem) | 400–510 | 1.50 | -0.15px | Overline text, sometimes uppercase |
-| Link Large | Inter Variable | 16px (1.00rem) | 400 | 1.50 | normal | Standard links |
-| Link Medium | Inter Variable | 15px (0.94rem) | 510 | 2.67 | normal | Spaced navigation links |
-| Link Small | Inter Variable | 14px (0.88rem) | 510 | 1.50 | normal | Compact links |
-| Link Caption | Inter Variable | 13px (0.81rem) | 400–510 | 1.50 | -0.13px | Footer, metadata links |
-| Mono Body | Berkeley Mono | 14px (0.88rem) | 400 | 1.50 | normal | Code blocks |
-| Mono Caption | Berkeley Mono | 13px (0.81rem) | 400 | 1.50 | normal | Code labels |
-| Mono Label | Berkeley Mono | 12px (0.75rem) | 400 | 1.40 | normal | Code metadata, sometimes uppercase |
+### Structure should be felt, not seen
 
-### Principles
-- **510 is the signature weight**: Linear uses Inter Variable's 510 weight (between regular 400 and medium 500) as its default emphasis weight. This creates a subtly bolded feel without the heaviness of traditional medium or semibold.
-- **Compression at scale**: Display sizes use progressively tighter letter-spacing — -1.584px at 72px, -1.408px at 64px, -1.056px at 48px, -0.704px at 32px. Below 24px, spacing relaxes toward normal.
-- **OpenType as identity**: `"cv01", "ss03"` aren't decorative — they transform Inter into Linear's distinctive typeface, giving it a more geometric, purposeful character.
-- **Three-tier weight system**: 400 (reading), 510 (emphasis/UI), 590 (strong emphasis). The 300 weight appears only in deliberately de-emphasized contexts.
+2024 年 4 月的 refresh 明确削减了 visual noise —— 更少的 divider、更柔和的 border、更低对比度的 separator —— 同时保留了 information density。Linear 的 density 是设计意图。那份「calm」来自移除 scaffolding，而不是移除 content。
 
-## 4. Component Stylings
+设计时：**先**用 spacing、typographic hierarchy、微妙的 background step；**再**考虑 border。一条 `rgba(255,255,255,0.06)` 的 1px divider，通常比 `rgba(255,255,255,0.14)` 那条更强。如果两个 region 非得靠硬 border 才能「看起来不一样」，那多半是 layout 本身错了。
 
-### Buttons
+### Built for humans and agents
 
-**Ghost Button (Default)**
-- Background: `rgba(255,255,255,0.02)`
-- Text: `#e2e4e7` (near-white)
-- Padding: comfortable
-- Radius: 6px
-- Border: `1px solid rgb(36, 40, 44)`
-- Outline: none
-- Focus shadow: `rgba(0,0,0,0.1) 0px 4px 12px`
-- Use: Standard actions, secondary CTAs
+Linear 当前的定位把 AI agent 视作与人类并列的 first-class actor：issue 由 agent 起草、PR 由 agent 推送，而 UI 必须在「下一次 change 不是人做的」时仍然保持 legible。
 
-**Subtle Button**
-- Background: `rgba(255,255,255,0.04)`
-- Text: `#d0d6e0` (silver-gray)
-- Padding: 0px 6px
-- Radius: 6px
-- Use: Toolbar actions, contextual buttons
+设计时：每一次 status change、assignment、comment **必须**带一个明确的 author（user avatar、agent chip，或 system label）。「Status moved to In Review」不够；「Cascade moved status to In Review」才够。
 
-**Primary Brand Button (Inferred)**
-- Background: `#5e6ad2` (brand indigo)
-- Text: `#ffffff`
-- Padding: 8px 16px
-- Radius: 6px
-- Hover: `#828fff` shift
-- Use: Primary CTAs ("Start building", "Sign up")
+---
 
-**Icon Button (Circle)**
-- Background: `rgba(255,255,255,0.03)` or `rgba(255,255,255,0.05)`
-- Text: `#f7f8f8` or `#ffffff`
-- Radius: 50%
-- Border: `1px solid rgba(255,255,255,0.08)`
-- Use: Close, menu toggle, icon-only actions
+## Review Format (Required)
 
-**Pill Button**
-- Background: transparent
-- Text: `#d0d6e0`
-- Padding: 0px 10px 0px 5px
-- Radius: 9999px
-- Border: `1px solid rgb(35, 37, 42)`
-- Use: Filter chips, tags, status indicators
+当你根据 Linear 原则评审 UI 代码或 design 时，**必须**使用 Before / After / Why 三列的 markdown 表格。**不要**用「Before:」「After:」分行写的 bullet list。始终输出像下面这样的真正的 markdown 表格：
 
-**Small Toolbar Button**
-- Background: `rgba(255,255,255,0.05)`
-- Text: `#62666d` (muted)
-- Radius: 2px
-- Border: `1px solid rgba(255,255,255,0.05)`
-- Shadow: `rgba(0,0,0,0.03) 0px 1.2px 0px 0px`
-- Font: 12px weight 510
-- Use: Toolbar actions, quick-access controls
+| Before | After | Why |
+| --- | --- | --- |
+| Sidebar hover 使用 `transition: transform 180ms ease-out` | `transition: background 80ms linear, color 80ms linear` | Linear sidebar hover 是 instant；navigation item 上不做 position/size transition |
+| 每两个 panel 之间都有 `border: 1px solid rgba(255,255,255,0.16)` | `border: 1px solid rgba(255,255,255,0.06)`；只要 spacing 已足以区分 region，就拿掉 border | Post-2024 refresh —— structure felt, not seen |
+| 某 action 只在 right-click menu 里才能触发 | 该 action **必须**也出现在 `⌘K` 中；高频时还必须配 single-key shortcut | Three paths to every action —— button、shortcut、command menu |
+| Status 通过 native `<select>` 切换 | 由 `S` 触发的 custom popover，列出全部七档 workflow state，每项带彩色 icon 与 count | Native select 无法被 theme 化，会把 Linear 的 visual continuity 打断 |
+| Primary accent 同时铺在 page background + button + badge + link 上 | 每屏只在一个 focal element 上使用 accent；border 与 text 保持中性 | Indigo is earned, not sprayed —— 它只 highlight 用户下一个该做的决定 |
 
-### Cards & Containers
-- Background: `rgba(255,255,255,0.02)` to `rgba(255,255,255,0.05)` (never solid — always translucent)
-- Border: `1px solid rgba(255,255,255,0.08)` (standard) or `1px solid rgba(255,255,255,0.05)` (subtle)
-- Radius: 8px (standard), 12px (featured), 22px (large panels)
-- Shadow: `rgba(0,0,0,0.2) 0px 0px 0px 1px` or layered multi-shadow stacks
-- Hover: subtle background opacity increase
+错误格式（永远不要这样写）：
 
-### Inputs & Forms
+```
+Before: transition: all 300ms
+After: transition: background 80ms linear
+────────────────────────────
+Before: border everywhere
+After: borders removed
+```
 
-**Text Area**
-- Background: `rgba(255,255,255,0.02)`
-- Text: `#d0d6e0`
-- Border: `1px solid rgba(255,255,255,0.08)`
-- Padding: 12px 14px
-- Radius: 6px
+正确格式：一张 markdown 表格，每个 issue 一行，三列分别为 Before / After / Why。「Why」这一列**必须**引用一条 Linear principle 或一次具体的 refresh decision，不能只写「口味更好」。
 
-**Search Input**
-- Background: transparent
-- Text: `#f7f8f8`
-- Padding: 1px 32px (icon-aware)
+---
 
-**Button-style Input**
-- Text: `#8a8f98`
-- Padding: 1px 6px
-- Radius: 5px
-- Focus shadow: multi-layer stack
+## The Linear Decision Framework
 
-### Badges & Pills
+在写任何 UI 代码或产出任何 mockup 之前，按顺序回答下面这些问题。
 
-**Success Pill**
-- Background: `#10b981`
-- Text: `#f7f8f8`
-- Radius: 50% (circular)
-- Font: 10px weight 510
-- Use: Status dots, completion indicators
+### 1. 这个 action 值不值得配 keyboard shortcut？
 
-**Neutral Pill**
-- Background: transparent
-- Text: `#d0d6e0`
-- Padding: 0px 10px 0px 5px
-- Radius: 9999px
-- Border: `1px solid rgb(35, 37, 42)`
-- Font: 12px weight 510
-- Use: Tags, filter chips, category labels
+**问自己：**一个 power user 在一次专注 session 里，会触发这个 action 多少次？
 
-**Subtle Badge**
-- Background: `rgba(255,255,255,0.05)`
-- Text: `#f7f8f8`
-- Padding: 0px 8px 0px 2px
-- Radius: 2px
-- Border: `1px solid rgba(255,255,255,0.05)`
-- Font: 10px weight 510
-- Use: Inline labels, version tags
+| Frequency | Decision |
+| --- | --- |
+| 每分钟多次（在 list 里翻动、open issue、change status） | Single-key shortcut，作用在 hover target 上。例：`S` change status、`A` assign、`P` priority、`L` label。 |
+| 每次 session 若干次（create issue、switch view、open Inbox） | Single-key 或 two-key shortcut。例：`C` create；`G` then `I` go to Inbox。 |
+| 每次 session 一次（settings、account、invite member） | 只放在 command menu（`⌘K`）里。不配专属 shortcut。 |
+| 极少 / destructive（delete workspace、revoke API key） | Command menu + 显式 confirmation dialog；绝不是裸 shortcut。 |
 
-### Navigation
-- Dark sticky header on near-black background
-- Linear logomark left-aligned (SVG icon)
-- Links: Inter Variable 13–14px weight 510, `#d0d6e0` text
-- Active/hover: text lightens to `#f7f8f8`
-- CTA: Brand indigo button or ghost button
-- Mobile: hamburger collapse
-- Search: command palette trigger (`/` or `Cmd+K`)
+**Hover-target 规则：**Single-key shortcut **必须**作用在 cursor 当前 hover 的 row / card 上 —— 而不是一个「selected」状态。这一条 interaction，是 Linear 感觉比任何对手都更快的根源；违反它，shortcut 就沦为装饰。
 
-### Image Treatment
-- Product screenshots on dark backgrounds with subtle border (`rgba(255,255,255,0.08)`)
-- Top-rounded images: `12px 12px 0px 0px` radius
-- Dashboard/issue previews dominate feature sections
-- Subtle shadow beneath screenshots: `rgba(0,0,0,0.4) 0px 2px 4px`
+### 2. 这个 view 是 dense 还是 calm？
 
-## 5. Layout Principles
+Linear 有两种 mode，把它们混淆是最常见的风格错误。
 
-### Spacing System
-- Base unit: 8px
-- Scale: 1px, 4px, 7px, 8px, 11px, 12px, 16px, 19px, 20px, 22px, 24px, 28px, 32px, 35px
-- The 7px and 11px values suggest micro-adjustments for optical alignment
-- Primary rhythm: 8px, 16px, 24px, 32px (standard 8px grid)
+| Mode | Used for | Rules |
+| --- | --- | --- |
+| **Dense** | Issue list、board、Triage、Inbox、command menu、activity feed | Row height 28–32px。没有 row border —— 只靠 hover 与交替。Metadata 以 chip 呈现，而不是整句话。大胆 truncate。 |
+| **Calm** | Issue detail、project overview、document page、marketing site | Line length ≤ 680px。充足的 vertical rhythm。Metadata 放在右侧的 vertical rail，而不是塞进正文行里。只有 major region 之间才出现 border。 |
 
-### Grid & Container
-- Max content width: approximately 1200px
-- Hero: centered single-column with generous vertical padding
-- Feature sections: 2–3 column grids for feature cards
-- Full-width dark sections with internal max-width constraints
-- Changelog: single-column timeline layout
+当一个 screen 里两种 mode 并存（issue detail 里嵌 activity feed、project overview 里嵌 task list），dense region **必须**在自己的 container 内保留 dense rules —— 不要为了「配合整页」把它「也 calm 下来」。
 
-### Whitespace Philosophy
-- **Darkness as space**: On Linear's dark canvas, empty space isn't white — it's absence. The near-black background IS the whitespace, and content emerges from it.
-- **Compressed headlines, expanded surroundings**: Display text at 72px with -1.584px tracking is dense and compressed, but sits within vast dark padding. The contrast between typographic density and spatial generosity creates tension.
-- **Section isolation**: Each feature section is separated by generous vertical padding (80px+) with no visible dividers — the dark background provides natural separation.
+### 3. 适用哪一档 motion？
 
-### Border Radius Scale
-- Micro (2px): Inline badges, toolbar buttons, subtle tags
-- Standard (4px): Small containers, list items
-- Comfortable (6px): Buttons, inputs, functional elements
-- Card (8px): Cards, dropdowns, popovers
-- Panel (12px): Panels, featured cards, section containers
-- Large (22px): Large panel elements
-- Full Pill (9999px): Chips, filter pills, status tags
-- Circle (50%): Icon buttons, avatars, status dots
+Linear 的 motion 是克制的。只有三 tier，之外的都不允许。
 
-## 6. Depth & Elevation
+| Tier | Duration | Easing | Used for |
+| --- | --- | --- | --- |
+| T1 · Instant feedback | 0–80ms | `linear` 或无 | Hover background、focus ring、selection、key press echo。只要是 tracking pointer 的，就不允许有 lag。 |
+| T2 · Overlay | 120–180ms | `cubic-bezier(0.16, 1, 0.3, 1)`（strong ease-out） | Dropdown、popover、tooltip、command menu、toast。**Enter only**，exit 走 80ms 或直接 instant。 |
+| T3 · Structural | 240–320ms | `cubic-bezier(0.32, 0.72, 0, 1)`（iOS drawer curve） | Sheet、side panel、modal、theme switch。**绝不**用在被反复扫视的 content 上。 |
 
-| Level | Treatment | Use |
-|-------|-----------|-----|
-| Flat (Level 0) | No shadow, `#010102` bg | Page background, deepest canvas |
-| Subtle (Level 1) | `rgba(0,0,0,0.03) 0px 1.2px 0px` | Toolbar buttons, micro-elevation |
-| Surface (Level 2) | `rgba(255,255,255,0.05)` bg + `1px solid rgba(255,255,255,0.08)` border | Cards, input fields, containers |
-| Inset (Level 2b) | `rgba(0,0,0,0.2) 0px 0px 12px 0px inset` | Recessed panels, inner shadows |
-| Ring (Level 3) | `rgba(0,0,0,0.2) 0px 0px 0px 1px` | Border-as-shadow technique |
-| Elevated (Level 4) | `rgba(0,0,0,0.4) 0px 2px 4px` | Floating elements, dropdowns |
-| Dialog (Level 5) | Multi-layer stack: `rgba(0,0,0,0) 0px 8px 2px, rgba(0,0,0,0.01) 0px 5px 2px, rgba(0,0,0,0.04) 0px 3px 2px, rgba(0,0,0,0.07) 0px 1px 1px, rgba(0,0,0,0.08) 0px 0px 1px` | Popovers, command palette, modals |
-| Focus | `rgba(0,0,0,0.1) 0px 4px 12px` + additional layers | Keyboard focus on interactive elements |
+**永远不用 ease-in。**Linear 从不让「用户最专注看的那一刻」被推迟。用 `ease-out` 或 `linear`；只有对称性的 on-screen travel 才考虑 `ease-in-out`。
 
-**Shadow Philosophy**: On dark surfaces, traditional shadows (dark on dark) are nearly invisible. Linear solves this by using semi-transparent white borders as the primary depth indicator. Elevation isn't communicated through shadow darkness but through background luminance steps — each level slightly increases the white opacity of the surface background (`0.02` → `0.04` → `0.05`), creating a subtle stacking effect. The inset shadow technique (`rgba(0,0,0,0.2) 0px 0px 12px 0px inset`) creates a unique "sunken" effect for recessed panels, adding dimensional depth that traditional dark themes lack.
+**Keyboard-triggered overlay 绝不走 T3。**Command menu **必须**在 ≤180ms 内打开，动效不多于 opacity + `translateY(-3px)`。一个 320ms 的 command menu 感觉像坏了。
 
-## 7. Do's and Don'ts
+---
 
-### Do
-- Use Inter Variable with `"cv01", "ss03"` on ALL text — these features are fundamental to Linear's typeface identity
-- Use weight 510 as your default emphasis weight — it's Linear's signature between-weight
-- Apply aggressive negative letter-spacing at display sizes (-1.584px at 72px, -1.056px at 48px)
-- Build on near-black backgrounds: `#08090a` for marketing, `#0f1011` for panels, `#191a1b` for elevated surfaces
-- Use semi-transparent white borders (`rgba(255,255,255,0.05)` to `rgba(255,255,255,0.08)`) instead of solid dark borders
-- Keep button backgrounds nearly transparent: `rgba(255,255,255,0.02)` to `rgba(255,255,255,0.05)`
-- Reserve brand indigo (`#5e6ad2` / `#7170ff`) for primary CTAs and interactive accents only
-- Use `#f7f8f8` for primary text — not pure `#ffffff`, which would be too harsh
-- Apply the luminance stacking model: deeper = darker bg, elevated = slightly lighter bg
+## Visual System
 
-### Don't
-- Don't use pure white (`#ffffff`) as primary text — `#f7f8f8` prevents eye strain
-- Don't use solid colored backgrounds for buttons — transparency is the system (rgba white at 0.02–0.05)
-- Don't apply the brand indigo decoratively — it's reserved for interactive/CTA elements only
-- Don't use positive letter-spacing on display text — Inter at large sizes always runs negative
-- Don't use visible/opaque borders on dark backgrounds — borders should be whisper-thin semi-transparent white
-- Don't skip the OpenType features (`"cv01", "ss03"`) — without them, it's generic Inter, not Linear's Inter
-- Don't use weight 700 (bold) — Linear's maximum weight is 590, with 510 as the workhorse
-- Don't introduce warm colors into the UI chrome — the palette is cool gray with blue-violet accent only
-- Don't use drop shadows for elevation on dark surfaces — use background luminance stepping instead
+### Surfaces —— Woodsmoke layering
 
-## 8. Responsive Behavior
+Linear 的 dark theme 建立在 neutral gray 上，零 blue bias。规则：`R ≈ G ≈ B + 0–1`。一旦带蓝，观感立刻滑向「generic dashboard」。
 
-### Breakpoints
-| Name | Width | Key Changes |
-|------|-------|-------------|
-| Mobile Small | <600px | Single column, compact padding |
-| Mobile | 600–640px | Standard mobile layout |
-| Tablet | 640–768px | Two-column grids begin |
-| Desktop Small | 768–1024px | Full card grids, expanded padding |
-| Desktop | 1024–1280px | Standard desktop, full navigation |
-| Large Desktop | >1280px | Full layout, generous margins |
+```css
+--bg-0: #08090A; /* canvas —— behind everything */
+--bg-1: #1C1C1F; /* main surface —— panel, card */
+--bg-2: #222326; /* elevated —— popover, hovered row */
+--bg-3: #2B2C30; /* control background */
+--bg-4: #35363A; /* hover on control, divider where needed */
+```
 
-### Touch Targets
-- Buttons use comfortable padding with 6px radius minimum
-- Navigation links at 13–14px with adequate spacing
-- Pill tags have 10px horizontal padding for touch accessibility
-- Icon buttons at 50% radius ensure circular, easy-to-tap targets
-- Search trigger is prominently placed with generous hit area
+Post-2024 refresh 把这几层之间的 visible contrast 压低了。拿不准时，**step less**，而不是 step more。两层之间相差 `#04` 通常已经足够。
 
-### Collapsing Strategy
-- Hero: 72px → 48px → 32px display text, tracking adjusts proportionally
-- Navigation: horizontal links + CTAs → hamburger menu at 768px
-- Feature cards: 3-column → 2-column → single column stacked
-- Product screenshots: maintain aspect ratio, may reduce padding
-- Changelog: timeline maintains single-column through all sizes
-- Footer: multi-column → stacked single column
-- Section spacing: 80px+ → 48px on mobile
+### Indigo —— the one earned color
 
-### Image Behavior
-- Dashboard screenshots maintain border treatment at all sizes
-- Hero visuals simplify on mobile (fewer floating UI elements)
-- Product screenshots use responsive sizing with consistent radius
-- Dark background ensures screenshots blend naturally at any viewport
+Linear 的 accent 是一支 desaturated indigo。它只出现在「用户接下来必须做一个决定」的地方。
 
-## 9. Agent Prompt Guide
+```css
+--ac:     #5E6AD2; /* primary button, active state, focus ring */
+--ac-h:   #6E7BDE; /* hover */
+--ac-sub: rgba(94, 106, 210, 0.10); /* selected row, subtle fill */
+--ac-fg:  #A5B0F0; /* text on subtle fill */
+```
 
-### Quick Color Reference
-- Primary CTA: Brand Indigo (`#5e6ad2`)
-- Page Background: Marketing Black (`#08090a`)
-- Panel Background: Panel Dark (`#0f1011`)
-- Surface: Level 3 (`#191a1b`)
-- Heading text: Primary White (`#f7f8f8`)
-- Body text: Silver Gray (`#d0d6e0`)
-- Muted text: Tertiary Gray (`#8a8f98`)
-- Subtle text: Quaternary Gray (`#62666d`)
-- Accent: Violet (`#7170ff`)
-- Accent Hover: Light Violet (`#828fff`)
-- Border (default): `rgba(255,255,255,0.08)`
-- Border (subtle): `rgba(255,255,255,0.05)`
-- Focus ring: Multi-layer shadow stack
+**Rules：**
 
-### Example Component Prompts
-- "Create a hero section on `#08090a` background. Headline at 48px Inter Variable weight 510, line-height 1.00, letter-spacing -1.056px, color `#f7f8f8`, font-feature-settings `'cv01', 'ss03'`. Subtitle at 18px weight 400, line-height 1.60, color `#8a8f98`. Brand CTA button (`#5e6ad2`, 6px radius, 8px 16px padding) and ghost button (`rgba(255,255,255,0.02)` bg, `1px solid rgba(255,255,255,0.08)` border, 6px radius)."
-- "Design a card on dark background: `rgba(255,255,255,0.02)` background, `1px solid rgba(255,255,255,0.08)` border, 8px radius. Title at 20px Inter Variable weight 590, letter-spacing -0.24px, color `#f7f8f8`. Body at 15px weight 400, color `#8a8f98`, letter-spacing -0.165px."
-- "Build a pill badge: transparent background, `#d0d6e0` text, 9999px radius, 0px 10px padding, `1px solid #23252a` border, 12px Inter Variable weight 510."
-- "Create navigation: dark sticky header on `#0f1011`. Inter Variable 13px weight 510 for links, `#d0d6e0` text. Brand indigo CTA `#5e6ad2` right-aligned with 6px radius. Bottom border: `1px solid rgba(255,255,255,0.05)`."
-- "Design a command palette: `#191a1b` background, `1px solid rgba(255,255,255,0.08)` border, 12px radius, multi-layer shadow stack. Input at 16px Inter Variable weight 400, `#f7f8f8` text. Results list with 13px weight 510 labels in `#d0d6e0` and 12px metadata in `#62666d`."
+- 每个 viewport region 里最多一个 accent。一屏已经有一个 accented CTA 了，就**不要**再把 nav、badge、link 也染成 accent。
+- Accent 从来不是 brand flourish。如果这个 element 不是用户的下一个 action，它就是 neutral。
+- 在 text 上，accent 只用于正文中的 inline link 与 keyboard shortcut hint。Button 是 filled accent，而不是 neutral bg + accent-colored text。
 
-### Iteration Guide
-1. Always set font-feature-settings `"cv01", "ss03"` on all Inter text — this is non-negotiable for Linear's look
-2. Letter-spacing scales with font size: -1.584px at 72px, -1.056px at 48px, -0.704px at 32px, normal below 16px
-3. Three weights: 400 (read), 510 (emphasize/navigate), 590 (announce)
-4. Surface elevation via background opacity: `rgba(255,255,255, 0.02 → 0.04 → 0.05)` — never solid backgrounds on dark
-5. Brand indigo (`#5e6ad2` / `#7170ff`) is the only chromatic color — everything else is grayscale
-6. Borders are always semi-transparent white, never solid dark colors on dark backgrounds
-7. Berkeley Mono for any code or technical content, Inter Variable for everything else
+### Typography —— Inter, tightly tuned
+
+默认 Inter，monospace 用 JetBrains Mono（或 SF Mono）。Linear 启用了 Inter 的 `cv11`（single-story `a`）以及 `ss01`/`ss03` stylistic set 以获得更干净的字形。
+
+```css
+font-family: "Inter var", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+font-feature-settings: "cv11", "ss01", "ss03";
+-webkit-font-smoothing: antialiased;
+```
+
+Type scale（锚点是 13px body，不是 14 也不是 16）：
+
+| Role | Size / line-height | Weight | Tracking |
+| --- | --- | --- | --- |
+| Micro label / badge | 11 / 14 | 500 | +0.02em, uppercase |
+| Meta / secondary | 12 / 16 | 400–500 | 0 |
+| Body | 13 / 20 | 400 | 0 |
+| Input / button | 13 / 1 | 500 | 0 |
+| H3 / section | 15 / 22 | 600 | −0.005em |
+| H2 | 22 / 28 | 600 | −0.022em |
+| H1 / page | 28 / 34 | 600 | −0.028em |
+
+Larger heading **必须** tighten tracking。Body **必须不** tighten —— 把 13px 的 Inter 压紧只会更难读，并不会更优雅。
+
+### Borders, radius, density
+
+Post-refresh defaults：
+
+- **Border tokens：** subtle `rgba(255,255,255,0.06)`、standard `rgba(255,255,255,0.09)`、strong `rgba(255,255,255,0.14)`。任何高于 `0.18` 的值都透着一股 pre-2024 的味道。
+- **Radius：**4 / 6 / 8 / 12。Button 与 input 是 6，card 是 8，dialog 是 12。Chip 要么 4（sharp），要么 9999（pill）—— **绝不**取中间值。
+- **Density：**Control 默认 height 28px。紧凑 chrome 用 22/26；32/36 只用于 marketing 或 settings 的「hero row」。
+- **Shadows：**layered，绝不是 single blurred drop。Popover shadow = `0 8px 24px rgba(0,0,0,0.36), 0 0 0 0.5px rgba(255,255,255,0.06)`。真正让它在 dark canvas 上显得利落的，是那条 0.5px 的 hairline。
+
+### Seven-state workflow color tokens
+
+Linear 的 status system 在精神上是不可 customize 的 —— 这七档就是那份 opinion。每一个在这条血统下的产品都应保留同样的 token 结构。
+
+| State | Icon / color | When |
+| --- | --- | --- |
+| Triage | Amber `#F2994A` | Needs a human decision before entering the workflow |
+| Backlog | Gray `#95979B` | Known work, not yet committed |
+| Todo | Light gray `#C7C9CE` | Committed, not started |
+| In Progress | Yellow `#F2C94C` | Actively being worked on |
+| In Review | Purple `#8B5CF6` | Blocked on review / approval |
+| Done | Green `#4CB782` | Shipped |
+| Canceled | Muted gray `#6E7076`，带 strikethrough | Explicitly won't ship |
+
+这些颜色**必须**贯穿每一个 surface —— status pill、list gutter、board column header、priority graph、notification、dark + light theme。**绝不**为了「brand 原因」替换成一个「差不多」的颜色。
+
+---
+
+## Motion
+
+### Region-level transition spec
+
+Linear 风格的 app 里，每一个 region 都要有明确的「what / how long / which curve」三元组。**不要**在任何地方写 `transition: all`。
+
+| Region | Duration · Curve | Properties |
+| --- | --- | --- |
+| Sidebar item hover | 80ms · linear | `background`、`color`。不做 `transform`、不做 `scale`。 |
+| Sidebar item active switch | 180ms · ease-out | 2px indigo pill 在 sibling 之间 `translateY` 滑动。Background 同时 crossfade。 |
+| Row selection in list | 0ms | Instant。Selection 是 state，不是 animation。 |
+| Status pill change | 120ms · ease-out | 只动 `background-color`。Icon swap 是 instant。 |
+| Dropdown / popover | 120ms · ease-out | `opacity 0→1`、`translateY(-3px)→0`。Origin: trigger。 |
+| Command menu（`⌘K`） | 140ms · ease-out | `opacity`、`scale(0.98)→1`，backdrop 80ms。Exit 80ms。 |
+| Tooltip | 400ms delay → 0ms show；0ms hide | 首次显示 300ms 内的 subsequent tooltip 立即出现，skip delay。 |
+| Toast | Enter 180ms · ease-out；exit 140ms | `translateY(16px)→0`  • opacity。Spring bounce **禁止**。 |
+| Side panel / sheet | 240ms · iOS drawer curve | `translateX`。Backdrop 120ms。 |
+| Modal / dialog | Content 200ms · backdrop 160ms | `opacity`  • `translateY(4px)→0`。Origin: viewport center。`scale` 保持 ≥ 0.98。 |
+| Theme switch | 120ms · linear on CSS vars | 单帧过渡，不 re-render、不 `key=` reset。 |
+
+### The Linear motion bans
+
+- ✗ `hover { transform: scale(1.02) }` —— Linear 的 hover 从不 scale。
+- ✗ 除了 drag-to-dismiss 之外，任何带 `>0.2` 回弹的 spring easing。
+- ✗ 以 `transform: scale(0)` 作为 entry state —— 用 `scale(0.95)` + `opacity: 0`。
+- ✗ Popover 使用 `transform-origin: center` —— 必须对准 trigger（`--radix-popover-content-transform-origin` 或等价物）。Modal 是唯一例外。
+- ✗ 在**已经存在**的 list item 上做 stagger delay。Stagger 只给 view 的**首次** render，不给每次 re-render。
+- ✗ 任何 entering element 上的 `ease-in`。
+- ✗ 单属性 transition 超过 320ms。
+- ✗ 在 performance-critical path 上使用 Framer Motion 的 `x`/`y` shorthand —— 请用完整的 `transform` 字符串以获得 hardware acceleration。
+- ✗ 用 slide animation 做 route change —— Linear 的默认是 ≤ 120ms 的 content crossfade。
+
+---
+
+## Component Patterns
+
+### Command menu（`⌘K`）—— the spine of the product
+
+Command menu 是「discoverability layer」，让 Linear 在一个 opinionated、shortcut-driven 的 UI 下，仍然不惩罚新用户。它**必须**：
+
+- 按键后 ≤ 180ms 打开。
+- 搜索范围按优先级：current entity 上的 action、navigation、recent item、settings。
+- 以 small uppercase label 分组（`11px / 500 / +0.06em tracking / fg-3`）。
+- 每个 action 的右侧以克制的 `kbd` 样式展示其 shortcut。
+- Active result 使用 `background: var(--bg-h)`（**不是** accent）。Accent 留给用户按下 `Enter` 时的「explicit selection」。
+- `Escape` 立即关闭（`Escape` 触发时不播 exit animation —— 用户已经决定了）。
+- 任何 surface 都能触达，包括 dialog 内部。
+
+### Status / priority / assignee control
+
+这三个出现在每一 row issue 上。它们的紧凑形态是 `st-tag` + `pri` + `avatar` 一排，三者都可直接点击打开各自的 popover，同时也都绑定 hover + `S` / `P` / `A`。
+
+- **Status pill：**来自七档集合的 icon + label。微微染色的 background，取 state color 的 `0.14` alpha。List row 里用 4px sharp radius，detail page 才用 pill 形。
+- **Priority：**四根递增的 bar（low → urgent），或一根 horizontal dash 表示「no priority」。**从不**只用 text。**从不**用数字（`P0/P1`）。
+- **Assignee：**20–28px avatar。Unassigned 时是一个 dashed circle，**不是** question mark、**不是** ghost icon。
+
+### Sidebar 与 activity bar
+
+两级 navigation：narrow activity bar（workspace switcher + primary destination + integrations），以及 sidebar（current workspace hierarchy：Inbox、My Issues、Views、Teams、Projects、Members）。
+
+- Sidebar item padding 7px vertical × 10px horizontal，6px radius，默认 `fg-2`。
+- Hover：`fg-0` + `bg-h`。不 position change。
+- Active：`fg-0` + `ac-sub` background + 左缘 2px Indigo pill（absolutely positioned，在 sibling 之间 `translateY` transition，而不是 per-item）。
+- Count 右对齐于本 row，`fm` font，默认 `fg-3`，hover 时 `fg-1`，active 时 `ac-fg`。
+- Zero-count item 保持可见但降到 `fg-4`，让视线自动跳过。
+
+### Dense table / list
+
+Linear 的 list 是一张 grid，而不是一张 HTML table。它用 CSS subgrid（或 fixed-column flex layout），保证即使 content 长短不一，每一 row 的 column 也对齐。
+
+- Row height 32px（compact 28）。
+- Hover：`bg-h` 作用在整 row，而不是 individual cell。
+- Selected：`ac-sub` background。Multi-select 用 `Shift` + `X`（**默认不放** checkbox 列 —— checkbox 是一项 opt-in preference）。
+- 无 row border。靠 hover 和内容交替来分隔。
+- Drag-reorder handle 只在 row hover 时出现在最左侧，不常驻。
+
+### Empty state that teaches
+
+Linear 的 empty state 是 instructional，不是 decorative。它们：
+
+- 以 imperative 命名 entity（「Create your first issue」，不是「No issues yet」）。
+- 只给一个 primary action，并同时给出它的 shortcut（`Press C to create`）。
+- 使用 flat line icon，或非常克制的 illustration。**永远不是**一张大号 3D render。
+- 一旦出现第一个真实 item 就立即消失 —— 不留 hint state。
+
+### Tooltip 与「instant second」规则
+
+First tooltip after focus：400ms delay、125ms `opacity + scale(0.97)→1` enter。300ms 内紧接的 subsequent tooltip：**0ms delay、0ms animation** —— 直接 instant swap。这条模式让整条 toolbar 在「不被 accidental hover 骚扰」的前提下仍然飞快。
+
+---
+
+## Interaction Patterns
+
+### Three paths to every action
+
+引用 Linear 官方 docs：对于 user-initiated 的任意 action，**必须**同时有 (a) 可见的 button 或 menu item；(b) keyboard shortcut；(c) `⌘K` 中的 entry。缺任意一条都是 bug，而不是「能力限制」。
+
+评审 design 时，列出所有 user-initiated action，核对三条 path 是否齐全。如果其中一条 path 在物理上不可能（例如「drag the card to reorder」没有 keyboard equivalent），那这份 design 就是 incomplete。
+
+### The hover-target pattern
+
+Single-key shortcut 作用于 cursor 悬停的目标，而不是「selected」。在 list 里 hover 一个 issue 再按 `S` —— status popover 为**那一个** issue 打开，而不是你上次 click 过的那一个。这就是 Linear 感觉像能读心的原因。
+
+实现：每一 row 在 `mouseenter` 时设置 `data-focused` 或等价属性；shortcut handler 从当前 focused element 读取。若无 hover，则作用在最近一次 focused 的 row（keyboard `J` / `K` navigation）。
+
+### Context menu mirrors shortcut
+
+右键一 row 时，context menu 里**每一项**都**必须**在右侧显示其 keyboard shortcut。这正是新用户不靠培训就能升级为 power user 的 path。
+
+### Bulk action via modifier key
+
+Linear 用 `Shift`-click 做 range select，用 `⌘`-click（Windows/Linux 的 `Ctrl`）做 toggle select —— 和 Finder 一致。然后任意 single-key shortcut 对整个 selection 生效。Design review 时要确认：bulk operation 与 single-row path **完全一致** —— 相同的 popover、相同的 key、相同的 confirmation（或同样没有 confirmation）。
+
+### Undo over confirmation
+
+Linear 很少问「Are you sure?」Destructive action 立即执行，随即弹出 8 秒的 undo toast，并在其中提示 `⌘Z`。这只适用于 undo 确实 implementable 的情况；对真正 irreversible 的 action（delete workspace、revoke API key），应走 typed-confirmation dialog。
+
+---
+
+## Patterns for the AI Age
+
+Karri Saarinen 的《Design for the AI age》点明了这次转折：过去的 interface 把 user 引上 predefined road；进入 AI 之后，road 会分叉，destination 可能让 user 惊讶。Linear 的 response 是：让 product 对 non-deterministic actor 保持 legible，同时**不**放弃 opinionated structure。
+
+### Agent 是 first-class actor
+
+任何会写入 workspace 的 agent **必须**具备：
+
+- 明确的 avatar（geometric，not a human photo，也不是通用的 sparkle icon）。
+- 一个以第三人称读起来像 agent 的 name（`Cascade`、`Atlas`、`Copilot`，而不是 `AI Assistant`）。
+- 它的每一次 write 都像 human author 一样被 attribute —— 体现在 activity feed、comment、status change 里。
+- 同样的三条中断 path：button、shortcut、`⌘K` command。
+
+### Let people interrupt, always
+
+长时运行的 agent task **必须**在 activity feed 中展示 progress，并提供可见的 Stop affordance。Stop **必须**绑定 shortcut（通常是 `.` 或 `⌘.`），**不得**需要 confirmation。
+
+### Status 在 work 不由 human 推进时仍要 legible
+
+当 agent advance status 时，transition 走与 human transition 一致的 motion tier —— 没有「AI is thinking」的额外 shimmer，没有多余 animation。要点在于：无论 author 是 person 还是 model，product 都保持 calm。
+
+### Draft before commit
+
+Agent 以明确标记的 draft state 写入（浅 accent border、`AI draft` chip），这一 state 只在 human accept 前存在。Draft 不会作为 real data 被 persist。这样 agent 可以 aggressively propose，而不污染 history。
+
+### Never fake confidence
+
+Agent 引用 external data 时**必须** inline 附带 source（小号 link chip）。没有 source 的 output **不得**使用暗示 source 的语言。这是 UI 的 commitment，不只是 content 的 commitment —— design 层给出 citation slot，并让其留空时看起来「不对」。
+
+---
+
+## Review Checklist
+
+评审一份 Linear-style interface 时，检查以下项：
+
+| Issue | Fix |
+| --- | --- |
+| Nav 或 list item 出现 `hover { transform: scale(…) }` | 移除。Hover 只做 `background` 与 `color`。 |
+| 一屏里多于一个 focal element 在用 primary accent | 除「next-action element」外，其余全部降回 neutral。 |
+| Shortcut 需要先 selection 才能触发 | Rewire 到 hover-target：single key 作用在 hovered row。 |
+| 每一次 subsequent hover 都重新走一次 tooltip delay | 首次之后 300ms 内的 subsequent tooltip skip delay + animation。 |
+| Popover 用了 `transform-origin: center` | 改为 trigger position（`--radix-popover-content-transform-origin`）。 |
+| Reversible 的 action 还弹「Are you sure?」dialog | 移除 dialog，改为带 `⌘Z` 提示的 undo toast。 |
+| Agent task 没有 Stop affordance | 加可见的 Stop button，绑定 `.` 或 `⌘.`，不需 confirmation。 |
+| 相邻 surface 层之间 step ≥ `#08` | 降到 `#04–#06`。Post-2024 refresh calmed the contrast。 |
+| Route transition 用了 slide animation | 换成 ≤ 120ms 的 content crossfade。 |
+| Empty state 里放大号 illustration 或 3D render | 替换为 flat line icon，或索性移除。 |
+
+---
+
+## Reference
+
+本 skill 的核心参考来源：
+
+- Linear Method —— Principles & Practices
+- 《A calmer interface for a product in motion》（2024 年 4 月 refresh）
+- 《Why is quality so rare?》—— Karri Saarinen
+- 《Design for the AI age》—— Karri Saarinen，2025 年 4 月
+- Linear Docs · Concepts（three-paths-to-action model）
+- Linear Brand Guidelines（Indigo / Mercury White / Nordic Gray / Woodsmoke palette，Inter typography）
+
+当本 skill 中的 principle 与一次 ad-hoc request 发生冲突时，把 conflict 摆上来，并引用相应 principle。Linear 的全部价值主张就是「opinionated defaults beat case-by-case decisions」—— 一份每次被用户追加一个 accent color 就妥协的 skill，已经不再是一份 Linear skill。

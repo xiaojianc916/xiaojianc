@@ -118,6 +118,16 @@
   --settings-accent: #5e6ad2;
   --settings-accent-soft: rgba(94, 106, 210, 0.35);
   --settings-accent-muted: rgba(94, 106, 210, 0.16);
+  --editor-context-menu-shadow:
+    0 10px 38px -10px rgba(0, 0, 0, 0.7),
+    0 10px 20px -15px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --editor-context-menu-separator: rgba(255, 255, 255, 0.06);
+  --editor-context-menu-muted: #8a8f98;
+  --editor-context-menu-disabled: #3e4248;
+  --editor-context-menu-kbd-bg: rgba(255, 255, 255, 0.06);
+  --editor-context-menu-kbd-hover-bg: rgba(255, 255, 255, 0.09);
+  --editor-context-menu-accent: #5e6ad2;
   --app-ui-font-size: 13px;
   --app-density-scale: 1;
   --success: #22c55e;
@@ -192,6 +202,16 @@
   --accent: #4c6fff;
   --accent-strong: #335cff;
   --accent-muted: rgba(76, 111, 255, 0.14);
+  --editor-context-menu-shadow:
+    0 14px 40px -16px rgba(15, 23, 42, 0.18),
+    0 10px 18px -14px rgba(15, 23, 42, 0.12),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.92);
+  --editor-context-menu-separator: rgba(15, 23, 42, 0.08);
+  --editor-context-menu-muted: #64748b;
+  --editor-context-menu-disabled: #94a3b8;
+  --editor-context-menu-kbd-bg: rgba(15, 23, 42, 0.05);
+  --editor-context-menu-kbd-hover-bg: rgba(15, 23, 42, 0.08);
+  --editor-context-menu-accent: #4c6fff;
 
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -1142,7 +1162,6 @@ button:disabled,
   align-items: center;
   gap: 10px;
   padding: 6px 12px;
-  border-top: 1px solid var(--explorer-border);
   font-size: 11px;
   color: var(--explorer-text-faint);
 }
@@ -2034,7 +2053,7 @@ button:disabled,
     color 0.12s ease;
 }
 
-.source-control-nav-item + .source-control-nav-item {
+.source-control-nav-item+.source-control-nav-item {
   margin-top: 2px;
 }
 
@@ -2088,7 +2107,7 @@ button:disabled,
   padding: 8px 6px;
 }
 
-.source-control-section + .source-control-section {
+.source-control-section+.source-control-section {
   border-top: 1px solid var(--scm-border);
 }
 
@@ -2616,95 +2635,166 @@ button:disabled,
  * 12. Monaco editor widgets
  * ============================================================ */
 
-.action-widget,
-.monaco-menu,
-.monaco-hover.workbench-hover,
-.monaco-editor .suggest-widget,
-.monaco-editor .suggest-details,
-.monaco-editor .find-widget,
-.monaco-editor .parameter-hints-widget,
-.monaco-editor .editor-widget {
-  font-family: var(--font-sans);
+/* Monaco context menu — Linear-inspired */
+
+.context-view.monaco-menu-container {
+  letter-spacing: -0.003em;
 }
 
-.action-widget,
-.monaco-menu,
-.monaco-hover.workbench-hover,
-.monaco-editor .suggest-widget,
-.monaco-editor .suggest-details,
-.monaco-editor .find-widget,
-.monaco-editor .parameter-hints-widget {
-  border-radius: 12px !important;
-  border-color: var(--border-subtle) !important;
-  box-shadow:
-    0 20px 56px rgba(0, 0, 0, 0.24),
-    0 0 0 1px rgba(255, 255, 255, 0.03) !important;
-  backdrop-filter: blur(18px) saturate(1.08);
+.context-view.monaco-menu-container .monaco-scrollable-element {
+  border-radius: 8px !important;
+  box-shadow: var(--editor-context-menu-shadow) !important;
+  backdrop-filter: blur(18px) saturate(1.04);
 }
 
-.action-widget,
-.monaco-menu,
-.monaco-hover.workbench-hover {
-  background: color-mix(in srgb, var(--panel-bg) 92%, transparent) !important;
-}
-
-.monaco-editor .suggest-widget,
-.monaco-editor .suggest-details,
-.monaco-editor .find-widget,
-.monaco-editor .parameter-hints-widget {
-  background: color-mix(in srgb, var(--editor-surface) 94%, transparent) !important;
-}
-
-.action-widget .monaco-list .monaco-list-row,
-.monaco-menu .monaco-action-bar.vertical .action-menu-item,
-.monaco-editor .suggest-widget .monaco-list-row,
-.monaco-editor .find-widget .button {
+.context-view.monaco-menu-container .monaco-menu {
+  min-width: 224px;
   border-radius: 8px;
-}
-
-.action-widget .monaco-list .monaco-list-row,
-.monaco-menu .monaco-action-bar.vertical .action-label,
-.monaco-editor .suggest-widget .monaco-list-row {
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease;
-}
-
-.monaco-editor .find-widget {
-  padding: 8px;
-}
-
-.monaco-editor .find-widget .monaco-inputbox {
-  border-radius: 8px;
-}
-
-.monaco-editor .suggest-widget,
-.monaco-editor .suggest-details,
-.monaco-editor .parameter-hints-widget {
   overflow: hidden;
+  font: 400 13px/1.5 var(--font-sans);
+  letter-spacing: -0.003em;
 }
 
-.light .action-widget,
-.light .monaco-menu,
-.light .monaco-hover.workbench-hover,
-.light .monaco-editor .suggest-widget,
-.light .monaco-editor .suggest-details,
-.light .monaco-editor .find-widget,
-.light .monaco-editor .parameter-hints-widget,
-[data-theme='light'] .action-widget,
-[data-theme='light'] .monaco-menu,
-[data-theme='light'] .monaco-hover.workbench-hover,
-[data-theme='light'] .monaco-editor .suggest-widget,
-[data-theme='light'] .monaco-editor .suggest-details,
-[data-theme='light'] .monaco-editor .find-widget,
-[data-theme='light'] .monaco-editor .parameter-hints-widget {
-  box-shadow:
-    0 18px 40px rgba(15, 23, 42, 0.12),
-    0 0 0 1px rgba(15, 23, 42, 0.04) !important;
+.context-view.monaco-menu-container .monaco-action-bar.vertical {
+  padding: 4px;
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .actions-container {
+  display: block;
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .action-item {
+  display: block;
+  padding: 0;
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .action-item.focused {
+  background: transparent;
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .action-menu-item {
+  min-height: 28px;
+  height: auto;
+  margin: 0;
+  padding: 6px 10px;
+  gap: 10px;
+  border-radius: 6px;
+  transition:
+    background 80ms ease,
+    color 80ms ease;
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .action-label:not(.separator) {
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .menu-item-check {
+  position: static;
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: transparent;
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .action-menu-item.checked .menu-item-check {
+  color: var(--editor-context-menu-accent);
+}
+
+.context-view.monaco-menu-container
+  .monaco-action-bar.vertical
+  .action-item.focused
+  .action-menu-item.checked
+  .menu-item-check {
+  color: currentColor;
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .keybinding,
+.context-view.monaco-menu-container .monaco-action-bar.vertical .submenu-indicator {
+  margin-left: auto;
+  padding: 0;
+  flex: none;
+  font-size: 10.5px;
+  line-height: 1;
+  opacity: 1;
+  color: var(--editor-context-menu-muted);
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .keybinding {
+  display: inline-flex;
+  min-height: 17px;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5px 6px;
+  border-radius: 4px;
+  background: var(--editor-context-menu-kbd-bg);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .submenu-indicator {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  align-items: center;
+  justify-content: center;
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .submenu-indicator.codicon {
+  font-size: 12px !important;
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .submenu-indicator.codicon::before {
+  margin: 0;
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .action-item.focused .keybinding,
+.context-view.monaco-menu-container
+  .monaco-action-bar.vertical
+  .action-item.focused
+  .submenu-indicator {
+  color: inherit;
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .action-item.focused .keybinding {
+  background: var(--editor-context-menu-kbd-hover-bg);
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .action-item.disabled .keybinding,
+.context-view.monaco-menu-container .monaco-action-bar.vertical .action-item.disabled .submenu-indicator {
+  opacity: 1;
+  color: var(--editor-context-menu-disabled);
+}
+
+.context-view.monaco-menu-container .monaco-action-bar.vertical .action-label.separator {
+  margin: 4px -4px !important;
+  border-bottom-color: var(--editor-context-menu-separator);
+}
+
+.context-view.monaco-menu-container .monaco-submenu .monaco-scrollable-element {
+  margin-left: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .context-view.monaco-menu-container .monaco-action-bar.vertical .action-menu-item {
+    transition: none;
+  }
 }
 
 .monaco-editor .git-diff-line {
-  /* 无行背景色，只保留 gutter 竖线 */
+  background: transparent;
 }
 
 .monaco-editor .git-diff-line-added {
@@ -2774,12 +2864,12 @@ button:disabled,
 }
 
 .terminal-resize-handle:hover {
-  background: color-mix(in srgb, var(--shell-divider) 88%, transparent);
+  background: transparent;
 }
 
 .app-window-shell[data-layout-resizing='true'] .terminal-resize-handle,
 .terminal-resize-handle:active {
-  background: color-mix(in srgb, var(--border-strong) 90%, transparent);
+  background: transparent;
 }
 
 .terminal-resize-handle-bar {
@@ -2918,11 +3008,9 @@ button:disabled,
   padding: 0;
   box-sizing: border-box;
   overflow: hidden;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--terminal-fill, var(--panel-bg)) 98%, rgba(255, 255, 255, 0.02)),
-    var(--terminal-fill, var(--panel-bg))
-  );
+  background: linear-gradient(180deg,
+      color-mix(in srgb, var(--terminal-fill, var(--panel-bg)) 98%, rgba(255, 255, 255, 0.02)),
+      var(--terminal-fill, var(--panel-bg)));
   contain: layout;
   overscroll-behavior: contain;
   isolation: isolate;
@@ -2995,9 +3083,7 @@ button:disabled,
 }
 
 .embedded-terminal-shell:hover .embedded-terminal-host .xterm-viewport::-webkit-scrollbar-thumb,
-.embedded-terminal-shell:focus-within
-  .embedded-terminal-host
-  .xterm-viewport::-webkit-scrollbar-thumb {
+.embedded-terminal-shell:focus-within .embedded-terminal-host .xterm-viewport::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--shell-divider) 92%, transparent);
 }
 
@@ -3054,8 +3140,7 @@ button:disabled,
   gap: 14px;
   width: 100%;
   height: 100%;
-  padding: clamp(14px, 1.8vw, 18px) clamp(20px, 2.4vw, 26px) clamp(16px, 2vw, 20px)
-    clamp(10px, 1.3vw, 14px);
+  padding: clamp(14px, 1.8vw, 18px) clamp(20px, 2.4vw, 26px) clamp(16px, 2vw, 20px) clamp(10px, 1.3vw, 14px);
 }
 
 .embedded-terminal-skeleton-layout {
@@ -3750,7 +3835,7 @@ button:disabled,
   background: rgba(255, 255, 255, 0.08);
 }
 
-.workbench-settings-nav-group + .workbench-settings-nav-group {
+.workbench-settings-nav-group+.workbench-settings-nav-group {
   margin-top: 8px;
 }
 
@@ -3906,7 +3991,7 @@ button:disabled,
   padding: 24px 40px 60px;
 }
 
-.workbench-settings-page + .workbench-settings-page {
+.workbench-settings-page+.workbench-settings-page {
   margin-top: 48px;
   padding-top: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
@@ -4253,11 +4338,9 @@ button:disabled,
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  background: linear-gradient(
-    135deg,
-    var(--settings-accent),
-    color-mix(in srgb, var(--settings-accent) 68%, #a855f7)
-  );
+  background: linear-gradient(135deg,
+      var(--settings-accent),
+      color-mix(in srgb, var(--settings-accent) 68%, #a855f7));
   color: #fff;
   font-family: var(--font-mono);
   font-weight: 700;
@@ -4772,6 +4855,7 @@ button:disabled,
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .startup-veil,
   .splash-screen,
   .splash-progress {
