@@ -80,6 +80,15 @@ export const useIntegratedTerminalControls = () => {
     sendCommand: async (command: string): Promise<void> => {
       await registry.get(DEFAULT_TERMINAL_SESSION_ID)?.sendCommand(command);
     },
+    copySelection: async (): Promise<void> => {
+      await registry.get(DEFAULT_TERMINAL_SESSION_ID)?.copySelection();
+    },
+    pasteFromClipboard: async (): Promise<void> => {
+      await registry.get(DEFAULT_TERMINAL_SESSION_ID)?.pasteFromClipboard();
+    },
+    selectAll: (): void => {
+      registry.get(DEFAULT_TERMINAL_SESSION_ID)?.selectAll();
+    },
   };
 };
 
@@ -102,6 +111,7 @@ export const useIntegratedTerminal = ({
   const session = registry.getOrCreate({
     sessionId,
     tauriService,
+    resetOrphanedBackendSession: !editorStore.isRunning,
     onStatusChange,
     onOutput,
     onRunComplete,
@@ -150,7 +160,7 @@ export const useIntegratedTerminal = ({
     (nextRunId) => {
       session.trackRun(nextRunId);
     },
-    { flush: 'sync' },
+    { flush: 'sync', immediate: true },
   );
 
   // --- 返回值 ---

@@ -6,6 +6,7 @@ import type {
   ICommandTemplate,
   IWorkspaceDirectoryPayload,
 } from '@/types/editor';
+import type { ITerminalRunCompletePayload } from '@/types/terminal';
 import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import { consumeProgrammaticWindowCloseAllowance } from '@/utils/window-close';
 import {
@@ -548,6 +549,10 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     });
   };
 
+  const handleIntegratedTerminalRunComplete = (payload: ITerminalRunCompletePayload): void => {
+    workbench.handleIntegratedTerminalRunComplete(payload);
+  };
+
   watch(
     () => [workbench.editorStore.hasActiveDocument, workbench.editorStore.document.kind],
     () => {
@@ -655,5 +660,6 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     openTerminal,
     clearTerminalLogs,
     handleRunScript,
+    handleIntegratedTerminalRunComplete,
   };
 };

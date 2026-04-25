@@ -51,10 +51,8 @@ struct ShellCheckComment {
 
 #[tauri::command]
 pub async fn analyze_script(payload: AnalyzeScriptRequest) -> Result<AnalyzeScriptPayload, String> {
-    let should_check_with_shellcheck = should_run_shellcheck(
-        payload.path.as_deref(),
-        payload.name.as_deref(),
-    );
+    let should_check_with_shellcheck =
+        should_run_shellcheck(payload.path.as_deref(), payload.name.as_deref());
     let normalized_content = normalize_shellcheck_content(&payload.content);
     let dialect = detect_shellcheck_dialect(
         payload.path.as_deref(),

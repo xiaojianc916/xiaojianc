@@ -30,9 +30,7 @@ pub use terminal::{
     TerminalSessionState,
 };
 pub use window::set_window_background;
-pub use window_stage::{
-    apply_window_stage, begin_startup_transition, finalize_startup_transition,
-};
+pub use window_stage::{apply_window_stage, begin_startup_transition, finalize_startup_transition};
 pub(crate) use workspace_fs::{
     decode_script_bytes, encode_script_content, resolve_workspace_root, workspace_name,
 };

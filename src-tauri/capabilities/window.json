@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "window",
-  "description": "Window domain permissions for native window lifecycle and titlebar interactions. Commands: apply_window_stage / complete_startup_transition / set_window_background.",
+  "description": "Window domain permissions for native window lifecycle and titlebar interactions. Commands: apply_window_stage / begin_startup_transition / finalize_startup_transition / set_window_background.",
   "windows": [
     "main",
     "welcome"

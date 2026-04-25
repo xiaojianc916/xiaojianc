@@ -2,7 +2,12 @@
 import type { TThemeMode } from '@/types/app';
 import 'monaco-editor/esm/nls.messages.zh-cn.js';
 import 'monaco-editor/esm/vs/basic-languages/shell/shell.contribution';
+import 'monaco-editor/esm/vs/editor/contrib/clipboard/browser/clipboard';
+import 'monaco-editor/esm/vs/editor/contrib/comment/browser/comment';
+import 'monaco-editor/esm/vs/editor/contrib/find/browser/findController';
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
+import 'monaco-editor/esm/vs/editor/standalone/browser/quickAccess/standaloneCommandsQuickAccess';
+import 'monaco-editor/esm/vs/editor/standalone/browser/quickAccess/standaloneGotoLineQuickAccess';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import 'monaco-editor/min/vs/editor/editor.main.css';
 

@@ -6,15 +6,47 @@ mod error;
 use commands::{
     analyze_script, apply_window_stage, begin_startup_transition, close_terminal_session,
     commit_git_index, detect_execution_environment, dispatch_script_to_terminal,
-    ensure_terminal_session, finalize_startup_transition, format_script,
-    get_git_file_baseline, get_git_repository_status, get_startup_workspace, init_git_repository,
-    list_workspace_entries, load_image_asset, load_script, resize_terminal_session, save_script,
-    set_window_background, shutdown_all_terminal_sessions, stage_git_paths,
-    unstage_git_paths, write_terminal_input, TerminalSessionState,
+    ensure_terminal_session, finalize_startup_transition, format_script, get_git_file_baseline,
+    get_git_repository_status, get_startup_workspace, init_git_repository, list_workspace_entries,
+    load_image_asset, load_script, resize_terminal_session, save_script, set_window_background,
+    shutdown_all_terminal_sessions, stage_git_paths, unstage_git_paths, write_terminal_input,
+    TerminalSessionState,
 };
 use std::time::Duration;
 use tauri::{Manager, WindowEvent};
 use tokio::time::sleep;
+
+#[cfg(windows)]
+fn disable_webview_default_context_menu<R: tauri::Runtime>(
+    webview_window: &tauri::WebviewWindow<R>,
+) {
+    let label = webview_window.label().to_string();
+    let closure_label = label.clone();
+
+    if let Err(error) = webview_window.with_webview(move |webview| unsafe {
+        match webview
+            .controller()
+            .CoreWebView2()
+            .and_then(|core| core.Settings())
+            .and_then(|settings| settings.SetAreDefaultContextMenusEnabled(false))
+        {
+            Ok(_) => {}
+            Err(error) => {
+                eprintln!(
+                    "failed to disable default WebView2 context menu for window {closure_label}: {error}"
+                );
+            }
+        }
+    }) {
+        eprintln!("failed to access platform webview for window {label}: {error}");
+    }
+}
+
+#[cfg(not(windows))]
+fn disable_webview_default_context_menu<R: tauri::Runtime>(
+    _webview_window: &tauri::WebviewWindow<R>,
+) {
+}
 
 fn main() {
     let app = tauri::Builder::default()
@@ -35,6 +67,10 @@ fn main() {
             }
         })
         .setup(|app| {
+            for webview_window in app.webview_windows().into_values() {
+                disable_webview_default_context_menu(&webview_window);
+            }
+
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
             }

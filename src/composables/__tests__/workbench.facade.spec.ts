@@ -21,8 +21,11 @@ const {
   mockAppWindow,
   mockSessionStore,
   mockWindowService,
+  capturedTerminalEventListeners,
+  mockListen,
 } =
   vi.hoisted(() => ({
+    capturedTerminalEventListeners: new Map<string, (event: { payload: unknown }) => void>(),
     mockTauriService: {
       detectEnvironment: vi.fn(),
       getStartupWorkspace: vi.fn(),
@@ -53,6 +56,13 @@ const {
       setWindowBackground: vi.fn(() => Promise.resolve()),
       applyWindowStage: vi.fn(() => Promise.resolve()),
     },
+    mockListen: vi.fn(async (eventName: string, handler: unknown) => {
+      const typedHandler = handler as (event: { payload: unknown }) => void;
+      capturedTerminalEventListeners.set(eventName, typedHandler);
+      return () => {
+        capturedTerminalEventListeners.delete(eventName);
+      };
+    }),
   }));
 
 vi.mock('@/services/tauri', () => ({
@@ -63,6 +73,10 @@ vi.mock('@/services/modules/window', () => mockWindowService);
 
 vi.mock('@/services/sessionStore', () => ({
   saveSession: mockSessionStore.saveSession,
+}));
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: mockListen,
 }));
 
 // ─────────────────────────────────────────────
@@ -142,6 +156,7 @@ describe('useWorkbench 特征化快照', () => {
 
   beforeEach(() => {
     setActivePinia(createPinia());
+    capturedTerminalEventListeners.clear();
 
     scope = effectScope();
     scope.run(() => {
@@ -483,6 +498,131 @@ describe('useWorkbench 特征化快照', () => {
 
       expect(registerEventListeners).toHaveBeenCalledOnce();
       expect(mockTauriService.dispatchScriptToTerminal).toHaveBeenCalledOnce();
+    });
+
+    it('直接收到 terminal:run-complete 事件时也能收口运行态，不依赖 UI 转发链', async () => {
+      editorStore.createDocumentTab({ content: '#!/bin/bash\necho hi' });
+      editorStore.setEnvironment({ hasAny: true, executors: [], recommended: 'wsl' });
+
+      let capturedRunId = '';
+      mockTauriService.dispatchScriptToTerminal.mockImplementation((req: { runId: string }) => {
+        capturedRunId = req.runId;
+        return Promise.resolve({
+          sessionId: 'main-terminal',
+          cwd: '/home',
+          commandLine: 'bash /tmp/script.sh',
+          usedTempFile: true,
+          startedAt: new Date().toISOString(),
+        });
+      });
+
+      await workbench.runScript();
+
+      const runCompleteHandler = capturedTerminalEventListeners.get('terminal:run-complete');
+      expect(runCompleteHandler).toBeDefined();
+
+      runCompleteHandler?.({
+        payload: {
+          sessionId: 'main-terminal',
+          runId: capturedRunId,
+          exitCode: 0,
+          finishedAt: new Date().toISOString(),
+        },
+      });
+
+      expect(editorStore.isRunning).toBe(false);
+      expect(editorStore.pendingTerminalRunId).toBeNull();
+      expect(editorStore.runHistory.length).toBe(1);
+      expect(editorStore.lastRunResult?.exitCode).toBe(0);
+    });
+
+    it('Windows ConPTY 未透传 OSC marker 时使用 terminal:data 捕获本次输出', async () => {
+      editorStore.createDocumentTab({ content: '#!/bin/bash\necho hi' });
+      editorStore.setEnvironment({ hasAny: true, executors: [], recommended: 'wsl' });
+
+      let capturedRunId = '';
+      mockTauriService.dispatchScriptToTerminal.mockImplementation((req: { runId: string }) => {
+        capturedRunId = req.runId;
+        return Promise.resolve({
+          sessionId: 'main-terminal',
+          cwd: '/home',
+          commandLine: "/bin/bash '/tmp/sh-editor-dispatch-123.sh'",
+          usedTempFile: true,
+          startedAt: new Date().toISOString(),
+        });
+      });
+
+      await workbench.runScript();
+
+      const dataHandler = capturedTerminalEventListeners.get('terminal:data');
+      const runCompleteHandler = capturedTerminalEventListeners.get('terminal:run-complete');
+      expect(dataHandler).toBeDefined();
+      expect(runCompleteHandler).toBeDefined();
+
+      dataHandler?.({
+        payload: {
+          sessionId: 'main-terminal',
+          data: "[test@host]$ /bin/bash '/tmp/sh-editor-dispatch-123.sh'\r\nhi\r\n",
+        },
+      });
+      runCompleteHandler?.({
+        payload: {
+          sessionId: 'main-terminal',
+          runId: capturedRunId,
+          exitCode: 0,
+          finishedAt: new Date().toISOString(),
+        },
+      });
+
+      expect(editorStore.isRunning).toBe(false);
+      expect(editorStore.lastRunResult?.stdout).toContain('hi');
+      expect(editorStore.lastRunResult?.stdout).not.toContain('sh-editor-dispatch-123.sh');
+    });
+
+    it('收到 terminal:exit 事件时会兜底收口，并允许下一次重新创建终端会话', async () => {
+      editorStore.createDocumentTab({ content: '#!/bin/bash\necho hi' });
+      editorStore.setEnvironment({ hasAny: true, executors: [], recommended: 'wsl' });
+
+      let firstRunId = '';
+      mockTauriService.dispatchScriptToTerminal.mockImplementationOnce((req: { runId: string }) => {
+        firstRunId = req.runId;
+        return Promise.resolve({
+          sessionId: 'main-terminal',
+          cwd: '/home',
+          commandLine: 'bash /tmp/script.sh',
+          usedTempFile: true,
+          startedAt: new Date().toISOString(),
+        });
+      });
+
+      await workbench.runScript();
+
+      const exitHandler = capturedTerminalEventListeners.get('terminal:exit');
+      expect(exitHandler).toBeDefined();
+
+      exitHandler?.({
+        payload: {
+          sessionId: 'main-terminal',
+          exitCode: 130,
+        },
+      });
+
+      expect(editorStore.isRunning).toBe(false);
+      expect(editorStore.pendingTerminalRunId).toBeNull();
+      expect(editorStore.lastRunResult?.runId).toBe(firstRunId);
+      expect(editorStore.lastRunResult?.exitCode).toBe(130);
+
+      mockTauriService.dispatchScriptToTerminal.mockResolvedValueOnce({
+        sessionId: 'main-terminal',
+        cwd: '/home',
+        commandLine: 'bash /tmp/script.sh',
+        usedTempFile: true,
+        startedAt: new Date().toISOString(),
+      });
+
+      await workbench.runScript();
+
+      expect(mockTauriService.ensureTerminalSession).toHaveBeenCalledTimes(2);
     });
 
     it('运行中重复触发时不重复派发脚本', async () => {

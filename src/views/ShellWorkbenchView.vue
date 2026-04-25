@@ -85,7 +85,7 @@
         :theme="appStore.theme" :terminal-settings="appStore.settings.terminal"
         :visible="isTerminalVisible && isWorkbenchContentVisible" :is-maximized="isTerminalMaximized"
         @hide="hideTerminal" @toggle-maximize="toggleTerminalMaximize" @clear-logs="clearTerminalLogs"
-        @terminal-output="appendTerminalOutput" @terminal-run-complete="handleIntegratedTerminalRunComplete" />
+        @terminal-run-complete="handleIntegratedTerminalRunComplete" />
     </template>
 
     <template #statusbar>
@@ -143,8 +143,6 @@ const {
   requestCloseWorkspace,
   activateDocument,
   updateContent,
-  appendTerminalOutput,
-  handleIntegratedTerminalRunComplete,
   updateEncoding,
   toggleTheme,
   editorRef,
@@ -188,5 +186,6 @@ const {
   openTerminal,
   clearTerminalLogs,
   handleRunScript,
+  handleIntegratedTerminalRunComplete,
 } = useShellWorkbenchView(() => emit('ready'));
 </script>

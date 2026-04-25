@@ -189,6 +189,7 @@ describe('useIntegratedTerminal 状态机特征化', () => {
         });
         mockTauriService.writeTerminalInput.mockResolvedValue(undefined);
         mockTauriService.resizeTerminalSession.mockResolvedValue(undefined);
+        mockTauriService.closeTerminalSession.mockResolvedValue(undefined);
     });
 
     // ── 1. 导出钩子的结构 ──
@@ -262,6 +263,69 @@ describe('useIntegratedTerminal 状态机特征化', () => {
             );
 
             wrapper.unmount();
+        });
+
+        it('前端会话对象丢失但 Rust 后端仍有旧 PTY 时先关闭旧会话再新建，避免回放旧 scrollback', async () => {
+            mockTauriService.ensureTerminalSession
+                .mockResolvedValueOnce({
+                    sessionId: 'main-terminal',
+                    cwd: '/home/test',
+                    shellLabel: 'bash',
+                    created: false,
+                    initialOutput:
+                        'To run a command as administrator (user "root"), use "sudo <command>".\n',
+                })
+                .mockResolvedValueOnce({
+                    sessionId: 'main-terminal',
+                    cwd: '/home/test',
+                    shellLabel: 'bash',
+                    created: true,
+                    initialOutput: null,
+                });
+
+            const statusChanges: ITerminalStatusChangePayload[] = [];
+            const wrapper = mount(createTestComponent(statusChanges), {
+                global: { plugins: [createPinia()] },
+                attachTo: document.body,
+            });
+
+            await flushPromises();
+
+            expect(mockTauriService.closeTerminalSession).toHaveBeenCalledOnce();
+            expect(mockTauriService.closeTerminalSession).toHaveBeenCalledWith({
+                sessionId: 'main-terminal',
+            });
+            expect(mockTauriService.ensureTerminalSession).toHaveBeenCalledTimes(2);
+            expect(mockTerminalInstance.write).not.toHaveBeenCalledWith(
+                expect.stringContaining('To run a command as administrator'),
+                expect.any(Function),
+            );
+
+            wrapper.unmount();
+        });
+
+        it('同一个前端 TerminalSession 重新挂载时不重复 ensure，也不重复回放 initialOutput', async () => {
+            const pinia = createPinia();
+            const statusChanges: ITerminalStatusChangePayload[] = [];
+            const firstWrapper = mount(createTestComponent(statusChanges), {
+                global: { plugins: [pinia] },
+                attachTo: document.body,
+            });
+
+            await flushPromises();
+            firstWrapper.unmount();
+            await flushPromises();
+
+            const secondWrapper = mount(createTestComponent(statusChanges), {
+                global: { plugins: [pinia] },
+                attachTo: document.body,
+            });
+
+            await flushPromises();
+
+            expect(mockTauriService.ensureTerminalSession).toHaveBeenCalledOnce();
+
+            secondWrapper.unmount();
         });
     });
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppDialogHost from '@/components/common/AppDialogHost.vue';
+import BrowserContextMenuHost from '@/components/common/BrowserContextMenuHost.vue';
 import startupWelcomeSvgRaw from '@/assets/svg/welcome-isometric.svg?raw';
 import {
   beginStartupTransition,
@@ -173,6 +174,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="app-root-stage" :class="{ 'is-welcome-window': isWelcomeWindow }">
     <AppDialogHost v-if="!isWelcomeWindow" />
+    <BrowserContextMenuHost v-if="!isWelcomeWindow" />
     <div
       v-if="isStartupVeilVisible && !isWelcomeWindow"
       data-testid="startup-veil"

@@ -17,9 +17,10 @@ import type {
     ITerminalStatusChangePayload,
     TTerminalConnectionState,
 } from '@/types/terminal';
-import { writeClipboardText } from '@/utils/clipboard';
+import { readClipboardText, writeClipboardText } from '@/utils/clipboard';
 import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import { toErrorMessage } from '@/utils/error';
+import { stripInternalDispatchEcho } from '@/utils/terminal-output';
 import {
     SHELL_WINDOW_RESIZE_END_EVENT,
     SHELL_WINDOW_RESIZE_START_EVENT,
@@ -46,7 +47,6 @@ const TERMINAL_SCROLL_RECOVERY_DELAY_MS = 64;
 const TERMINAL_PROMPT_WAKE_DELAY_MS = 320;
 const DEFAULT_TERMINAL_FONT_FAMILY =
     "Berkeley Mono, JetBrains Mono, 'SFMono-Regular', Consolas, 'Courier New', monospace";
-const DISPATCH_RUNNER_ECHO_PATTERN = /\/tmp\/sh-editor-dispatch-[^\s'"]+\.sh/i;
 
 type TTerminalBellStyle = 'none' | 'sound' | 'visual';
 type TTerminalLayoutSyncOptions = { settle?: boolean };
@@ -118,19 +118,6 @@ const isPrintableTerminalInput = (data: string): boolean => {
     return code >= 0x20 && code !== 0x7f;
 };
 
-const stripInternalDispatchEcho = (value: string): string => {
-    if (!DISPATCH_RUNNER_ECHO_PATTERN.test(value)) return value;
-    const segments = value.split(/(\r?\n)/);
-    let result = '';
-    for (let index = 0; index < segments.length; index += 2) {
-        const line = segments[index] ?? '';
-        const lineBreak = segments[index + 1] ?? '';
-        if (DISPATCH_RUNNER_ECHO_PATTERN.test(line)) continue;
-        result += `${line}${lineBreak}`;
-    }
-    return result;
-};
-
 // ─── 可注入的 Tauri PTY 服务接口（使 TerminalSession 可测试） ─────────────────
 
 export interface ITerminalTauriService {
@@ -142,6 +129,7 @@ export interface ITerminalTauriService {
     }): Promise<ITerminalSessionPayload>;
     writeTerminalInput(params: { sessionId: string; data: string }): Promise<void>;
     resizeTerminalSession(params: { sessionId: string; cols: number; rows: number }): Promise<void>;
+    closeTerminalSession(params: { sessionId: string }): Promise<void>;
 }
 
 // ─── 回调接口 ─────────────────────────────────────────────────────────────────
@@ -157,6 +145,7 @@ export interface ITerminalSessionCallbacks {
 export interface ITerminalSessionOptions extends ITerminalSessionCallbacks {
     sessionId: string;
     tauriService: ITerminalTauriService;
+    resetOrphanedBackendSession?: boolean;
     /**
      * 由 registry 注入的外部 status ref。
      * 确保 useIntegratedTerminalStatus 在 session 创建前后读同一个 ref（Fix-3）。
@@ -181,6 +170,7 @@ export class TerminalSession {
 
     // ── 私有：服务依赖 ──────────────────────────────────────────────────────────
     private readonly _tauri: ITerminalTauriService;
+    private readonly _resetOrphanedBackendSession: boolean;
 
     // ── 私有：回调 ─────────────────────────────────────────────────────────────
     private _onStatusChange: ((p: ITerminalStatusChangePayload) => void) | null = null;
@@ -273,6 +263,7 @@ export class TerminalSession {
         this.statusMessage = options.statusMessageRef ?? ref('正在连接 WSL2 终端…');
         this.session = ref<ITerminalSessionPayload | null>(null);
         this._tauri = options.tauriService;
+        this._resetOrphanedBackendSession = options.resetOrphanedBackendSession ?? false;
         this._onStatusChange = options.onStatusChange ?? null;
         this._onOutput = options.onOutput ?? null;
         this._onRunComplete = options.onRunComplete ?? null;
@@ -382,16 +373,35 @@ export class TerminalSession {
         const terminal = this._terminalRef.value;
         if (!terminal) return;
 
+        if (this.session.value) {
+            this._emitStatus('ready', `${this.session.value.shellLabel} 已连接`);
+            this._ensurePreferredRenderer();
+            this._scheduleViewportSync({ scrollToBottom: true });
+            if (this._visible) {
+                this.focusTerminal();
+            }
+            return;
+        }
+
         this._emitStatus('connecting', '正在连接 WSL2 终端…');
         await nextTick();
         this._syncTerminalLayout();
         try {
-            const payload = await this._tauri.ensureTerminalSession({
+            let payload = await this._tauri.ensureTerminalSession({
                 sessionId: this.id,
                 cwd: null,
                 cols: resolveInteger(terminal.cols, DEFAULT_COLS, 2, 5000),
                 rows: resolveInteger(terminal.rows, DEFAULT_ROWS, 1, 3000),
             });
+            if (!payload.created && this._resetOrphanedBackendSession) {
+                await this._tauri.closeTerminalSession({ sessionId: this.id });
+                payload = await this._tauri.ensureTerminalSession({
+                    sessionId: this.id,
+                    cwd: null,
+                    cols: resolveInteger(terminal.cols, DEFAULT_COLS, 2, 5000),
+                    rows: resolveInteger(terminal.rows, DEFAULT_ROWS, 1, 3000),
+                });
+            }
             this.session.value = payload;
             if (!payload.created && payload.initialOutput) {
                 terminal.reset();
@@ -428,6 +438,10 @@ export class TerminalSession {
     async retry(): Promise<void> {
         this._terminalRef.value?.reset();
         this._resetTerminalRunCapture();
+        if (this.session.value) {
+            await this._tauri.closeTerminalSession({ sessionId: this.id });
+            this.session.value = null;
+        }
         this._isAutoFollowEnabled = true;
         this._pendingInitialPaintRecovery = true;
         await this.ensureConnect();
@@ -437,6 +451,48 @@ export class TerminalSession {
 
     focusTerminal(): void {
         this._terminalRef.value?.focus();
+    }
+
+    getSelectionText(): string {
+        const selection = this._terminalRef.value?.getSelection() ?? '';
+        if (!selection) {
+            return '';
+        }
+
+        return this._settings?.trimFinalNewlineOnCopy
+            ? selection.replace(/[\r\n]+$/u, '')
+            : selection;
+    }
+
+    async copySelection(): Promise<void> {
+        const selection = this.getSelectionText();
+        if (!selection) {
+            return;
+        }
+
+        await writeClipboardText(selection);
+        this.focusTerminal();
+    }
+
+    selectAll(): void {
+        this._terminalRef.value?.selectAll();
+        this.focusTerminal();
+    }
+
+    pasteText(text: string): void {
+        if (!text) {
+            return;
+        }
+
+        this._terminalRef.value?.paste(text);
+        this._isAutoFollowEnabled = true;
+        this._scheduleViewportSync({ scrollToBottom: true });
+        this.focusTerminal();
+    }
+
+    async pasteFromClipboard(): Promise<void> {
+        const text = await readClipboardText();
+        this.pasteText(text);
     }
 
     // ── 公共：清屏 ──────────────────────────────────────────────────────────────
@@ -1159,15 +1215,10 @@ export class TerminalSession {
     // ── 私有：剪贴板 ─────────────────────────────────────────────────────────────
 
     private async _writeSelectionToClipboard(): Promise<void> {
-        const terminal = this._terminalRef.value;
-        if (!terminal || !this._settings?.copyOnSelect) return;
-        const selection = terminal.getSelection();
+        if (!this._terminalRef.value || !this._settings?.copyOnSelect) return;
+        const selection = this.getSelectionText();
         if (!selection) return;
-        const next = this._settings.trimFinalNewlineOnCopy
-            ? selection.replace(/[\r\n]+$/u, '')
-            : selection;
-        if (!next) return;
-        void writeClipboardText(next).catch(() => { });
+        void writeClipboardText(selection).catch(() => { });
     }
 
     // ── 私有：提示符唤醒 ─────────────────────────────────────────────────────────

@@ -31,12 +31,27 @@ export const writeClipboardText = async (value: string): Promise<void> => {
   }
 };
 
+export const readClipboardText = async (): Promise<string> => {
+  if (typeof navigator !== 'undefined' && typeof navigator.clipboard?.readText === 'function') {
+    return navigator.clipboard.readText();
+  }
+
+  throw new Error('当前环境不支持剪贴板读取');
+};
+
 export const tryWriteClipboardText = async (value: string): Promise<boolean> => {
   try {
     await writeClipboardText(value);
     return true;
   } catch {
-    // 剪贴板权限或宿主能力缺失属于可预期失败，返回 false 交由调用方决定是否提示。
     return false;
+  }
+};
+
+export const tryReadClipboardText = async (): Promise<string | null> => {
+  try {
+    return await readClipboardText();
+  } catch {
+    return null;
   }
 };

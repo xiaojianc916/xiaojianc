@@ -345,6 +345,7 @@ src-tauri/
 ## 4.7 资源
 
 - **R-4.7.1** 图片优先 WebP/AVIF；SVG MUST 组件化；模板 MUST NOT 嵌大段 SVG 源码。
+  唯一例外：欢迎页允许按 ADR-20260423-welcome-smil-svg 使用本地 `?raw` SVG + `v-html` 保留原生 SMIL 动画；该例外 MUST 限定在 `src/views/Welcome.vue`（及启动桥接同域组件），MUST NOT 扩散到业务页面。
 
 ## **R-4.7.2** 静态资源 MUST 放 `src/assets/{css,images,fonts,icons}`。
 
@@ -1219,10 +1220,10 @@ AI 在提交 PR 前 MUST 逐项自检，标记 ✅ / ❌ / N/A：
 
 ## 18.2 路由策略（当前形态）
 
-- **R-18.2.1** 当前运行时 MUST NOT 注册 Vue Router；`App.vue` MUST 作为窗口与工作台编排的唯一协调器。
-- **R-18.2.2** `src/router/` 目录若保留 MUST 在顶部 README 明示「当前未注册」；业务代码 MUST NOT `import` 其中模块。
-- **R-18.2.3** 若未来引入路由 MUST 走 ADR；启用路由后 `ShellWorkbenchView.vue` MUST 同步拆解聚合职责，MUST NOT 简单套一层 `<RouterView>` 了事。
-- **R-18.2.4** 通用规则 R-10.3.*（路由级性能）在当前形态下 **N/A**，由 R-18.3、R-18.11 替代约束。CI 的路由相关检查 MUST 在本形态下跳过。
+- **R-18.2.1** 当前运行时 MAY 在受限启动路径中注册 Vue Router（仅 `welcome` / `home`）；`App.vue` MUST 作为窗口与工作台编排的唯一协调器。
+- **R-18.2.2** `src/router/` MUST 在顶部 README 明示当前状态与边界（active/dormant、允许路由范围、关联 ADR）；业务代码 MUST NOT 在未评审情况下扩展业务路由。
+- **R-18.2.3** 若扩大路由职责（超出欢迎页启动过渡）MUST 走 ADR；启用或扩容路由后 `ShellWorkbenchView.vue` MUST 同步拆解聚合职责，MUST NOT 简单套一层 `<RouterView>` 了事。
+- **R-18.2.4** 通用规则 R-10.3.*（路由级性能）在当前受限路由形态下部分适用：欢迎页与工作台路由切换 MUST 满足预算与观测要求。
 
 ## 18.3 Monaco 编辑器
 
@@ -1454,7 +1455,7 @@ AI 在提交 PR 前 MUST 逐项自检，标记 ✅ / ❌ / N/A：
 ## 20.8 死代码与结构漂移治理
 
 - **R-20.8.1** 仓库 MUST NOT 保留「未被事实来源引用」的源文件超过一个迭代；死代码 MUST 删除，或 MUST 在顶部注释显式声明「保留原因 + 复活条件 + 负责人 + 截止日期」四项，缺一 MUST 删除。
-- **R-20.8.2** `src/router/` 在当前未挂载期间 MUST 含 `README.md` 明示状态（与 R-18.2.2 联动），且 `index.ts` 顶部 MUST 含 `// @status: dormant` 注释；`scripts/check-dormant-modules.ts` MUST 校验「dormant 模块 MUST NOT 被业务代码 import」。
+- **R-20.8.2** `src/router/` MUST 含 `README.md` 明示状态（与 R-18.2.2 联动），且 `index.ts` 顶部 MUST 含状态注释（`// @status: active` 或 `// @status: dormant`）；`scripts/check-dormant-modules.ts` MUST 校验「dormant 模块 MUST NOT 被业务代码 import」。
 - **R-20.8.3** 配置文件的外部路径引用 MUST 与真实文件一致：`components.json` / `tsconfig*.json` / `vite.config.ts` / `tauri.conf.json` / `Cargo.toml` 中引用的相对路径 MUST 均可解析；`scripts/check-config-refs.ts` MUST 静态解析所有配置引用，悬空引用即 CI 失败。
 - **R-20.8.4** 删除或重命名配置文件 MUST 同 PR 内更新所有引用点；MUST NOT 分多 PR 「先删后补」。
 - **R-20.8.5** CSS-first Tailwind 形态下 MUST NOT 同时保留 `tailwind.config.ts` 与 `@theme` 块；若历史 `tailwind.config.ts` 已删除，`components.json` 的 `tailwind.config` 字段 MUST 清空或指向真实存在的文件，MUST NOT 保留悬空引用。

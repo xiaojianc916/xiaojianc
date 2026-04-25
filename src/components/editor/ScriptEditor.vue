@@ -1,10 +1,22 @@
 <template>
   <div class="shell-editor-surface relative h-full min-h-0 w-full bg-(--editor-bg)">
     <div ref="containerRef" class="h-full min-h-0 w-full bg-(--editor-bg)" />
+    <EditorContextMenu
+      :open="contextMenuState.open"
+      :x="contextMenuState.x"
+      :y="contextMenuState.y"
+      :groups="contextMenuGroups"
+      :theme="props.theme"
+      :submenu-direction="submenuDirection"
+      @select="handleContextMenuItemSelect"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
+import type { IEditorContextMenuItem } from '@/components/editor/editor-context-menu.types';
+import EditorContextMenu from '@/components/editor/EditorContextMenu.vue';
+import { useEditorContextMenu } from '@/composables/useEditorContextMenu';
 import { useEditorStore } from '@/store/editor';
 import type { TThemeMode } from '@/types/app';
 import type { IAnalyzeScriptPayload, TScriptDiagnosticSeverity } from '@/types/editor';
@@ -58,9 +70,28 @@ const emit = defineEmits<{
   'format-request': [];
 }>();
 
+let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
+
 const containerRef = ref<HTMLElement | null>(null);
 const analysisState = computed(() => props.analysis ?? createEmptyAnalysis());
 const editorStore = useEditorStore();
+const {
+  contextMenuState,
+  contextMenuGroups,
+  submenuDirection,
+  closeContextMenu,
+  executeContextMenuItem,
+  handleEditorContextMenu,
+} = useEditorContextMenu({
+  getEditor: () => editorInstance,
+  onFormatRequest: () => {
+    emit('format-request');
+  },
+});
+
+const handleContextMenuItemSelect = (item: IEditorContextMenuItem): void => {
+  void executeContextMenuItem(item);
+};
 
 const DEFAULT_EDITOR_FONT_FAMILY =
   "Berkeley Mono, JetBrains Mono, Consolas, 'Courier New', monospace";
@@ -133,7 +164,6 @@ const resolveEditorRuntimeOptions = (editorSettings: IEditorSettings) => ({
   },
 });
 
-let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
 let suppressModelValueEmit = false;
 let resizeObserver: ResizeObserver | null = null;
 let editorLayoutFrameId: number | null = null;
@@ -416,6 +446,7 @@ const createEditor = (): void => {
     glyphMargin: true,
     renderValidationDecorations: 'on',
     fixedOverflowWidgets: true,
+    contextmenu: false,
     scrollbar: {
       verticalScrollbarSize: 10,
       horizontalScrollbarSize: 10,
@@ -429,11 +460,21 @@ const createEditor = (): void => {
   editorInstance.addAction({
     id: 'sh-editor.format-with-shfmt',
     label: '使用 shfmt 格式化',
-    contextMenuGroupId: '1_modification',
-    contextMenuOrder: 1.5,
     run: async () => {
       emit('format-request');
     },
+  });
+
+  editorInstance.onContextMenu((event) => {
+    handleEditorContextMenu(event);
+  });
+
+  editorInstance.onDidBlurEditorText(() => {
+    closeContextMenu();
+  });
+
+  editorInstance.onDidBlurEditorWidget(() => {
+    closeContextMenu();
   });
 
   editorInstance.onDidChangeModelContent(() => {
@@ -441,6 +482,7 @@ const createEditor = (): void => {
       return;
     }
 
+    closeContextMenu();
     emit('update:modelValue', editorInstance.getValue());
   });
 
@@ -450,6 +492,7 @@ const createEditor = (): void => {
   });
 
   editorInstance.onDidScrollChange(() => {
+    closeContextMenu();
     scheduleViewStatePersist();
   });
 
@@ -603,6 +646,7 @@ onBeforeUnmount(() => {
     shellCompletionRegistrationTimerId = null;
   }
 
+  closeContextMenu();
   editorInstance?.dispose();
   editorInstance = null;
 });

@@ -17,13 +17,6 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager, State};
 
 const WSL_TEMP_DIRECTORY: &str = "/tmp";
-const TERMINAL_DISPATCH_RUNNER_PREFIX: &str = "/tmp/sh-editor-dispatch";
-const TERMINAL_RUN_MARKER_PREFIX: &str = "\u{001b}]SH_EDITOR:";
-const TERMINAL_RUN_MARKER_SUFFIX: char = '\u{0007}';
-const TERMINAL_RUN_MARKER_ESCAPED_PREFIX: &str = "\\033]SH_EDITOR:";
-const TERMINAL_RUN_MARKER_ESCAPED_SUFFIX: &str = "\\007";
-const TERMINAL_RUN_START_MARKER_PREFIX: &str = "SH_EDITOR_RUN_BEGIN:";
-const TERMINAL_RUN_END_MARKER_PREFIX: &str = "SH_EDITOR_RUN_END:";
 const TERMINAL_READ_BUFFER_SIZE: usize = 64 * 1024;
 const TERMINAL_EVENT_FLUSH_INTERVAL: Duration = Duration::from_millis(16);
 const TERMINAL_EVENT_FLUSH_THRESHOLD: usize = 64 * 1024;
@@ -132,9 +125,11 @@ struct TerminalPreparedScript {
 }
 
 struct TerminalDispatchCommand {
-    raw_command: String,
     display_command: String,
     used_temp_file: bool,
+    execution_path: String,
+    working_directory: String,
+    cleanup_paths: Vec<String>,
 }
 
 struct TerminalSession {
@@ -145,81 +140,13 @@ struct TerminalSession {
 }
 
 #[derive(Default)]
-struct TerminalRunStreamParser {
-    buffer: String,
-    active_run_id: Option<String>,
-}
-
-struct TerminalRunStreamUpdate {
-    messages: Vec<TerminalEmitterMessage>,
-}
-
-struct TerminalMarkerChunk<'a> {
-    before: &'a str,
-    marker_token: Option<&'a str>,
-    remainder: &'a str,
-}
-
-enum TerminalRunMarkerToken<'a> {
-    Start(&'a str),
-    End {
-        run_id: &'a str,
-        exit_code: Option<i32>,
-    },
-    Unknown,
-}
-
-#[derive(Default)]
 struct TerminalUtf8ChunkDecoder {
     pending: Vec<u8>,
 }
 
 enum TerminalEmitterMessage {
     VisibleOutput(String),
-    RunOutput(TerminalRunOutputEvent),
-    RunComplete(TerminalRunCompleteEvent),
     Close,
-}
-
-impl TerminalRunStreamUpdate {
-    fn new() -> Self {
-        Self {
-            messages: Vec::new(),
-        }
-    }
-
-    fn push_visible_output(&mut self, value: &str) {
-        if value.is_empty() {
-            return;
-        }
-
-        self.messages
-            .push(TerminalEmitterMessage::VisibleOutput(value.to_string()));
-    }
-
-    fn push_run_output(&mut self, session_id: &str, run_id: String, data: String) {
-        if data.is_empty() {
-            return;
-        }
-
-        self.messages
-            .push(TerminalEmitterMessage::RunOutput(TerminalRunOutputEvent {
-                session_id: session_id.to_string(),
-                run_id,
-                data,
-            }));
-    }
-
-    fn push_completed_run(&mut self, session_id: &str, run_id: String, exit_code: Option<i32>) {
-        self.messages.push(TerminalEmitterMessage::RunComplete(
-            TerminalRunCompleteEvent {
-                session_id: session_id.to_string(),
-                run_id,
-                exit_code,
-                finished_at: Utc::now().to_rfc3339(),
-            },
-        ));
-    }
 }
 
 #[derive(Clone, Default)]
@@ -385,7 +312,10 @@ pub fn close_terminal_session(
 pub fn shutdown_all_terminal_sessions(state: &TerminalSessionState) -> Result<(), String> {
     let sessions = {
         let mut sessions_map = lock_terminal_sessions(state)?;
-        sessions_map.drain().map(|(_, session)| session).collect::<Vec<_>>()
+        sessions_map
+            .drain()
+            .map(|(_, session)| session)
+            .collect::<Vec<_>>()
     };
 
     for session in sessions {
@@ -397,6 +327,7 @@ pub fn shutdown_all_terminal_sessions(state: &TerminalSessionState) -> Result<()
 
 #[tauri::command]
 pub fn dispatch_script_to_terminal(
+    app: AppHandle,
     state: State<TerminalSessionState>,
     payload: DispatchTerminalScriptRequest,
 ) -> Result<DispatchTerminalScriptPayload, String> {
@@ -405,22 +336,22 @@ pub fn dispatch_script_to_terminal(
         .ok_or_else(|| "目标终端会话不存在，请先打开集成终端。".to_string())?;
     let started_at = Utc::now();
     let command = build_terminal_run_command(&payload, &session.working_directory)?;
-    let mut writer = session
-        .writer
-        .lock()
-        .map_err(|_| "终端写入通道已损坏。".to_string())?;
+    let command_line = command.display_command.clone();
+    let used_temp_file = command.used_temp_file;
 
-    writer
-        .write_all(command.raw_command.as_bytes())
-        .and_then(|_| writer.write_all(b"\n"))
-        .and_then(|_| writer.flush())
-        .map_err(|error| format!("发送脚本到终端失败：{error}"))?;
+    spawn_terminal_child_run(
+        app,
+        terminal_state,
+        payload.session_id.clone(),
+        payload.run_id.clone(),
+        command,
+    );
 
     Ok(DispatchTerminalScriptPayload {
         session_id: payload.session_id,
         cwd: session.working_directory.clone(),
-        command_line: command.display_command,
-        used_temp_file: command.used_temp_file,
+        command_line,
+        used_temp_file,
         started_at: started_at.to_rfc3339(),
     })
 }
@@ -662,12 +593,6 @@ fn write_wsl_file(path: &str, content: &[u8]) -> Result<(), String> {
     }
 }
 
-fn build_terminal_dispatch_runner_path() -> Result<String, String> {
-    let suffix = build_temp_file_suffix()?;
-
-    Ok(format!("{TERMINAL_DISPATCH_RUNNER_PREFIX}-{suffix}.sh"))
-}
-
 pub(crate) fn build_temp_file_suffix() -> Result<String, String> {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -713,6 +638,28 @@ fn emit_terminal_run_complete(app: &AppHandle, payload: TerminalRunCompleteEvent
     }
 }
 
+fn emit_terminal_run_output_chunk(
+    app: &AppHandle,
+    state: &TerminalSessionState,
+    session_id: &str,
+    run_id: &str,
+    data: String,
+) {
+    if data.is_empty() {
+        return;
+    }
+
+    let _ = append_terminal_snapshot(state, session_id, &data);
+    emit_terminal_run_output(
+        app,
+        TerminalRunOutputEvent {
+            session_id: session_id.to_string(),
+            run_id: run_id.to_string(),
+            data,
+        },
+    );
+}
+
 fn flush_terminal_data_buffer(
     app: &AppHandle,
     state: &TerminalSessionState,
@@ -735,18 +682,6 @@ fn flush_terminal_data_buffer(
     );
 }
 
-fn flush_terminal_run_output_buffer(
-    app: &AppHandle,
-    state: &TerminalSessionState,
-    session_id: &str,
-    buffer: &mut Option<TerminalRunOutputEvent>,
-) {
-    if let Some(payload) = buffer.take() {
-        let _ = append_terminal_snapshot(state, session_id, &payload.data);
-        emit_terminal_run_output(app, payload);
-    }
-}
-
 fn spawn_terminal_event_emitter(
     app: AppHandle,
     state: TerminalSessionState,
@@ -755,17 +690,10 @@ fn spawn_terminal_event_emitter(
 ) {
     thread::spawn(move || {
         let mut visible_output_buffer = String::new();
-        let mut run_output_buffer: Option<TerminalRunOutputEvent> = None;
 
         loop {
             match receiver.recv_timeout(TERMINAL_EVENT_FLUSH_INTERVAL) {
                 Ok(TerminalEmitterMessage::VisibleOutput(chunk)) => {
-                    flush_terminal_run_output_buffer(
-                        &app,
-                        &state,
-                        &session_id,
-                        &mut run_output_buffer,
-                    );
                     visible_output_buffer.push_str(&chunk);
                     if visible_output_buffer.len() >= TERMINAL_EVENT_FLUSH_THRESHOLD {
                         flush_terminal_data_buffer(
@@ -776,54 +704,6 @@ fn spawn_terminal_event_emitter(
                         );
                     }
                 }
-                Ok(TerminalEmitterMessage::RunOutput(payload)) => {
-                    flush_terminal_data_buffer(
-                        &app,
-                        &state,
-                        &session_id,
-                        &mut visible_output_buffer,
-                    );
-                    match run_output_buffer.as_mut() {
-                        Some(buffer) if buffer.run_id == payload.run_id => {
-                            buffer.data.push_str(&payload.data);
-                            if buffer.data.len() >= TERMINAL_EVENT_FLUSH_THRESHOLD {
-                                flush_terminal_run_output_buffer(
-                                    &app,
-                                    &state,
-                                    &session_id,
-                                    &mut run_output_buffer,
-                                );
-                            }
-                        }
-                        Some(_) => {
-                            flush_terminal_run_output_buffer(
-                                &app,
-                                &state,
-                                &session_id,
-                                &mut run_output_buffer,
-                            );
-                            run_output_buffer = Some(payload);
-                        }
-                        None => {
-                            run_output_buffer = Some(payload);
-                        }
-                    }
-                }
-                Ok(TerminalEmitterMessage::RunComplete(payload)) => {
-                    flush_terminal_data_buffer(
-                        &app,
-                        &state,
-                        &session_id,
-                        &mut visible_output_buffer,
-                    );
-                    flush_terminal_run_output_buffer(
-                        &app,
-                        &state,
-                        &session_id,
-                        &mut run_output_buffer,
-                    );
-                    emit_terminal_run_complete(&app, payload);
-                }
                 Ok(TerminalEmitterMessage::Close) => break,
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     flush_terminal_data_buffer(
@@ -832,29 +712,13 @@ fn spawn_terminal_event_emitter(
                         &session_id,
                         &mut visible_output_buffer,
                     );
-                    flush_terminal_run_output_buffer(
-                        &app,
-                        &state,
-                        &session_id,
-                        &mut run_output_buffer,
-                    );
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
         }
 
         flush_terminal_data_buffer(&app, &state, &session_id, &mut visible_output_buffer);
-        flush_terminal_run_output_buffer(&app, &state, &session_id, &mut run_output_buffer);
     });
-}
-
-fn send_terminal_stream_update(
-    sender: &mpsc::Sender<TerminalEmitterMessage>,
-    update: TerminalRunStreamUpdate,
-) {
-    for message in update.messages {
-        let _ = sender.send(message);
-    }
 }
 
 fn spawn_terminal_reader(
@@ -864,13 +728,12 @@ fn spawn_terminal_reader(
     mut reader: Box<dyn Read + Send>,
 ) {
     let (sender, receiver) = mpsc::channel::<TerminalEmitterMessage>();
-    spawn_terminal_event_emitter(app, state, session_id.clone(), receiver);
+    spawn_terminal_event_emitter(app, state, session_id, receiver);
 
     thread::spawn(move || {
         let mut buffer = [0_u8; TERMINAL_READ_BUFFER_SIZE];
         let mut decoded_chunk = String::new();
         let mut decoder = TerminalUtf8ChunkDecoder::default();
-        let mut parser = TerminalRunStreamParser::default();
 
         loop {
             match reader.read(&mut buffer) {
@@ -882,8 +745,7 @@ fn spawn_terminal_reader(
                         continue;
                     }
 
-                    let update = parser.push_chunk(&session_id, &decoded_chunk);
-                    send_terminal_stream_update(&sender, update);
+                    let _ = sender.send(TerminalEmitterMessage::VisibleOutput(decoded_chunk.clone()));
                 }
                 Err(_) => break,
             }
@@ -892,12 +754,8 @@ fn spawn_terminal_reader(
         decoded_chunk.clear();
         decoder.decode_into(&[], &mut decoded_chunk, true);
         if !decoded_chunk.is_empty() {
-            let update = parser.push_chunk(&session_id, &decoded_chunk);
-            send_terminal_stream_update(&sender, update);
+            let _ = sender.send(TerminalEmitterMessage::VisibleOutput(decoded_chunk));
         }
-
-        let trailing_update = parser.finish(&session_id);
-        send_terminal_stream_update(&sender, trailing_update);
 
         let _ = sender.send(TerminalEmitterMessage::Close);
     });
@@ -927,6 +785,194 @@ fn spawn_terminal_waiter(
             TerminalExitEvent {
                 session_id,
                 exit_code,
+            },
+        );
+    });
+}
+
+fn spawn_terminal_child_output_reader<R>(
+    app: AppHandle,
+    state: TerminalSessionState,
+    session_id: String,
+    run_id: String,
+    mut reader: R,
+) -> thread::JoinHandle<()>
+where
+    R: Read + Send + 'static,
+{
+    thread::spawn(move || {
+        let mut buffer = [0_u8; TERMINAL_READ_BUFFER_SIZE];
+        let mut decoded_chunk = String::new();
+        let mut decoder = TerminalUtf8ChunkDecoder::default();
+
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(size) => {
+                    decoded_chunk.clear();
+                    decoder.decode_into(&buffer[..size], &mut decoded_chunk, false);
+                    if decoded_chunk.is_empty() {
+                        continue;
+                    }
+
+                    emit_terminal_run_output_chunk(
+                        &app,
+                        &state,
+                        &session_id,
+                        &run_id,
+                        decoded_chunk.clone(),
+                    );
+                }
+                Err(_) => break,
+            }
+        }
+
+        decoded_chunk.clear();
+        decoder.decode_into(&[], &mut decoded_chunk, true);
+        if !decoded_chunk.is_empty() {
+            emit_terminal_run_output_chunk(&app, &state, &session_id, &run_id, decoded_chunk);
+        }
+    })
+}
+
+fn cleanup_terminal_child_run_files(paths: &[String]) {
+    if paths.is_empty() {
+        return;
+    }
+
+    let Ok(wsl_command_path) = resolve_wsl_command_path() else {
+        return;
+    };
+    let cleanup_command = format!(
+        "rm -f {}",
+        paths
+            .iter()
+            .map(|path| bash_quote(path))
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    let mut command = StdCommand::new(wsl_command_path);
+    configure_std_command_for_background(&mut command);
+    let _ = command
+        .args(["--", "sh", "-lc", &cleanup_command])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
+fn spawn_terminal_child_run(
+    app: AppHandle,
+    state: TerminalSessionState,
+    session_id: String,
+    run_id: String,
+    command: TerminalDispatchCommand,
+) {
+    thread::spawn(move || {
+        let wsl_command_path = match resolve_wsl_command_path() {
+            Ok(path) => path,
+            Err(error) => {
+                emit_terminal_run_output_chunk(
+                    &app,
+                    &state,
+                    &session_id,
+                    &run_id,
+                    format!("启动 WSL2 失败：{error}\n"),
+                );
+                emit_terminal_run_complete(
+                    &app,
+                    TerminalRunCompleteEvent {
+                        session_id,
+                        run_id,
+                        exit_code: Some(127),
+                        finished_at: Utc::now().to_rfc3339(),
+                    },
+                );
+                return;
+            }
+        };
+
+        let mut child_command = StdCommand::new(wsl_command_path);
+        configure_std_command_for_background(&mut child_command);
+        child_command
+            .args([
+                "--cd",
+                &command.working_directory,
+                "--",
+                "/bin/bash",
+                &command.execution_path,
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let mut child = match child_command.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                emit_terminal_run_output_chunk(
+                    &app,
+                    &state,
+                    &session_id,
+                    &run_id,
+                    format!("启动脚本进程失败：{error}\n"),
+                );
+                cleanup_terminal_child_run_files(&command.cleanup_paths);
+                emit_terminal_run_complete(
+                    &app,
+                    TerminalRunCompleteEvent {
+                        session_id,
+                        run_id,
+                        exit_code: Some(127),
+                        finished_at: Utc::now().to_rfc3339(),
+                    },
+                );
+                return;
+            }
+        };
+        let child_pid = child.id();
+
+        let mut reader_threads = Vec::new();
+        if let Some(stdout) = child.stdout.take() {
+            reader_threads.push(spawn_terminal_child_output_reader(
+                app.clone(),
+                state.clone(),
+                session_id.clone(),
+                run_id.clone(),
+                stdout,
+            ));
+        }
+        if let Some(stderr) = child.stderr.take() {
+            reader_threads.push(spawn_terminal_child_output_reader(
+                app.clone(),
+                state.clone(),
+                session_id.clone(),
+                run_id.clone(),
+                stderr,
+            ));
+        }
+
+        let exit_code = child
+            .wait()
+            .ok()
+            .and_then(|status| status.code())
+            .or(Some(1));
+        eprintln!(
+            "script-child-exited pid={child_pid} session_id={session_id} run_id={run_id} exit_code={:?}",
+            exit_code
+        );
+
+        for reader_thread in reader_threads {
+            let _ = reader_thread.join();
+        }
+
+        cleanup_terminal_child_run_files(&command.cleanup_paths);
+        emit_terminal_run_complete(
+            &app,
+            TerminalRunCompleteEvent {
+                session_id,
+                run_id,
+                exit_code,
+                finished_at: Utc::now().to_rfc3339(),
             },
         );
     });
@@ -976,351 +1022,6 @@ impl TerminalUtf8ChunkDecoder {
                 }
             }
         }
-    }
-}
-
-fn resolve_terminal_marker_remainder_start(value: &str) -> usize {
-    let max_tail_length = TERMINAL_RUN_MARKER_PREFIX.len().saturating_sub(1);
-
-    for (index, _) in value.char_indices().rev() {
-        if value.len().saturating_sub(index) > max_tail_length {
-            break;
-        }
-
-        if TERMINAL_RUN_MARKER_PREFIX.starts_with(&value[index..]) {
-            return index;
-        }
-    }
-
-    value.len()
-}
-
-fn split_terminal_marker_chunk(value: &str) -> TerminalMarkerChunk<'_> {
-    let Some(marker_start_index) = value.find(TERMINAL_RUN_MARKER_PREFIX) else {
-        let remainder_start_index = resolve_terminal_marker_remainder_start(value);
-        return TerminalMarkerChunk {
-            before: &value[..remainder_start_index],
-            marker_token: None,
-            remainder: &value[remainder_start_index..],
-        };
-    };
-
-    let marker_content_start_index = marker_start_index + TERMINAL_RUN_MARKER_PREFIX.len();
-    let Some(marker_end_offset) =
-        value[marker_content_start_index..].find(TERMINAL_RUN_MARKER_SUFFIX)
-    else {
-        return TerminalMarkerChunk {
-            before: &value[..marker_start_index],
-            marker_token: None,
-            remainder: &value[marker_start_index..],
-        };
-    };
-
-    let marker_end_index = marker_content_start_index + marker_end_offset;
-    TerminalMarkerChunk {
-        before: &value[..marker_start_index],
-        marker_token: Some(&value[marker_content_start_index..marker_end_index]),
-        remainder: &value[marker_end_index + TERMINAL_RUN_MARKER_SUFFIX.len_utf8()..],
-    }
-}
-
-fn parse_terminal_run_marker_token(value: &str) -> TerminalRunMarkerToken<'_> {
-    if let Some(run_id) = value.strip_prefix(TERMINAL_RUN_START_MARKER_PREFIX) {
-        return TerminalRunMarkerToken::Start(run_id);
-    }
-
-    if let Some(rest) = value.strip_prefix(TERMINAL_RUN_END_MARKER_PREFIX) {
-        if let Some((run_id, exit_code)) = rest.rsplit_once(':') {
-            return TerminalRunMarkerToken::End {
-                run_id,
-                exit_code: exit_code.parse::<i32>().ok(),
-            };
-        }
-    }
-
-    TerminalRunMarkerToken::Unknown
-}
-
-impl TerminalRunStreamParser {
-    fn push_chunk(&mut self, session_id: &str, chunk: &str) -> TerminalRunStreamUpdate {
-        self.buffer.push_str(chunk);
-        let mut update = TerminalRunStreamUpdate::new();
-
-        loop {
-            if let Some(run_id) = self.active_run_id.clone() {
-                let marker_chunk = split_terminal_marker_chunk(&self.buffer);
-                if !marker_chunk.before.is_empty() {
-                    let data = marker_chunk.before.to_string();
-                    update.push_run_output(session_id, run_id.clone(), data);
-                }
-
-                let marker_token = marker_chunk.marker_token.map(str::to_owned);
-                self.buffer = marker_chunk.remainder.to_string();
-                let Some(marker_token) = marker_token else {
-                    break;
-                };
-
-                match parse_terminal_run_marker_token(&marker_token) {
-                    TerminalRunMarkerToken::Start(next_run_id) => {
-                        if run_id != next_run_id {
-                            update.push_completed_run(session_id, run_id, None);
-                        }
-                        self.active_run_id = Some(next_run_id.to_string());
-                    }
-                    TerminalRunMarkerToken::End {
-                        run_id: completed_run_id,
-                        exit_code,
-                    } => {
-                        if run_id != completed_run_id {
-                            update.push_completed_run(session_id, run_id, None);
-                        }
-                        update.push_completed_run(
-                            session_id,
-                            completed_run_id.to_string(),
-                            exit_code,
-                        );
-                        self.active_run_id = None;
-                    }
-                    TerminalRunMarkerToken::Unknown => {
-                        self.active_run_id = Some(run_id);
-                    }
-                }
-
-                continue;
-            }
-
-            let marker_chunk = split_terminal_marker_chunk(&self.buffer);
-            if !marker_chunk.before.is_empty() {
-                update.push_visible_output(marker_chunk.before);
-            }
-
-            let marker_token = marker_chunk.marker_token.map(str::to_owned);
-            self.buffer = marker_chunk.remainder.to_string();
-            let Some(marker_token) = marker_token else {
-                break;
-            };
-
-            match parse_terminal_run_marker_token(&marker_token) {
-                TerminalRunMarkerToken::Start(run_id) => {
-                    self.active_run_id = Some(run_id.to_string());
-                }
-                TerminalRunMarkerToken::End { run_id, exit_code } => {
-                    update.push_completed_run(session_id, run_id.to_string(), exit_code);
-                }
-                TerminalRunMarkerToken::Unknown => {}
-            }
-        }
-
-        update
-    }
-
-    fn finish(&mut self, session_id: &str) -> TerminalRunStreamUpdate {
-        let mut update = TerminalRunStreamUpdate::new();
-
-        if let Some(run_id) = self.active_run_id.take() {
-            if !self.buffer.is_empty() {
-                let data = std::mem::take(&mut self.buffer);
-                update.push_run_output(session_id, run_id.clone(), data);
-            }
-
-            update.push_completed_run(session_id, run_id, None);
-
-            return update;
-        }
-
-        if !self.buffer.is_empty() {
-            let visible_output = std::mem::take(&mut self.buffer);
-            update.push_visible_output(&visible_output);
-        }
-
-        update
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        build_terminal_dispatch_runner_content, parse_terminal_run_marker_token,
-        DispatchTerminalScriptRequest, TerminalEmitterMessage, TerminalPreparedScript,
-        TerminalRunCompleteEvent, TerminalRunMarkerToken, TerminalRunOutputEvent,
-        TerminalRunStreamParser, TerminalRunStreamUpdate, TERMINAL_RUN_END_MARKER_PREFIX,
-        TERMINAL_RUN_MARKER_PREFIX, TERMINAL_RUN_MARKER_SUFFIX, TERMINAL_RUN_START_MARKER_PREFIX,
-    };
-
-    fn build_marker(token: &str) -> String {
-        format!("{TERMINAL_RUN_MARKER_PREFIX}{token}{TERMINAL_RUN_MARKER_SUFFIX}")
-    }
-
-    fn collect_visible_output(update: &TerminalRunStreamUpdate) -> String {
-        update
-            .messages
-            .iter()
-            .filter_map(|message| match message {
-                TerminalEmitterMessage::VisibleOutput(value) => Some(value.as_str()),
-                _ => None,
-            })
-            .collect()
-    }
-
-    fn collect_run_output_events(update: &TerminalRunStreamUpdate) -> Vec<&TerminalRunOutputEvent> {
-        update
-            .messages
-            .iter()
-            .filter_map(|message| match message {
-                TerminalEmitterMessage::RunOutput(value) => Some(value),
-                _ => None,
-            })
-            .collect()
-    }
-
-    fn collect_completed_runs(update: &TerminalRunStreamUpdate) -> Vec<&TerminalRunCompleteEvent> {
-        update
-            .messages
-            .iter()
-            .filter_map(|message| match message {
-                TerminalEmitterMessage::RunComplete(value) => Some(value),
-                _ => None,
-            })
-            .collect()
-    }
-
-    #[test]
-    fn parse_terminal_run_marker_token_recognizes_end_marker() {
-        let token = format!("{TERMINAL_RUN_END_MARKER_PREFIX}run-1:0");
-
-        match parse_terminal_run_marker_token(&token) {
-            TerminalRunMarkerToken::End { run_id, exit_code } => {
-                assert_eq!(run_id, "run-1");
-                assert_eq!(exit_code, Some(0));
-            }
-            _ => panic!("expected end marker"),
-        }
-    }
-
-    #[test]
-    fn parser_completes_run_when_only_end_marker_is_seen() {
-        let run_id = "terminal-run-short";
-        let mut parser = TerminalRunStreamParser::default();
-        let update = parser.push_chunk(
-            "session-1",
-            &format!(
-                "111\n{}$ ",
-                build_marker(&format!("{TERMINAL_RUN_END_MARKER_PREFIX}{run_id}:0")),
-            ),
-        );
-
-        let completed_runs = collect_completed_runs(&update);
-        assert_eq!(collect_visible_output(&update), "111\n$ ");
-        assert!(collect_run_output_events(&update).is_empty());
-        assert_eq!(completed_runs.len(), 1);
-        assert_eq!(completed_runs[0].run_id, run_id);
-        assert_eq!(completed_runs[0].exit_code, Some(0));
-    }
-
-    #[test]
-    fn parser_keeps_normal_start_output_end_flow() {
-        let run_id = "terminal-run-normal";
-        let mut parser = TerminalRunStreamParser::default();
-
-        let start_update = parser.push_chunk(
-            "session-1",
-            &format!(
-                "$ /bin/bash /tmp/sh-editor-dispatch.sh\n{}",
-                build_marker(&format!("{TERMINAL_RUN_START_MARKER_PREFIX}{run_id}")),
-            ),
-        );
-        assert_eq!(
-            collect_visible_output(&start_update),
-            "$ /bin/bash /tmp/sh-editor-dispatch.sh\n"
-        );
-        assert!(collect_completed_runs(&start_update).is_empty());
-
-        let output_update = parser.push_chunk("session-1", "111\n");
-        let output_events = collect_run_output_events(&output_update);
-        assert_eq!(output_events.len(), 1);
-        assert_eq!(output_events[0].run_id, run_id);
-        assert_eq!(output_events[0].data, "111\n");
-
-        let end_update = parser.push_chunk(
-            "session-1",
-            &format!(
-                "{}$ ",
-                build_marker(&format!("{TERMINAL_RUN_END_MARKER_PREFIX}{run_id}:0")),
-            ),
-        );
-        let completed_runs = collect_completed_runs(&end_update);
-        assert_eq!(collect_visible_output(&end_update), "$ ");
-        assert_eq!(completed_runs.len(), 1);
-        assert_eq!(completed_runs[0].run_id, run_id);
-        assert_eq!(completed_runs[0].exit_code, Some(0));
-    }
-
-    #[test]
-    fn parser_keeps_run_output_before_prompt_when_end_marker_shares_chunk() {
-        let run_id = "terminal-run-order";
-        let mut parser = TerminalRunStreamParser::default();
-        let _ = parser.push_chunk(
-            "session-1",
-            &build_marker(&format!("{TERMINAL_RUN_START_MARKER_PREFIX}{run_id}")),
-        );
-
-        let update = parser.push_chunk(
-            "session-1",
-            &format!(
-                "last line\n{}$ ",
-                build_marker(&format!("{TERMINAL_RUN_END_MARKER_PREFIX}{run_id}:0")),
-            ),
-        );
-
-        assert_eq!(update.messages.len(), 3);
-        match &update.messages[0] {
-            TerminalEmitterMessage::RunOutput(payload) => {
-                assert_eq!(payload.data, "last line\n");
-                assert_eq!(payload.run_id, run_id);
-            }
-            _ => panic!("expected run output before completion"),
-        }
-        match &update.messages[1] {
-            TerminalEmitterMessage::RunComplete(payload) => {
-                assert_eq!(payload.run_id, run_id);
-                assert_eq!(payload.exit_code, Some(0));
-            }
-            _ => panic!("expected run completion after output"),
-        }
-        match &update.messages[2] {
-            TerminalEmitterMessage::VisibleOutput(value) => {
-                assert_eq!(value, "$ ");
-            }
-            _ => panic!("expected prompt after completion marker"),
-        }
-    }
-
-    #[test]
-    fn dispatch_runner_uses_exit_trap_to_emit_completion_marker() {
-        let payload = DispatchTerminalScriptRequest {
-            session_id: "main-terminal".to_string(),
-            path: Some("D:/workspace/test.sh".to_string()),
-            content: "#!/usr/bin/env bash\necho ok\n".to_string(),
-            is_dirty: false,
-            run_id: "terminal-run-trap".to_string(),
-        };
-        let prepared = TerminalPreparedScript {
-            execution_path: "/mnt/d/workspace/test.sh".to_string(),
-            working_directory: "/mnt/d/workspace".to_string(),
-            used_temp_file: false,
-            should_cleanup_execution_path: false,
-            should_materialize_inline_content: false,
-        };
-
-        let content =
-            build_terminal_dispatch_runner_content(&payload, &prepared, "rm -f \"$0\"", "");
-
-        assert!(content.contains("trap '__sh_editor_exit_code=$?; __sh_editor_cleanup' EXIT"));
-        assert!(content.contains("trap '__sh_editor_exit_code=130; exit 130' INT"));
-        assert!(content.contains("trap '__sh_editor_exit_code=143; exit 143' TERM"));
-        assert!(content.contains("__sh_editor_finish() {"));
-        assert!(content.contains(TERMINAL_RUN_END_MARKER_PREFIX));
-        assert!(content.contains("exit \"$__sh_editor_exit_code\""));
     }
 }
 
@@ -1376,94 +1077,23 @@ fn build_terminal_run_command(
     terminal_working_directory: &str,
 ) -> Result<TerminalDispatchCommand, String> {
     let prepared = prepare_terminal_dispatch_script(payload, terminal_working_directory)?;
-    let runner_path = create_terminal_dispatch_runner(payload, &prepared)?;
+    if prepared.should_materialize_inline_content {
+        write_wsl_file(&prepared.execution_path, payload.content.as_bytes())
+            .map_err(|error| format!("写入临时脚本失败：{error}"))?;
+    }
+    let cleanup_paths = if prepared.should_cleanup_execution_path {
+        vec![prepared.execution_path.clone()]
+    } else {
+        Vec::new()
+    };
 
     Ok(TerminalDispatchCommand {
-        raw_command: format!("/bin/bash {}", bash_quote(&runner_path)),
-        display_command: format!("/bin/bash {}", bash_quote(&runner_path)),
+        display_command: format!("/bin/bash {}", bash_quote(&prepared.execution_path)),
         used_temp_file: prepared.used_temp_file,
+        execution_path: prepared.execution_path,
+        working_directory: prepared.working_directory,
+        cleanup_paths,
     })
-}
-
-fn build_terminal_dispatch_runner_content(
-    payload: &DispatchTerminalScriptRequest,
-    prepared: &TerminalPreparedScript,
-    cleanup_command: &str,
-    materialize_inline_script: &str,
-) -> String {
-    format!(
-        concat!(
-            "#!/usr/bin/env bash\n",
-            "set +x\n",
-            "i={}\n",
-            "t={}\n",
-            "wd={}\n",
-            "__sh_editor_exit_code=0\n",
-            "__sh_editor_finalized=0\n",
-            "__sh_editor_finish() {{\n",
-            "  if [ \"$__sh_editor_finalized\" -eq 1 ]; then\n",
-            "    return\n",
-            "  fi\n",
-            "  __sh_editor_finalized=1\n",
-            "  printf '%b%s%s:%s%b' {} {} \"$i\" \"$__sh_editor_exit_code\" {}\n",
-            "}}\n",
-            "__sh_editor_cleanup() {{\n",
-            "  __sh_editor_finish\n",
-            "  {}\n",
-            "}}\n",
-            "trap '__sh_editor_exit_code=$?; __sh_editor_cleanup' EXIT\n",
-            "trap '__sh_editor_exit_code=129; exit 129' HUP\n",
-            "trap '__sh_editor_exit_code=130; exit 130' INT\n",
-            "trap '__sh_editor_exit_code=143; exit 143' TERM\n",
-            "{}",
-            "printf '%b%s%s%b' {} {} \"$i\" {}\n",
-            "if cd \"$wd\"; then\n",
-            "  bash \"$t\"\n",
-            "  __sh_editor_exit_code=$?\n",
-            "else\n",
-            "  __sh_editor_exit_code=$?\n",
-            "fi\n",
-            "exit \"$__sh_editor_exit_code\"\n",
-        ),
-        bash_quote(&payload.run_id),
-        bash_quote(&prepared.execution_path),
-        bash_quote(&prepared.working_directory),
-        bash_quote(TERMINAL_RUN_MARKER_ESCAPED_PREFIX),
-        bash_quote(TERMINAL_RUN_END_MARKER_PREFIX),
-        bash_quote(TERMINAL_RUN_MARKER_ESCAPED_SUFFIX),
-        cleanup_command,
-        materialize_inline_script,
-        bash_quote(TERMINAL_RUN_MARKER_ESCAPED_PREFIX),
-        bash_quote(TERMINAL_RUN_START_MARKER_PREFIX),
-        bash_quote(TERMINAL_RUN_MARKER_ESCAPED_SUFFIX),
-    )
-}
-fn create_terminal_dispatch_runner(
-    payload: &DispatchTerminalScriptRequest,
-    prepared: &TerminalPreparedScript,
-) -> Result<String, String> {
-    let runner_path = build_terminal_dispatch_runner_path()?;
-    let cleanup_command = if prepared.should_cleanup_execution_path {
-        "rm -f \"$0\" \"$t\""
-    } else {
-        "rm -f \"$0\""
-    };
-    let materialize_inline_script = if prepared.should_materialize_inline_content {
-        format!("printf '%s' {} > \"$t\"\n", bash_quote(&payload.content))
-    } else {
-        String::new()
-    };
-    let runner_content = build_terminal_dispatch_runner_content(
-        payload,
-        prepared,
-        cleanup_command,
-        &materialize_inline_script,
-    );
-
-    write_wsl_file(&runner_path, runner_content.as_bytes())
-        .map_err(|error| format!("写入终端调度脚本失败：{error}"))?;
-
-    Ok(runner_path)
 }
 
 pub(crate) fn to_wsl_path(path: &Path) -> Result<String, String> {

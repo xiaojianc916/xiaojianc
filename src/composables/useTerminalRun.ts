@@ -6,10 +6,14 @@ import type { IEditorDocument } from '@/types/editor';
 import {
   DEFAULT_TERMINAL_SESSION_ID,
   type IDispatchTerminalScriptRequest,
+  type ITerminalDataEvent,
+  type ITerminalExitEvent,
   type ITerminalRunCompletePayload,
   type ITerminalRunOutputEvent,
 } from '@/types/terminal';
+import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import { toErrorMessage } from '@/utils/error';
+import { stripInternalDispatchEcho } from '@/utils/terminal-output';
 import { DEFAULT_EXECUTOR, getExecutorLabel } from '@/utils/templates';
 import {
   TERMINAL_RUN_LOG_CODES,
@@ -23,6 +27,7 @@ import {
   createTerminalRunId,
   type IActiveTerminalRunMeta,
 } from '@/utils/terminal-run';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { onScopeDispose, type ComputedRef } from 'vue';
 
 const DEFAULT_TERMINAL_COLS = 120;
@@ -63,6 +68,13 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
   let isDisposed = false;
   let activeTerminalRunMeta: IActiveTerminalRunMeta | null = null;
   let hasEnsuredTerminalSession = false;
+  let hasStructuredTerminalRunOutput = false;
+  let terminalDataUnlisten: UnlistenFn | null = null;
+  let terminalRunOutputUnlisten: UnlistenFn | null = null;
+  let terminalRunCompleteUnlisten: UnlistenFn | null = null;
+  let terminalExitUnlisten: UnlistenFn | null = null;
+  let terminalRunListenerRegistration: Promise<void> | null = null;
+  let terminalRunListenerVersion = 0;
 
   const clearBufferedTerminalOutputTimer = (): void => {
     if (bufferedTerminalOutputTimerId === null) {
@@ -108,6 +120,18 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
     editorStore.setActiveRunSummary(null);
     editorStore.isRunning = false;
     activeTerminalRunMeta = null;
+    hasStructuredTerminalRunOutput = false;
+  };
+
+  const clearTerminalRunEventListeners = (): void => {
+    terminalDataUnlisten?.();
+    terminalRunOutputUnlisten?.();
+    terminalRunCompleteUnlisten?.();
+    terminalExitUnlisten?.();
+    terminalDataUnlisten = null;
+    terminalRunOutputUnlisten = null;
+    terminalRunCompleteUnlisten = null;
+    terminalExitUnlisten = null;
   };
 
   const appendRunLifecycleLog = (
@@ -129,6 +153,9 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
     ?? editorStore.pendingTerminalRunId
     ?? editorStore.activeRunSummary?.runId
     ?? null;
+
+  const isIntegratedTerminalSession = (sessionId: string): boolean =>
+    sessionId === DEFAULT_TERMINAL_SESSION_ID;
 
   const resolveTerminalRunId = (runId: string | null | undefined): string | null => {
     const normalizedRunId = typeof runId === 'string' ? runId.trim() : '';
@@ -233,7 +260,6 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
   };
 
   const dispatchScriptToIntegratedTerminal = async (document: IEditorDocument, runId: string) => {
-    await ensureIntegratedTerminalSessionBeforeDispatch();
     const dispatchRequest = buildTerminalDispatchRequest(document, runId);
 
     try {
@@ -244,7 +270,7 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
       }
 
       hasEnsuredTerminalSession = false;
-      await ensureIntegratedTerminalSession();
+      await ensureIntegratedTerminalSessionBeforeDispatch();
       return tauriService.dispatchScriptToTerminal(dispatchRequest);
     }
   };
@@ -261,6 +287,7 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
     resetBufferedTerminalOutput();
     editorStore.lastRunResult = null;
     editorStore.setTerminalOutput('');
+    hasStructuredTerminalRunOutput = false;
     activeTerminalRunMeta = createActiveTerminalRunMeta(runId, startedAt, 'bash', usedTempFile);
     appendRunLifecycleLog(
       'info',
@@ -279,6 +306,7 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
       throw new Error('当前文档不是可执行脚本文本。');
     }
 
+    await ensureIntegratedTerminalSessionBeforeDispatch();
     const runId = primeTerminalRun(document);
 
     try {
@@ -332,7 +360,85 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
     }
   };
 
+  const handleIntegratedTerminalExit = (payload: ITerminalExitEvent): void => {
+    if (isDisposed || !isIntegratedTerminalSession(payload.sessionId)) {
+      return;
+    }
+
+    hasEnsuredTerminalSession = false;
+
+    const activeRunId = getCurrentTerminalRunId();
+    if (!activeRunId) {
+      return;
+    }
+
+    finalizeTerminalRun({
+      sessionId: payload.sessionId,
+      runId: activeRunId,
+      exitCode: payload.exitCode,
+      finishedAt: new Date().toISOString(),
+    });
+  };
+
+  const ensureTerminalRunEventListeners = async (): Promise<void> => {
+    if (
+      terminalDataUnlisten
+      && terminalRunOutputUnlisten
+      && terminalRunCompleteUnlisten
+      && terminalExitUnlisten
+    ) {
+      return;
+    }
+
+    if (terminalRunListenerRegistration) {
+      return terminalRunListenerRegistration;
+    }
+
+    const version = terminalRunListenerVersion;
+    terminalRunListenerRegistration = (async () => {
+      const runtimeReady = await waitForDesktopRuntime();
+      if (!runtimeReady || isDisposed) {
+        return;
+      }
+
+      const [dataUnlisten, runOutputUnlisten, runCompleteUnlisten, exitUnlisten] = await Promise.all([
+        listen<ITerminalDataEvent>('terminal:data', ({ payload }) => {
+          appendVisibleTerminalData(payload);
+        }),
+        listen<ITerminalRunOutputEvent>('terminal:run-output', ({ payload }) => {
+          appendStructuredTerminalOutput(payload);
+        }),
+        listen<ITerminalRunCompletePayload>('terminal:run-complete', ({ payload }) => {
+          handleIntegratedTerminalRunComplete(payload);
+        }),
+        listen<ITerminalExitEvent>('terminal:exit', ({ payload }) => {
+          handleIntegratedTerminalExit(payload);
+        }),
+      ]);
+
+      if (isDisposed || terminalRunListenerVersion !== version) {
+        dataUnlisten();
+        runOutputUnlisten();
+        runCompleteUnlisten();
+        exitUnlisten();
+        return;
+      }
+
+      terminalDataUnlisten = dataUnlisten;
+      terminalRunOutputUnlisten = runOutputUnlisten;
+      terminalRunCompleteUnlisten = runCompleteUnlisten;
+      terminalExitUnlisten = exitUnlisten;
+    })().finally(() => {
+      terminalRunListenerRegistration = null;
+    });
+
+    return terminalRunListenerRegistration;
+  };
+
   const finalizeTerminalRun = (payload: ITerminalRunCompletePayload): void => {
+    if (!isIntegratedTerminalSession(payload.sessionId)) {
+      return;
+    }
     const resolvedRunId = resolveTerminalRunId(payload.runId);
     if (isDisposed || !resolvedRunId) {
       return;
@@ -402,6 +508,7 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
     editorStore.isRunning = true;
 
     try {
+      await ensureTerminalRunEventListeners();
       await runScriptInIntegratedTerminal(editorStore.document);
     } catch (error) {
       failTerminalRun('脚本执行失败', error, '脚本执行失败', TERMINAL_RUN_LOG_CODES.failed, {
@@ -411,7 +518,12 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
   };
 
   const appendTerminalOutput = (payload: ITerminalRunOutputEvent): void => {
-    if (isDisposed || !payload.data || !isCurrentTerminalRun(payload.runId)) {
+    if (
+      isDisposed
+      || !isIntegratedTerminalSession(payload.sessionId)
+      || !payload.data
+      || !isCurrentTerminalRun(payload.runId)
+    ) {
       return;
     }
 
@@ -425,8 +537,51 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
     }, TERMINAL_OUTPUT_BATCH_INTERVAL_MS);
   };
 
+  const appendStructuredTerminalOutput = (payload: ITerminalRunOutputEvent): void => {
+    if (
+      isDisposed
+      || !isIntegratedTerminalSession(payload.sessionId)
+      || !payload.data
+      || !isCurrentTerminalRun(payload.runId)
+    ) {
+      return;
+    }
+
+    hasStructuredTerminalRunOutput = true;
+    appendTerminalOutput(payload);
+  };
+
+  const appendVisibleTerminalData = (payload: ITerminalDataEvent): void => {
+    if (
+      isDisposed
+      || hasStructuredTerminalRunOutput
+      || !isIntegratedTerminalSession(payload.sessionId)
+      || !payload.data
+    ) {
+      return;
+    }
+
+    const runId = getCurrentTerminalRunId();
+    if (!runId) {
+      return;
+    }
+
+    const data = stripInternalDispatchEcho(payload.data);
+    if (!data) {
+      return;
+    }
+
+    appendTerminalOutput({
+      sessionId: payload.sessionId,
+      runId,
+      data,
+    });
+  };
+
   onScopeDispose(() => {
     isDisposed = true;
+    terminalRunListenerVersion += 1;
+    clearTerminalRunEventListeners();
     resetBufferedTerminalOutput();
     clearTerminalRunFallbackTimer();
     clearActiveTerminalRunState();
