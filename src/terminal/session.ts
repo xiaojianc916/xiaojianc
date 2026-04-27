@@ -650,6 +650,20 @@ export class TerminalSession {
         this.focusTerminal();
     }
 
+    async sendInput(data: string): Promise<void> {
+        if (!data) return;
+        if (!this.session.value) {
+            await this.ensureConnect();
+        }
+        if (!this.session.value) {
+            throw new Error('WSL2 终端尚未就绪。');
+        }
+        await this._tauri.writeTerminalInput({ sessionId: this.id, data });
+        this._isAutoFollowEnabled = true;
+        this._scheduleViewportSync({ scrollToBottom: true });
+        this.focusTerminal();
+    }
+
     // -- Public: track run id -------------------------------------------------
 
     trackRun(nextRunId: string | null): void {

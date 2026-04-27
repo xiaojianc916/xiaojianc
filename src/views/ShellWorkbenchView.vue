@@ -51,9 +51,10 @@
         <SmartScriptEditor v-else-if="editorStore.document.kind === 'text'" ref="editorRef"
           :document-id="editorStore.document.id" :document-path="editorStore.document.path"
           :document-name="editorStore.document.name" :model-value="editorStore.document.content" :theme="appStore.theme"
-          :editor-settings="appStore.settings.editor" @update:model-value="updateContent"
+          :editor-settings="appStore.settings.editor" :can-run="canRun" @update:model-value="updateContent"
           @cursor-position-change="handleCursorPositionChange" @diagnostics-change="handleDiagnosticsChange"
-          @format-request="handleFormatDocument" @command-palette-request="handleOpenCommandPalette" />
+          @format-request="handleFormatDocument" @command-palette-request="handleOpenCommandPalette"
+          @run-request="handleRunScript" />
 
         <ImageAssetPreview v-else-if="editorStore.document.path" :path="editorStore.document.path"
           :name="editorStore.document.name" />

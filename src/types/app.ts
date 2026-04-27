@@ -42,6 +42,7 @@ export type TWorkbenchSidebarView =
     | 'search'
     | 'source-control'
     | 'run'
+    | 'ai'
     | 'extensions';
 
 export const WORKBENCH_SIDEBAR_VIEWS = [
@@ -49,5 +50,6 @@ export const WORKBENCH_SIDEBAR_VIEWS = [
     'search',
     'source-control',
     'run',
+    'ai',
     'extensions',
 ] as const satisfies ReadonlyArray<TWorkbenchSidebarView>;

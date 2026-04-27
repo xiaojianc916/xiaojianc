@@ -108,6 +108,9 @@ export const useIntegratedTerminalControls = () => {
     sendCommand: async (command: string): Promise<void> => {
       await registry.get(DEFAULT_TERMINAL_SESSION_ID)?.sendCommand(command);
     },
+    sendInput: async (data: string): Promise<void> => {
+      await registry.get(DEFAULT_TERMINAL_SESSION_ID)?.sendInput(data);
+    },
     copySelection: async (): Promise<void> => {
       await registry.get(DEFAULT_TERMINAL_SESSION_ID)?.copySelection();
     },

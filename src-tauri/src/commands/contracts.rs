@@ -305,3 +305,27 @@ pub struct SshConfigHostPayload {
     pub(crate) identity_path: Option<String>,
     pub(crate) last_used_label: String,
 }
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiChatMessagePayload {
+    pub(crate) role: String,
+    pub(crate) content: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiChatRequest {
+    pub(crate) endpoint: String,
+    pub(crate) api_key: String,
+    pub(crate) model: String,
+    pub(crate) system_prompt: String,
+    pub(crate) messages: Vec<AiChatMessagePayload>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiChatPayload {
+    pub(crate) content: String,
+    pub(crate) model: String,
+}

@@ -183,6 +183,9 @@ const measureScriptContentInput = <T extends { content: string }>(value: T): IPa
     ['content'],
   );
 
+const measureAiChatInput = <T extends Record<string, unknown>>(value: T): IPayloadMetrics =>
+  buildPayloadMetricsOmittingTextFields(value, ['apiKey', 'messages', 'systemPrompt']);
+
 const emitIpcLog = (record: IIpcLogRecord): void => {
   const serialized = JSON.stringify(record);
   if (record.outcome === 'error') {
@@ -687,6 +690,20 @@ const renameSshPathIpc = definePayloadIpc(
   { audit: 'sensitive', timeoutMs: 30_000 },
 );
 
+const createSshDirectoryIpc = definePayloadIpc(
+  'create_ssh_directory',
+  '创建 SSH 远端目录',
+  tauriContracts.createSshDirectory,
+  { audit: 'sensitive', timeoutMs: 30_000 },
+);
+
+const sendAiChatIpc = definePayloadIpc(
+  'send_ai_chat',
+  '发送 AI 对话请求',
+  tauriContracts.sendAiChat,
+  { audit: 'sensitive', timeoutMs: 60_000, measureInput: measureAiChatInput },
+);
+
 const ensureTerminalSessionIpc = definePayloadIpc(
   'ensure_terminal_session',
   '连接 WSL2 终端',
@@ -845,4 +862,8 @@ export const tauriService: ITauriService & {
   deleteSshPath: deleteSshPathIpc,
 
   renameSshPath: renameSshPathIpc,
+
+  createSshDirectory: createSshDirectoryIpc,
+
+  sendAiChat: sendAiChatIpc,
 };

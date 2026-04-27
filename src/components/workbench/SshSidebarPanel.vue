@@ -2,7 +2,7 @@
 import { useIntegratedTerminalControls } from '@/composables/useIntegratedTerminal'
 import { useMessage } from '@/composables/useMessage'
 import { tauriService } from '@/services/tauri'
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 
 type TSshContentTab = 'explorer' | 'transfer'
 type TSshPanelTab = TSshContentTab | 'connect'
@@ -11,6 +11,7 @@ type TSshFileKind = 'folder' | 'rust' | 'toml' | 'markdown' | 'lock' | 'file'
 type TSshTransferDirection = 'upload' | 'download'
 type TSshTransferStatus = 'uploading' | 'downloading' | 'done' | 'failed'
 type TSshContextActionTone = 'default' | 'danger'
+type TSshFooterAction = TSshTransferDirection | 'new-folder'
 
 interface ISshPathSegment {
   id: string
@@ -61,11 +62,12 @@ interface ISshAuthOption {
 }
 
 const CONTEXT_MENU_WIDTH = 172
-const CONTEXT_MENU_HEIGHT = 214
+const CONTEXT_MENU_HEIGHT = 252
 const DEFAULT_SELECTED_FILE_ID = 'ssh-client'
 const MANUAL_CONNECTION_ID = 'manual'
 const DEFAULT_SSH_PORT = '22'
 const TERMINAL_OPEN_DELAY_MS = 120
+const SSH_PASSWORD_SEND_DELAY_MS = 180
 const HOST_PATTERN = /^[a-zA-Z0-9._:-]+$/
 const USER_PATTERN = /^[a-zA-Z0-9._-]+$/
 const SAFE_PATH_PATTERN = /^[^\r\n]+$/
@@ -84,6 +86,7 @@ const SSH_FILE_ITEMS: ISshFileItem[] = [
 ]
 
 const SSH_CONTEXT_ACTIONS: ISshContextAction[] = [
+  { key: 'new-folder', label: '新建文件夹', tone: 'default' },
   { key: 'rename', label: '重命名', tone: 'default' },
   { key: 'copy-path', label: '复制路径', tone: 'default' },
   { key: 'download', label: '下载到本地', tone: 'default' },
@@ -155,6 +158,8 @@ const currentConnectionId = ref<string | null>(null)
 const selectedFileId = ref(DEFAULT_SELECTED_FILE_ID)
 const contextMenuRef = ref<HTMLElement | null>(null)
 const authSelectRef = ref<HTMLElement | null>(null)
+const renameInputRef = ref<HTMLInputElement | null>(null)
+const createDirectoryInputRef = ref<HTMLInputElement | null>(null)
 const isConnecting = ref(false)
 const isAuthSelectOpen = ref(false)
 const recentConnections = ref<ISshRecentConnection[]>(SSH_RECENT_CONNECTIONS)
@@ -167,7 +172,9 @@ const isDownloading = ref(false)
 const isPathMutating = ref(false)
 const pendingRenameItem = ref<ISshFileItem | null>(null)
 const pendingDeleteItem = ref<ISshFileItem | null>(null)
+const isCreateDirectoryDialogOpen = ref(false)
 const renameInputValue = ref('')
+const createDirectoryName = ref('')
 const contextMenu = reactive({
   open: false,
   x: 0,
@@ -179,6 +186,7 @@ const connectionForm = reactive({
   username: 'root',
   authMode: 'key' as TSshAuthMode,
   identityPath: '~/.ssh/id_rsa',
+  password: '',
 })
 
 const isExplorerActive = computed(() => activeContentTab.value === 'explorer')
@@ -220,11 +228,19 @@ const selectedAuthOption = computed(
     SSH_AUTH_OPTIONS[0],
 )
 const isTransferBusy = computed(() => isUploading.value || isDownloading.value)
+const isPasswordTerminalMode = computed(
+  () => isConnected.value && currentConnection.value.authMode === 'password',
+)
 const normalizedRenameInput = computed(() => renameInputValue.value.trim())
+const normalizedCreateDirectoryName = computed(() => createDirectoryName.value.trim())
 const canConfirmRename = computed(() => {
   const item = pendingRenameItem.value
   const nextName = normalizedRenameInput.value
   return Boolean(item && nextName && nextName !== item.name && !nextName.includes('/') && !nextName.includes('\\'))
+})
+const canConfirmCreateDirectory = computed(() => {
+  const nextName = normalizedCreateDirectoryName.value
+  return Boolean(nextName && nextName !== '.' && nextName !== '..' && !nextName.includes('/') && !nextName.includes('\\'))
 })
 
 const isTabActive = (tab: TSshPanelTab): boolean => {
@@ -296,6 +312,14 @@ const applyConnectionState = (connectionId: string | null): void => {
   isConnectFormVisible.value = false
   activeContentTab.value = 'explorer'
   closeContextMenu()
+}
+
+const applyPasswordTerminalState = (connectionId: string | null): void => {
+  applyConnectionState(connectionId)
+  currentRemotePath.value = '.'
+  sshFileItems.value = []
+  selectedFileId.value = ''
+  isRemoteDirectoryLoading.value = false
 }
 
 const quoteShellArg = (value: string): string => {
@@ -414,6 +438,16 @@ const createSshPathRenameRequest = (remotePath: string, newName: string) => ({
   newName,
 })
 
+const createSshDirectoryCreateRequest = (remoteDirectory: string, name: string) => ({
+  host: connectionForm.host.trim(),
+  port: Number.parseInt(connectionForm.port.trim(), 10),
+  username: connectionForm.username.trim(),
+  authMode: connectionForm.authMode,
+  identityPath: connectionForm.authMode === 'key' ? connectionForm.identityPath.trim() || null : null,
+  remoteDirectory,
+  name,
+})
+
 const createTransferItem = (
   direction: TSshTransferDirection,
   name: string,
@@ -470,6 +504,10 @@ const downloadSelectedFile = async (): Promise<void> => {
   if (!isConnected.value || isDownloading.value) {
     return
   }
+  if (isPasswordTerminalMode.value) {
+    message.info('密码认证下请在终端中执行文件操作；侧边栏文件管理需要密钥或 SSH agent。')
+    return
+  }
 
   const fileItem = selectedFile.value
   if (fileItem.isDirectory) {
@@ -512,6 +550,10 @@ const downloadSelectedFile = async (): Promise<void> => {
 
 const uploadFileToCurrentDirectory = async (): Promise<void> => {
   if (!isConnected.value || isUploading.value) {
+    return
+  }
+  if (isPasswordTerminalMode.value) {
+    message.info('密码认证下请在终端中执行文件操作；侧边栏文件管理需要密钥或 SSH agent。')
     return
   }
 
@@ -561,26 +603,81 @@ const copySelectedPath = async (): Promise<void> => {
   }
 }
 
-const closeRenameDialog = (): void => {
+const resetRenameDialog = (force = false): void => {
+  if (isPathMutating.value && !force) {
+    return
+  }
+
   pendingRenameItem.value = null
   renameInputValue.value = ''
 }
 
-const closeDeleteDialog = (): void => {
+const closeRenameDialog = (): void => {
+  resetRenameDialog(false)
+}
+
+const resetDeleteDialog = (force = false): void => {
+  if (isPathMutating.value && !force) {
+    return
+  }
+
   pendingDeleteItem.value = null
 }
 
-const renameSelectedPath = (): void => {
+const closeDeleteDialog = (): void => {
+  resetDeleteDialog(false)
+}
+
+const resetCreateDirectoryDialog = (force = false): void => {
+  if (isPathMutating.value && !force) {
+    return
+  }
+
+  isCreateDirectoryDialogOpen.value = false
+  createDirectoryName.value = ''
+}
+
+const closeCreateDirectoryDialog = (): void => {
+  resetCreateDirectoryDialog(false)
+}
+
+const focusRenameInput = async (): Promise<void> => {
+  await nextTick()
+  renameInputRef.value?.focus()
+  renameInputRef.value?.select()
+}
+
+const focusCreateDirectoryInput = async (): Promise<void> => {
+  await nextTick()
+  createDirectoryInputRef.value?.focus()
+}
+
+const renameSelectedPath = async (): Promise<void> => {
   const fileItem = selectedFile.value
   pendingRenameItem.value = fileItem
   renameInputValue.value = fileItem.name
+  await focusRenameInput()
+}
+
+const openCreateDirectoryDialog = async (): Promise<void> => {
+  if (!isConnected.value || isPathMutating.value) {
+    return
+  }
+  if (isPasswordTerminalMode.value) {
+    message.info('密码认证下请在终端中创建目录；侧边栏文件管理需要密钥或 SSH agent。')
+    return
+  }
+
+  createDirectoryName.value = ''
+  isCreateDirectoryDialogOpen.value = true
+  await focusCreateDirectoryInput()
 }
 
 const confirmRenamePath = async (): Promise<void> => {
   const fileItem = pendingRenameItem.value
   const newName = normalizedRenameInput.value
   if (!fileItem || !newName || newName === fileItem.name) {
-    closeRenameDialog()
+    resetRenameDialog(true)
     return
   }
 
@@ -607,6 +704,30 @@ const deleteSelectedPath = (): void => {
   pendingDeleteItem.value = selectedFile.value
 }
 
+const confirmCreateDirectory = async (): Promise<void> => {
+  const directoryName = normalizedCreateDirectoryName.value
+  if (!canConfirmCreateDirectory.value) {
+    message.error('目录名称不能为空，且不能包含路径分隔符。')
+    return
+  }
+
+  isPathMutating.value = true
+  try {
+    const result = await tauriService.createSshDirectory(
+      createSshDirectoryCreateRequest(currentRemotePath.value, directoryName),
+    )
+    resetCreateDirectoryDialog(true)
+    await loadRemoteDirectory(currentRemotePath.value)
+    selectedFileId.value = result.remotePath
+    message.success('远端目录已创建。')
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : '创建远端目录失败。'
+    message.error(errorMessage)
+  } finally {
+    isPathMutating.value = false
+  }
+}
+
 const confirmDeletePath = async (): Promise<void> => {
   const fileItem = pendingDeleteItem.value
   if (!fileItem) {
@@ -616,7 +737,7 @@ const confirmDeletePath = async (): Promise<void> => {
   isPathMutating.value = true
   try {
     await tauriService.deleteSshPath(createSshPathDeleteRequest(fileItem.path))
-    closeDeleteDialog()
+    resetDeleteDialog(true)
     await loadRemoteDirectory(currentRemotePath.value)
     message.success('远端路径已删除。')
   } catch (error) {
@@ -653,8 +774,16 @@ const validateConnectionForm = (): string | null => {
     return '端口必须是 1 到 65535 之间的整数。'
   }
 
+  if (connectionForm.authMode === 'password' && !connectionForm.password) {
+    return '请填写登录密码。'
+  }
+
   if (identityPath && !SAFE_PATH_PATTERN.test(identityPath)) {
     return '私钥路径不能包含换行符。'
+  }
+
+  if (connectionForm.authMode === 'password' && !SAFE_PATH_PATTERN.test(connectionForm.password)) {
+    return '登录密码不能包含换行符。'
   }
 
   return null
@@ -668,6 +797,19 @@ const buildSshCommand = (): string => {
 
   if (connectionForm.authMode === 'key' && connectionForm.identityPath.trim()) {
     parts.push('-i', quoteShellArg(connectionForm.identityPath))
+  }
+
+  if (connectionForm.authMode === 'password') {
+    parts.push(
+      '-o',
+      'PreferredAuthentications=password',
+      '-o',
+      'PubkeyAuthentication=no',
+      '-o',
+      'NumberOfPasswordPrompts=1',
+      '-o',
+      'StrictHostKeyChecking=accept-new',
+    )
   }
 
   if (username && host) {
@@ -687,6 +829,17 @@ const handleConnect = async (connectionId = MANUAL_CONNECTION_ID): Promise<void>
   isConnecting.value = true
 
   try {
+    if (connectionForm.authMode === 'password') {
+      emit('open-terminal')
+      await new Promise((resolve) => window.setTimeout(resolve, TERMINAL_OPEN_DELAY_MS))
+      await terminalControls.sendCommand(sshCommandPreview.value)
+      await new Promise((resolve) => window.setTimeout(resolve, SSH_PASSWORD_SEND_DELAY_MS))
+      await terminalControls.sendInput(`${connectionForm.password}\n`)
+      applyPasswordTerminalState(connectionId)
+      message.success('已自动提交登录密码，正在建立 SSH 终端会话。')
+      return
+    }
+
     const testResult = await tauriService.testSshConnection({
       host: connectionForm.host.trim(),
       port: Number.parseInt(connectionForm.port.trim(), 10),
@@ -697,16 +850,6 @@ const handleConnect = async (connectionId = MANUAL_CONNECTION_ID): Promise<void>
     })
 
     if (!testResult.ok) {
-      if (connectionForm.authMode === 'password' && testResult.code === 'ssh/auth-failed') {
-        emit('open-terminal')
-        await new Promise((resolve) => window.setTimeout(resolve, TERMINAL_OPEN_DELAY_MS))
-        await terminalControls.sendCommand(sshCommandPreview.value)
-        isConnected.value = false
-        isConnectFormVisible.value = false
-        message.warning('已打开真实 SSH 终端，请在终端内输入密码完成认证。')
-        return
-      }
-
       isConnected.value = false
       message.error(testResult.message)
       return
@@ -769,17 +912,29 @@ const handlePathSegmentClick = (segment: ISshPathSegment): void => {
   void loadRemoteDirectory(segment.path)
 }
 
+const refreshCurrentRemoteDirectory = (): void => {
+  if (!isConnected.value || isRemoteDirectoryLoading.value || isPasswordTerminalMode.value) {
+    return
+  }
+
+  void loadRemoteDirectory(currentRemotePath.value)
+}
+
 const handleSelectFile = (fileId: string): void => {
   selectedFileId.value = fileId
   closeContextMenu()
 
   const fileItem = sshFileItems.value.find((item) => item.id === fileId)
-  if (fileItem?.isDirectory && !isRemoteDirectoryLoading.value) {
+  if (fileItem?.isDirectory && !isRemoteDirectoryLoading.value && !isPasswordTerminalMode.value) {
     void loadRemoteDirectory(fileItem.path)
   }
 }
 
 const handleFileContextMenu = (event: MouseEvent, fileId: string): void => {
+  if (isPasswordTerminalMode.value) {
+    return
+  }
+
   selectedFileId.value = fileId
 
   const maxX = Math.max(12, window.innerWidth - CONTEXT_MENU_WIDTH - 12)
@@ -791,7 +946,17 @@ const handleFileContextMenu = (event: MouseEvent, fileId: string): void => {
 }
 
 const handleContextAction = (action: ISshContextAction): void => {
+  if (isPathMutating.value || isRemoteDirectoryLoading.value || isPasswordTerminalMode.value) {
+    closeContextMenu()
+    return
+  }
+
   const targetLabel = selectedFile.value.name
+  if (action.key === 'new-folder') {
+    closeContextMenu()
+    void openCreateDirectoryDialog()
+    return
+  }
   if (action.key === 'download') {
     closeContextMenu()
     void downloadSelectedFile()
@@ -822,8 +987,13 @@ const handleContextAction = (action: ISshContextAction): void => {
   closeContextMenu()
 }
 
-const handleFooterAction = (action: TSshTransferDirection): void => {
+const handleFooterAction = (action: TSshFooterAction): void => {
   if (!isConnected.value) {
+    return
+  }
+
+  if (action === 'new-folder') {
+    void openCreateDirectoryDialog()
     return
   }
 
@@ -869,6 +1039,9 @@ const handleWindowKeydown = (event: KeyboardEvent): void => {
   if (event.key === 'Escape') {
     closeContextMenu()
     closeAuthSelect()
+    closeRenameDialog()
+    closeDeleteDialog()
+    closeCreateDirectoryDialog()
   }
 }
 
@@ -1014,9 +1187,18 @@ v-if="isConnectFormVisible" class="ssh-connect-form"
           </div>
         </div>
 
-        <label class="ssh-form-group">
+        <label v-if="connectionForm.authMode === 'key'" class="ssh-form-group">
           <span>私钥路径</span>
           <input v-model="connectionForm.identityPath" type="text" placeholder="~/.ssh/id_rsa" autocomplete="off" />
+        </label>
+        <label v-else class="ssh-form-group">
+          <span>登录密码</span>
+          <input
+            v-model="connectionForm.password"
+            type="password"
+            placeholder="输入 SSH 登录密码"
+            autocomplete="current-password"
+          />
         </label>
 
         <div class="ssh-form-actions">
@@ -1098,7 +1280,7 @@ width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" str
       </section>
 
       <template v-else>
-        <div v-if="isExplorerActive" class="ssh-path-bar" aria-label="远端路径">
+        <div v-if="isExplorerActive && !isPasswordTerminalMode" class="ssh-path-bar" aria-label="远端路径">
           <template v-for="(segment, index) in sshPathSegments" :key="segment.id">
             <button
 type="button" class="ssh-path-segment"
@@ -1108,10 +1290,32 @@ type="button" class="ssh-path-segment"
             </button>
             <span v-if="index < sshPathSegments.length - 1" class="ssh-path-separator">/</span>
           </template>
+          <button
+            type="button"
+            class="ssh-path-refresh"
+            :disabled="isRemoteDirectoryLoading"
+            aria-label="刷新远端目录"
+            @click="refreshCurrentRemoteDirectory"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </svg>
+          </button>
         </div>
 
         <div v-if="isExplorerActive" class="ssh-file-list" role="list" aria-label="远端文件列表">
-          <button
+          <div v-if="isPasswordTerminalMode" class="ssh-file-list-state">
+            密码认证已打开终端会话。文件浏览、上传下载和远端改名删除需要密钥或 SSH agent。
+          </div>
+          <div v-else-if="isRemoteDirectoryLoading" class="ssh-file-list-state" aria-live="polite">
+            正在读取远端目录…
+          </div>
+          <div v-else-if="sshFileItems.length === 0" class="ssh-file-list-state">
+            当前目录为空
+          </div>
+          <template v-else>
+            <button
  v-for="item in sshFileItems" :key="item.id" type="button" class="ssh-file-item" :class="{
             'is-folder': item.kind === 'folder',
             'is-selected': selectedFileId === item.id,
@@ -1138,7 +1342,8 @@ v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentCol
 
             <span class="ssh-file-name">{{ item.name }}</span>
             <span class="ssh-file-meta">{{ item.metaLabel }}</span>
-          </button>
+            </button>
+          </template>
         </div>
 
         <div v-else-if="isTransferActive" class="ssh-transfer-panel" aria-label="传输任务列表">
@@ -1175,8 +1380,22 @@ v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentCol
       <button
 type="button" class="ssh-footer-button" :class="{
         'ssh-footer-button--disconnected': isDisconnected,
-        'is-disabled': isDisconnected || isTransferBusy,
-      }" :disabled="isDisconnected || isTransferBusy" title="连接后可用" @click="handleFooterAction('upload')">
+        'is-disabled': isDisconnected || isPathMutating || isPasswordTerminalMode,
+      }" :disabled="isDisconnected || isPathMutating || isPasswordTerminalMode" title="连接后可用" @click="handleFooterAction('new-folder')">
+        <svg
+viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 5v14" />
+          <path d="M5 12h14" />
+        </svg>
+        新建
+      </button>
+
+      <button
+type="button" class="ssh-footer-button" :class="{
+        'ssh-footer-button--disconnected': isDisconnected,
+        'is-disabled': isDisconnected || isTransferBusy || isPathMutating || isPasswordTerminalMode,
+      }" :disabled="isDisconnected || isTransferBusy || isPathMutating || isPasswordTerminalMode" title="连接后可用" @click="handleFooterAction('upload')">
         <svg
 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
           stroke-linejoin="round" aria-hidden="true">
@@ -1190,8 +1409,8 @@ viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-li
       <button
 type="button" class="ssh-footer-button" :class="{
         'ssh-footer-button--disconnected': isDisconnected,
-        'is-disabled': isDisconnected || isTransferBusy,
-      }" :disabled="isDisconnected || isTransferBusy" title="连接后可用" @click="handleFooterAction('download')">
+        'is-disabled': isDisconnected || isTransferBusy || isPathMutating || isPasswordTerminalMode,
+      }" :disabled="isDisconnected || isTransferBusy || isPathMutating || isPasswordTerminalMode" title="连接后可用" @click="handleFooterAction('download')">
         <svg
 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
           stroke-linejoin="round" aria-hidden="true">
@@ -1215,7 +1434,11 @@ v-if="isConnected && contextMenu.open" ref="contextMenuRef" class="ssh-context-m
         <button
 type="button" class="ssh-context-item" :class="{ 'is-danger': action.tone === 'danger' }"
           @click="handleContextAction(action)">
-          <svg v-if="action.key === 'rename'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg v-if="action.key === 'new-folder'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14" />
+            <path d="M5 12h14" />
+          </svg>
+          <svg v-else-if="action.key === 'rename'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
           </svg>
@@ -1250,6 +1473,29 @@ v-else-if="action.key === 'upload'" viewBox="0 0 24 24" fill="none" stroke="curr
   </Teleport>
 
   <Teleport to="body">
+    <div v-if="isCreateDirectoryDialogOpen" class="ssh-modal-backdrop" @click.self="closeCreateDirectoryDialog">
+      <form class="ssh-modal" @submit.prevent="confirmCreateDirectory">
+        <div class="ssh-modal-copy">
+          <h3>新建远端文件夹</h3>
+          <p>将在“{{ currentRemotePath }}”下创建文件夹。不会覆盖远端已有项目。</p>
+        </div>
+        <label class="ssh-modal-field">
+          <span>文件夹名称</span>
+          <input ref="createDirectoryInputRef" v-model="createDirectoryName" :disabled="isPathMutating" autocomplete="off" />
+        </label>
+        <div class="ssh-modal-actions">
+          <button type="button" class="ssh-modal-button" :disabled="isPathMutating" @click="closeCreateDirectoryDialog">
+            取消
+          </button>
+          <button type="submit" class="ssh-modal-button is-primary" :disabled="!canConfirmCreateDirectory || isPathMutating">
+            {{ isPathMutating ? '处理中…' : '创建' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </Teleport>
+
+  <Teleport to="body">
     <div v-if="pendingRenameItem" class="ssh-modal-backdrop" @click.self="closeRenameDialog">
       <form class="ssh-modal" @submit.prevent="confirmRenamePath">
         <div class="ssh-modal-copy">
@@ -1258,7 +1504,7 @@ v-else-if="action.key === 'upload'" viewBox="0 0 24 24" fill="none" stroke="curr
         </div>
         <label class="ssh-modal-field">
           <span>新名称</span>
-          <input v-model="renameInputValue" :disabled="isPathMutating" autocomplete="off" />
+          <input ref="renameInputRef" v-model="renameInputValue" :disabled="isPathMutating" autocomplete="off" />
         </label>
         <div class="ssh-modal-actions">
           <button type="button" class="ssh-modal-button" :disabled="isPathMutating" @click="closeRenameDialog">
@@ -2033,6 +2279,37 @@ v-else-if="action.key === 'upload'" viewBox="0 0 24 24" fill="none" stroke="curr
   opacity: 0.32;
 }
 
+.ssh-path-refresh {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  place-items: center;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.ssh-path-refresh:hover:not(:disabled) {
+  background: var(--surface-soft);
+  color: var(--text-primary);
+}
+
+.ssh-path-refresh:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.ssh-path-refresh svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
+}
+
 .ssh-file-list,
 .ssh-transfer-panel {
   min-height: 0;
@@ -2042,6 +2319,13 @@ v-else-if="action.key === 'upload'" viewBox="0 0 24 24" fill="none" stroke="curr
 
 .ssh-file-list {
   padding: 4px 0;
+}
+
+.ssh-file-list-state {
+  padding: 18px 12px;
+  color: var(--text-quaternary);
+  font-size: 12px;
+  text-align: center;
 }
 
 .ssh-file-list::-webkit-scrollbar,

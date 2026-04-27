@@ -3,21 +3,9 @@
     <header class="search-panel-header">
       <span class="search-panel-title">搜索</span>
 
-      <button
-        type="button"
-        class="search-panel-icon-btn"
-        aria-label="切换到替换"
-        title="切换到替换"
-        @click="handleReplaceAction"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
+      <button type="button" class="search-panel-icon-btn" aria-label="切换到替换" title="切换到替换" @click="handleReplaceAction">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+          stroke-linejoin="round">
           <path d="M3 7h11" />
           <path d="M3 17h8" />
           <path d="m16 14 4 3-4 3" />
@@ -29,43 +17,19 @@
     <div class="search-panel-search">
       <label class="search-panel-input-shell">
         <span class="search-panel-input-icon" aria-hidden="true">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+            stroke-linejoin="round">
             <circle cx="11" cy="11" r="7" />
             <path d="m20 20-3.5-3.5" />
           </svg>
         </span>
 
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="输入关键字搜索…"
-          autocomplete="off"
-          spellcheck="false"
-        />
+        <input v-model="searchQuery" type="text" placeholder="输入关键字搜索…" autocomplete="off" spellcheck="false" />
 
-        <button
-          v-if="hasSearchQuery"
-          type="button"
-          class="search-panel-clear-btn"
-          aria-label="清空搜索"
-          title="清空搜索"
-          @click.stop="searchQuery = ''"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
+        <button v-if="hasSearchQuery" type="button" class="search-panel-clear-btn" aria-label="清空搜索" title="清空搜索"
+          @click.stop="searchQuery = ''">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
             <path d="M6 6l12 12" />
             <path d="M18 6 6 18" />
           </svg>
@@ -74,59 +38,29 @@
     </div>
 
     <div class="search-panel-chip-row">
-      <button
-        v-for="chip in scopeChips"
-        :key="chip.key"
-        type="button"
-        class="search-panel-chip"
-        :class="{ 'is-active': activeScope === chip.key }"
-        :aria-pressed="activeScope === chip.key"
-        @click="activeScope = chip.key"
-      >
+      <button v-for="chip in scopeChips" :key="chip.key" type="button" class="search-panel-chip"
+        :class="{ 'is-active': activeScope === chip.key }" :aria-pressed="activeScope === chip.key"
+        @click="activeScope = chip.key">
         <span>{{ chip.label }}</span>
         <span class="search-panel-chip-count">{{ chip.count }}</span>
       </button>
     </div>
 
     <div class="search-panel-option-row" aria-label="搜索选项">
-      <button
-        type="button"
-        class="search-panel-option-btn"
-        :class="{ 'is-active': matchCase }"
-        :aria-pressed="matchCase"
-        title="区分大小写"
-        @click="matchCase = !matchCase"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
+      <button type="button" class="search-panel-option-btn" :class="{ 'is-active': matchCase }"
+        :aria-pressed="matchCase" title="区分大小写" @click="matchCase = !matchCase">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+          stroke-linejoin="round">
           <path d="M4 18 8 6l4 12" />
           <path d="M5.5 14h5" />
           <path d="M14 12a3 3 0 1 1 5 2v2" />
         </svg>
       </button>
 
-      <button
-        type="button"
-        class="search-panel-option-btn"
-        :class="{ 'is-active': wholeWord }"
-        :aria-pressed="wholeWord"
-        title="全字匹配"
-        @click="wholeWord = !wholeWord"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
+      <button type="button" class="search-panel-option-btn" :class="{ 'is-active': wholeWord }"
+        :aria-pressed="wholeWord" title="全字匹配" @click="wholeWord = !wholeWord">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+          stroke-linejoin="round">
           <rect x="3" y="7" width="18" height="10" rx="1.5" />
           <path d="M3 10v4" />
           <path d="M21 10v4" />
@@ -136,22 +70,10 @@
         </svg>
       </button>
 
-      <button
-        type="button"
-        class="search-panel-option-btn"
-        :class="{ 'is-active': useRegex }"
-        :aria-pressed="useRegex"
-        title="正则表达式"
-        @click="useRegex = !useRegex"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
+      <button type="button" class="search-panel-option-btn" :class="{ 'is-active': useRegex }" :aria-pressed="useRegex"
+        title="正则表达式" @click="useRegex = !useRegex">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+          stroke-linejoin="round">
           <path d="M12 4v10" />
           <path d="M7.3 6.5 16.7 11.5" />
           <path d="M16.7 6.5 7.3 11.5" />
@@ -159,22 +81,10 @@
         </svg>
       </button>
 
-      <button
-        type="button"
-        class="search-panel-option-btn"
-        :class="{ 'is-active': showPathFilters }"
-        :aria-pressed="showPathFilters"
-        title="包含 / 排除路径"
-        @click="showPathFilters = !showPathFilters"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
+      <button type="button" class="search-panel-option-btn" :class="{ 'is-active': showPathFilters }"
+        :aria-pressed="showPathFilters" title="包含 / 排除路径" @click="showPathFilters = !showPathFilters">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+          stroke-linejoin="round">
           <path d="M4 7h10" />
           <path d="M4 12h10" />
           <path d="M4 17h6" />
@@ -187,32 +97,18 @@
     <div v-if="showPathFilters" class="search-panel-path-filter-row">
       <label class="search-panel-path-filter">
         <span>包含</span>
-        <input
-          v-model="includePattern"
-          type="text"
-          placeholder="例如 src/**/*.vue"
-          autocomplete="off"
-          spellcheck="false"
-        />
+        <input v-model="includePattern" type="text" placeholder="例如 src/**/*.vue" autocomplete="off"
+          spellcheck="false" />
       </label>
 
       <label class="search-panel-path-filter">
         <span>排除</span>
-        <input
-          v-model="excludePattern"
-          type="text"
-          placeholder="例如 target/**"
-          autocomplete="off"
-          spellcheck="false"
-        />
+        <input v-model="excludePattern" type="text" placeholder="例如 target/**" autocomplete="off" spellcheck="false" />
       </label>
     </div>
 
     <div class="search-panel-results" role="listbox">
-      <div
-        v-if="hasSearchQuery && !searchError && !activeScopeIsPending"
-        class="search-panel-summary"
-      >
+      <div v-if="hasSearchQuery && !searchError && !activeScopeIsPending" class="search-panel-summary">
         <b>{{ activeResults.length }}</b> 条结果 · 来自 <b>{{ matchedFileCount }}</b> 个文件
       </div>
 
@@ -227,8 +123,8 @@
       </div>
 
       <div v-else-if="searchIndexing && indexedFileCount === 0" class="search-panel-empty-state">
-        <p class="search-panel-empty-title">正在建立搜索索引</p>
-        <p class="search-panel-empty-text">稍等片刻，面板会自动汇总当前工作区的文件名与路径。</p>
+        <p class="search-panel-empty-title"></p>
+        <p class="search-panel-empty-text"></p>
       </div>
 
       <div v-else-if="searchError" class="search-panel-empty-state">
@@ -246,44 +142,29 @@
         <p class="search-panel-empty-text">当前已接入文件名与路径搜索，符号与内容结果稍后补齐。</p>
       </div>
 
-      <div
-        v-else-if="hasSearchQuery && activeResults.length === 0"
-        class="search-panel-empty-state"
-      >
+      <div v-else-if="hasSearchQuery && activeResults.length === 0" class="search-panel-empty-state">
         <p class="search-panel-empty-title">没有匹配结果</p>
         <p class="search-panel-empty-text">试试更短的关键字，或调整大小写、正则和路径过滤条件。</p>
       </div>
 
-      <button
-        v-for="result in activeResults"
-        :key="result.resultKey"
-        type="button"
-        class="search-panel-result"
-        :class="{ 'is-selected': selectedResultPath === result.path }"
-        role="option"
-        :aria-selected="selectedResultPath === result.path"
-        @click="handleResultClick(result.path)"
-      >
+      <button v-for="result in activeResults" :key="result.resultKey" type="button" class="search-panel-result"
+        :class="{ 'is-selected': selectedResultPath === result.path }" role="option"
+        :aria-selected="selectedResultPath === result.path" @click="handleResultClick(result.path)">
         <span class="search-panel-result-icon" aria-hidden="true">
           <ExplorerEntryIcon kind="file" :path="result.path" />
         </span>
 
         <span class="search-panel-result-body">
           <span class="search-panel-result-snippet">
-            <template
-              v-for="(segment, index) in result.snippetSegments"
-              :key="`${result.resultKey}-snippet-${index}`"
-            >
+            <template v-for="(segment, index) in result.snippetSegments" :key="`${result.resultKey}-snippet-${index}`">
               <mark v-if="segment.matched">{{ segment.text }}</mark>
               <span v-else>{{ segment.text }}</span>
             </template>
           </span>
 
           <span class="search-panel-result-loc">
-            <template
-              v-for="(segment, index) in result.locationSegments"
-              :key="`${result.resultKey}-location-${index}`"
-            >
+            <template v-for="(segment, index) in result.locationSegments"
+              :key="`${result.resultKey}-location-${index}`">
               <mark v-if="segment.matched">{{ segment.text }}</mark>
               <span v-else>{{ segment.text }}</span>
             </template>

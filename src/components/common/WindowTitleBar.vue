@@ -299,7 +299,7 @@ const editMenuItems = computed(() => [
   },
   {
     key: 'redo',
-    label: '重做',
+    label: '恢复撤销',
     shortcut: 'Z',
     disabled: !props.hasActiveDocument,
   },

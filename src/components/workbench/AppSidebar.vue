@@ -255,6 +255,8 @@
 
     <SshSidebarPanel v-else-if="isSshView" @open-terminal="emit('open-terminal')" />
 
+    <AiSidebarPanel v-else-if="isAiView" :document="document" :active-run="activeRun" />
+
     <template v-else>
       <div class="border-b border-(--shell-divider) px-3 py-3">
         <p class="sidebar-section-title">{{ panelMeta.title }}</p>
@@ -309,6 +311,7 @@
 import type { ILinearContextMenuGroup, ILinearContextMenuItem } from '@/components/common/linear-context-menu.types';
 import LinearContextMenu from '@/components/common/LinearContextMenu.vue';
 import { Button } from '@/components/ui/button';
+import AiSidebarPanel from '@/components/workbench/AiSidebarPanel.vue';
 import ExplorerEntryIcon from '@/components/workbench/ExplorerEntryIcon.vue';
 import RunSidebarPanel from '@/components/workbench/RunSidebarPanel.vue';
 import SearchSidebarPanel from '@/components/workbench/SearchSidebarPanel.vue';
@@ -528,6 +531,17 @@ const SIDEBAR_META: Record<
       { title: '历史记录', description: '回看最近一次运行的命令和结果。' },
     ],
   },
+  ai: {
+    title: 'AI 助手',
+    headline: '对话、解释与修复建议',
+    description: '这里承载 AI 对话、上下文整理和模型配置入口。',
+    actionLabel: '打开 AI 面板',
+    items: [
+      { title: '对话框', description: '用于向模型提问、整理上下文和保留临时对话。' },
+      { title: '快捷任务', description: '解释脚本、修复报错、代码审查等高频入口。' },
+      { title: '服务配置', description: '配置模型服务地址、模型名和系统提示词。' },
+    ],
+  },
   extensions: {
     title: 'SSH 连接',
     headline: '远端连接与文件传输',
@@ -545,6 +559,7 @@ const isExplorerView = computed(() => props.view === 'explorer');
 const isSearchView = computed(() => props.view === 'search');
 const isSourceControlView = computed(() => props.view === 'source-control');
 const isRunView = computed(() => props.view === 'run');
+const isAiView = computed(() => props.view === 'ai');
 const isSshView = computed(() => props.view === 'extensions');
 const panelMeta = computed(() => SIDEBAR_META[props.view]);
 const normalizedExplorerSearchQuery = computed(() =>

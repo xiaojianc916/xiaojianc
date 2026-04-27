@@ -55,6 +55,7 @@ const props = withDefaults(
     analysis?: IAnalyzeScriptPayload;
     gitBaseline?: IGitFileBaselinePayload | null;
     editorSettings: IEditorSettings;
+    canRun?: boolean;
   }>(),
   {
     documentPath: null,
@@ -62,6 +63,7 @@ const props = withDefaults(
     theme: 'dark',
     analysis: undefined,
     gitBaseline: null,
+    canRun: false,
   },
 );
 
@@ -70,6 +72,7 @@ const emit = defineEmits<{
   'cursor-position-change': [line: number, column: number];
   'format-request': [];
   'command-palette-request': [];
+  'run-request': [];
 }>();
 
 let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
@@ -86,11 +89,15 @@ const {
   handleEditorContextMenu,
 } = useEditorContextMenu({
   getEditor: () => editorInstance,
+  canRunCurrentScript: () => props.canRun,
   onFormatRequest: () => {
     emit('format-request');
   },
   onCommandPaletteRequest: () => {
     emit('command-palette-request');
+  },
+  onRunCurrentScriptRequest: () => {
+    emit('run-request');
   },
 });
 

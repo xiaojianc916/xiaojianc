@@ -485,7 +485,7 @@ export const useBrowserContextMenu = () => {
           },
           {
             key: 'redo',
-            label: '重做',
+            label: '恢复撤销',
             icon: 'redo',
             shortcut: SHORTCUT_MAP.redo,
             action: 'redo',

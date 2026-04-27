@@ -104,6 +104,15 @@ export interface ISshPathRenamePayload {
   newPath: string;
 }
 
+export interface ISshDirectoryCreateRequest extends ISshConnectionTestRequest {
+  remoteDirectory: string;
+  name: string;
+}
+
+export interface ISshDirectoryCreatePayload {
+  remotePath: string;
+}
+
 export interface ISshConfigHostPayload {
   id: string;
   name: string;
@@ -112,6 +121,24 @@ export interface ISshConfigHostPayload {
   port: number;
   identityPath: string | null;
   lastUsedLabel: string;
+}
+
+export interface IAiChatMessagePayload {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export interface IAiChatRequest {
+  endpoint: string;
+  apiKey: string;
+  model: string;
+  systemPrompt: string;
+  messages: IAiChatMessagePayload[];
+}
+
+export interface IAiChatPayload {
+  content: string;
+  model: string;
 }
 
 export interface ITauriService {
@@ -148,4 +175,6 @@ export interface ITauriService {
   uploadSshFile(payload: ISshFileUploadRequest): Promise<ISshFileUploadPayload>;
   deleteSshPath(payload: ISshPathDeleteRequest): Promise<ISshPathDeletePayload>;
   renameSshPath(payload: ISshPathRenameRequest): Promise<ISshPathRenamePayload>;
+  createSshDirectory(payload: ISshDirectoryCreateRequest): Promise<ISshDirectoryCreatePayload>;
+  sendAiChat(payload: IAiChatRequest): Promise<IAiChatPayload>;
 }

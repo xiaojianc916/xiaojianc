@@ -1,8 +1,6 @@
 use std::{
     io::{Read, Write},
     path::PathBuf,
-    process::{Command as StdCommand, Stdio},
-    sync::atomic::{AtomicU64, Ordering},
     sync::{mpsc, Arc, Mutex},
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -10,18 +8,22 @@ use std::{
 
 use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
 
-use crate::commands::configure_std_command_for_background;
+use crate::terminal::{
+    ansi::contains_cursor_position_query, pty::normalize_pty_size, utf8_decoder::Utf8ChunkDecoder,
+};
+
+#[path = "run_supervisor/output_filter.rs"]
+mod output_filter;
+#[path = "run_supervisor/wsl_resize.rs"]
+mod wsl_resize;
+
+use output_filter::WslHostOutputFilter;
+use wsl_resize::{
+    build_resize_control_path, build_run_command_args_with_resize_control,
+    cleanup_resize_control_file, sync_wsl_tty_size, WslResizeControl,
+};
 
 const RUN_READ_BUFFER_SIZE: usize = 64 * 1024;
-const WSL_RESIZE_CONTROL_SCRIPT: &str = r#"
-tty_path="$(cat "$1" 2>/dev/null || true)"
-case "$tty_path" in
-  /dev/pts/[0-9]*|/dev/tty[0-9]*)
-    stty rows "$2" cols "$3" < "$tty_path" >/dev/null 2>&1 || exit 0
-    ;;
-esac
-"#;
-static RUN_RESIZE_CONTROL_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone)]
 pub struct RunPtySpec {
@@ -46,12 +48,6 @@ pub struct LiveRunPty {
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     exit_rx: Mutex<mpsc::Receiver<Option<i32>>>,
     resize_control: WslResizeControl,
-}
-
-#[derive(Debug, Clone)]
-struct WslResizeControl {
-    wsl_command_path: PathBuf,
-    control_path: String,
 }
 
 pub fn run_pty_script<F>(spec: RunPtySpec, on_output: F) -> Result<RunPtyExit, String>
@@ -228,91 +224,6 @@ impl LiveRunPty {
     }
 }
 
-#[derive(Default)]
-struct WslHostOutputFilter {
-    strip_startup_controls: bool,
-}
-
-impl WslHostOutputFilter {
-    fn sanitize(&mut self, value: &str) -> String {
-        let mut output = strip_known_wsl_host_sequences(value);
-        if !self.strip_startup_controls {
-            output = strip_leading_ansi_controls(&output);
-            if output.chars().any(|character| !character.is_control()) {
-                self.strip_startup_controls = true;
-            }
-        }
-        output
-    }
-}
-
-fn strip_known_wsl_host_sequences(value: &str) -> String {
-    let mut output = value
-        .replace("\x1b[6n", "")
-        .replace("\x1b[?9001h", "")
-        .replace("\x1b[?9001l", "")
-        .replace("\x1b[?1004h", "")
-        .replace("\x1b[?1004l", "");
-
-    loop {
-        let Some(start) = output.find("\x1b]0;") else {
-            break;
-        };
-        let Some(end_offset) = output[start..].find('\x07') else {
-            break;
-        };
-        let end = start + end_offset + '\x07'.len_utf8();
-        if output[start..end].to_ascii_lowercase().contains("wsl.exe") {
-            output.replace_range(start..end, "");
-        } else {
-            break;
-        }
-    }
-
-    output
-}
-
-fn strip_leading_ansi_controls(value: &str) -> String {
-    let bytes = value.as_bytes();
-    let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] != 0x1b {
-            break;
-        }
-        if index + 1 >= bytes.len() {
-            break;
-        }
-        match bytes[index + 1] {
-            b'[' => {
-                let mut end = index + 2;
-                while end < bytes.len() {
-                    let byte = bytes[end];
-                    end += 1;
-                    if (0x40..=0x7e).contains(&byte) {
-                        index = end;
-                        break;
-                    }
-                }
-                if end >= bytes.len() && index != end {
-                    break;
-                }
-            }
-            b']' => {
-                let Some(relative_end) = value[index..].find('\x07') else {
-                    break;
-                };
-                index += relative_end + '\x07'.len_utf8();
-            }
-            _ => break,
-        }
-    }
-    value[index..].to_string()
-}
-
-fn contains_cursor_position_query(data: &[u8]) -> bool {
-    data.windows(4).any(|window| window == b"\x1b[6n")
-}
-
 fn wait_child_exit_code(
     mut child: Box<dyn Child + Send + Sync>,
     timeout: Option<Duration>,
@@ -343,53 +254,6 @@ fn wait_child_exit_code(
     }
 }
 
-#[derive(Default)]
-struct Utf8ChunkDecoder {
-    pending: Vec<u8>,
-}
-
-impl Utf8ChunkDecoder {
-    fn decode_into(&mut self, input: &[u8], output: &mut String, last: bool) {
-        if !input.is_empty() {
-            self.pending.extend_from_slice(input);
-        }
-
-        loop {
-            if self.pending.is_empty() {
-                return;
-            }
-
-            match std::str::from_utf8(&self.pending) {
-                Ok(valid) => {
-                    output.push_str(valid);
-                    self.pending.clear();
-                    return;
-                }
-                Err(error) => {
-                    let valid_up_to = error.valid_up_to();
-                    if valid_up_to > 0 {
-                        output.push_str(&String::from_utf8_lossy(&self.pending[..valid_up_to]));
-                        self.pending.drain(..valid_up_to);
-                        continue;
-                    }
-
-                    if error.error_len().is_some() {
-                        output.push('\u{FFFD}');
-                        self.pending.drain(..1);
-                        continue;
-                    }
-
-                    if last {
-                        output.push_str(&String::from_utf8_lossy(&self.pending));
-                        self.pending.clear();
-                    }
-                    return;
-                }
-            }
-        }
-    }
-}
-
 pub fn build_run_command_args(working_directory: &str, execution_path: &str) -> Vec<String> {
     [
         "--cd",
@@ -409,97 +273,6 @@ pub fn build_run_command_args(working_directory: &str, execution_path: &str) -> 
     .into_iter()
     .map(str::to_string)
     .collect()
-}
-
-fn build_run_command_args_with_resize_control(
-    working_directory: &str,
-    execution_path: &str,
-    resize_control_path: &str,
-) -> Vec<String> {
-    vec![
-        "--cd".to_string(),
-        working_directory.to_string(),
-        "--".to_string(),
-        "/usr/bin/setsid".to_string(),
-        "--wait".to_string(),
-        "/bin/bash".to_string(),
-        "--noprofile".to_string(),
-        "--norc".to_string(),
-        "-lc".to_string(),
-        build_wsl_run_wrapper_script(resize_control_path, execution_path),
-    ]
-}
-
-fn build_wsl_run_wrapper_script(resize_control_path: &str, execution_path: &str) -> String {
-    format!(
-        r#"
-tty_path="$(tty 2>/dev/null || true)"
-case "$tty_path" in
-  /dev/pts/[0-9]*|/dev/tty[0-9]*)
-    printf '%s\n' "$tty_path" > {} 2>/dev/null || true
-    ;;
-esac
-exec /usr/bin/env LANG=C.UTF-8 LC_ALL=C.UTF-8 TERM=xterm-256color /bin/bash --noprofile --norc {}
-"#,
-        bash_quote_for_wsl(resize_control_path),
-        bash_quote_for_wsl(execution_path),
-    )
-}
-
-fn bash_quote_for_wsl(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\"'\"'"))
-}
-
-fn build_resize_control_path() -> String {
-    let sequence = RUN_RESIZE_CONTROL_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-    format!("/tmp/calamex-rpty-resize-{}-{sequence}.ctl", now_ms())
-}
-
-fn sync_wsl_tty_size(control: &WslResizeControl, cols: u16, rows: u16) {
-    let mut command = StdCommand::new(&control.wsl_command_path);
-    configure_std_command_for_background(&mut command);
-    let _ = command
-        .args([
-            "--",
-            "/bin/sh",
-            "-lc",
-            WSL_RESIZE_CONTROL_SCRIPT,
-            "calamex-rpty-resize",
-            &control.control_path,
-            &rows.max(1).to_string(),
-            &cols.max(2).to_string(),
-        ])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-}
-
-fn cleanup_resize_control_file(control: &WslResizeControl) {
-    let mut command = StdCommand::new(&control.wsl_command_path);
-    configure_std_command_for_background(&mut command);
-    let _ = command
-        .args([
-            "--",
-            "/bin/sh",
-            "-lc",
-            "rm -f -- \"$1\"",
-            "calamex-rpty-cleanup",
-            &control.control_path,
-        ])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-}
-
-fn normalize_pty_size(cols: u16, rows: u16) -> PtySize {
-    PtySize {
-        cols: cols.max(2),
-        rows: rows.max(1),
-        pixel_width: 0,
-        pixel_height: 0,
-    }
 }
 
 pub fn now_ms() -> i64 {

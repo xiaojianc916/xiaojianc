@@ -1,9 +1,10 @@
 <template>
   <ScriptEditor
-ref="innerEditorRef" :document-path="documentPath" :model-value="modelValue" :theme="theme"
+ref="innerEditorRef" :document-path="documentPath" :model-value="modelValue" :theme="theme" :can-run="canRun"
     :analysis="analysisState" :editor-settings="editorSettings" :git-baseline="gitBaseline"
     @update:model-value="handleModelValueChange" @cursor-position-change="handleCursorPositionChange"
-    @format-request="emit('format-request')" @command-palette-request="emit('command-palette-request')" />
+    @format-request="emit('format-request')" @command-palette-request="emit('command-palette-request')"
+    @run-request="emit('run-request')" />
 </template>
 
 <script setup lang="ts">
@@ -37,12 +38,14 @@ const props = withDefaults(
     modelValue?: string;
     theme?: TThemeMode;
     editorSettings: IEditorSettings;
+    canRun?: boolean;
   }>(),
   {
     documentPath: null,
     documentName: '',
     modelValue: '',
     theme: 'dark',
+    canRun: false,
   },
 );
 
@@ -52,6 +55,7 @@ const emit = defineEmits<{
   'diagnostics-change': [documentId: string, payload: IAnalyzeScriptPayload];
   'format-request': [];
   'command-palette-request': [];
+  'run-request': [];
 }>();
 
 const innerEditorRef = ref<IEditorExpose | null>(null);

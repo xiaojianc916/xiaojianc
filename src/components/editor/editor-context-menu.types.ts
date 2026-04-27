@@ -17,6 +17,7 @@ export type TEditorContextMenuIcon = Extract<
   | 'goto'
   | 'undo'
   | 'redo'
+  | 'command'
 >;
 
 export type TEditorContextMenuAction =
@@ -27,6 +28,7 @@ export type TEditorContextMenuAction =
   | 'find'
   | 'goto-line'
   | 'quick-command'
+  | 'run-current-script'
   | 'cut'
   | 'copy'
   | 'paste'

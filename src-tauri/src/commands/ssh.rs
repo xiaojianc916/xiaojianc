@@ -2,9 +2,9 @@ use super::{
     configure_tokio_command_for_background, find_command_path, SshConfigHostPayload,
     SshConnectionTestPayload, SshConnectionTestRequest, SshDirectoryCreatePayload,
     SshDirectoryCreateRequest, SshDirectoryEntryPayload, SshDirectoryListPayload,
-    SshDirectoryListRequest, SshFileDownloadPayload, SshFileDownloadRequest,
-    SshFileUploadPayload, SshFileUploadRequest, SshPathDeletePayload, SshPathDeleteRequest,
-    SshPathRenamePayload, SshPathRenameRequest,
+    SshDirectoryListRequest, SshFileDownloadPayload, SshFileDownloadRequest, SshFileUploadPayload,
+    SshFileUploadRequest, SshPathDeletePayload, SshPathDeleteRequest, SshPathRenamePayload,
+    SshPathRenameRequest,
 };
 use std::{env, path::PathBuf, process::Stdio, time::Duration};
 use tokio::{fs, process::Command, time::timeout};
@@ -400,6 +400,41 @@ pub async fn rename_ssh_path(
     })
 }
 
+#[tauri::command]
+pub async fn create_ssh_directory(
+    payload: SshDirectoryCreateRequest,
+) -> Result<SshDirectoryCreatePayload, String> {
+    let host = payload.host.trim();
+    let username = payload.username.trim();
+    let remote_directory = normalize_remote_path(&payload.remote_directory);
+    let name = payload.name.trim();
+    if host.is_empty() {
+        return Err("请填写主机地址。".into());
+    }
+    if username.is_empty() {
+        return Err("请填写用户名。".into());
+    }
+    if payload.auth_mode == "password" {
+        return Err("密码认证暂不支持非交互式创建目录，请使用已配置的密钥或 SSH agent。".into());
+    }
+    if !is_safe_file_name(name) {
+        return Err("目录名称不能为空，且不能包含路径分隔符。".into());
+    }
+
+    let remote_path = join_remote_path(&remote_directory, name);
+    run_remote_mutation(
+        &payload.host,
+        payload.port,
+        &payload.username,
+        payload.identity_path.as_deref(),
+        build_remote_create_directory_script(&remote_path),
+        "创建远端目录",
+    )
+    .await?;
+
+    Ok(SshDirectoryCreatePayload { remote_path })
+}
+
 async fn run_remote_mutation(
     host: &str,
     port: u16,
@@ -556,6 +591,14 @@ fn build_remote_rename_script(old_path: &str, new_path: &str) -> String {
         quote_posix_shell(new_path),
         quote_posix_shell(old_path),
         quote_posix_shell(new_path)
+    )
+}
+
+fn build_remote_create_directory_script(path: &str) -> String {
+    format!(
+        "test ! -e {} || exit 4; mkdir -- {}",
+        quote_posix_shell(path),
+        quote_posix_shell(path)
     )
 }
 

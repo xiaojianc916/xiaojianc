@@ -39,6 +39,7 @@ const createShortcutMap = (): Record<TEditorContextMenuAction, string[]> => {
     find: [labels.primary, 'F'],
     'goto-line': [labels.primary, 'G'],
     'quick-command': ['F1'],
+    'run-current-script': [labels.primary, 'Enter'],
     cut: [labels.primary, 'X'],
     copy: [labels.primary, 'C'],
     paste: [labels.primary, 'V'],
@@ -50,8 +51,10 @@ const SHORTCUT_MAP = createShortcutMap();
 
 interface IUseEditorContextMenuOptions {
   getEditor: () => monaco.editor.IStandaloneCodeEditor | null;
+  canRunCurrentScript: () => boolean;
   onFormatRequest: () => void;
   onCommandPaletteRequest: () => void;
+  onRunCurrentScriptRequest: () => void;
 }
 
 interface IEditorContextMenuState {
@@ -289,6 +292,7 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
     const supportsGotoLine = supportsAction(editor, 'editor.action.gotoLine');
     const supportsCommentLine = supportsAction(editor, 'editor.action.commentLine');
     const hasModel = editor.getModel() !== null;
+    const canRunCurrentScript = options.canRunCurrentScript();
 
     const formatChildren: IEditorContextMenuItem[] = [
       {
@@ -330,6 +334,20 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
 
     return [
       {
+        key: 'run-actions',
+        title: 'RUN',
+        items: [
+          {
+            key: 'run-current-script',
+            label: '运行当前脚本',
+            icon: 'command',
+            shortcut: SHORTCUT_MAP['run-current-script'],
+            action: 'run-current-script',
+            disabled: !canRunCurrentScript,
+          },
+        ],
+      },
+      {
         key: 'history-actions',
         title: 'EDIT',
         items: [
@@ -343,7 +361,7 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
           },
           {
             key: 'redo',
-            label: '重做',
+            label: '恢复撤销',
             icon: 'redo',
             shortcut: SHORTCUT_MAP.redo,
             action: 'redo',
@@ -485,6 +503,9 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
         return;
       case 'quick-command':
         options.onCommandPaletteRequest();
+        return;
+      case 'run-current-script':
+        options.onRunCurrentScriptRequest();
         return;
       case 'cut':
         await cutEditorSelection(editor);

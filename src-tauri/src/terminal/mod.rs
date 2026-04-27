@@ -2,13 +2,18 @@
 // 部分契约类型预留给后续命令拆分与观测闭环，当前由命令层桥接生产路径。
 #![allow(dead_code)]
 
+pub mod ansi;
 pub mod event_bus;
 pub mod interactive_pty;
 pub mod multiplexer;
+pub mod pty;
 pub mod registry;
 pub mod run_supervisor;
 pub mod state_machine;
 pub mod types;
+pub mod utf8_decoder;
+pub mod visual;
+pub mod wsl;
 
 #[cfg(test)]
 pub(crate) mod test_support {

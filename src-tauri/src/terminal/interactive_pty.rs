@@ -8,9 +8,14 @@ use std::{
     thread,
 };
 
-use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty};
 
-use super::types::{Geometry, SessionId};
+use super::{
+    ansi::contains_cursor_position_query,
+    pty::normalize_geometry_pty_size,
+    types::{Geometry, SessionId},
+    wsl::to_wsl_path,
+};
 
 const INTERACTIVE_READ_BUFFER_SIZE: usize = 64 * 1024;
 
@@ -32,7 +37,7 @@ impl InteractivePty {
         let wsl_cwd = resolve_wsl_cwd(&cwd)?;
         let pty_system = native_pty_system();
         let pty_pair = pty_system
-            .openpty(normalize_pty_size(geometry))
+            .openpty(normalize_geometry_pty_size(geometry))
             .map_err(|error| format!("创建 iPTY 失败：{error}"))?;
 
         let mut command = CommandBuilder::new(wsl_command_path.to_string_lossy().as_ref());
@@ -151,7 +156,7 @@ impl InteractivePty {
             .lock()
             .map_err(|_| "iPTY 尺寸通道已损坏。".to_string())?;
         master
-            .resize(normalize_pty_size(geometry))
+            .resize(normalize_geometry_pty_size(geometry))
             .map_err(|error| format!("同步 iPTY 尺寸失败：{error}"))
     }
 
@@ -190,19 +195,6 @@ impl InteractivePty {
     }
 }
 
-fn normalize_pty_size(geometry: Geometry) -> PtySize {
-    PtySize {
-        cols: geometry.cols.max(2),
-        rows: geometry.rows.max(1),
-        pixel_width: 0,
-        pixel_height: 0,
-    }
-}
-
-fn contains_cursor_position_query(data: &[u8]) -> bool {
-    data.windows(4).any(|window| window == b"\x1b[6n")
-}
-
 fn resolve_wsl_command_path() -> Result<PathBuf, String> {
     let system_root = std::env::var_os("SystemRoot")
         .map(PathBuf::from)
@@ -224,30 +216,6 @@ fn resolve_wsl_cwd(cwd: &Path) -> Result<String, String> {
         return Ok(raw);
     }
     to_wsl_path(cwd)
-}
-
-fn to_wsl_path(path: &Path) -> Result<String, String> {
-    let normalized = path
-        .canonicalize()
-        .unwrap_or_else(|_| path.to_path_buf())
-        .to_string_lossy()
-        .to_string();
-    let normalized = normalized.strip_prefix(r"\\?\").unwrap_or(&normalized);
-    let drive_letter = normalized
-        .chars()
-        .next()
-        .ok_or_else(|| "无法识别 Windows 路径。".to_string())?;
-    if !drive_letter.is_ascii_alphabetic() || !normalized.contains(':') {
-        return Err(format!("无法转换为 WSL 路径：{normalized}"));
-    }
-    let rest = normalized
-        .get(2..)
-        .ok_or_else(|| "Windows 路径格式无效。".to_string())?;
-    Ok(format!(
-        "/mnt/{}/{}",
-        drive_letter.to_ascii_lowercase(),
-        rest.replace('\\', "/").trim_start_matches('/'),
-    ))
 }
 
 #[cfg(test)]

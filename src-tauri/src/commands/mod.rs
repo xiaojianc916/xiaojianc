@@ -1,3 +1,4 @@
+mod ai;
 mod contracts;
 mod git;
 mod script_run;
@@ -12,6 +13,7 @@ mod workspace_fs;
 #[cfg(windows)]
 const CREATE_NO_WINDOW_FLAG: u32 = 0x0800_0000;
 
+pub use ai::send_ai_chat;
 pub use contracts::{
     AnalyzeScriptPayload, AnalyzeScriptRequest, ExecutionEnvironment, ExecutionOption,
     FormatScriptPayload, FormatScriptRequest, ImageAssetPayload, SaveScriptRequest,
@@ -20,9 +22,9 @@ pub use contracts::{
     SshDirectoryEntryPayload, SshDirectoryListPayload, SshDirectoryListRequest,
     SshFileDownloadPayload, SshFileDownloadRequest, SshFileUploadPayload, SshFileUploadRequest,
     SshPathDeletePayload, SshPathDeleteRequest, SshPathRenamePayload, SshPathRenameRequest,
-    WorkspaceDirectoryPayload, WorkspaceEntry, WorkspacePathCreatePayload, WorkspacePathCreateRequest,
-    WorkspacePathDeletePayload, WorkspacePathDeleteRequest, WorkspacePathRenamePayload,
-    WorkspacePathRenameRequest,
+    WorkspaceDirectoryPayload, WorkspaceEntry, WorkspacePathCreatePayload,
+    WorkspacePathCreateRequest, WorkspacePathDeletePayload, WorkspacePathDeleteRequest,
+    WorkspacePathRenamePayload, WorkspacePathRenameRequest,
 };
 pub use git::{
     commit_git_index, discard_git_paths, get_git_file_baseline, get_git_repository_status,

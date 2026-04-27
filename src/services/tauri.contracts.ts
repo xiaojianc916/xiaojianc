@@ -64,6 +64,11 @@ const sshConnectionInputSchema = z.object({
   identityPath: z.string().nullable(),
 });
 
+const aiChatMessageSchema = z.object({
+  role: z.enum(['system', 'user', 'assistant']),
+  content: z.string().min(1),
+});
+
 const executionOptionSchema = z.object({
   type: executorKindSchema,
   label: z.string(),
@@ -447,6 +452,28 @@ export const tauriContracts = {
     outSchema: z.object({
       oldPath: z.string(),
       newPath: z.string(),
+    }),
+  },
+  createSshDirectory: {
+    inSchema: sshConnectionInputSchema.extend({
+      remoteDirectory: z.string(),
+      name: z.string().min(1),
+    }),
+    outSchema: z.object({
+      remotePath: z.string(),
+    }),
+  },
+  sendAiChat: {
+    inSchema: z.object({
+      endpoint: z.string().min(1),
+      apiKey: z.string().min(1),
+      model: z.string().min(1),
+      systemPrompt: z.string(),
+      messages: z.array(aiChatMessageSchema).min(1),
+    }),
+    outSchema: z.object({
+      content: z.string(),
+      model: z.string(),
     }),
   },
   ensureTerminalSession: {

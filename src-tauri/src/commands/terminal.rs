@@ -1,6 +1,6 @@
 use super::{configure_std_command_for_background, find_command_path};
 use chrono::Utc;
-use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -16,7 +16,18 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::terminal::{state_machine::StateMachine, types::TerminalState};
+use crate::terminal::{
+    pty::normalize_pty_size,
+    state_machine::StateMachine,
+    types::TerminalState,
+    utf8_decoder::Utf8ChunkDecoder,
+    visual::{
+        build_terminal_ansi_reset, build_terminal_run_separator, current_visual_tracker,
+        extract_prompt_from_terminal_snapshot, next_visual_run_seq,
+        observe_visual_output_and_prefix, TerminalRunVisualObservation, TerminalRunVisualTracker,
+    },
+    wsl as terminal_wsl,
+};
 
 const WSL_TEMP_DIRECTORY: &str = "/tmp";
 const TERMINAL_READ_BUFFER_SIZE: usize = 64 * 1024;
@@ -24,12 +35,7 @@ const TERMINAL_EVENT_FLUSH_INTERVAL: Duration = Duration::from_millis(16);
 const TERMINAL_EVENT_FLUSH_THRESHOLD: usize = 64 * 1024;
 const TERMINAL_RESIZE_REPAINT_SUPPRESSION: Duration = Duration::from_millis(240);
 const TERMINAL_SNAPSHOT_MAX_LENGTH: usize = 160 * 1024;
-const TERMINAL_ANSI_SAFE_RESET: &str =
-    "\x1b[?25h\x1b[?7h\x1b[m\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l";
-const TERMINAL_ANSI_EXIT_ALT_SCREEN: &str = "\x1b[?1049l";
-const TERMINAL_ANSI_RESET_SCROLL_REGION_PRESERVE_CURSOR: &str = "\x1b7\x1b[r\x1b8";
 const TERMINAL_PROMPT_MAX_LENGTH: usize = 240;
-
 static TEMP_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static TERMINAL_DATA_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static TERMINAL_RUN_CHUNK_SEQUENCE: AtomicU64 = AtomicU64::new(1);
@@ -223,11 +229,6 @@ impl Drop for TerminalActiveRunGuard {
     fn drop(&mut self) {
         clear_active_terminal_run(&self.state, &self.run_id);
     }
-}
-
-#[derive(Default)]
-struct TerminalUtf8ChunkDecoder {
-    pending: Vec<u8>,
 }
 
 enum TerminalEmitterMessage {
@@ -872,15 +873,6 @@ fn should_skip_snapshot_for_interactive_resize_repaint(
     is_likely_interactive_resize_repaint_frame(chunk)
 }
 
-fn normalize_pty_size(cols: u16, rows: u16) -> PtySize {
-    PtySize {
-        cols: cols.max(2),
-        rows: rows.max(1),
-        pixel_width: 0,
-        pixel_height: 0,
-    }
-}
-
 fn resize_session_master(session: &TerminalSession, cols: u16, rows: u16) -> Result<(), String> {
     let master = session
         .master
@@ -1215,6 +1207,10 @@ fn next_terminal_data_seq() -> u64 {
     TERMINAL_DATA_SEQUENCE.fetch_add(1, AtomicOrdering::Relaxed)
 }
 
+fn next_terminal_run_visual_seq() -> u64 {
+    TERMINAL_RUN_VISUAL_SEQUENCE.fetch_add(1, AtomicOrdering::Relaxed)
+}
+
 fn emit_terminal_run_chunk_with_visual_prefix(
     app: &AppHandle,
     state: &TerminalSessionState,
@@ -1253,152 +1249,8 @@ fn emit_terminal_run_chunk_with_visual_prefix(
     );
 }
 
-#[derive(Debug, Clone, Copy)]
-struct TerminalRunVisualTracker {
-    has_output: bool,
-    ended_at_line_start: bool,
-    next_seq: u64,
-    alt_screen_active: bool,
-    scroll_region_changed: bool,
-}
-
-impl Default for TerminalRunVisualTracker {
-    fn default() -> Self {
-        Self {
-            has_output: false,
-            ended_at_line_start: false,
-            next_seq: 1,
-            alt_screen_active: false,
-            scroll_region_changed: false,
-        }
-    }
-}
-
-impl TerminalRunVisualTracker {
-    fn allocate_seq(&mut self) -> u64 {
-        let seq = self.next_seq;
-        self.next_seq += 1;
-        seq
-    }
-
-    fn observe(&mut self, data: &str) {
-        if data.is_empty() {
-            return;
-        }
-        self.observe_ansi_state(data);
-        self.has_output = true;
-        self.ended_at_line_start = data.ends_with('\n') || data.ends_with('\r');
-    }
-
-    fn observe_ansi_state(&mut self, data: &str) {
-        let bytes = data.as_bytes();
-        let mut index = 0;
-
-        while index + 2 < bytes.len() {
-            if bytes[index] != 0x1b || bytes[index + 1] != b'[' {
-                index += 1;
-                continue;
-            }
-
-            let params_start = index + 2;
-            let mut cursor = params_start;
-            while cursor < bytes.len() {
-                let byte = bytes[cursor];
-                if (0x40..=0x7e).contains(&byte) {
-                    if let Some(params) = data.get(params_start..cursor) {
-                        self.observe_csi(params, byte);
-                    }
-                    index = cursor + 1;
-                    break;
-                }
-                cursor += 1;
-            }
-
-            if cursor >= bytes.len() {
-                break;
-            }
-        }
-    }
-
-    fn observe_csi(&mut self, params: &str, final_byte: u8) {
-        match final_byte {
-            b'h' if csi_private_params_contain(params, &[47, 1047, 1049]) => {
-                self.alt_screen_active = true;
-            }
-            b'l' if csi_private_params_contain(params, &[47, 1047, 1049]) => {
-                self.alt_screen_active = false;
-            }
-            b'r' => {
-                self.scroll_region_changed = true;
-            }
-            _ => {}
-        }
-    }
-}
-
-fn csi_private_params_contain(params: &str, needles: &[u16]) -> bool {
-    let Some(private_params) = params.strip_prefix('?') else {
-        return false;
-    };
-
-    private_params.split(';').any(|part| {
-        let digits = part
-            .bytes()
-            .take_while(|byte| byte.is_ascii_digit())
-            .collect::<Vec<_>>();
-        if digits.is_empty() {
-            return false;
-        }
-
-        std::str::from_utf8(&digits)
-            .ok()
-            .and_then(|value| value.parse::<u16>().ok())
-            .is_some_and(|value| needles.contains(&value))
-    })
-}
-
-#[derive(Debug, Clone, Copy)]
-struct TerminalRunVisualObservation {
-    prefix: &'static str,
-    run_seq: u64,
-}
-
-fn observe_visual_output_and_prefix(
-    tracker: &Arc<Mutex<TerminalRunVisualTracker>>,
-    data: &str,
-) -> TerminalRunVisualObservation {
-    if let Ok(mut tracker) = tracker.lock() {
-        let prefix = if !tracker.has_output && !data.starts_with(['\r', '\n']) {
-            "\r\n"
-        } else {
-            ""
-        };
-        let run_seq = tracker.allocate_seq();
-        tracker.observe(data);
-        TerminalRunVisualObservation { prefix, run_seq }
-    } else {
-        TerminalRunVisualObservation {
-            prefix: "",
-            run_seq: 0,
-        }
-    }
-}
-
-fn current_visual_tracker(
-    tracker: &Arc<Mutex<TerminalRunVisualTracker>>,
-) -> TerminalRunVisualTracker {
-    tracker.lock().map(|value| *value).unwrap_or_default()
-}
-
-fn next_terminal_run_visual_seq() -> u64 {
-    TERMINAL_RUN_VISUAL_SEQUENCE.fetch_add(1, AtomicOrdering::Relaxed)
-}
-
-fn next_visual_run_seq(tracker: &Arc<Mutex<TerminalRunVisualTracker>>) -> u64 {
-    tracker
-        .lock()
-        .map(|mut tracker| tracker.allocate_seq())
-        .unwrap_or(0)
+fn next_terminal_run_chunk_seq() -> u64 {
+    TERMINAL_RUN_CHUNK_SEQUENCE.fetch_add(1, AtomicOrdering::Relaxed)
 }
 
 fn emit_terminal_run_visual_completion(
@@ -1448,84 +1300,6 @@ fn emit_terminal_run_visual_completion(
             run_seq: Some(separator_run_seq),
         },
     );
-}
-
-fn build_terminal_ansi_reset(tracker: TerminalRunVisualTracker) -> String {
-    let mut reset = String::new();
-    if tracker.alt_screen_active {
-        reset.push_str(TERMINAL_ANSI_EXIT_ALT_SCREEN);
-    }
-    reset.push_str(TERMINAL_ANSI_SAFE_RESET);
-    if tracker.scroll_region_changed {
-        reset.push_str(TERMINAL_ANSI_RESET_SCROLL_REGION_PRESERVE_CURSOR);
-    }
-    reset
-}
-
-fn build_terminal_run_separator(
-    visual_seq: u64,
-    exit_code: Option<i32>,
-    duration: Duration,
-    tracker: TerminalRunVisualTracker,
-    prompt: Option<String>,
-) -> String {
-    let prefix = if tracker.has_output && tracker.ended_at_line_start {
-        ""
-    } else {
-        "\r\n"
-    };
-    let exit_label = exit_code
-        .map(|code| format!("exit {code}"))
-        .unwrap_or_else(|| "exit ?".to_string());
-    let duration_secs = duration.as_secs_f64();
-    let mut text =
-        format!("{prefix}──── run #{visual_seq} · {exit_label} · {duration_secs:.1}s ────\r\n");
-    if let Some(prompt) = prompt {
-        text.push_str(&prompt);
-    }
-    text
-}
-
-fn extract_prompt_from_terminal_snapshot(snapshot: &str) -> Option<String> {
-    if snapshot.is_empty() {
-        return None;
-    }
-
-    let marker_index = snapshot
-        .char_indices()
-        .rev()
-        .find_map(|(index, character)| matches!(character, '$' | '#').then_some(index))?;
-    let prefix = &snapshot[..=marker_index];
-    let start = prefix
-        .rfind("\x1b[32m")
-        .or_else(|| prefix.rfind("\x1b[1m"))
-        .or_else(|| prefix.rfind('['))
-        .or_else(|| prefix.rfind('\n').map(|index| index + 1))
-        .or_else(|| prefix.rfind('\r').map(|index| index + 1))
-        .unwrap_or(0);
-    let mut prompt = snapshot[start..]
-        .split(['\r', '\n'])
-        .next()
-        .unwrap_or_default()
-        .to_string();
-
-    if prompt.len() > TERMINAL_PROMPT_MAX_LENGTH
-        || !prompt
-            .chars()
-            .any(|character| matches!(character, '$' | '#'))
-    {
-        return None;
-    }
-
-    if !prompt.ends_with(' ') {
-        prompt.push(' ');
-    }
-
-    Some(prompt)
-}
-
-fn next_terminal_run_chunk_seq() -> u64 {
-    TERMINAL_RUN_CHUNK_SEQUENCE.fetch_add(1, AtomicOrdering::Relaxed)
 }
 
 fn flush_terminal_data_buffer(
@@ -1607,7 +1381,7 @@ fn spawn_terminal_reader(
     thread::spawn(move || {
         let mut buffer = [0_u8; TERMINAL_READ_BUFFER_SIZE];
         let mut decoded_chunk = String::new();
-        let mut decoder = TerminalUtf8ChunkDecoder::default();
+        let mut decoder = Utf8ChunkDecoder::default();
 
         loop {
             match reader.read(&mut buffer) {
@@ -1840,53 +1614,6 @@ fn spawn_terminal_run(
     });
 }
 
-impl TerminalUtf8ChunkDecoder {
-    fn decode_into(&mut self, input: &[u8], output: &mut String, last: bool) {
-        if !input.is_empty() {
-            self.pending.extend_from_slice(input);
-        }
-
-        loop {
-            if self.pending.is_empty() {
-                return;
-            }
-
-            match std::str::from_utf8(&self.pending) {
-                Ok(valid) => {
-                    output.push_str(valid);
-                    self.pending.clear();
-                    return;
-                }
-                Err(error) => {
-                    let valid_up_to = error.valid_up_to();
-
-                    if valid_up_to > 0 {
-                        if let Ok(valid_prefix) = std::str::from_utf8(&self.pending[..valid_up_to])
-                        {
-                            output.push_str(valid_prefix);
-                        }
-                        self.pending.drain(..valid_up_to);
-                        continue;
-                    }
-
-                    if let Some(error_len) = error.error_len() {
-                        output.push('\u{FFFD}');
-                        self.pending.drain(..error_len);
-                        continue;
-                    }
-
-                    if last {
-                        output.push('\u{FFFD}');
-                        self.pending.clear();
-                    }
-
-                    return;
-                }
-            }
-        }
-    }
-}
-
 fn prepare_terminal_dispatch_script(
     payload: &DispatchTerminalScriptRequest,
     terminal_working_directory: &str,
@@ -1969,56 +1696,20 @@ fn build_terminal_run_command(
 }
 
 pub(crate) fn to_wsl_path(path: &Path) -> Result<String, String> {
-    let normalized = path
-        .canonicalize()
-        .unwrap_or_else(|_| path.to_path_buf())
-        .to_string_lossy()
-        .to_string();
-
-    let normalized = normalize_windows_path_for_wsl(&normalized)?;
-
-    let drive_letter = normalized
-        .chars()
-        .next()
-        .ok_or_else(|| "无法识别 Windows 路径。".to_string())?;
-
-    if !drive_letter.is_ascii_alphabetic() || !normalized.contains(':') {
-        return Err("仅支持 Windows 本地磁盘路径转换为 WSL 路径。".into());
-    }
-
-    let rest = normalized
-        .get(2..)
-        .ok_or_else(|| "Windows 路径格式无效。".to_string())?;
-
-    Ok(format!(
-        "/mnt/{}/{}",
-        drive_letter.to_ascii_lowercase(),
-        rest.replace('\\', "/").trim_start_matches('/'),
-    ))
-}
-
-fn normalize_windows_path_for_wsl(value: &str) -> Result<String, String> {
-    if let Some(network_path) = value.strip_prefix(r"\\?\UNC\") {
-        return Err(format!(
-            "暂不支持将网络共享路径转换为 WSL 路径：\\\\{}",
-            network_path
-        ));
-    }
-
-    if let Some(extended_path) = value.strip_prefix(r"\\?\") {
-        return Ok(extended_path.to_string());
-    }
-
-    Ok(value.to_string())
+    terminal_wsl::to_wsl_path(path)
 }
 
 fn bash_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\"'\"'"))
+    terminal_wsl::bash_quote(value)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::terminal::visual::{
+        TERMINAL_ANSI_EXIT_ALT_SCREEN, TERMINAL_ANSI_RESET_SCROLL_REGION_PRESERVE_CURSOR,
+        TERMINAL_ANSI_SAFE_RESET,
+    };
     use std::{
         fs,
         sync::{Arc, Mutex},
