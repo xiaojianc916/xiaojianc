@@ -1,5 +1,7 @@
 import {
   aiEditAuthStateSchema,
+  aiEditCreateSnapshotPayloadSchema,
+  aiEditCreateSnapshotRequestSchema,
   aiEditListTimelinePayloadSchema,
   aiEditListTimelineRequestSchema,
   aiEditRestoreSnapshotPayloadSchema,
@@ -625,6 +627,10 @@ export const tauriContracts = {
   aiEditListTimeline: {
     inSchema: aiEditListTimelineRequestSchema,
     outSchema: aiEditListTimelinePayloadSchema,
+  },
+  aiEditCreateSnapshot: {
+    inSchema: aiEditCreateSnapshotRequestSchema,
+    outSchema: aiEditCreateSnapshotPayloadSchema,
   },
   aiEditRestoreSnapshot: {
     inSchema: aiEditRestoreSnapshotRequestSchema,

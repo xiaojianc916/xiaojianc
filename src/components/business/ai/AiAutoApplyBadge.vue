@@ -2,11 +2,21 @@
 import AppDropdownMenu from '@/components/common/AppDropdownMenu.vue';
 import { useAiAutoApply } from '@/composables/useAiAutoApply';
 import { useAiEditTimeline } from '@/composables/useAiEditTimeline';
+import { useAiRevert } from '@/composables/useAiRevert';
 import type { TAiEditAuthLevel } from '@/types/ai-edit';
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+
+import AiRevertConfirmDialog from './AiRevertConfirmDialog.vue';
 
 const autoApply = useAiAutoApply();
 const timeline = useAiEditTimeline();
+const revert = useAiRevert();
+
+const dialogOpen = ref(false);
+const dialogTitle = ref('');
+const dialogDescription = ref('');
+const dialogConfirmText = ref('确认回滚');
+const pendingAction = ref<'undo-last' | 'revert-task' | 'restore-latest-snapshot' | null>(null);
 
 const toneClass = computed(() => {
     switch (autoApply.authLevel.value) {
@@ -30,7 +40,16 @@ const modeLabel = computed(() => {
     }
 });
 
-const timelineCountLabel = computed(() => `${timeline.timelineEntries.value.length} edits`);
+const timelineCountLabel = computed(() => `${timeline.editedFileCount.value} 文件已编辑`);
+
+const currentTaskSummary = computed(() => {
+    if (!revert.currentTaskId.value) {
+        return '当前任务暂无 AED 记录';
+    }
+
+    const entryCount = timeline.activeTaskEntries.value.length;
+    return `当前任务 · ${entryCount} 条记录`;
+});
 
 const menuItems = computed(() => [
     {
@@ -52,11 +71,25 @@ const menuItems = computed(() => [
         selected: autoApply.authLevel.value === 'session',
     },
     {
-        key: 'revert-placeholder',
-        label: '回滚入口即将接入',
-        description: 'Task Revert / Snapshot Restore / Per-file Revert 下一步接入',
+        key: 'undo-last',
+        label: '撤销最近一次 AI 编辑',
+        description: revert.latestUndoableOperation.value
+            ? `当前文件 · ${revert.latestUndoableOperation.value.path}`
+            : '当前任务暂无可撤销编辑',
         separatorBefore: true,
-        disabled: true,
+        disabled: !revert.canUndoLastEdit.value,
+    },
+    {
+        key: 'revert-task',
+        label: '回滚当前任务',
+        description: currentTaskSummary.value,
+        disabled: !revert.canRevertTask.value,
+    },
+    {
+        key: 'restore-latest-snapshot',
+        label: '恢复最近快照',
+        description: revert.latestSnapshot.value?.label ?? '当前任务暂无快照',
+        disabled: !revert.canRestoreLatestSnapshot.value,
     },
 ]);
 
@@ -64,16 +97,86 @@ const setAuthLevel = async (level: TAiEditAuthLevel): Promise<void> => {
     await autoApply.setAuthLevel({ level });
 };
 
+const syncTimeline = (): void => {
+    const taskId = autoApply.activeTaskId.value;
+    void timeline.loadTimeline(taskId ? { taskId } : {}).catch(() => undefined);
+};
+
+const openDialog = (
+    action: 'undo-last' | 'revert-task' | 'restore-latest-snapshot',
+): void => {
+    pendingAction.value = action;
+
+    if (action === 'undo-last') {
+        dialogTitle.value = '确认撤销最近一次 AI 编辑';
+        dialogDescription.value = revert.latestUndoableOperation.value
+            ? `将恢复文件“${revert.latestUndoableOperation.value.path}”到这次 AED 编辑前的快照内容。`
+            : '当前任务没有可撤销的 AED 编辑。';
+        dialogConfirmText.value = '确认撤销';
+    } else if (action === 'revert-task') {
+        dialogTitle.value = '确认回滚当前任务';
+        dialogDescription.value = revert.currentTaskId.value
+            ? `将把当前任务涉及的 AED 编辑恢复到 task-start / pre-tool 快照记录的状态。`
+            : '当前任务没有可回滚的 AED 记录。';
+        dialogConfirmText.value = '确认回滚';
+    } else {
+        dialogTitle.value = '确认恢复最近快照';
+        dialogDescription.value = revert.latestSnapshot.value
+            ? `将把当前任务恢复到快照“${revert.latestSnapshot.value.label}”记录的内容。`
+            : '当前任务没有可恢复的 AED 快照。';
+        dialogConfirmText.value = '确认恢复';
+    }
+
+    dialogOpen.value = true;
+};
+
+const handleDialogConfirm = async (): Promise<void> => {
+    if (!pendingAction.value) {
+        dialogOpen.value = false;
+        return;
+    }
+
+    const result = pendingAction.value === 'undo-last'
+        ? await revert.undoLastEdit()
+        : pendingAction.value === 'revert-task'
+            ? await revert.revertCurrentTask()
+            : await revert.restoreLatestSnapshot();
+
+    if (result.status === 'success') {
+        dialogOpen.value = false;
+        pendingAction.value = null;
+        syncTimeline();
+        return;
+    }
+
+    dialogTitle.value = '回滚失败';
+    dialogDescription.value = result.error.message;
+    dialogConfirmText.value = '知道了';
+    pendingAction.value = null;
+};
+
 const handleSelect = (key: string): void => {
     if (key === 'manual' || key === 'per_task' || key === 'session') {
         void setAuthLevel(key);
+        return;
+    }
+
+    if (key === 'undo-last' || key === 'revert-task' || key === 'restore-latest-snapshot') {
+        openDialog(key);
     }
 };
 
 onMounted(() => {
     autoApply.loadAuthState().catch(() => undefined);
-    timeline.loadTimeline().catch(() => undefined);
+    syncTimeline();
 });
+
+watch(
+    () => autoApply.activeTaskId.value,
+    () => {
+        syncTimeline();
+    },
+);
 </script>
 
 <template>
@@ -88,6 +191,9 @@ onMounted(() => {
             </button>
         </template>
     </AppDropdownMenu>
+
+    <AiRevertConfirmDialog :open="dialogOpen" :title="dialogTitle" :description="dialogDescription"
+        :confirm-text="dialogConfirmText" @close="dialogOpen = false" @confirm="handleDialogConfirm" />
 </template>
 
 <style scoped>

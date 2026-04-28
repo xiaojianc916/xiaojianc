@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { useAiAutoApply } from '@/composables/useAiAutoApply';
 import { AI_PROVIDER_PRESETS, findAiProviderPreset } from '@/constants/ai-providers';
 import type {
     IAiConfigPayload,
     IAiProviderSettingsActionFeedback,
     TAiProviderType,
 } from '@/types/ai';
+import type { TAiEditAuthLevel } from '@/types/ai-edit';
 import { tryWriteClipboardText } from '@/utils/clipboard';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
@@ -43,6 +45,7 @@ const emit = defineEmits<{
 
 const nextConfig = defineModel<IAiConfigPayload>('draft', { required: true });
 const apiKey = defineModel<string>('apiKey', { required: true });
+const autoApply = useAiAutoApply();
 
 const statusMessage = ref('');
 const statusTone = ref<'success' | 'error' | 'info'>('info');
@@ -107,6 +110,70 @@ const requiresApiKey = computed(
 
 const canTestProvider = computed(() => !isTesting.value);
 const canSaveProvider = computed(() => !isSaving.value);
+const autoApplyOptions = computed<
+    Array<{ value: TAiEditAuthLevel; label: string; description: string }>
+>(() => [
+    {
+        value: 'manual',
+        label: '手动审批',
+        description: '保留 patch 预览，逐次确认后再写盘。',
+    },
+    {
+        value: 'per_task',
+        label: '任务内自动应用',
+        description: '当前对话线程内自动写盘，关闭任务后回到手动模式。',
+    },
+    {
+        value: 'session',
+        label: '会话内自动应用',
+        description: '当前应用会话持续自动写盘，重启后恢复手动模式。',
+    },
+]);
+const autoApplyModeLabel = computed(() => {
+    switch (autoApply.authLevel.value) {
+        case 'per_task':
+            return 'Per-task';
+        case 'session':
+            return 'Session';
+        default:
+            return 'Manual';
+    }
+});
+const autoApplyStatusLabel = computed(() => {
+    switch (autoApply.authLevel.value) {
+        case 'per_task':
+            return autoApply.activeTaskId.value
+                ? '当前对话线程已授权自动写盘。'
+                : '当前暂无活跃任务，切回对话后会自动绑定 taskId。';
+        case 'session':
+            return '当前应用会话内允许 Agent 自动应用 patch。';
+        default:
+            return '当前仍为手动审批模式，Agent 写盘前必须显式确认。';
+    }
+});
+const autoApplyUpdatedAtLabel = computed(() => {
+    const parsed = Date.parse(autoApply.authState.value.updatedAt);
+    if (!Number.isFinite(parsed)) {
+        return '尚未记录授权变更';
+    }
+
+    return new Intl.DateTimeFormat('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    }).format(new Date(parsed));
+});
+const autoApplyToneClass = computed(() => {
+    switch (autoApply.authLevel.value) {
+        case 'per_task':
+            return 'is-task';
+        case 'session':
+            return 'is-session';
+        default:
+            return 'is-manual';
+    }
+});
 
 const syncDraftWithProviderPreset = (providerType: TAiProviderType): void => {
     const preset = findAiProviderPreset(providerType);
@@ -202,6 +269,25 @@ const updateProvider = (providerType: string): void => {
 const updateModel = (model: string): void => {
     nextConfig.value.selectedModel = model;
     closeDropdowns();
+};
+
+const updateAutoApplyLevel = async (level: TAiEditAuthLevel): Promise<void> => {
+    if (autoApply.authLevel.value === level) {
+        return;
+    }
+
+    try {
+        showStatus('正在更新 AED 授权…', 'info', false);
+        await autoApply.setAuthLevel({ level });
+        showStatus(`AED 授权已切换到 ${autoApplyModeLabel.value}`, 'success');
+    } catch (error) {
+        showStatus(
+            error instanceof Error && error.message.trim()
+                ? error.message
+                : 'AED 授权更新失败',
+            'error',
+        );
+    }
 };
 
 const createActionFeedback = (
@@ -301,6 +387,7 @@ watch(
         if (!nextConfig.value.selectedModel && activePreset.value.defaultModel) {
             nextConfig.value.selectedModel = activePreset.value.defaultModel;
         }
+        void autoApply.loadAuthState().catch(() => undefined);
     },
     { immediate: true },
 );
@@ -308,6 +395,7 @@ watch(
 onMounted(() => {
     document.addEventListener('click', onDocumentClick);
     document.addEventListener('keydown', onDocumentKeydown);
+    void autoApply.loadAuthState().catch(() => undefined);
 });
 
 onBeforeUnmount(() => {
@@ -435,6 +523,35 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
                     </div>
+
+                    <section class="aed-section" aria-label="AED 授权设置">
+                        <div class="aed-section__header">
+                            <div>
+                                <span class="aed-section__eyebrow">Agent Edit</span>
+                                <strong>自动应用授权</strong>
+                            </div>
+                            <span class="aed-section__badge" :class="autoApplyToneClass">{{ autoApplyModeLabel }}</span>
+                        </div>
+                        <p class="aed-section__copy">控制 Agent patch 是保持手动审批，还是在当前任务 / 当前会话内直接自动应用。</p>
+
+                        <div class="aed-auth-grid">
+                            <button v-for="option in autoApplyOptions" :key="option.value" type="button"
+                                class="aed-auth-card" :class="{
+                                    'is-selected': option.value === autoApply.authLevel.value,
+                                    'is-manual': option.value === 'manual',
+                                    'is-task': option.value === 'per_task',
+                                    'is-session': option.value === 'session',
+                                }" @click="updateAutoApplyLevel(option.value)">
+                                <span class="aed-auth-card__title">{{ option.label }}</span>
+                                <span class="aed-auth-card__description">{{ option.description }}</span>
+                            </button>
+                        </div>
+
+                        <div class="aed-section__meta">
+                            <span>{{ autoApplyStatusLabel }}</span>
+                            <span>最近变更：{{ autoApplyUpdatedAtLabel }}</span>
+                        </div>
+                    </section>
                 </div>
 
                 <div class="modal-footer">
@@ -913,6 +1030,131 @@ input[type='number'] {
     margin-bottom: 14px;
 }
 
+.aed-section {
+    display: grid;
+    gap: 12px;
+    margin-top: 4px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
+    padding: 14px;
+}
+
+.aed-section__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.aed-section__header strong {
+    display: block;
+    color: var(--fg-primary);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.aed-section__eyebrow {
+    display: inline-flex;
+    margin-bottom: 6px;
+    color: var(--fg-muted);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.aed-section__badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    padding: 4px 9px;
+    color: var(--fg-secondary);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.aed-section__badge.is-task {
+    border-color: rgba(86, 168, 255, 0.35);
+    background: rgba(86, 168, 255, 0.12);
+    color: #dcecff;
+}
+
+.aed-section__badge.is-session {
+    border-color: rgba(245, 158, 11, 0.42);
+    background: rgba(245, 158, 11, 0.14);
+    color: #fff1cf;
+}
+
+.aed-section__copy,
+.aed-section__meta {
+    color: var(--fg-secondary);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.aed-section__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    color: var(--fg-tertiary);
+}
+
+.aed-auth-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.aed-auth-card {
+    display: grid;
+    gap: 6px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background: var(--bg-input);
+    padding: 12px;
+    text-align: left;
+    transition: border-color 0.12s var(--ease), background 0.12s var(--ease), transform 0.12s var(--ease);
+}
+
+.aed-auth-card:hover {
+    background: var(--bg-input-hover);
+    border-color: var(--border);
+}
+
+.aed-auth-card:active {
+    transform: scale(0.985);
+}
+
+.aed-auth-card.is-selected {
+    box-shadow: 0 0 0 1px var(--accent-ring);
+}
+
+.aed-auth-card.is-task.is-selected {
+    border-color: rgba(86, 168, 255, 0.42);
+    background: rgba(86, 168, 255, 0.12);
+}
+
+.aed-auth-card.is-session.is-selected {
+    border-color: rgba(245, 158, 11, 0.42);
+    background: rgba(245, 158, 11, 0.14);
+}
+
+.aed-auth-card__title {
+    color: var(--fg-primary);
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.aed-auth-card__description {
+    color: var(--fg-tertiary);
+    font-size: 11.5px;
+    line-height: 1.5;
+}
+
 .slider-item {
     flex: 1;
 }
@@ -978,6 +1220,16 @@ input[type='range']::-moz-range-thumb {
     align-items: center;
     gap: 8px;
     background: var(--bg-elevated);
+}
+
+@media (max-width: 720px) {
+    .aed-auth-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .aed-section__header {
+        flex-direction: column;
+    }
 }
 
 .btn {

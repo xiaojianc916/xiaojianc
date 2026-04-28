@@ -2,6 +2,7 @@ use super::contracts::{
     AiAgentPlanPayload, AiAgentPlanRequest, AiApplyPatchPayload, AiApplyPatchRequest,
     AiBuildIndexPayload, AiBuildIndexRequest, AiCancelRequest, AiChatMessagePayload, AiChatPayload, AiChatRequest, AiChatStreamPayload,
     AiCodeActionPayload, AiCodeActionRequest, AiConfigPayload, AiInlineCompletionRangePayload,
+    AiEditCreateSnapshotPayload, AiEditCreateSnapshotRequest,
     AiEditAuthStatePayload, AiEditListTimelinePayload, AiEditListTimelineRequest,
     AiEditRestoreSnapshotPayload, AiEditRestoreSnapshotRequest, AiEditRevertTaskPayload,
     AiEditRevertTaskRequest, AiEditSetAuthLevelRequest, AiEditUndoOperationPayload,
@@ -245,6 +246,16 @@ pub fn ai_edit_list_timeline(
     let stored_snapshots = ai_edit::snapshot::list_stored_snapshots(&snapshot_root)?;
     let stored_operations = ai_edit::edit_journal::list_operations(&snapshot_root)?;
     ai_edit::list_timeline_with_state(payload, state.inner(), stored_snapshots, stored_operations)
+}
+
+#[tauri::command]
+pub fn ai_edit_create_snapshot(
+    app: AppHandle,
+    payload: AiEditCreateSnapshotRequest,
+    state: State<AiEditState>,
+) -> Result<AiEditCreateSnapshotPayload, String> {
+    let snapshot_root = resolve_ai_edit_storage_root(&app)?;
+    ai_edit::create_snapshot(payload, &snapshot_root, state.inner())
 }
 
 #[tauri::command]

@@ -384,7 +384,10 @@ impl SnapshotManifest {
 
 #[cfg(test)]
 mod tests {
-	use super::{list_stored_snapshots, store_pre_tool_snapshot, SnapshotManifest, SnapshotSourceFile};
+	use super::{
+		list_stored_snapshots, store_manual_snapshot, store_pre_tool_snapshot, SnapshotManifest,
+		SnapshotSourceFile,
+	};
 	use crate::commands::contracts::AiApplyPatchMetadataRequest;
 	use std::fs;
 
@@ -442,6 +445,45 @@ mod tests {
 		let restored = list_stored_snapshots(&temp_dir).expect("snapshots should be listed");
 		assert_eq!(restored.len(), 1);
 		assert_eq!(restored[0].id, snapshot.id);
+
+		let _ = fs::remove_dir_all(&temp_dir);
+	}
+
+	#[test]
+	fn store_manual_snapshot_uses_manual_scope() {
+		let temp_dir = std::env::temp_dir().join(format!(
+			"aed-manual-snapshot-{}",
+			std::time::SystemTime::now()
+				.duration_since(std::time::UNIX_EPOCH)
+				.expect("time should move forward")
+				.as_nanos()
+		));
+		fs::create_dir_all(&temp_dir).expect("temp directory should be created");
+
+		let snapshot = store_manual_snapshot(
+			&temp_dir,
+			&[SnapshotSourceFile {
+				path: "src/main.ts",
+				content_hash: "fnv64:manual",
+				content: "console.log('manual');",
+			}],
+			Some(&AiApplyPatchMetadataRequest {
+				task_id: Some("task-manual".to_string()),
+				turn_id: None,
+				reason: Some("Pin checkpoint".to_string()),
+				tool_call_id: None,
+				confirmed_by_user: Some(true),
+			}),
+			"Pin checkpoint",
+		)
+		.expect("manual snapshot should be written");
+
+		let restored = list_stored_snapshots(&temp_dir).expect("snapshots should be listed");
+
+		assert_eq!(snapshot.scope, "manual");
+		assert_eq!(snapshot.task_id, "task-manual");
+		assert_eq!(restored.len(), 1);
+		assert_eq!(restored[0].scope, "manual");
 
 		let _ = fs::remove_dir_all(&temp_dir);
 	}

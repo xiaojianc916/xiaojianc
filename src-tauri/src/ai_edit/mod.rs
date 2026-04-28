@@ -10,7 +10,8 @@ pub mod timeline;
 use crate::ai::audit::{self, AiAuditEventKind};
 use crate::commands::contracts::{
     AiApplyPatchMetadataRequest,
-    AiEditAuthStatePayload, AiEditListTimelinePayload, AiEditListTimelineRequest,
+    AiEditAuthStatePayload, AiEditCreateSnapshotPayload, AiEditCreateSnapshotRequest,
+    AiEditListTimelinePayload, AiEditListTimelineRequest,
     AiEditOperationPayload, AiEditRestoreSnapshotPayload, AiEditRestoreSnapshotRequest,
     AiEditRevertTaskPayload, AiEditRevertTaskRequest, AiEditSetAuthLevelRequest,
     AiEditTimelineEntryPayload, AiEditUndoOperationPayload, AiEditUndoOperationRequest,
@@ -18,6 +19,7 @@ use crate::commands::contracts::{
 };
 use chrono::Utc;
 use std::collections::HashSet;
+use std::fs;
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -218,6 +220,83 @@ pub fn restore_snapshot(
     revert::restore_snapshot(payload, storage_root, state)
 }
 
+pub fn create_snapshot(
+    payload: AiEditCreateSnapshotRequest,
+    storage_root: &Path,
+    state: &AiEditState,
+) -> Result<AiEditCreateSnapshotPayload, String> {
+    let task_id = payload
+        .task_id
+        .and_then(normalize_optional_string)
+        .unwrap_or_else(|| "manual-preview".to_string());
+    let label = payload
+        .label
+        .and_then(normalize_optional_string)
+        .unwrap_or_else(|| "Pin checkpoint".to_string());
+    let mut deduped = HashSet::new();
+    let file_refs = payload
+        .file_refs
+        .into_iter()
+        .filter_map(normalize_optional_string)
+        .filter(|value| deduped.insert(value.clone()))
+        .collect::<Vec<_>>();
+
+    if file_refs.is_empty() {
+        return Err(errors::snapshot_store_failed("手动快照至少需要一个文件。"));
+    }
+
+    let mut file_buffers = Vec::with_capacity(file_refs.len());
+    for file_ref in &file_refs {
+        let normalized = file_ref.replace('\\', "/");
+        if protected_paths::is_builtin_protected_path(&normalized) {
+            return Err(errors::snapshot_store_failed(format!(
+                "手动快照不支持受保护路径：{file_ref}"
+            )));
+        }
+
+        let path = Path::new(file_ref);
+        if !path.is_file() {
+            return Err(errors::snapshot_store_failed(format!(
+                "手动快照文件不存在：{file_ref}"
+            )));
+        }
+
+        let content = fs::read_to_string(path).map_err(|error| {
+            errors::snapshot_store_failed(format!(
+                "读取手动快照文件失败（{file_ref}）：{error}"
+            ))
+        })?;
+        let content_hash = crate::ai_patch::hash_text(&content);
+        file_buffers.push((file_ref.clone(), content_hash, content));
+    }
+
+    let snapshot_sources = file_buffers
+        .iter()
+        .map(|file| snapshot::SnapshotSourceFile {
+            path: file.0.as_str(),
+            content_hash: file.1.as_str(),
+            content: file.2.as_str(),
+        })
+        .collect::<Vec<_>>();
+    let metadata = AiApplyPatchMetadataRequest {
+        task_id: Some(task_id),
+        turn_id: None,
+        reason: Some(label.clone()),
+        tool_call_id: None,
+        confirmed_by_user: Some(true),
+    };
+    let snapshot = snapshot::store_manual_snapshot(
+        storage_root,
+        &snapshot_sources,
+        Some(&metadata),
+        &label,
+    )?;
+
+    append_snapshot(state, snapshot.clone())?;
+
+    Ok(AiEditCreateSnapshotPayload { snapshot })
+}
+
 pub fn undo_operation(
     payload: AiEditUndoOperationRequest,
     storage_root: &Path,
@@ -296,8 +375,11 @@ fn normalize_optional_str<'a>(value: Option<&'a str>) -> Option<&'a str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_patch_authorized, errors, set_auth_level, AiEditState};
-    use crate::commands::contracts::{AiApplyPatchMetadataRequest, AiEditSetAuthLevelRequest};
+    use super::{create_snapshot, ensure_patch_authorized, errors, set_auth_level, AiEditState};
+    use crate::commands::contracts::{
+        AiApplyPatchMetadataRequest, AiEditCreateSnapshotRequest, AiEditSetAuthLevelRequest,
+    };
+    use std::fs;
 
     #[test]
     fn ensure_patch_authorized_rejects_manual_mode() {
@@ -384,5 +466,42 @@ mod tests {
             }),
         )
         .expect("user confirmed patch should bypass auto-apply gate");
+    }
+
+    #[test]
+    fn create_snapshot_writes_manual_snapshot_for_current_files() {
+        let storage_root = std::env::temp_dir().join(format!(
+            "aed-create-snapshot-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time should move forward")
+                .as_nanos()
+        ));
+        let workspace_root = storage_root.join("workspace");
+        fs::create_dir_all(&workspace_root).expect("workspace directory should be created");
+
+        let file_path = workspace_root.join("src").join("main.ts");
+        fs::create_dir_all(file_path.parent().expect("parent should exist"))
+            .expect("file parent should be created");
+        fs::write(&file_path, "console.log('hello');\n")
+            .expect("snapshot source file should exist");
+
+        let state = AiEditState::default();
+        let payload = create_snapshot(
+            AiEditCreateSnapshotRequest {
+                file_refs: vec![file_path.to_string_lossy().to_string()],
+                label: Some("Pin checkpoint".to_string()),
+                task_id: Some("task-1".to_string()),
+            },
+            &storage_root,
+            &state,
+        )
+        .expect("manual snapshot should be created");
+
+        assert_eq!(payload.snapshot.scope, "manual");
+        assert_eq!(payload.snapshot.task_id, "task-1");
+        assert_eq!(payload.snapshot.file_refs.len(), 1);
+
+        let _ = fs::remove_dir_all(&storage_root);
     }
 }

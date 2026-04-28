@@ -761,6 +761,20 @@ pub struct AiEditListTimelinePayload {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AiEditCreateSnapshotRequest {
+    pub(crate) file_refs: Vec<String>,
+    pub(crate) label: Option<String>,
+    pub(crate) task_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiEditCreateSnapshotPayload {
+    pub(crate) snapshot: AiSnapshotPayload,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AiEditRestoreSnapshotRequest {
     pub(crate) snapshot_id: String,
 }

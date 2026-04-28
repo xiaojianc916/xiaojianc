@@ -26,6 +26,8 @@ import type {
 } from './ai';
 import type {
   IAiEditAuthState,
+  IAiEditCreateSnapshotPayload,
+  IAiEditCreateSnapshotRequest,
   IAiEditListTimelinePayload,
   IAiEditListTimelineRequest,
   IAiEditRestoreSnapshotPayload,
@@ -217,6 +219,9 @@ export interface ITauriService {
   aiEditGetAuthLevel(): Promise<IAiEditAuthState>;
   aiEditSetAuthLevel(payload: IAiEditSetAuthLevelRequest): Promise<IAiEditAuthState>;
   aiEditListTimeline(payload: IAiEditListTimelineRequest): Promise<IAiEditListTimelinePayload>;
+  aiEditCreateSnapshot(
+    payload: IAiEditCreateSnapshotRequest,
+  ): Promise<IAiEditCreateSnapshotPayload>;
   aiEditRestoreSnapshot(
     payload: IAiEditRestoreSnapshotRequest,
   ): Promise<IAiEditRestoreSnapshotPayload>;

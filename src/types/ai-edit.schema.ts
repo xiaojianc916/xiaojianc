@@ -114,6 +114,22 @@ export const aiEditListTimelinePayloadSchema = z.object({
 });
 
 /**
+ * AED 手动创建快照请求 schema。
+ */
+export const aiEditCreateSnapshotRequestSchema = z.object({
+    fileRefs: z.array(z.string().min(1)).min(1),
+    label: z.string().min(1).nullable().optional(),
+    taskId: z.string().min(1).nullable().optional(),
+});
+
+/**
+ * AED 手动创建快照结果 schema。
+ */
+export const aiEditCreateSnapshotPayloadSchema = z.object({
+    snapshot: aiSnapshotSchema,
+});
+
+/**
  * AED 恢复快照请求 schema。
  */
 export const aiEditRestoreSnapshotRequestSchema = z.object({

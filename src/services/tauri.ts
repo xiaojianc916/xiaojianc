@@ -867,6 +867,13 @@ const aiEditListTimelineIpc = definePayloadIpc(
   { audit: 'sensitive', timeoutMs: 15_000 },
 );
 
+const aiEditCreateSnapshotIpc = definePayloadIpc(
+  'ai_edit_create_snapshot',
+  '创建 AED 手动快照',
+  tauriContracts.aiEditCreateSnapshot,
+  { audit: 'sensitive', timeoutMs: 20_000 },
+);
+
 const aiEditRestoreSnapshotIpc = definePayloadIpc(
   'ai_edit_restore_snapshot',
   '恢复 AED 快照',
@@ -878,6 +885,13 @@ const aiEditUndoOperationIpc = definePayloadIpc(
   'ai_edit_undo_operation',
   '撤销 AED 编辑',
   tauriContracts.aiEditUndoOperation,
+  { audit: 'sensitive', timeoutMs: 30_000 },
+);
+
+const aiEditRevertTaskIpc = definePayloadIpc(
+  'ai_edit_revert_task',
+  '回滚 AED 当前任务',
+  tauriContracts.aiEditRevertTask,
   { audit: 'sensitive', timeoutMs: 30_000 },
 );
 
@@ -1101,9 +1115,13 @@ export const tauriService: ITauriService & {
 
   aiEditListTimeline: aiEditListTimelineIpc,
 
+  aiEditCreateSnapshot: aiEditCreateSnapshotIpc,
+
   aiEditRestoreSnapshot: aiEditRestoreSnapshotIpc,
 
   aiEditUndoOperation: aiEditUndoOperationIpc,
+
+  aiEditRevertTask: aiEditRevertTaskIpc,
 
   aiListTools: () => aiListToolsIpc(undefined),
 };

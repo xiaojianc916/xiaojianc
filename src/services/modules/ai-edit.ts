@@ -1,6 +1,8 @@
 import { tauriService } from '@/services/tauri';
 import type {
     IAiEditAuthState,
+    IAiEditCreateSnapshotPayload,
+    IAiEditCreateSnapshotRequest,
     IAiEditListTimelinePayload,
     IAiEditListTimelineRequest,
     IAiEditRestoreSnapshotPayload,
@@ -21,6 +23,11 @@ export const aiEditService = {
     },
     listTimeline(payload: IAiEditListTimelineRequest = {}): Promise<IAiEditListTimelinePayload> {
         return tauriService.aiEditListTimeline(payload);
+    },
+    createSnapshot(
+        payload: IAiEditCreateSnapshotRequest,
+    ): Promise<IAiEditCreateSnapshotPayload> {
+        return tauriService.aiEditCreateSnapshot(payload);
     },
     restoreSnapshot(
         payload: IAiEditRestoreSnapshotRequest,

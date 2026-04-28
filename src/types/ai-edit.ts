@@ -138,6 +138,22 @@ export interface IAiEditListTimelinePayload {
 }
 
 /**
+ * AED 手动创建快照请求。
+ */
+export interface IAiEditCreateSnapshotRequest {
+    fileRefs: string[];
+    label?: string | null;
+    taskId?: string | null;
+}
+
+/**
+ * AED 手动创建快照结果。
+ */
+export interface IAiEditCreateSnapshotPayload {
+    snapshot: IAiSnapshot;
+}
+
+/**
  * AED 恢复快照请求。
  */
 export interface IAiEditRestoreSnapshotRequest {
