@@ -874,6 +874,13 @@ const aiEditCreateSnapshotIpc = definePayloadIpc(
   { audit: 'sensitive', timeoutMs: 20_000 },
 );
 
+const aiEditGetDiffIpc = definePayloadIpc(
+  'ai_edit_get_diff',
+  '读取 AED 文件 diff',
+  tauriContracts.aiEditGetDiff,
+  { audit: 'sensitive', timeoutMs: 20_000 },
+);
+
 const aiEditRestoreSnapshotIpc = definePayloadIpc(
   'ai_edit_restore_snapshot',
   '恢复 AED 快照',
@@ -885,6 +892,20 @@ const aiEditUndoOperationIpc = definePayloadIpc(
   'ai_edit_undo_operation',
   '撤销 AED 编辑',
   tauriContracts.aiEditUndoOperation,
+  { audit: 'sensitive', timeoutMs: 30_000 },
+);
+
+const aiEditRevertFileIpc = definePayloadIpc(
+  'ai_edit_revert_file',
+  '回滚 AED 单文件',
+  tauriContracts.aiEditRevertFile,
+  { audit: 'sensitive', timeoutMs: 30_000 },
+);
+
+const aiEditRevertHunkIpc = definePayloadIpc(
+  'ai_edit_revert_hunk',
+  '回滚 AED 单个 hunk',
+  tauriContracts.aiEditRevertHunk,
   { audit: 'sensitive', timeoutMs: 30_000 },
 );
 
@@ -1117,9 +1138,15 @@ export const tauriService: ITauriService & {
 
   aiEditCreateSnapshot: aiEditCreateSnapshotIpc,
 
+  aiEditGetDiff: aiEditGetDiffIpc,
+
   aiEditRestoreSnapshot: aiEditRestoreSnapshotIpc,
 
   aiEditUndoOperation: aiEditUndoOperationIpc,
+
+  aiEditRevertFile: aiEditRevertFileIpc,
+
+  aiEditRevertHunk: aiEditRevertHunkIpc,
 
   aiEditRevertTask: aiEditRevertTaskIpc,
 

@@ -7,16 +7,20 @@ const props = withDefaults(
         entry: IAiEditTimelineEntry;
         canUndo?: boolean;
         canRestore?: boolean;
+        canRevertFile?: boolean;
     }>(),
     {
         canUndo: false,
         canRestore: false,
+        canRevertFile: false,
     },
 );
 
 const emit = defineEmits<{
     undo: [entry: IAiEditTimelineEntry];
     restore: [entry: IAiEditTimelineEntry];
+    revertFile: [entry: IAiEditTimelineEntry];
+    previewDiff: [entry: IAiEditTimelineEntry];
 }>();
 
 const timestampLabel = computed(() => {
@@ -89,11 +93,23 @@ const isUndoEnabled = computed(() => {
             <p class="ai-edit-timeline-item__subtitle">{{ subtitle }}</p>
         </div>
         <div class="ai-edit-timeline-item__actions">
-            <button v-if="entry.type === 'operation'" type="button" class="ai-edit-timeline-item__action"
+            <button
+v-if="entry.type === 'operation'" type="button" class="ai-edit-timeline-item__action"
+                :disabled="!canRevertFile" @click="emit('previewDiff', entry)">
+                查看 Diff
+            </button>
+            <button
+v-if="entry.type === 'operation'" type="button" class="ai-edit-timeline-item__action"
+                :disabled="!canRevertFile" @click="emit('revertFile', entry)">
+                回滚文件
+            </button>
+            <button
+v-if="entry.type === 'operation'" type="button" class="ai-edit-timeline-item__action"
                 :disabled="!isUndoEnabled" @click="emit('undo', entry)">
                 撤销
             </button>
-            <button v-if="entry.type === 'snapshot'" type="button" class="ai-edit-timeline-item__action"
+            <button
+v-if="entry.type === 'snapshot'" type="button" class="ai-edit-timeline-item__action"
                 :disabled="!canRestore" @click="emit('restore', entry)">
                 恢复
             </button>

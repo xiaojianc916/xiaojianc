@@ -189,7 +189,7 @@ fn capture_checkpoint_snapshots(
             metadata,
             summary,
         )?;
-        ai_edit::append_snapshot(state, snapshot)?;
+        ai_edit::append_snapshot(state, storage_root, snapshot)?;
     }
 
     if let Some(turn_id) = resolve_turn_id(metadata) {
@@ -200,7 +200,7 @@ fn capture_checkpoint_snapshots(
                 metadata,
                 summary,
             )?;
-            ai_edit::append_snapshot(state, snapshot)?;
+            ai_edit::append_snapshot(state, storage_root, snapshot)?;
         }
     }
 
@@ -215,7 +215,7 @@ fn capture_checkpoint_snapshots(
     };
 
     let source_snapshot_id = source_snapshot.id.clone();
-    ai_edit::append_snapshot(state, source_snapshot)?;
+    ai_edit::append_snapshot(state, storage_root, source_snapshot)?;
     Ok(Some(source_snapshot_id))
 }
 

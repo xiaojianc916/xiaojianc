@@ -90,11 +90,13 @@ describe('App startup handoff', () => {
     });
 
     afterEach(() => {
+        vi.useRealTimers();
         vi.restoreAllMocks();
         delete window.__SH_WINDOW_LABEL__;
     });
 
     it('falls back to the global workbench ready event when route component does not emit ready', async () => {
+        vi.useFakeTimers();
         const router = createTestRouter();
         await router.push('/home');
         await router.isReady();
@@ -107,10 +109,16 @@ describe('App startup handoff', () => {
 
         await flushUi();
 
+        expect(wrapper.find('[data-testid="startup-veil"]').exists()).toBe(true);
+
         window.dispatchEvent(new Event(WORKBENCH_READY_EVENT));
         await flushUi();
+        expect(wrapper.find('[data-testid="startup-veil"]').classes()).toContain('is-leaving');
 
-        expect(beginStartupTransitionMock).toHaveBeenCalledOnce();
+        vi.advanceTimersByTime(240);
+        await flushUi();
+
+        expect(wrapper.find('[data-testid="startup-veil"]').exists()).toBe(false);
 
         wrapper.unmount();
     });

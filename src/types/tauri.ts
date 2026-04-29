@@ -28,10 +28,16 @@ import type {
   IAiEditAuthState,
   IAiEditCreateSnapshotPayload,
   IAiEditCreateSnapshotRequest,
+  IAiEditGetDiffPayload,
+  IAiEditGetDiffRequest,
   IAiEditListTimelinePayload,
   IAiEditListTimelineRequest,
   IAiEditRestoreSnapshotPayload,
   IAiEditRestoreSnapshotRequest,
+  IAiEditRevertFilePayload,
+  IAiEditRevertFileRequest,
+  IAiEditRevertHunkPayload,
+  IAiEditRevertHunkRequest,
   IAiEditRevertTaskPayload,
   IAiEditRevertTaskRequest,
   IAiEditSetAuthLevelRequest,
@@ -222,11 +228,14 @@ export interface ITauriService {
   aiEditCreateSnapshot(
     payload: IAiEditCreateSnapshotRequest,
   ): Promise<IAiEditCreateSnapshotPayload>;
+  aiEditGetDiff(payload: IAiEditGetDiffRequest): Promise<IAiEditGetDiffPayload>;
   aiEditRestoreSnapshot(
     payload: IAiEditRestoreSnapshotRequest,
   ): Promise<IAiEditRestoreSnapshotPayload>;
   aiEditUndoOperation(
     payload: IAiEditUndoOperationRequest,
   ): Promise<IAiEditUndoOperationPayload>;
+  aiEditRevertFile(payload: IAiEditRevertFileRequest): Promise<IAiEditRevertFilePayload>;
+  aiEditRevertHunk(payload: IAiEditRevertHunkRequest): Promise<IAiEditRevertHunkPayload>;
   aiEditRevertTask(payload: IAiEditRevertTaskRequest): Promise<IAiEditRevertTaskPayload>;
 }

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { useAiEditTimeline } from '@/composables/useAiEditTimeline';
 import { useAiRevert } from '@/composables/useAiRevert';
-import type { IAiEditTimelineEntry } from '@/types/ai-edit';
+import type { IAiEditGetDiffPayload, IAiEditTimelineEntry } from '@/types/ai-edit';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
+import AiEditDiffPreview from './AiEditDiffPreview.vue';
 import AiEditTimelineItem from './AiEditTimelineItem.vue';
 import AiRevertConfirmDialog from './AiRevertConfirmDialog.vue';
 
@@ -14,10 +15,16 @@ const dialogOpen = ref(false);
 const dialogTitle = ref('');
 const dialogDescription = ref('');
 const dialogConfirmText = ref('知道了');
-const dialogMode = ref<'info' | 'restore' | 'task' | 'undo'>('info');
+const dialogMode = ref<'info' | 'restore' | 'task' | 'undo' | 'file'>('info');
 const pendingRestoreSnapshotId = ref<string | null>(null);
 const pendingTaskId = ref<string | null>(null);
 const pendingUndoOperationId = ref<string | null>(null);
+const pendingFileTaskId = ref<string | null>(null);
+const pendingFilePath = ref<string | null>(null);
+const activeDiffEntryId = ref<string | null>(null);
+const diffPreview = ref<IAiEditGetDiffPayload | null>(null);
+const isDiffLoading = ref(false);
+const activeHunkIndex = ref<number | null>(null);
 const snapshotFeedback = ref('');
 
 let snapshotFeedbackTimer: number | null = null;
@@ -38,6 +45,9 @@ const setSnapshotFeedback = (message: string): void => {
 const statusLabel = computed(() => {
     if (timeline.isCreatingSnapshot.value) {
         return '正在创建 AED checkpoint';
+    }
+    if (isDiffLoading.value) {
+        return '正在生成 AED diff 预览';
     }
     if (snapshotFeedback.value) {
         return snapshotFeedback.value;
@@ -65,6 +75,8 @@ const openNotReadyDialog = (entry: IAiEditTimelineEntry, action: 'undo' | 'resto
     pendingRestoreSnapshotId.value = null;
     pendingTaskId.value = null;
     pendingUndoOperationId.value = null;
+    pendingFileTaskId.value = null;
+    pendingFilePath.value = null;
     dialogConfirmText.value = '知道了';
     dialogTitle.value = action === 'undo' ? '撤销接口即将接入' : '恢复接口即将接入';
     dialogDescription.value = entry.type === 'snapshot'
@@ -83,6 +95,8 @@ const openRestoreDialog = (entry: IAiEditTimelineEntry): void => {
     pendingRestoreSnapshotId.value = entry.data.id;
     pendingTaskId.value = null;
     pendingUndoOperationId.value = null;
+    pendingFileTaskId.value = null;
+    pendingFilePath.value = null;
     dialogConfirmText.value = '确认恢复';
     dialogTitle.value = '确认恢复到该快照';
     dialogDescription.value = `将把 ${entry.data.fileRefs.length} 个文件恢复到快照“${entry.data.label}”记录的内容，并生成 pre-revert / revert 时间线条目。`;
@@ -99,6 +113,8 @@ const openUndoDialog = (entry: IAiEditTimelineEntry): void => {
     pendingUndoOperationId.value = entry.data.id;
     pendingRestoreSnapshotId.value = null;
     pendingTaskId.value = null;
+    pendingFileTaskId.value = null;
+    pendingFilePath.value = null;
     dialogConfirmText.value = '确认撤销';
     dialogTitle.value = '确认撤销该编辑';
     dialogDescription.value = `将把文件“${entry.data.path}”恢复到这次 AED 编辑前的快照内容，并生成 pre-revert / revert 时间线条目。`;
@@ -122,10 +138,98 @@ const openTaskRevertDialog = (): void => {
     pendingTaskId.value = revert.currentTaskId.value;
     pendingRestoreSnapshotId.value = null;
     pendingUndoOperationId.value = null;
+    pendingFileTaskId.value = null;
+    pendingFilePath.value = null;
     dialogConfirmText.value = '确认回滚';
     dialogTitle.value = '确认回滚当前任务';
     dialogDescription.value = `将把当前任务涉及的 AED 编辑恢复到 task-start / pre-tool 快照记录的状态，并生成 pre-revert / revert 时间线条目。`;
     dialogOpen.value = true;
+};
+
+const openFileRevertDialogFor = (taskId: string, path: string): void => {
+    dialogMode.value = 'file';
+    pendingFileTaskId.value = taskId;
+    pendingFilePath.value = path;
+    pendingRestoreSnapshotId.value = null;
+    pendingTaskId.value = null;
+    pendingUndoOperationId.value = null;
+    dialogConfirmText.value = '确认回滚文件';
+    dialogTitle.value = '确认按文件回滚';
+    dialogDescription.value = `将把文件“${path}”恢复到当前任务最近一条有效 AED 编辑之前的状态，并生成 pre-revert / revert 时间线条目。`;
+    dialogOpen.value = true;
+};
+
+const openFileRevertDialog = (entry: IAiEditTimelineEntry): void => {
+    if (entry.type !== 'operation') {
+        openNotReadyDialog(entry, 'undo');
+        return;
+    }
+
+    openFileRevertDialogFor(entry.data.taskId, entry.data.newPath ?? entry.data.path);
+};
+
+const loadDiffPreview = async (taskId: string, path: string, entryId: string): Promise<void> => {
+    isDiffLoading.value = true;
+    const result = await revert.getDiff(taskId, path);
+    if (activeDiffEntryId.value !== entryId) {
+        isDiffLoading.value = false;
+        return;
+    }
+
+    diffPreview.value = result.status === 'success' ? result.data : null;
+    isDiffLoading.value = false;
+};
+
+const openDiffPreview = (entry: IAiEditTimelineEntry): void => {
+    if (entry.type !== 'operation') {
+        return;
+    }
+
+    const entryId = entry.data.id;
+    if (activeDiffEntryId.value === entryId) {
+        activeDiffEntryId.value = null;
+        diffPreview.value = null;
+        activeHunkIndex.value = null;
+        return;
+    }
+
+    activeDiffEntryId.value = entryId;
+    diffPreview.value = null;
+    activeHunkIndex.value = null;
+    void loadDiffPreview(entry.data.taskId, entry.data.newPath ?? entry.data.path, entryId);
+};
+
+const isDiffVisible = (entry: IAiEditTimelineEntry): boolean =>
+    entry.type === 'operation' && activeDiffEntryId.value === entry.data.id;
+
+const refreshActiveDiffPreview = async (): Promise<void> => {
+    if (!diffPreview.value || !activeDiffEntryId.value) {
+        return;
+    }
+
+    await loadDiffPreview(diffPreview.value.taskId, diffPreview.value.path, activeDiffEntryId.value);
+};
+
+const handlePreviewFileRevert = (): void => {
+    if (!diffPreview.value) {
+        return;
+    }
+
+    openFileRevertDialogFor(diffPreview.value.taskId, diffPreview.value.path);
+};
+
+const handleHunkRevert = async (hunkIndex: number): Promise<void> => {
+    if (!diffPreview.value) {
+        return;
+    }
+
+    activeHunkIndex.value = hunkIndex;
+    const result = await revert.revertHunk(diffPreview.value.taskId, diffPreview.value.path, hunkIndex);
+    activeHunkIndex.value = null;
+
+    if (result.status === 'success') {
+        await refreshActiveDiffPreview();
+    }
 };
 
 const pinCheckpoint = async (): Promise<void> => {
@@ -149,6 +253,8 @@ const handleDialogConfirm = async (): Promise<void> => {
         result = await revert.revertTask(pendingTaskId.value);
     } else if (dialogMode.value === 'undo' && pendingUndoOperationId.value) {
         result = await revert.undoOperation(pendingUndoOperationId.value);
+    } else if (dialogMode.value === 'file' && pendingFileTaskId.value && pendingFilePath.value) {
+        result = await revert.revertFile(pendingFileTaskId.value, pendingFilePath.value);
     } else {
         dialogOpen.value = false;
         return;
@@ -159,6 +265,11 @@ const handleDialogConfirm = async (): Promise<void> => {
         pendingRestoreSnapshotId.value = null;
         pendingTaskId.value = null;
         pendingUndoOperationId.value = null;
+        pendingFileTaskId.value = null;
+        pendingFilePath.value = null;
+        if (dialogMode.value === 'file') {
+            await refreshActiveDiffPreview();
+        }
         return;
     }
 
@@ -175,6 +286,9 @@ onMounted(() => {
 watch(
     () => timeline.activeTaskId.value,
     (taskId) => {
+        activeDiffEntryId.value = null;
+        diffPreview.value = null;
+        activeHunkIndex.value = null;
         void timeline.loadTimeline(taskId ? { taskId } : {}).catch(() => undefined);
     },
 );
@@ -194,11 +308,13 @@ onBeforeUnmount(() => {
                 <p>{{ statusLabel }}</p>
             </div>
             <div class="ai-edit-timeline__header-actions">
-                <button type="button" class="ai-edit-timeline__pin-button"
+                <button
+type="button" class="ai-edit-timeline__pin-button"
                     :disabled="!timeline.canCreateManualSnapshot.value" @click="pinCheckpoint">
                     {{ timeline.isCreatingSnapshot.value ? 'Pinning…' : 'Pin checkpoint' }}
                 </button>
-                <button type="button" class="ai-edit-timeline__revert-button" :disabled="!revert.canRevertTask.value"
+                <button
+type="button" class="ai-edit-timeline__revert-button" :disabled="!revert.canRevertTask.value"
                     @click="openTaskRevertDialog">
                     回滚当前任务
                 </button>
@@ -207,9 +323,19 @@ onBeforeUnmount(() => {
         </header>
 
         <div v-if="timeline.hasEntries.value" class="ai-edit-timeline__list">
-            <AiEditTimelineItem v-for="entry in timeline.activeTaskEntries.value" :key="entry.data.id" :entry="entry"
-                :can-undo="revert.canUndo.value" :can-restore="revert.canRestoreSnapshot.value"
-                @undo="openUndoDialog($event)" @restore="openRestoreDialog($event)" />
+            <div v-for="entry in timeline.activeTaskEntries.value" :key="entry.data.id" class="ai-edit-timeline__entry">
+                <AiEditTimelineItem
+:entry="entry" :can-undo="revert.canUndo.value"
+                    :can-restore="revert.canRestoreSnapshot.value" :can-revert-file="revert.canRevertTask.value"
+                    @undo="openUndoDialog($event)" @restore="openRestoreDialog($event)"
+                    @revert-file="openFileRevertDialog($event)" @preview-diff="openDiffPreview($event)" />
+                <AiEditDiffPreview
+v-if="isDiffVisible(entry)" :diff="diffPreview" :is-loading="isDiffLoading"
+                    :is-reverting="revert.isReverting.value" :active-hunk-index="activeHunkIndex"
+                    :can-revert-file="revert.canRevertTask.value"
+                    :can-revert-hunk="Boolean(diffPreview && diffPreview.kind === 'modify')"
+                    @revert-file="handlePreviewFileRevert" @revert-hunk="handleHunkRevert" />
+            </div>
         </div>
 
         <div v-else class="ai-edit-timeline__empty">
@@ -217,7 +343,8 @@ onBeforeUnmount(() => {
             <p>当 Agent 在当前对话里自动写盘或创建快照后，这里会显示 task-start、pre-tool 与 edit 条目。</p>
         </div>
 
-        <AiRevertConfirmDialog :open="dialogOpen" :title="dialogTitle" :description="dialogDescription"
+        <AiRevertConfirmDialog
+:open="dialogOpen" :title="dialogTitle" :description="dialogDescription"
             :confirm-text="dialogConfirmText" @close="dialogOpen = false" @confirm="handleDialogConfirm" />
     </section>
 </template>
@@ -297,8 +424,13 @@ onBeforeUnmount(() => {
 .ai-edit-timeline__list {
     display: grid;
     gap: 10px;
-    max-height: 220px;
+    max-height: 420px;
     overflow: auto;
+}
+
+.ai-edit-timeline__entry {
+    display: grid;
+    gap: 8px;
 }
 
 .ai-edit-timeline__empty {

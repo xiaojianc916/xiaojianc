@@ -2,10 +2,16 @@ import {
   aiEditAuthStateSchema,
   aiEditCreateSnapshotPayloadSchema,
   aiEditCreateSnapshotRequestSchema,
+  aiEditGetDiffPayloadSchema,
+  aiEditGetDiffRequestSchema,
   aiEditListTimelinePayloadSchema,
   aiEditListTimelineRequestSchema,
   aiEditRestoreSnapshotPayloadSchema,
   aiEditRestoreSnapshotRequestSchema,
+  aiEditRevertFilePayloadSchema,
+  aiEditRevertFileRequestSchema,
+  aiEditRevertHunkPayloadSchema,
+  aiEditRevertHunkRequestSchema,
   aiEditRevertTaskPayloadSchema,
   aiEditRevertTaskRequestSchema,
   aiEditSetAuthLevelRequestSchema,
@@ -632,6 +638,10 @@ export const tauriContracts = {
     inSchema: aiEditCreateSnapshotRequestSchema,
     outSchema: aiEditCreateSnapshotPayloadSchema,
   },
+  aiEditGetDiff: {
+    inSchema: aiEditGetDiffRequestSchema,
+    outSchema: aiEditGetDiffPayloadSchema,
+  },
   aiEditRestoreSnapshot: {
     inSchema: aiEditRestoreSnapshotRequestSchema,
     outSchema: aiEditRestoreSnapshotPayloadSchema,
@@ -639,6 +649,14 @@ export const tauriContracts = {
   aiEditUndoOperation: {
     inSchema: aiEditUndoOperationRequestSchema,
     outSchema: aiEditUndoOperationPayloadSchema,
+  },
+  aiEditRevertFile: {
+    inSchema: aiEditRevertFileRequestSchema,
+    outSchema: aiEditRevertFilePayloadSchema,
+  },
+  aiEditRevertHunk: {
+    inSchema: aiEditRevertHunkRequestSchema,
+    outSchema: aiEditRevertHunkPayloadSchema,
   },
   aiEditRevertTask: {
     inSchema: aiEditRevertTaskRequestSchema,

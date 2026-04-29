@@ -2,6 +2,7 @@ use crate::ai_edit::errors;
 use crate::commands::contracts::{AiApplyPatchMetadataRequest, AiSnapshotPayload};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -12,6 +13,13 @@ const SNAPSHOT_SCOPE_MANUAL: &str = "manual";
 const SNAPSHOT_SCOPE_PRE_REVERT: &str = "pre-revert";
 const SNAPSHOT_SCOPE_REVERT: &str = "revert";
 const SNAPSHOT_MANIFEST_VERSION: u32 = 1;
+
+#[derive(Debug, Default)]
+pub struct SnapshotPruneOutcome {
+	pub removed_snapshot_ids: HashSet<String>,
+	pub removed_blob_count: usize,
+	pub reclaimed_bytes: u64,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct SnapshotSourceFile<'a> {
@@ -305,6 +313,80 @@ pub fn list_stored_snapshots(storage_root: &Path) -> Result<Vec<AiSnapshotPayloa
 	Ok(snapshots)
 }
 
+pub fn prune_stored_snapshots(
+	storage_root: &Path,
+	retained_snapshot_ids: &HashSet<String>,
+) -> Result<SnapshotPruneOutcome, String> {
+	let snapshots_dir = storage_root.join("snapshots");
+	if !snapshots_dir.is_dir() {
+		return Ok(SnapshotPruneOutcome::default());
+	}
+
+	let entries = fs::read_dir(&snapshots_dir).map_err(|error| {
+		errors::snapshot_store_failed(format!("读取快照目录失败：{error}"))
+	})?;
+	let mut manifests = Vec::new();
+
+	for entry in entries {
+		let entry = match entry {
+			Ok(value) => value,
+			Err(error) => {
+				tracing::warn!(target: "ai.edit", error = %error, "skip unreadable snapshot entry");
+				continue;
+			}
+		};
+		let path = entry.path();
+		if path.extension().and_then(|value| value.to_str()) != Some("json") {
+			continue;
+		}
+
+		let Some((manifest, storage_key)) = read_manifest_from_path(storage_root, &path)? else {
+			continue;
+		};
+		manifests.push((manifest, storage_key));
+	}
+
+	let retained_blob_keys = manifests
+		.iter()
+		.filter(|(manifest, _)| retained_snapshot_ids.contains(&manifest.id))
+		.flat_map(|(manifest, _)| manifest.files.iter().map(|file| file.blob_key.clone()))
+		.collect::<HashSet<_>>();
+	let mut blob_keys_to_remove = HashSet::new();
+	let mut outcome = SnapshotPruneOutcome::default();
+
+	for (manifest, storage_key) in manifests {
+		if retained_snapshot_ids.contains(&manifest.id) {
+			continue;
+		}
+
+		outcome.removed_snapshot_ids.insert(manifest.id.clone());
+		let manifest_path = join_storage_path(storage_root, &storage_key);
+		outcome.reclaimed_bytes +=
+			remove_storage_file(&manifest_path, "删除快照清单失败")?;
+
+		for file in manifest.files {
+			if !retained_blob_keys.contains(&file.blob_key) {
+				blob_keys_to_remove.insert(file.blob_key);
+			}
+		}
+	}
+
+	for blob_key in blob_keys_to_remove {
+		if retained_blob_keys.contains(&blob_key) {
+			continue;
+		}
+
+		let blob_path = join_storage_path(storage_root, &blob_key);
+		let removed_bytes = remove_storage_file(&blob_path, "删除快照 blob 失败")?;
+		if removed_bytes > 0 {
+			outcome.removed_blob_count += 1;
+			outcome.reclaimed_bytes += removed_bytes;
+		}
+	}
+
+	Ok(outcome)
+}
+
 fn read_manifest_from_path(
 	_storage_root: &Path,
 	path: &Path,
@@ -338,6 +420,25 @@ fn join_storage_path(storage_root: &Path, relative_key: &str) -> PathBuf {
 	relative_key
 		.split('/')
 		.fold(storage_root.to_path_buf(), |path, segment| path.join(segment))
+}
+
+fn remove_storage_file(path: &Path, action: &str) -> Result<u64, String> {
+	let removed_bytes = match fs::metadata(path) {
+		Ok(metadata) => metadata.len(),
+		Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+		Err(error) => {
+			return Err(errors::snapshot_store_failed(format!(
+				"{action}（{}）：{error}",
+				path.display()
+			)));
+		}
+	};
+
+	fs::remove_file(path).map_err(|error| {
+		errors::snapshot_store_failed(format!("{action}（{}）：{error}", path.display()))
+	})?;
+
+	Ok(removed_bytes)
 }
 
 impl SnapshotManifest {
@@ -385,10 +486,11 @@ impl SnapshotManifest {
 #[cfg(test)]
 mod tests {
 	use super::{
-		list_stored_snapshots, store_manual_snapshot, store_pre_tool_snapshot, SnapshotManifest,
-		SnapshotSourceFile,
+		list_stored_snapshots, prune_stored_snapshots, store_manual_snapshot,
+		store_pre_tool_snapshot, SnapshotManifest, SnapshotSourceFile,
 	};
 	use crate::commands::contracts::AiApplyPatchMetadataRequest;
+	use std::collections::HashSet;
 	use std::fs;
 
 	#[test]
@@ -484,6 +586,76 @@ mod tests {
 		assert_eq!(snapshot.task_id, "task-manual");
 		assert_eq!(restored.len(), 1);
 		assert_eq!(restored[0].scope, "manual");
+
+		let _ = fs::remove_dir_all(&temp_dir);
+	}
+
+	#[test]
+	fn prune_stored_snapshots_removes_old_manifests_and_orphan_blobs() {
+		let temp_dir = std::env::temp_dir().join(format!(
+			"aed-prune-snapshots-{}",
+			std::time::SystemTime::now()
+				.duration_since(std::time::UNIX_EPOCH)
+				.expect("time should move forward")
+				.as_nanos()
+		));
+		fs::create_dir_all(&temp_dir).expect("temp directory should be created");
+
+		let first = store_manual_snapshot(
+			&temp_dir,
+			&[SnapshotSourceFile {
+				path: "src/one.sh",
+				content_hash: "fnv64:shared",
+				content: "echo shared",
+			}],
+			None,
+			"first",
+		)
+		.expect("first snapshot should be written");
+		std::thread::sleep(std::time::Duration::from_millis(1));
+
+		let second = store_manual_snapshot(
+			&temp_dir,
+			&[SnapshotSourceFile {
+				path: "src/two.sh",
+				content_hash: "fnv64:unique",
+				content: "echo unique",
+			}],
+			None,
+			"second",
+		)
+		.expect("second snapshot should be written");
+		std::thread::sleep(std::time::Duration::from_millis(1));
+
+		let third = store_manual_snapshot(
+			&temp_dir,
+			&[SnapshotSourceFile {
+				path: "src/three.sh",
+				content_hash: "fnv64:shared",
+				content: "echo shared",
+			}],
+			None,
+			"third",
+		)
+		.expect("third snapshot should be written");
+
+		let retained_snapshot_ids = HashSet::from([third.id.clone()]);
+		let outcome = prune_stored_snapshots(&temp_dir, &retained_snapshot_ids)
+			.expect("snapshots should be pruned");
+
+		let snapshots = list_stored_snapshots(&temp_dir).expect("snapshots should be listed");
+		let blobs = fs::read_dir(temp_dir.join("blobs"))
+			.expect("blobs directory should exist")
+			.collect::<Result<Vec<_>, _>>()
+			.expect("blob entries should be readable");
+
+		assert_eq!(snapshots.len(), 1);
+		assert_eq!(snapshots[0].id, third.id);
+		assert!(outcome.removed_snapshot_ids.contains(&first.id));
+		assert!(outcome.removed_snapshot_ids.contains(&second.id));
+		assert_eq!(outcome.removed_blob_count, 1);
+		assert_eq!(blobs.len(), 1);
+		assert!(outcome.reclaimed_bytes > 0);
 
 		let _ = fs::remove_dir_all(&temp_dir);
 	}

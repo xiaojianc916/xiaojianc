@@ -805,6 +805,74 @@ pub struct AiEditUndoOperationPayload {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AiEditRevertFileRequest {
+    pub(crate) task_id: String,
+    pub(crate) path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiEditRevertFilePayload {
+    pub(crate) task_id: String,
+    pub(crate) path: String,
+    pub(crate) operation_id: String,
+    pub(crate) restored_files: Vec<String>,
+    pub(crate) pre_revert_snapshot: AiSnapshotPayload,
+    pub(crate) restored_snapshot: AiSnapshotPayload,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiEditDiffHunkPayload {
+    pub(crate) hunk_index: u32,
+    pub(crate) old_start: u32,
+    pub(crate) old_lines: u32,
+    pub(crate) new_start: u32,
+    pub(crate) new_lines: u32,
+    pub(crate) lines: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiEditGetDiffRequest {
+    pub(crate) task_id: String,
+    pub(crate) path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiEditGetDiffPayload {
+    pub(crate) task_id: String,
+    pub(crate) path: String,
+    pub(crate) operation_id: String,
+    pub(crate) kind: String,
+    pub(crate) additions: u32,
+    pub(crate) deletions: u32,
+    pub(crate) hunks: Vec<AiEditDiffHunkPayload>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiEditRevertHunkRequest {
+    pub(crate) task_id: String,
+    pub(crate) path: String,
+    pub(crate) hunk_index: u32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiEditRevertHunkPayload {
+    pub(crate) task_id: String,
+    pub(crate) path: String,
+    pub(crate) operation_id: String,
+    pub(crate) hunk_index: u32,
+    pub(crate) restored_files: Vec<String>,
+    pub(crate) pre_revert_snapshot: AiSnapshotPayload,
+    pub(crate) restored_snapshot: AiSnapshotPayload,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AiEditRevertTaskRequest {
     pub(crate) task_id: String,
 }

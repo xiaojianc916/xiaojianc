@@ -3,10 +3,16 @@ import type {
     IAiEditAuthState,
     IAiEditCreateSnapshotPayload,
     IAiEditCreateSnapshotRequest,
+    IAiEditGetDiffPayload,
+    IAiEditGetDiffRequest,
     IAiEditListTimelinePayload,
     IAiEditListTimelineRequest,
     IAiEditRestoreSnapshotPayload,
     IAiEditRestoreSnapshotRequest,
+    IAiEditRevertFilePayload,
+    IAiEditRevertFileRequest,
+    IAiEditRevertHunkPayload,
+    IAiEditRevertHunkRequest,
     IAiEditRevertTaskPayload,
     IAiEditRevertTaskRequest,
     IAiEditSetAuthLevelRequest,
@@ -29,6 +35,9 @@ export const aiEditService = {
     ): Promise<IAiEditCreateSnapshotPayload> {
         return tauriService.aiEditCreateSnapshot(payload);
     },
+    getDiff(payload: IAiEditGetDiffRequest): Promise<IAiEditGetDiffPayload> {
+        return tauriService.aiEditGetDiff(payload);
+    },
     restoreSnapshot(
         payload: IAiEditRestoreSnapshotRequest,
     ): Promise<IAiEditRestoreSnapshotPayload> {
@@ -38,6 +47,12 @@ export const aiEditService = {
         payload: IAiEditUndoOperationRequest,
     ): Promise<IAiEditUndoOperationPayload> {
         return tauriService.aiEditUndoOperation(payload);
+    },
+    revertFile(payload: IAiEditRevertFileRequest): Promise<IAiEditRevertFilePayload> {
+        return tauriService.aiEditRevertFile(payload);
+    },
+    revertHunk(payload: IAiEditRevertHunkRequest): Promise<IAiEditRevertHunkPayload> {
+        return tauriService.aiEditRevertHunk(payload);
     },
     revertTask(payload: IAiEditRevertTaskRequest): Promise<IAiEditRevertTaskPayload> {
         return tauriService.aiEditRevertTask(payload);

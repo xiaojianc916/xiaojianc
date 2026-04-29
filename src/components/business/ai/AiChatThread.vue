@@ -48,7 +48,8 @@ onMounted(() => {
 
 <template>
   <div ref="listRef" class="ai-chat-list" aria-label="AI 对话记录">
-    <AiMessageItem v-for="message in messages" :key="message.id" :message="message" :avatar-url="avatarUrl"
+    <AiMessageItem
+v-for="message in messages" :key="message.id" :message="message" :avatar-url="avatarUrl"
       :avatar-alt="avatarAlt" @apply-code="emit('applyCode', $event)" @open-code-path="emit('openCodePath', $event)" />
     <article v-if="shouldRenderStandaloneTyping" class="ai-message-typing" aria-label="AI 正在输入">
       <svg v-if="!avatarUrl" class="ai-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">

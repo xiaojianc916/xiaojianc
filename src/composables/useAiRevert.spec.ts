@@ -9,7 +9,10 @@ import { useAiRevert } from './useAiRevert';
 const tauriServiceMock = vi.hoisted(() => ({
     aiEditGetAuthLevel: vi.fn(),
     aiEditSetAuthLevel: vi.fn(),
+    aiEditGetDiff: vi.fn(),
     aiEditListTimeline: vi.fn(),
+    aiEditRevertFile: vi.fn(),
+    aiEditRevertHunk: vi.fn(),
     aiEditRevertTask: vi.fn(),
     aiEditRestoreSnapshot: vi.fn(),
     aiEditUndoOperation: vi.fn(),
@@ -153,6 +156,118 @@ describe('useAiRevert', () => {
         expect(result.status).toBe('success');
         expect(tauriServiceMock.aiEditRevertTask).toHaveBeenCalledWith({
             taskId: 'task-1',
+        });
+        expect(tauriServiceMock.aiEditListTimeline).toHaveBeenCalledWith({ taskId: 'task-1' });
+    });
+
+    it('revertFile 调用 AED 单文件回滚接口并刷新时间线', async () => {
+        tauriServiceMock.aiEditRevertFile.mockResolvedValueOnce({
+            taskId: 'task-1',
+            path: 'src/main.ts',
+            operationId: 'operation-3',
+            restoredFiles: ['src/main.ts'],
+            preRevertSnapshot: {
+                id: 'snapshot-pre-revert-file',
+                scope: 'pre-revert',
+                taskId: 'task-1',
+                createdAt: '2026-04-28T10:00:00.000Z',
+                label: '文件回滚前快照',
+                fileRefs: ['src/main.ts'],
+                storageKey: 'snapshots/pre-revert-file.json',
+                sizeBytes: 64,
+            },
+            restoredSnapshot: {
+                id: 'snapshot-revert-file',
+                scope: 'revert',
+                taskId: 'task-1',
+                createdAt: '2026-04-28T10:00:01.000Z',
+                label: '文件回滚后快照',
+                fileRefs: ['src/main.ts'],
+                storageKey: 'snapshots/revert-file.json',
+                sizeBytes: 64,
+            },
+        });
+        tauriServiceMock.aiEditListTimeline.mockResolvedValueOnce({ entries: [] });
+
+        const revert = useAiRevert();
+        const result = await revert.revertFile('task-1', 'src/main.ts');
+
+        expect(result.status).toBe('success');
+        expect(tauriServiceMock.aiEditRevertFile).toHaveBeenCalledWith({
+            taskId: 'task-1',
+            path: 'src/main.ts',
+        });
+        expect(tauriServiceMock.aiEditListTimeline).toHaveBeenCalledWith({ taskId: 'task-1' });
+    });
+
+    it('getDiff 调用 AED diff 预览接口', async () => {
+        tauriServiceMock.aiEditGetDiff.mockResolvedValueOnce({
+            taskId: 'task-1',
+            path: 'src/main.ts',
+            operationId: 'operation-4',
+            kind: 'modify',
+            additions: 2,
+            deletions: 1,
+            hunks: [
+                {
+                    hunkIndex: 0,
+                    oldStart: 3,
+                    oldLines: 1,
+                    newStart: 3,
+                    newLines: 2,
+                    lines: ['-echo old', '+echo new', '+echo newer'],
+                },
+            ],
+        });
+
+        const revert = useAiRevert();
+        const result = await revert.getDiff('task-1', 'src/main.ts');
+
+        expect(result.status).toBe('success');
+        expect(tauriServiceMock.aiEditGetDiff).toHaveBeenCalledWith({
+            taskId: 'task-1',
+            path: 'src/main.ts',
+        });
+    });
+
+    it('revertHunk 调用 AED hunk 回滚接口并刷新时间线', async () => {
+        tauriServiceMock.aiEditRevertHunk.mockResolvedValueOnce({
+            taskId: 'task-1',
+            path: 'src/main.ts',
+            operationId: 'operation-4',
+            hunkIndex: 0,
+            restoredFiles: ['src/main.ts'],
+            preRevertSnapshot: {
+                id: 'snapshot-pre-revert-hunk',
+                scope: 'pre-revert',
+                taskId: 'task-1',
+                createdAt: '2026-04-28T10:00:00.000Z',
+                label: 'hunk 回滚前快照',
+                fileRefs: ['src/main.ts'],
+                storageKey: 'snapshots/pre-revert-hunk.json',
+                sizeBytes: 64,
+            },
+            restoredSnapshot: {
+                id: 'snapshot-revert-hunk',
+                scope: 'revert',
+                taskId: 'task-1',
+                createdAt: '2026-04-28T10:00:01.000Z',
+                label: 'hunk 回滚后快照',
+                fileRefs: ['src/main.ts'],
+                storageKey: 'snapshots/revert-hunk.json',
+                sizeBytes: 64,
+            },
+        });
+        tauriServiceMock.aiEditListTimeline.mockResolvedValueOnce({ entries: [] });
+
+        const revert = useAiRevert();
+        const result = await revert.revertHunk('task-1', 'src/main.ts', 0);
+
+        expect(result.status).toBe('success');
+        expect(tauriServiceMock.aiEditRevertHunk).toHaveBeenCalledWith({
+            taskId: 'task-1',
+            path: 'src/main.ts',
+            hunkIndex: 0,
         });
         expect(tauriServiceMock.aiEditListTimeline).toHaveBeenCalledWith({ taskId: 'task-1' });
     });

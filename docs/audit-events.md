@@ -30,7 +30,13 @@
 | `settings.workspace_changed` | 工作区根路径变更 | `traceId`, `new_path_hash` | HIGH |
 | `settings.theme_changed` | 主题切换 | `traceId`, `from_mode`, `to_mode` | LOW |
 | `ai.edit.auth_changed` | AED 授权等级升级或降级 | `traceId`, `from_level`, `to_level`, `task_id` | HIGH |
+| `ai.edit.applied` | AED 自动写盘或用户确认后的 Patch 成功写入 | `traceId`, `task_id`, `turn_id`, `file_count`, `byte_size_total` | HIGH |
+| `ai.edit.checkpoint_created` | 用户创建 AED 手动 checkpoint | `traceId`, `snapshot_id`, `task_id`, `file_count`, `label` | HIGH |
 | `ai.edit.operation_reverted` | 用户撤销单条 AED 编辑 | `traceId`, `operation_id`, `source_snapshot_id`, `pre_revert_snapshot_id`, `restored_snapshot_id`, `task_id`, `restored_file_count` | HIGH |
+| `ai.edit.file_reverted` | 用户按文件回滚当前任务中的 AED 编辑 | `traceId`, `operation_id`, `task_id`, `path`, `pre_revert_snapshot_id`, `restored_snapshot_id`, `restored_file_count`, `granularity` | HIGH |
+| `ai.edit.hunk_reverted` | 用户按 hunk 回滚当前文件中的 AED 编辑片段 | `traceId`, `operation_id`, `task_id`, `path`, `hunk_index`, `pre_revert_snapshot_id`, `restored_snapshot_id`, `granularity` | HIGH |
+| `ai.edit.pruned` | AED retention 自动清理超出保留窗口的本地历史 | `traceId`, `pruned_operation_count`, `pruned_snapshot_count`, `pruned_blob_count`, `reclaimed_bytes`, `retained_operation_limit`, `retained_snapshot_limit` | HIGH |
+| `ai.edit.task_reverted` | 用户按任务回滚当前任务内全部有效 AED 编辑 | `traceId`, `task_id`, `reverted_operation_count`, `restored_file_count` | HIGH |
 | `ai.edit.snapshot_restored` | 用户恢复 AED 快照 | `traceId`, `snapshot_id`, `pre_revert_snapshot_id`, `restored_snapshot_id`, `task_id`, `restored_file_count` | HIGH |
 
 ---

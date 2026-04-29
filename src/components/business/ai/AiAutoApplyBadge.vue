@@ -182,7 +182,8 @@ watch(
 <template>
     <AppDropdownMenu :items="menuItems" align="right" :min-width="248" @select="handleSelect">
         <template #trigger>
-            <button type="button" class="ai-auto-apply-badge" :class="toneClass"
+            <button
+type="button" class="ai-auto-apply-badge" :class="toneClass"
                 :aria-label="`${modeLabel}，${timelineCountLabel}`">
                 <span class="ai-auto-apply-dot" aria-hidden="true"></span>
                 <span class="ai-auto-apply-label">{{ modeLabel }}</span>
@@ -192,7 +193,8 @@ watch(
         </template>
     </AppDropdownMenu>
 
-    <AiRevertConfirmDialog :open="dialogOpen" :title="dialogTitle" :description="dialogDescription"
+    <AiRevertConfirmDialog
+:open="dialogOpen" :title="dialogTitle" :description="dialogDescription"
         :confirm-text="dialogConfirmText" @close="dialogOpen = false" @confirm="handleDialogConfirm" />
 </template>
 

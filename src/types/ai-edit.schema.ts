@@ -164,6 +164,81 @@ export const aiEditUndoOperationPayloadSchema = z.object({
 });
 
 /**
+ * AED 按文件回滚请求 schema。
+ */
+export const aiEditRevertFileRequestSchema = z.object({
+    taskId: z.string().min(1),
+    path: z.string().min(1),
+});
+
+/**
+ * AED 按文件回滚结果 schema。
+ */
+export const aiEditRevertFilePayloadSchema = z.object({
+    taskId: z.string().min(1),
+    path: z.string().min(1),
+    operationId: z.string().min(1),
+    restoredFiles: z.array(z.string().min(1)),
+    preRevertSnapshot: aiSnapshotSchema,
+    restoredSnapshot: aiSnapshotSchema,
+});
+
+/**
+ * AED diff hunk 预览条目 schema。
+ */
+export const aiEditDiffHunkSchema = z.object({
+    hunkIndex: z.number().int().nonnegative(),
+    oldStart: z.number().int().nonnegative(),
+    oldLines: z.number().int().nonnegative(),
+    newStart: z.number().int().nonnegative(),
+    newLines: z.number().int().nonnegative(),
+    lines: z.array(z.string()),
+});
+
+/**
+ * AED 读取文件 diff 请求 schema。
+ */
+export const aiEditGetDiffRequestSchema = z.object({
+    taskId: z.string().min(1),
+    path: z.string().min(1),
+});
+
+/**
+ * AED 文件 diff 预览结果 schema。
+ */
+export const aiEditGetDiffPayloadSchema = z.object({
+    taskId: z.string().min(1),
+    path: z.string().min(1),
+    operationId: z.string().min(1),
+    kind: aiEditOperationKindSchema,
+    additions: z.number().int().nonnegative(),
+    deletions: z.number().int().nonnegative(),
+    hunks: z.array(aiEditDiffHunkSchema),
+});
+
+/**
+ * AED 按 hunk 回滚请求 schema。
+ */
+export const aiEditRevertHunkRequestSchema = z.object({
+    taskId: z.string().min(1),
+    path: z.string().min(1),
+    hunkIndex: z.number().int().nonnegative(),
+});
+
+/**
+ * AED 按 hunk 回滚结果 schema。
+ */
+export const aiEditRevertHunkPayloadSchema = z.object({
+    taskId: z.string().min(1),
+    path: z.string().min(1),
+    operationId: z.string().min(1),
+    hunkIndex: z.number().int().nonnegative(),
+    restoredFiles: z.array(z.string().min(1)),
+    preRevertSnapshot: aiSnapshotSchema,
+    restoredSnapshot: aiSnapshotSchema,
+});
+
+/**
  * AED 按任务回滚请求 schema。
  */
 export const aiEditRevertTaskRequestSchema = z.object({

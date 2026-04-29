@@ -38,7 +38,9 @@ const aiServiceMock = vi.hoisted(() => {
         model: MOCK_MODEL,
     }));
 
-    const cancel = vi.fn(async (_payload: { streamId: string }) => undefined);
+    const cancel = vi.fn(async (payload: { streamId: string }) => {
+        void payload;
+    });
 
     const queryIndex = vi.fn(async () => ({
         rootPath: WORKSPACE_ROOT,

@@ -89,10 +89,12 @@ watch(
 
 <template>
   <section class="ai-code-block" :class="{ 'is-diff': block.fence.meta.isDiff, 'is-streaming': !block.closed }">
-    <AiCodeBlockHeader :block="block" :is-copied="isCopied" :is-folded="isFolded" :is-wrapped="isWrapped"
+    <AiCodeBlockHeader
+:block="block" :is-copied="isCopied" :is-folded="isFolded" :is-wrapped="isWrapped"
       :can-apply="canApplyBlock" @copy="copyCode" @wrap="store.toggleWrap(block.id)" @fold="store.toggleFold(block.id)"
       @apply="emit('apply', block)" @open-path="openPath" />
-    <div v-if="!block.closed" class="ai-code-stream-body"
+    <div
+v-if="!block.closed" class="ai-code-stream-body"
       :class="{ 'is-folded': isFolded, 'is-wrapped': isWrapped, 'is-cancelled': block.streamState === 'cancelled' }">
       <div v-if="showLineNumbers" class="ai-code-stream-lines" aria-hidden="true">
         <span v-for="line in lineNumbers" :key="line">{{ line }}</span>
@@ -107,7 +109,8 @@ watch(
       <div v-if="block.truncated" class="ai-code-truncated">内容过大，已截断显示。</div>
     </div>
     <AiCodeBlockDiff v-else-if="block.fence.meta.isDiff" :block="block" :is-folded="isFolded" />
-    <AiCodeBlockBody v-else :highlighted-html="highlightedHtml" :is-folded="isFolded" :is-wrapped="isWrapped"
+    <AiCodeBlockBody
+v-else :highlighted-html="highlightedHtml" :is-folded="isFolded" :is-wrapped="isWrapped"
       :show-line-numbers="showLineNumbers" :line-numbers="lineNumbers" :truncated="block.truncated" />
   </section>
 </template>

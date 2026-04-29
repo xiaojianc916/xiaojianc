@@ -4,9 +4,11 @@ use super::contracts::{
     AiCodeActionPayload, AiCodeActionRequest, AiConfigPayload, AiInlineCompletionRangePayload,
     AiEditCreateSnapshotPayload, AiEditCreateSnapshotRequest,
     AiEditAuthStatePayload, AiEditListTimelinePayload, AiEditListTimelineRequest,
+    AiEditGetDiffPayload, AiEditGetDiffRequest,
+    AiEditRevertFilePayload, AiEditRevertFileRequest,
     AiEditRestoreSnapshotPayload, AiEditRestoreSnapshotRequest, AiEditRevertTaskPayload,
-    AiEditRevertTaskRequest, AiEditSetAuthLevelRequest, AiEditUndoOperationPayload,
-    AiEditUndoOperationRequest,
+    AiEditRevertHunkPayload, AiEditRevertHunkRequest, AiEditRevertTaskRequest,
+    AiEditSetAuthLevelRequest, AiEditUndoOperationPayload, AiEditUndoOperationRequest,
     AiInlineCompletionRequest, AiInlineCompletionResult, AiProposePatchPayload,
     AiProposePatchRequest, AiProviderConnectionPayload, AiProviderConnectionRequest,
     AiProviderTestPayload, AiQueryIndexPayload, AiQueryIndexRequest,
@@ -249,6 +251,16 @@ pub fn ai_edit_list_timeline(
 }
 
 #[tauri::command]
+pub fn ai_edit_get_diff(
+    app: AppHandle,
+    payload: AiEditGetDiffRequest,
+    state: State<AiEditState>,
+) -> Result<AiEditGetDiffPayload, String> {
+    let snapshot_root = resolve_ai_edit_storage_root(&app)?;
+    ai_edit::get_diff(payload, &snapshot_root, state.inner())
+}
+
+#[tauri::command]
 pub fn ai_edit_create_snapshot(
     app: AppHandle,
     payload: AiEditCreateSnapshotRequest,
@@ -276,6 +288,26 @@ pub fn ai_edit_undo_operation(
 ) -> Result<AiEditUndoOperationPayload, String> {
     let snapshot_root = resolve_ai_edit_storage_root(&app)?;
     ai_edit::undo_operation(payload, &snapshot_root, state.inner())
+}
+
+#[tauri::command]
+pub fn ai_edit_revert_file(
+    app: AppHandle,
+    payload: AiEditRevertFileRequest,
+    state: State<AiEditState>,
+) -> Result<AiEditRevertFilePayload, String> {
+    let snapshot_root = resolve_ai_edit_storage_root(&app)?;
+    ai_edit::revert_file(payload, &snapshot_root, state.inner())
+}
+
+#[tauri::command]
+pub fn ai_edit_revert_hunk(
+    app: AppHandle,
+    payload: AiEditRevertHunkRequest,
+    state: State<AiEditState>,
+) -> Result<AiEditRevertHunkPayload, String> {
+    let snapshot_root = resolve_ai_edit_storage_root(&app)?;
+    ai_edit::revert_hunk(payload, &snapshot_root, state.inner())
 }
 
 #[tauri::command]

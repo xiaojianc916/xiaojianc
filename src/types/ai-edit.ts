@@ -188,6 +188,81 @@ export interface IAiEditUndoOperationPayload {
 }
 
 /**
+ * AED 按文件回滚请求。
+ */
+export interface IAiEditRevertFileRequest {
+    taskId: string;
+    path: string;
+}
+
+/**
+ * AED 按文件回滚结果。
+ */
+export interface IAiEditRevertFilePayload {
+    taskId: string;
+    path: string;
+    operationId: string;
+    restoredFiles: string[];
+    preRevertSnapshot: IAiSnapshot;
+    restoredSnapshot: IAiSnapshot;
+}
+
+/**
+ * AED diff hunk 预览条目。
+ */
+export interface IAiEditDiffHunk {
+    hunkIndex: number;
+    oldStart: number;
+    oldLines: number;
+    newStart: number;
+    newLines: number;
+    lines: string[];
+}
+
+/**
+ * AED 读取文件 diff 请求。
+ */
+export interface IAiEditGetDiffRequest {
+    taskId: string;
+    path: string;
+}
+
+/**
+ * AED 文件 diff 预览结果。
+ */
+export interface IAiEditGetDiffPayload {
+    taskId: string;
+    path: string;
+    operationId: string;
+    kind: TAiEditOperationKind;
+    additions: number;
+    deletions: number;
+    hunks: IAiEditDiffHunk[];
+}
+
+/**
+ * AED 按 hunk 回滚请求。
+ */
+export interface IAiEditRevertHunkRequest {
+    taskId: string;
+    path: string;
+    hunkIndex: number;
+}
+
+/**
+ * AED 按 hunk 回滚结果。
+ */
+export interface IAiEditRevertHunkPayload {
+    taskId: string;
+    path: string;
+    operationId: string;
+    hunkIndex: number;
+    restoredFiles: string[];
+    preRevertSnapshot: IAiSnapshot;
+    restoredSnapshot: IAiSnapshot;
+}
+
+/**
  * AED 按任务回滚请求。
  */
 export interface IAiEditRevertTaskRequest {

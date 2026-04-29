@@ -184,6 +184,7 @@ describe('AiAssistantPanel', () => {
                 stubs: {
                     AiChatThread: { template: '<div />' },
                     AiContextChips: { template: '<div />' },
+                    AiEditTimeline: { template: '<div />' },
                     AiPatchPreview: { template: '<div />' },
                     AiPromptInput: { template: '<div />' },
                     AiProviderSettings: { template: '<div />' },
@@ -220,6 +221,7 @@ describe('AiAssistantPanel', () => {
                 stubs: {
                     AiChatThread: { template: '<div />' },
                     AiContextChips: { template: '<div />' },
+                    AiEditTimeline: { template: '<div />' },
                     AiPatchPreview: { template: '<div />' },
                     AiPromptInput: { template: '<div />' },
                     AiProviderSettings: { template: '<div />' },
@@ -252,6 +254,7 @@ describe('AiAssistantPanel', () => {
                 stubs: {
                     AiChatThread: { template: '<div />' },
                     AiContextChips: { template: '<div />' },
+                    AiEditTimeline: { template: '<div />' },
                     AiPatchPreview: { template: '<div />' },
                     AiPromptInput: { template: '<div />' },
                     AiProviderSettings: { template: '<div />' },

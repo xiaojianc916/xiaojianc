@@ -1,7 +1,10 @@
 import { aiEditService } from '@/services/modules/ai-edit';
 import { useAiEditStore } from '@/store/aiEdit';
 import type {
+    IAiEditGetDiffPayload,
     IAiEditRestoreSnapshotPayload,
+    IAiEditRevertFilePayload,
+    IAiEditRevertHunkPayload,
     IAiEditRevertTaskPayload,
     IAiEditUndoOperationPayload,
 } from '@/types/ai-edit';
@@ -117,6 +120,30 @@ export const useAiRevert = () => {
         }
     };
 
+    const getDiff = async (
+        taskId: string,
+        path: string,
+    ): Promise<TAiRevertActionResult<IAiEditGetDiffPayload>> => {
+        error.value = null;
+
+        try {
+            const data = await aiEditService.getDiff({ taskId, path });
+            return {
+                data,
+                error: null,
+                status: 'success',
+            };
+        } catch (value) {
+            const nextError = normalizeError(value, `get-diff:${taskId}:${path}`);
+            error.value = nextError;
+            return {
+                data: null,
+                error: nextError,
+                status: 'failed',
+            };
+        }
+    };
+
     const undoOperation = async (
         operationId: string,
     ): Promise<TAiRevertActionResult<IAiEditUndoOperationPayload>> => {
@@ -171,6 +198,63 @@ export const useAiRevert = () => {
         }
     };
 
+    const revertFile = async (
+        taskId: string,
+        path: string,
+    ): Promise<TAiRevertActionResult<IAiEditRevertFilePayload>> => {
+        isReverting.value = true;
+        error.value = null;
+
+        try {
+            const data = await aiEditService.revertFile({ taskId, path });
+            await store.loadTimeline(buildRefreshPayload()).catch(() => undefined);
+            return {
+                data,
+                error: null,
+                status: 'success',
+            };
+        } catch (value) {
+            const nextError = normalizeError(value, `revert-file:${taskId}:${path}`);
+            error.value = nextError;
+            return {
+                data: null,
+                error: nextError,
+                status: 'failed',
+            };
+        } finally {
+            isReverting.value = false;
+        }
+    };
+
+    const revertHunk = async (
+        taskId: string,
+        path: string,
+        hunkIndex: number,
+    ): Promise<TAiRevertActionResult<IAiEditRevertHunkPayload>> => {
+        isReverting.value = true;
+        error.value = null;
+
+        try {
+            const data = await aiEditService.revertHunk({ taskId, path, hunkIndex });
+            await store.loadTimeline(buildRefreshPayload()).catch(() => undefined);
+            return {
+                data,
+                error: null,
+                status: 'success',
+            };
+        } catch (value) {
+            const nextError = normalizeError(value, `revert-hunk:${taskId}:${path}:${hunkIndex}`);
+            error.value = nextError;
+            return {
+                data: null,
+                error: nextError,
+                status: 'failed',
+            };
+        } finally {
+            isReverting.value = false;
+        }
+    };
+
     const undoLastEdit = (): Promise<IAiRevertFailureResult | IAiRevertSuccessResult<IAiEditUndoOperationPayload>> => {
         const operationId = latestUndoableOperation.value?.id;
         if (!operationId) {
@@ -208,12 +292,15 @@ export const useAiRevert = () => {
         currentTaskId,
         isReverting,
         error,
+        getDiff,
         latestSnapshot,
         latestUndoableOperation,
         restoreLatestSnapshot,
         revertCurrentTask,
         undoLastEdit,
         undoOperation,
+        revertFile,
+        revertHunk,
         revertTask,
         restoreSnapshot,
     };

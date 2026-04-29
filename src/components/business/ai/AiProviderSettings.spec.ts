@@ -4,8 +4,18 @@ import type {
     IAiProviderSettingsActionFeedback,
 } from '@/types/ai';
 import { mount } from '@vue/test-utils';
+import { createPinia } from 'pinia';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
+
+const createGlobalMountOptions = () => ({
+    global: {
+        plugins: [createPinia()],
+        stubs: {
+            teleport: true,
+        },
+    },
+});
 
 const createConfig = (overrides: Partial<IAiConfigPayload> = {}): IAiConfigPayload => ({
     providerType: 'openai',
@@ -35,11 +45,7 @@ describe('AiProviderSettings', () => {
                 draft,
                 apiKey: '',
             },
-            global: {
-                stubs: {
-                    teleport: true,
-                },
-            },
+            ...createGlobalMountOptions(),
         });
 
         await wrapper.get('[data-provider-id="deepseek"]').trigger('click');
@@ -57,11 +63,7 @@ describe('AiProviderSettings', () => {
                 draft: createConfig(),
                 apiKey: '',
             },
-            global: {
-                stubs: {
-                    teleport: true,
-                },
-            },
+            ...createGlobalMountOptions(),
         });
 
         await wrapper.get('[data-key="model"] .lr-select-trigger').trigger('click');
@@ -79,11 +81,7 @@ describe('AiProviderSettings', () => {
                 draft: createConfig(),
                 apiKey: '',
             },
-            global: {
-                stubs: {
-                    teleport: true,
-                },
-            },
+            ...createGlobalMountOptions(),
         });
 
         const testButton = wrapper
@@ -115,11 +113,7 @@ describe('AiProviderSettings', () => {
                 draft: createConfig(),
                 apiKey: 'sk-test-secret-value',
             },
-            global: {
-                stubs: {
-                    teleport: true,
-                },
-            },
+            ...createGlobalMountOptions(),
         });
 
         expect(wrapper.find('[aria-label="复制"]').exists()).toBe(true);
@@ -136,11 +130,7 @@ describe('AiProviderSettings', () => {
                 draft: createConfig(),
                 apiKey: '',
             },
-            global: {
-                stubs: {
-                    teleport: true,
-                },
-            },
+            ...createGlobalMountOptions(),
         });
 
         const testButton = wrapper
@@ -167,11 +157,7 @@ describe('AiProviderSettings', () => {
                 draft: createConfig(),
                 apiKey: '',
             },
-            global: {
-                stubs: {
-                    teleport: true,
-                },
-            },
+            ...createGlobalMountOptions(),
         });
 
         const saveButton = wrapper
@@ -206,11 +192,7 @@ describe('AiProviderSettings', () => {
                 draft: createConfig(),
                 apiKey: '',
             },
-            global: {
-                stubs: {
-                    teleport: true,
-                },
-            },
+            ...createGlobalMountOptions(),
         });
 
         expect(wrapper.find('.close-btn').exists()).toBe(false);

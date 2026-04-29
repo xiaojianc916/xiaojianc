@@ -1,5 +1,6 @@
 use crate::ai_edit::errors;
 use crate::commands::contracts::AiEditOperationPayload;
+use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -8,6 +9,12 @@ use std::path::{Path, PathBuf};
 const OPERATIONS_DIR: &str = "operations";
 /// 操作日志文件名。NDJSON 格式，一行一条 [`AiEditOperationPayload`]。
 const JOURNAL_FILE: &str = "journal.ndjson";
+
+#[derive(Debug, Default)]
+pub struct JournalPruneOutcome {
+    pub removed_operation_ids: HashSet<String>,
+    pub reclaimed_bytes: u64,
+}
 
 /// 计算操作日志文件在指定 storage_root 下的绝对路径。
 /// 唯一的路径派生入口，避免目录与文件路径出现不一致的事实源。
@@ -130,10 +137,71 @@ pub fn list_operations(storage_root: &Path) -> Result<Vec<AiEditOperationPayload
     Ok(operations)
 }
 
+pub fn prune_operations(
+    storage_root: &Path,
+    retained_operation_ids: &HashSet<String>,
+) -> Result<JournalPruneOutcome, String> {
+    let path = journal_path(storage_root);
+    if !path.is_file() {
+        return Ok(JournalPruneOutcome::default());
+    }
+
+    let operations = list_operations(storage_root)?;
+    let mut kept_operations = Vec::with_capacity(operations.len());
+    let mut outcome = JournalPruneOutcome::default();
+
+    for operation in operations {
+        if retained_operation_ids.contains(&operation.id) {
+            kept_operations.push(operation);
+            continue;
+        }
+
+        outcome.reclaimed_bytes += serialized_operation_len(&operation)?;
+        outcome.removed_operation_ids.insert(operation.id);
+    }
+
+    if outcome.removed_operation_ids.is_empty() {
+        return Ok(outcome);
+    }
+
+    if kept_operations.is_empty() {
+        fs::remove_file(&path).map_err(|error| {
+            errors::journal_failed(format!(
+                "删除操作日志失败（{}）：{error}",
+                path.display()
+            ))
+        })?;
+        return Ok(outcome);
+    }
+
+    let mut content = Vec::new();
+    for operation in &kept_operations {
+        serde_json::to_writer(&mut content, operation)
+            .map_err(|error| errors::journal_failed(format!("序列化操作日志失败：{error}")))?;
+        content.push(b'\n');
+    }
+
+    fs::write(&path, content).map_err(|error| {
+        errors::journal_failed(format!(
+            "重写操作日志失败（{}）：{error}",
+            path.display()
+        ))
+    })?;
+
+    Ok(outcome)
+}
+
+fn serialized_operation_len(operation: &AiEditOperationPayload) -> Result<u64, String> {
+    let serialized = serde_json::to_string(operation)
+        .map_err(|error| errors::journal_failed(format!("序列化操作日志失败：{error}")))?;
+    Ok(serialized.len() as u64 + 1)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{append_operations, list_operations};
+    use super::{append_operations, list_operations, prune_operations};
     use crate::commands::contracts::AiEditOperationPayload;
+    use std::collections::HashSet;
     use std::fs;
 
     #[test]
@@ -173,6 +241,90 @@ mod tests {
         assert_eq!(operations.len(), 1);
         assert_eq!(operations[0].id, "operation-1");
         assert_eq!(operations[0].source_snapshot_id.as_deref(), Some("snapshot-1"));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn prune_operations_rewrites_journal_with_retained_entries_only() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "aed-edit-journal-prune-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time should move forward")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&temp_dir).expect("temp directory should be created");
+
+        append_operations(
+            &temp_dir,
+            &[
+                AiEditOperationPayload {
+                    id: "operation-1".to_string(),
+                    task_id: "task-1".to_string(),
+                    turn_id: "turn-1".to_string(),
+                    kind: "modify".to_string(),
+                    path: "src/one.sh".to_string(),
+                    new_path: None,
+                    source_snapshot_id: Some("snapshot-1".to_string()),
+                    before_hash: Some("fnv64:before-1".to_string()),
+                    after_hash: Some("fnv64:after-1".to_string()),
+                    bytes_before: Some(16),
+                    bytes_after: Some(32),
+                    applied_at: "2026-04-28T10:00:01.000Z".to_string(),
+                    reason: "测试日志 1".to_string(),
+                    tool_call_id: None,
+                },
+                AiEditOperationPayload {
+                    id: "operation-2".to_string(),
+                    task_id: "task-1".to_string(),
+                    turn_id: "turn-2".to_string(),
+                    kind: "modify".to_string(),
+                    path: "src/two.sh".to_string(),
+                    new_path: None,
+                    source_snapshot_id: Some("snapshot-2".to_string()),
+                    before_hash: Some("fnv64:before-2".to_string()),
+                    after_hash: Some("fnv64:after-2".to_string()),
+                    bytes_before: Some(24),
+                    bytes_after: Some(40),
+                    applied_at: "2026-04-28T10:00:02.000Z".to_string(),
+                    reason: "测试日志 2".to_string(),
+                    tool_call_id: None,
+                },
+                AiEditOperationPayload {
+                    id: "operation-3".to_string(),
+                    task_id: "task-2".to_string(),
+                    turn_id: "turn-3".to_string(),
+                    kind: "modify".to_string(),
+                    path: "src/three.sh".to_string(),
+                    new_path: None,
+                    source_snapshot_id: Some("snapshot-3".to_string()),
+                    before_hash: Some("fnv64:before-3".to_string()),
+                    after_hash: Some("fnv64:after-3".to_string()),
+                    bytes_before: Some(32),
+                    bytes_after: Some(48),
+                    applied_at: "2026-04-28T10:00:03.000Z".to_string(),
+                    reason: "测试日志 3".to_string(),
+                    tool_call_id: None,
+                },
+            ],
+        )
+        .expect("operations should be appended");
+
+        let retained_operation_ids = HashSet::from([
+            "operation-2".to_string(),
+            "operation-3".to_string(),
+        ]);
+        let outcome =
+            prune_operations(&temp_dir, &retained_operation_ids).expect("journal should be pruned");
+
+        let operations = list_operations(&temp_dir).expect("operations should be listed");
+        assert_eq!(operations.len(), 2);
+        assert_eq!(operations[0].id, "operation-2");
+        assert_eq!(operations[1].id, "operation-3");
+        assert!(outcome.removed_operation_ids.contains("operation-1"));
+        assert!(!outcome.removed_operation_ids.contains("operation-2"));
+        assert!(outcome.reclaimed_bytes > 0);
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

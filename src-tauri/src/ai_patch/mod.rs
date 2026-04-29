@@ -129,6 +129,22 @@ pub fn apply_patch(
         return Err(errors::error("AI_PATCH_APPLY_FAILED", "Patch 未产生任何写入结果。"));
     }
 
+    tracing::info!(
+        target: "ai.audit",
+        event = "ai.edit.applied",
+        task_id = metadata
+            .as_ref()
+            .and_then(|value| value.task_id.as_deref())
+            .unwrap_or(""),
+        turn_id = metadata
+            .as_ref()
+            .and_then(|value| value.turn_id.as_deref())
+            .unwrap_or(""),
+        file_count = applied_files.len(),
+        byte_size_total = applied_files.iter().map(|file| file.byte_size).sum::<u64>(),
+        "AI edit applied"
+    );
+    audit::emit(AiAuditEventKind::AiEditApplied);
     audit::emit(AiAuditEventKind::PatchApplied);
     Ok(AiApplyPatchPayload { applied_files })
 }
