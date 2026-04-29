@@ -1,7 +1,6 @@
 ﻿<script setup lang="ts">
 import AiChatThread from '@/components/business/ai/AiChatThread.vue';
 import AiContextChips from '@/components/business/ai/AiContextChips.vue';
-import AiEditTimeline from '@/components/business/ai/AiEditTimeline.vue';
 import AiPatchPreview from '@/components/business/ai/AiPatchPreview.vue';
 import AiPromptInput from '@/components/business/ai/AiPromptInput.vue';
 import AiProviderSettings from '@/components/business/ai/AiProviderSettings.vue';
@@ -252,7 +251,6 @@ onMounted(() => {
     </header>
 
     <AiContextChips :references="assistant.currentReferences.value" />
-    <AiEditTimeline />
     <AiChatThread :messages="assistant.messages.value" :is-typing="assistant.isSending.value" :avatar-url="aiAvatarUrl"
       :avatar-alt="aiAvatarAlt" @apply-code="assistant.previewPatchFromCodeBlock"
       @open-code-path="emit('openCodePath', $event)" @message-action="handleMessageAction" />
@@ -265,7 +263,7 @@ onMounted(() => {
       @apply="assistant.applyProposedPatch" @close="assistant.proposedPatch.value = null" />
     <AiPromptInput v-model="assistant.draft.value" :disabled="assistant.isSending.value"
       :error-message="assistant.errorMessage.value"
-      :submit-label="assistant.activeMode.value === 'agent' ? '规划任务' : assistant.sendButtonLabel.value"
+      :submit-label="assistant.activeMode.value === 'agent' ? '开始执行' : assistant.sendButtonLabel.value"
       :attachments="assistant.attachedFiles.value" :has-attachments="assistant.attachedFiles.value.length > 0"
       @submit="assistant.sendMessage" @stop="assistant.stopCurrentRequest" @file-selected="assistant.attachFile"
       @remove-file="assistant.removeAttachedFile" />

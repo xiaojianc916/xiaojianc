@@ -25,15 +25,76 @@ const aiServiceMock = vi.hoisted(() => {
     type StreamHandler = (payload: IAiChatStreamEventPayload) => void;
 
     let streamHandler: StreamHandler | null = null;
+    let streamSequence = 0;
+    const queuedStreamResponses: Array<{
+        streamId: string;
+        assistantMessageId: string;
+        content: string;
+        terminalKind: 'done' | 'error';
+        terminalMessage: string | null;
+    }> = [];
 
     const onChatStream = vi.fn(async (handler: StreamHandler) => {
         streamHandler = handler;
         return vi.fn(); // unsubscribe
     });
 
-    const chatStream = vi.fn(async () => ({
-        streamId: STREAM_ID,
-        assistantMessageId: ASSISTANT_MESSAGE_ID,
+    const chatStream = vi.fn(async () => {
+        const queued = queuedStreamResponses.shift();
+        if (!queued) {
+            return {
+                streamId: STREAM_ID,
+                assistantMessageId: ASSISTANT_MESSAGE_ID,
+                providerType: 'mock',
+                model: MOCK_MODEL,
+            };
+        }
+
+        queueMicrotask(() => {
+            streamHandler?.({
+                streamId: queued.streamId,
+                assistantMessageId: queued.assistantMessageId,
+                kind: 'start',
+                delta: null,
+                message: null,
+                model: MOCK_MODEL,
+            });
+            for (const chunk of queued.content.match(/.{1,24}/g) ?? []) {
+                streamHandler?.({
+                    streamId: queued.streamId,
+                    assistantMessageId: queued.assistantMessageId,
+                    kind: 'delta',
+                    delta: chunk,
+                    message: null,
+                    model: MOCK_MODEL,
+                });
+            }
+            streamHandler?.({
+                streamId: queued.streamId,
+                assistantMessageId: queued.assistantMessageId,
+                kind: queued.terminalKind,
+                delta: null,
+                message: queued.terminalMessage,
+                model: MOCK_MODEL,
+            });
+        });
+
+        return {
+            streamId: queued.streamId,
+            assistantMessageId: queued.assistantMessageId,
+            providerType: 'mock',
+            model: MOCK_MODEL,
+        };
+    });
+
+    const chat = vi.fn(async () => ({
+        message: {
+            id: ASSISTANT_MESSAGE_ID,
+            role: 'assistant',
+            content: '{"type":"final","content":"mock agent final"}',
+            createdAt: '2026-04-29T00:00:00.000Z',
+            references: [],
+        },
         providerType: 'mock',
         model: MOCK_MODEL,
     }));
@@ -47,11 +108,35 @@ const aiServiceMock = vi.hoisted(() => {
         results: [],
     }));
 
+    const proposePatch = vi.fn(async () => ({
+        patch: {
+            summary: 'mock patch',
+            files: [],
+        },
+    }));
+
+    const applyPatch = vi.fn(async () => ({
+        appliedFiles: [],
+    }));
+
     return {
         onChatStream,
+        chat,
         chatStream,
         cancel,
         queryIndex,
+        proposePatch,
+        applyPatch,
+        queueStreamResponse(content: string, terminalKind: 'done' | 'error' = 'done', terminalMessage: string | null = null): void {
+            streamSequence += 1;
+            queuedStreamResponses.push({
+                streamId: `${STREAM_ID}-${streamSequence}`,
+                assistantMessageId: `${ASSISTANT_MESSAGE_ID}-${streamSequence}`,
+                content,
+                terminalKind,
+                terminalMessage,
+            });
+        },
         emit(event: IAiChatStreamEventPayload): void {
             streamHandler?.(event);
         },
@@ -67,10 +152,15 @@ const aiServiceMock = vi.hoisted(() => {
         },
         reset(): void {
             streamHandler = null;
+            streamSequence = 0;
+            queuedStreamResponses.length = 0;
             onChatStream.mockClear();
+            chat.mockClear();
             chatStream.mockClear();
             cancel.mockClear();
             queryIndex.mockClear();
+            proposePatch.mockClear();
+            applyPatch.mockClear();
         },
     };
 });
@@ -78,9 +168,12 @@ const aiServiceMock = vi.hoisted(() => {
 vi.mock('@/services/modules/ai', () => ({
     aiService: {
         onChatStream: aiServiceMock.onChatStream,
+        chat: aiServiceMock.chat,
         chatStream: aiServiceMock.chatStream,
         cancel: aiServiceMock.cancel,
         queryIndex: aiServiceMock.queryIndex,
+        proposePatch: aiServiceMock.proposePatch,
+        applyPatch: aiServiceMock.applyPatch,
     },
 }));
 
@@ -152,14 +245,28 @@ const createGitStatus = (): IGitRepositoryStatusPayload => ({
 });
 
 const createAssistantHarness = (): ReturnType<typeof useAiAssistant> =>
-    useAiAssistant({
-        document: ref(createDocument()),
+    createAssistantHarnessContext().assistant;
+
+const createAssistantHarnessContext = (
+    overrides: {
+        analysis?: IAnalyzeScriptPayload;
+    } = {},
+) => {
+    const document = ref(createDocument());
+    const assistant = useAiAssistant({
+        document,
         activeRun: ref(null),
-        analysis: ref(createAnalysis()),
+        analysis: ref(overrides.analysis ?? createAnalysis()),
         selection: ref(null),
         gitStatus: ref(createGitStatus()),
         workspaceRootPath: ref(WORKSPACE_ROOT),
     });
+
+    return {
+        assistant,
+        document,
+    };
+};
 
 // ---------------------------------------------------------------------------
 // Suite
@@ -326,41 +433,210 @@ describe('useAiAssistant streaming integration', () => {
         expect(assistant.messages.value[0]?.id).toBe('persisted-message');
     });
 
-    it('asks for confirmation before starting agent execution', async () => {
-        const assistant = createAssistantHarness();
+    it('automatically invokes tools in agent mode without waiting for confirmation', async () => {
+        const { assistant } = createAssistantHarnessContext({
+            analysis: {
+                available: true,
+                message: null,
+                dialect: 'shell',
+                diagnostics: [
+                    {
+                        line: 3,
+                        endLine: 3,
+                        column: 1,
+                        endColumn: 8,
+                        level: 'error',
+                        code: 'SC2086',
+                        message: 'Double quote to prevent globbing and word splitting.',
+                    },
+                ],
+            },
+        });
+
+        aiServiceMock.queueStreamResponse(
+            '{"type":"tool_call","name":"get_diagnostics","summary":"读取当前诊断","arguments":{}}',
+        );
+        aiServiceMock.queueStreamResponse(
+            '{"type":"final","content":"已根据当前诊断给出修复建议。"}',
+        );
 
         assistant.activeMode.value = 'agent';
         assistant.draft.value = '在当前文件里整理数据库备份示例';
 
         await assistant.sendMessage();
 
-        expect(aiServiceMock.chatStream).not.toHaveBeenCalled();
         expect(assistant.messages.value).toHaveLength(2);
         expect(assistant.messages.value[0]?.role).toBe('user');
-        expect(assistant.messages.value[1]?.content).toContain('是否允许 AI 开始执行这个任务');
-        expect(assistant.messages.value[1]?.actions).toEqual([
-            {
-                id: 'allow-agent-execution',
-                label: '允许执行',
-            },
-        ]);
-
-        const confirmPromise = assistant.handleMessageAction(
-            assistant.messages.value[1]?.id ?? '',
-            'allow-agent-execution',
-        );
-
-        await waitForStartedStream(() => assistant.messages.value.at(-1)?.id);
-
-        expect(aiServiceMock.chatStream).toHaveBeenCalledTimes(1);
+        expect(aiServiceMock.chatStream).toHaveBeenCalledTimes(2);
         expect(aiServiceMock.chatStream.mock.calls[0]?.[0]?.messages[0]).toEqual(
             expect.objectContaining({
                 role: 'system',
             }),
         );
-        expect(assistant.messages.value[1]?.content).toContain('已允许开始执行');
+        expect(aiServiceMock.chatStream.mock.calls[1]?.[0]?.messages).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    role: 'system',
+                    content: expect.stringContaining('工具 get_diagnostics 已执行。'),
+                }),
+            ]),
+        );
+        expect(assistant.messages.value[1]?.content).toBe('已根据当前诊断给出修复建议。');
+        expect(assistant.messages.value[1]?.toolCalls).toEqual([
+            {
+                id: 'agent-tool-1',
+                name: 'get_diagnostics',
+                status: 'succeeded',
+                summary: '读取当前诊断',
+            },
+        ]);
+        expect(assistant.agentSteps.value).toEqual([
+            {
+                id: 'agent-tool-1',
+                title: '读取当前诊断',
+                status: 'completed',
+            },
+        ]);
+    });
 
-        assistant.stopCurrentRequest();
-        await confirmPromise;
+    it('silently applies patch in agent mode and keeps the change rollbackable via AED timeline', async () => {
+        const { assistant, document } = createAssistantHarnessContext();
+        document.value.path = 'D:/test/xiaojianc.sh';
+        document.value.name = 'xiaojianc.sh';
+        document.value.content = 'echo old';
+        document.value.savedContent = 'echo old';
+        document.value.lineCount = 1;
+        document.value.charCount = 8;
+
+        aiServiceMock.queueStreamResponse(
+            JSON.stringify({
+                type: 'tool_call',
+                name: 'propose_patch',
+                summary: '静默写入当前文件',
+                arguments: {
+                    updatedContent: 'echo new',
+                    summary: '修正脚本输出',
+                },
+            }),
+        );
+        aiServiceMock.queueStreamResponse(
+            JSON.stringify({
+                type: 'final',
+                content: '脚本已经直接写入，可在 AED 时间线中回滚。',
+            }),
+        );
+        aiServiceMock.proposePatch.mockResolvedValueOnce({
+            patch: {
+                summary: '修正脚本输出',
+                files: [
+                    {
+                        path: 'D:/test/xiaojianc.sh',
+                        originalHash: 'fnv64:test',
+                        hunks: [
+                            {
+                                oldStart: 1,
+                                oldLines: 1,
+                                newStart: 1,
+                                newLines: 1,
+                                lines: ['-echo old', '+echo new'],
+                            },
+                        ],
+                    },
+                ],
+            },
+        });
+        aiServiceMock.applyPatch.mockResolvedValueOnce({
+            appliedFiles: [
+                {
+                    path: String.raw`\\?\D:\test\xiaojianc.sh`,
+                    byteSize: 8,
+                },
+            ],
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '把当前脚本的输出改成 echo new';
+
+        await assistant.sendMessage();
+
+        expect(aiServiceMock.applyPatch).toHaveBeenCalledTimes(1);
+        expect(aiServiceMock.applyPatch).toHaveBeenCalledWith(expect.objectContaining({
+            patch: expect.objectContaining({
+                summary: '修正脚本输出',
+            }),
+            metadata: expect.objectContaining({
+                reason: '修正脚本输出',
+                confirmedByUser: true,
+            }),
+        }));
+        expect(document.value.content).toBe('echo new');
+        expect(document.value.savedContent).toBe('echo new');
+        expect(document.value.isDirty).toBe(false);
+        expect(assistant.messages.value[1]?.content).toBe('脚本已经直接写入，可在 AED 时间线中回滚。');
+        expect(assistant.messages.value[1]?.toolCalls).toEqual([
+            {
+                id: 'agent-tool-1',
+                name: 'propose_patch',
+                status: 'succeeded',
+                summary: '静默写入当前文件',
+            },
+        ]);
+        expect(assistant.agentSteps.value).toEqual([
+            {
+                id: 'agent-tool-1',
+                title: '静默写入当前文件',
+                status: 'completed',
+            },
+        ]);
+        expect(assistant.proposedPatch.value).toBeNull();
+    });
+
+    it('applies patch by normalizing the returned path and syncing the current document', async () => {
+        const { assistant, document } = createAssistantHarnessContext();
+        document.value.path = 'D:/test/xiaojianc.sh';
+        document.value.name = 'xiaojianc.sh';
+        document.value.content = 'echo old';
+        document.value.savedContent = 'echo old';
+        document.value.lineCount = 1;
+        document.value.charCount = 8;
+
+        assistant.proposedPatch.value = {
+            summary: '应用 AI 代码块',
+            files: [
+                {
+                    path: 'D:/test/xiaojianc.sh',
+                    originalHash: 'fnv64:test',
+                    hunks: [
+                        {
+                            oldStart: 1,
+                            oldLines: 1,
+                            newStart: 1,
+                            newLines: 1,
+                            lines: ['-echo old', '+echo new'],
+                        },
+                    ],
+                },
+            ],
+        };
+
+        aiServiceMock.applyPatch.mockResolvedValueOnce({
+            appliedFiles: [
+                {
+                    path: String.raw`\\?\D:\test\xiaojianc.sh`,
+                    byteSize: 8,
+                },
+            ],
+        });
+
+        await assistant.applyProposedPatch();
+
+        expect(document.value.path).toBe('D:/test/xiaojianc.sh');
+        expect(document.value.content).toBe('echo new');
+        expect(document.value.savedContent).toBe('echo new');
+        expect(document.value.isDirty).toBe(false);
+        expect(document.value.lineCount).toBe(1);
+        expect(document.value.charCount).toBe(8);
+        expect(assistant.messages.value.at(-1)?.content).toBe('Patch 已应用：D:/test/xiaojianc.sh');
+        expect(assistant.proposedPatch.value).toBeNull();
     });
 });
