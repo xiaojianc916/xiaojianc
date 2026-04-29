@@ -49,16 +49,6 @@ const handleKeydown = (event: KeyboardEvent): void => {
   emit('submit');
 };
 
-const insertContextToken = async (token: string): Promise<void> => {
-  if (props.disabled) return;
-  const nextToken = `@${token}`;
-  const current = modelValue.value.trimEnd();
-  modelValue.value = current ? `${current} ${nextToken} ` : `${nextToken} `;
-  await nextTick();
-  textareaRef.value?.focus();
-  await resizeTextarea();
-};
-
 const handleFileChange = (event: Event): void => {
   const target = event.target;
   if (!(target instanceof HTMLInputElement)) return;
@@ -95,18 +85,9 @@ onMounted(() => {
 <template>
   <footer class="ai-composer">
     <p v-if="errorMessage" class="ai-error">{{ errorMessage }}</p>
-    <div class="ai-context-toolbar" aria-label="添加上下文">
-      <button type="button" @click="insertContextToken('file')">@file</button>
-      <button type="button" @click="insertContextToken('selection')">@selection</button>
-      <button type="button" @click="insertContextToken('diagnostics')">@diagnostics</button>
-      <button type="button" @click="insertContextToken('terminal')">@terminal</button>
-      <button type="button" @click="insertContextToken('git')">@git</button>
-      <button type="button" @click="insertContextToken('project')">@project</button>
-    </div>
     <div v-if="attachments.length" class="ai-attachment-strip" aria-label="已添加附件">
       <span v-for="attachment in attachments" :key="attachment.id" class="ai-attachment-chip">
-        <svg
-v-if="attachment.kind === 'image'" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        <svg v-if="attachment.kind === 'image'" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           aria-hidden="true">
           <rect x="3" y="4" width="18" height="16" rx="2" />
           <circle cx="8.5" cy="9" r="1.5" />
@@ -136,16 +117,14 @@ v-if="attachment.kind === 'image'" viewBox="0 0 24 24" fill="none" stroke="curre
             d="M21.44 11.05L12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
         </svg>
       </label>
-      <textarea
-ref="textareaRef" v-model="modelValue" rows="1" placeholder="输入消息…" aria-label="输入消息"
+      <textarea ref="textareaRef" v-model="modelValue" rows="1" placeholder="输入消息…" aria-label="输入消息"
         :disabled="disabled" @input="resizeTextarea" @keydown="handleKeydown" @paste="handlePaste" />
       <button v-if="disabled" type="button" class="ai-icon-button" aria-label="停止" title="停止" @click="emit('stop')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
           <rect x="7" y="7" width="10" height="10" rx="1" />
         </svg>
       </button>
-      <button
-v-else type="button" class="ai-icon-button" :aria-label="submitLabel" :title="submitLabel"
+      <button v-else type="button" class="ai-icon-button" :aria-label="submitLabel" :title="submitLabel"
         :disabled="!modelValue.trim() && !hasAttachments" @click="emit('submit')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
           <path d="M21.5 2.5L11 13" />
@@ -186,34 +165,6 @@ v-else type="button" class="ai-icon-button" :aria-label="submitLabel" :title="su
     border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
     background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
     box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.ai-context-toolbar {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.ai-context-toolbar button {
-  min-width: 0;
-  height: 22px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--shell-divider) 78%, transparent);
-  border-radius: 5px;
-  color: var(--text-quaternary);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 20px;
-  padding: 0 7px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ai-context-toolbar button:hover {
-  background: var(--surface-soft);
-  color: var(--text-primary);
 }
 
 .ai-attachment-strip {

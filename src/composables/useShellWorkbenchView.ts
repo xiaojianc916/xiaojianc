@@ -579,11 +579,6 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     }
 
     if (activeSidebarView.value === view) {
-      if (view === 'source-control') {
-        isSidebarVisible.value = true;
-        return;
-      }
-
       toggleSidebar();
       return;
     }

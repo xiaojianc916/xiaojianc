@@ -6,8 +6,9 @@ use super::provider::{AiProviderChatRequest, AiProviderMessage, AiProviderRespon
 use super::redaction::redact_text;
 use super::stream_manager;
 use crate::commands::contracts::{
-    AiAgentPlanPayload, AiAgentPlanRequest, AiChatRequest, AiCodeActionPayload,
-    AiCodeActionRequest, AiConfigPayload, AiContextReferencePayload,
+    AiAgentApprovePlanPayload, AiAgentApprovePlanRequest, AiAgentClassifyTaskPayload,
+    AiAgentClassifyTaskRequest, AiAgentPlanPayload, AiAgentPlanRequest, AiChatRequest,
+    AiCodeActionPayload, AiCodeActionRequest, AiConfigPayload, AiContextReferencePayload,
     AiInlineCompletionRangePayload, AiInlineCompletionRequest, AiInlineCompletionResult,
     AiTaskPlanStepPayload,
 };
@@ -552,12 +553,199 @@ pub async fn plan_task(payload: AiAgentPlanRequest) -> Result<AiAgentPlanPayload
     let goal = payload.goal.trim();
     if goal.is_empty() {
         return Err(errors::error(
-            "AI_AGENT_STEP_FAILED",
+            "AI_AGENT_PLAN_INVALID",
             "请输入 Agent 任务目标。",
         ));
     }
-    let _ = payload;
-    Ok(AiAgentPlanPayload { steps: Vec::new() })
+
+    let should_enter_plan_mode = should_enter_plan_mode(goal);
+    let mut steps = if should_enter_plan_mode {
+        build_default_plan_steps(goal)
+    } else {
+        vec![build_step(
+            0,
+            "完成当前请求",
+            "inspect",
+            "low",
+            vec!["read_current_file"],
+            false,
+            "给出可执行结论",
+            Some("无需回滚"),
+        )]
+    };
+
+    if steps.len() < 2 {
+        steps.push(build_step(
+            1,
+            "输出结果摘要",
+            "summarize",
+            "low",
+            vec!["search_text"],
+            false,
+            "输出简要执行摘要",
+            Some("无需回滚"),
+        ));
+    }
+
+    if steps.len() > 6 {
+        steps.truncate(6);
+    }
+
+    audit::emit(AiAuditEventKind::AgentPlanCreated);
+    Ok(AiAgentPlanPayload { steps })
+}
+
+pub async fn classify_task(
+    payload: AiAgentClassifyTaskRequest,
+) -> Result<AiAgentClassifyTaskPayload, String> {
+    let goal = payload.goal.trim();
+    if goal.is_empty() {
+        return Err(errors::error(
+            "AI_AGENT_PLAN_INVALID",
+            "任务描述不能为空。",
+        ));
+    }
+
+    let should_enter_plan_mode = should_enter_plan_mode(goal);
+    let classification = if should_enter_plan_mode {
+        "complex"
+    } else {
+        "simple"
+    };
+    let reason = if should_enter_plan_mode {
+        "任务包含多阶段动作或潜在写盘影响，需先计划后执行。"
+    } else {
+        "任务可在单轮内完成，可直接执行。"
+    };
+
+    Ok(AiAgentClassifyTaskPayload {
+        classification: classification.to_string(),
+        should_enter_plan_mode,
+        reason: reason.to_string(),
+    })
+}
+
+pub async fn approve_plan(
+    payload: AiAgentApprovePlanRequest,
+) -> Result<AiAgentApprovePlanPayload, String> {
+    if payload.goal.trim().is_empty() {
+        return Err(errors::error(
+            "AI_AGENT_PLAN_INVALID",
+            "任务目标不能为空。",
+        ));
+    }
+
+    if payload.steps.len() < 2 {
+        return Err(errors::error(
+            "AI_AGENT_PLAN_TOO_SHORT",
+            "计划步骤数必须在 2 到 6 之间。",
+        ));
+    }
+
+    if payload.steps.len() > 6 {
+        return Err(errors::error(
+            "AI_AGENT_PLAN_TOO_LONG",
+            "计划步骤数必须在 2 到 6 之间。",
+        ));
+    }
+
+    audit::emit(AiAuditEventKind::AgentPlanApproved);
+    Ok(AiAgentApprovePlanPayload {
+        approved_at: chrono::Utc::now().to_rfc3339(),
+        step_count: payload.steps.len(),
+    })
+}
+
+fn should_enter_plan_mode(goal: &str) -> bool {
+    const COMPLEX_KEYWORDS: &[&str] = &[
+        "重构",
+        "完善",
+        "接入",
+        "实现",
+        "全链路",
+        "架构",
+        "方案",
+        "测试",
+        "构建",
+        "回滚",
+    ];
+
+    if goal.chars().count() >= 24 {
+        return true;
+    }
+
+    COMPLEX_KEYWORDS.iter().any(|keyword| goal.contains(keyword))
+}
+
+fn build_default_plan_steps(goal: &str) -> Vec<AiTaskPlanStepPayload> {
+    vec![
+        build_step(
+            0,
+            "收集现有上下文与影响面",
+            "inspect",
+            "low",
+            vec!["search_text", "read_current_file", "get_diagnostics"],
+            false,
+            "产出受影响文件与边界说明",
+            Some("无需回滚"),
+        ),
+        build_step(
+            1,
+            "设计实现方案与风险控制",
+            "design",
+            "medium",
+            vec!["search_symbols", "get_git_diff"],
+            false,
+            "产出可执行方案与风险说明",
+            Some("无需回滚"),
+        ),
+        build_step(
+            2,
+            "执行改动并验证",
+            "verify",
+            "medium",
+            vec!["propose_patch", "run_test"],
+            true,
+            "输出改动结果、验证结论与后续建议",
+            Some("通过 AED 时间线回滚本轮写盘"),
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(index, mut step)| {
+        step.index = index;
+        step.id = format!("plan-step-{}", index + 1);
+        step.goal = format!("{}：{}", goal, step.goal);
+        step
+    })
+    .collect()
+}
+
+fn build_step(
+    index: usize,
+    title: &str,
+    kind: &str,
+    risk_level: &str,
+    tools: Vec<&str>,
+    requires_user_approval: bool,
+    expected_output: &str,
+    rollback_strategy: Option<&str>,
+) -> AiTaskPlanStepPayload {
+    AiTaskPlanStepPayload {
+        id: format!("plan-step-{}", index + 1),
+        index,
+        title: title.to_string(),
+        goal: title.to_string(),
+        kind: kind.to_string(),
+        status: "pending".to_string(),
+        expected_output: expected_output.to_string(),
+        tools: tools.into_iter().map(|item| item.to_string()).collect(),
+        references: None,
+        is_active: None,
+        requires_user_approval,
+        risk_level: risk_level.to_string(),
+        rollback_strategy: rollback_strategy.map(|item| item.to_string()),
+    }
 }
 
 fn collect_messages(

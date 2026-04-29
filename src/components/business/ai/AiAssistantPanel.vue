@@ -2,6 +2,7 @@
 import AiChatThread from '@/components/business/ai/AiChatThread.vue';
 import AiContextChips from '@/components/business/ai/AiContextChips.vue';
 import AiPatchPreview from '@/components/business/ai/AiPatchPreview.vue';
+import AiPlanModePanel from '@/components/business/ai/AiPlanModePanel.vue';
 import AiPromptInput from '@/components/business/ai/AiPromptInput.vue';
 import AiProviderSettings from '@/components/business/ai/AiProviderSettings.vue';
 import { useAiAssistant } from '@/composables/useAiAssistant';
@@ -64,6 +65,14 @@ const aiAvatarUrl = computed(() =>
 const aiAvatarAlt = computed(() => currentProviderPreset.value.label);
 const historyThreads = computed(() => assistant.historyThreads.value.slice(-MAX_HISTORY_MESSAGES).reverse());
 const historyCountLabel = computed(() => `最近 ${historyThreads.value.length} 组`);
+const planStore = computed(() => assistant.agentPlan.store);
+const planVisible = computed(() => {
+  if (assistant.activeMode.value !== 'agent') {
+    return false;
+  }
+
+  return planStore.value.hasPlan || planStore.value.isPlanning || Boolean(planStore.value.errorMessage);
+});
 
 const openSettings = (): void => {
   settingsDraft.value = { ...assistant.config.value };
@@ -114,6 +123,42 @@ const getHistoryMessageCountLabel = (messages: IAiChatMessage[]): string => `${m
 
 const toErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error && error.message.trim() ? error.message : fallback;
+
+const setPlanError = (error: unknown, fallback: string): void => {
+  planStore.value.errorMessage = toErrorMessage(error, fallback);
+};
+
+const handleUpdatePlanStepTitle = (stepId: string, title: string): void => {
+  assistant.agentPlan.updateStep(stepId, { title });
+};
+
+const handleRemovePlanStep = (stepId: string): void => {
+  try {
+    assistant.agentPlan.removeStep(stepId);
+  } catch (error) {
+    setPlanError(error, '删除计划步骤失败。');
+  }
+};
+
+const handleRegeneratePlan = async (): Promise<void> => {
+  try {
+    await assistant.agentPlan.regeneratePlan();
+  } catch (error) {
+    setPlanError(error, '重生成计划失败。');
+  }
+};
+
+const handleApprovePlan = async (): Promise<void> => {
+  try {
+    await assistant.agentPlan.approvePlan();
+  } catch (error) {
+    setPlanError(error, '批准计划失败。');
+  }
+};
+
+const handleResetPlan = (): void => {
+  assistant.agentPlan.resetPlan();
+};
 
 const saveSettings = async (
   config: IAiConfigPayload,
@@ -251,6 +296,11 @@ onMounted(() => {
     </header>
 
     <AiContextChips :references="assistant.currentReferences.value" />
+    <AiPlanModePanel v-if="planVisible" :goal="planStore.activeGoal" :steps="planStore.steps"
+      :classification-reason="planStore.classificationReason" :error-message="planStore.errorMessage"
+      :is-planning="planStore.isPlanning" :is-approving="planStore.isApproving"
+      @update-step-title="handleUpdatePlanStepTitle" @remove-step="handleRemovePlanStep"
+      @regenerate="handleRegeneratePlan" @approve="handleApprovePlan" @reset="handleResetPlan" />
     <AiChatThread :messages="assistant.messages.value" :is-typing="assistant.isSending.value" :avatar-url="aiAvatarUrl"
       :avatar-alt="aiAvatarAlt" @apply-code="assistant.previewPatchFromCodeBlock"
       @open-code-path="emit('openCodePath', $event)" @message-action="handleMessageAction" />

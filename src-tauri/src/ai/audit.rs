@@ -6,6 +6,8 @@ pub enum AiAuditEventKind {
     ChatStarted,
     ChatCompleted,
     ChatFailed,
+    AgentPlanCreated,
+    AgentPlanApproved,
     ConfigUpdated,
     CredentialCleared,
     AiEditAuthChanged,

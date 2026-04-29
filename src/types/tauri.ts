@@ -1,4 +1,8 @@
 import type {
+  IAiAgentApprovePlanPayload,
+  IAiAgentApprovePlanRequest,
+  IAiAgentClassifyTaskPayload,
+  IAiAgentClassifyTaskRequest,
   IAiAgentPlanPayload,
   IAiAgentPlanRequest,
   IAiApplyPatchPayload,
@@ -23,6 +27,7 @@ import type {
   IAiQueryIndexRequest,
   IAiSaveConfigRequest,
   IAiSaveCredentialsRequest,
+  IAiToolDefinitionPayload,
 } from './ai';
 import type {
   IAiEditAuthState,
@@ -217,7 +222,9 @@ export interface ITauriService {
   onAiChatStream(handler: (payload: IAiChatStreamEventPayload) => void): Promise<() => void>;
   aiInlineComplete(payload: IAiInlineCompletionRequest): Promise<IAiInlineCompletionResult>;
   aiCodeAction(payload: IAiCodeActionRequest): Promise<IAiCodeActionResult>;
+  aiAgentClassifyTask(payload: IAiAgentClassifyTaskRequest): Promise<IAiAgentClassifyTaskPayload>;
   aiPlanTask(payload: IAiAgentPlanRequest): Promise<IAiAgentPlanPayload>;
+  aiAgentApprovePlan(payload: IAiAgentApprovePlanRequest): Promise<IAiAgentApprovePlanPayload>;
   aiBuildIndex(payload: IAiBuildIndexRequest): Promise<IAiBuildIndexPayload>;
   aiQueryIndex(payload: IAiQueryIndexRequest): Promise<IAiQueryIndexPayload>;
   aiProposePatch(payload: IAiProposePatchRequest): Promise<IAiProposePatchPayload>;
@@ -238,4 +245,5 @@ export interface ITauriService {
   aiEditRevertFile(payload: IAiEditRevertFileRequest): Promise<IAiEditRevertFilePayload>;
   aiEditRevertHunk(payload: IAiEditRevertHunkRequest): Promise<IAiEditRevertHunkPayload>;
   aiEditRevertTask(payload: IAiEditRevertTaskRequest): Promise<IAiEditRevertTaskPayload>;
+  aiListTools(): Promise<IAiToolDefinitionPayload[]>;
 }

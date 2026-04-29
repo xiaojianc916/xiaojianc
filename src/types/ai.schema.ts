@@ -1,5 +1,29 @@
 ﻿import { z } from 'zod';
 
+import {
+  aiContextKindSchema,
+  aiContextRangeSchema,
+  aiContextReferenceSchema,
+} from '@/types/ai-context.schema';
+import {
+  aiAgentApprovePlanPayloadSchema,
+  aiAgentApprovePlanRequestSchema,
+  aiAgentClassifyTaskPayloadSchema,
+  aiAgentClassifyTaskRequestSchema,
+  aiAgentPermissionLevelSchema,
+  aiAgentPermissionScopeSchema,
+  aiAgentPermissionStateSchema,
+  aiAgentPlanPayloadSchema,
+  aiAgentPlanReferenceSchema,
+  aiAgentPlanReferenceTypeSchema,
+  aiAgentPlanRequestSchema,
+  aiAgentPlanRiskLevelSchema,
+  aiAgentPlanStepKindSchema,
+  aiAgentPlanStepStatusSchema,
+  aiAgentTaskClassificationSchema,
+  aiAgentToolNameSchema,
+  aiTaskPlanStepSchema,
+} from '@/types/ai-agent.schema';
 import { aiCodeBlockSchema } from '@/types/ai-code.schema';
 
 export const aiProviderTypeSchema = z.enum([
@@ -15,33 +39,6 @@ export const aiProviderTypeSchema = z.enum([
   'local',
   'custom-gateway',
 ]);
-
-export const aiContextKindSchema = z.enum([
-  'current-file',
-  'selection',
-  'cursor-window',
-  'diagnostics',
-  'git-diff',
-  'terminal-log',
-  'search-result',
-  'image-attachment',
-  'symbol-definition',
-  'symbol-references',
-  'project-tree',
-]);
-
-export const aiContextReferenceSchema = z.object({
-  id: z.string().min(1),
-  kind: aiContextKindSchema,
-  label: z.string().min(1),
-  path: z.string().nullable(),
-  range: z.object({
-    startLine: z.number().int().positive(),
-    endLine: z.number().int().positive(),
-  }).nullable(),
-  contentPreview: z.string(),
-  redacted: z.boolean(),
-});
 
 export const aiChatMessageActionSchema = z.object({
   id: z.enum(['allow-agent-execution']),
@@ -210,15 +207,25 @@ export const aiCodeActionPayloadSchema = z.object({
   followUpQuestions: z.array(z.string()),
 });
 
-export const aiAgentPlanRequestSchema = z.object({
-  goal: z.string(),
-  context: z.array(aiContextReferenceSchema),
-});
-
-export const aiAgentPlanPayloadSchema = z.object({
-  steps: z.array(z.object({
-    id: z.string(),
-    title: z.string(),
-    status: z.enum(['pending', 'running', 'completed', 'failed', 'requires-confirmation']),
-  })),
-});
+export {
+  aiAgentApprovePlanPayloadSchema,
+  aiAgentApprovePlanRequestSchema,
+  aiAgentClassifyTaskPayloadSchema,
+  aiAgentClassifyTaskRequestSchema,
+  aiAgentPermissionLevelSchema,
+  aiAgentPermissionScopeSchema,
+  aiAgentPermissionStateSchema,
+  aiAgentPlanPayloadSchema,
+  aiAgentPlanReferenceSchema,
+  aiAgentPlanReferenceTypeSchema,
+  aiAgentPlanRequestSchema,
+  aiAgentPlanRiskLevelSchema,
+  aiAgentPlanStepKindSchema,
+  aiAgentPlanStepStatusSchema,
+  aiAgentTaskClassificationSchema,
+  aiAgentToolNameSchema,
+  aiContextKindSchema,
+  aiContextRangeSchema,
+  aiContextReferenceSchema,
+  aiTaskPlanStepSchema,
+};

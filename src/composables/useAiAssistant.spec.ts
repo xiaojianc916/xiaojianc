@@ -119,6 +119,46 @@ const aiServiceMock = vi.hoisted(() => {
         appliedFiles: [],
     }));
 
+    const classifyTask = vi.fn(async () => ({
+        classification: 'complex',
+        shouldEnterPlanMode: true,
+        reason: '任务影响面较大，需先进入计划模式。',
+    }));
+
+    const planTask = vi.fn(async () => ({
+        steps: [
+            {
+                id: 'plan-step-1',
+                index: 0,
+                title: '收集上下文',
+                goal: '收集上下文',
+                kind: 'inspect',
+                status: 'pending',
+                expectedOutput: '产出影响范围',
+                tools: ['search_text'],
+                requiresUserApproval: false,
+                riskLevel: 'low',
+            },
+            {
+                id: 'plan-step-2',
+                index: 1,
+                title: '输出实施计划',
+                goal: '输出实施计划',
+                kind: 'summarize',
+                status: 'pending',
+                expectedOutput: '产出可执行计划',
+                tools: ['get_diagnostics'],
+                requiresUserApproval: true,
+                riskLevel: 'medium',
+            },
+        ],
+    }));
+
+    const approvePlan = vi.fn(async () => ({
+        approvedAt: '2026-04-29T00:00:00.000Z',
+        stepCount: 2,
+    }));
+
     return {
         onChatStream,
         chat,
@@ -127,6 +167,9 @@ const aiServiceMock = vi.hoisted(() => {
         queryIndex,
         proposePatch,
         applyPatch,
+        classifyTask,
+        planTask,
+        approvePlan,
         queueStreamResponse(content: string, terminalKind: 'done' | 'error' = 'done', terminalMessage: string | null = null): void {
             streamSequence += 1;
             queuedStreamResponses.push({
@@ -161,6 +204,9 @@ const aiServiceMock = vi.hoisted(() => {
             queryIndex.mockClear();
             proposePatch.mockClear();
             applyPatch.mockClear();
+            classifyTask.mockClear();
+            planTask.mockClear();
+            approvePlan.mockClear();
         },
     };
 });
@@ -174,6 +220,9 @@ vi.mock('@/services/modules/ai', () => ({
         queryIndex: aiServiceMock.queryIndex,
         proposePatch: aiServiceMock.proposePatch,
         applyPatch: aiServiceMock.applyPatch,
+        classifyTask: aiServiceMock.classifyTask,
+        planTask: aiServiceMock.planTask,
+        approvePlan: aiServiceMock.approvePlan,
     },
 }));
 
@@ -433,32 +482,42 @@ describe('useAiAssistant streaming integration', () => {
         expect(assistant.messages.value[0]?.id).toBe('persisted-message');
     });
 
-    it('automatically invokes tools in agent mode without waiting for confirmation', async () => {
-        const { assistant } = createAssistantHarnessContext({
-            analysis: {
-                available: true,
-                message: null,
-                dialect: 'shell',
-                diagnostics: [
-                    {
-                        line: 3,
-                        endLine: 3,
-                        column: 1,
-                        endColumn: 8,
-                        level: 'error',
-                        code: 'SC2086',
-                        message: 'Double quote to prevent globbing and word splitting.',
-                    },
-                ],
-            },
-        });
+    it('enters plan mode first for complex tasks in agent mode', async () => {
+        const { assistant } = createAssistantHarnessContext();
 
-        aiServiceMock.queueStreamResponse(
-            '{"type":"tool_call","name":"get_diagnostics","summary":"读取当前诊断","arguments":{}}',
-        );
-        aiServiceMock.queueStreamResponse(
-            '{"type":"final","content":"已根据当前诊断给出修复建议。"}',
-        );
+        aiServiceMock.classifyTask.mockResolvedValueOnce({
+            classification: 'complex',
+            shouldEnterPlanMode: true,
+            reason: '任务影响面较大，需先进入计划模式。',
+        });
+        aiServiceMock.planTask.mockResolvedValueOnce({
+            steps: [
+                {
+                    id: 'plan-step-1',
+                    index: 0,
+                    title: '收集上下文',
+                    goal: '收集上下文',
+                    kind: 'inspect',
+                    status: 'pending',
+                    expectedOutput: '产出影响范围',
+                    tools: ['search_text'],
+                    requiresUserApproval: false,
+                    riskLevel: 'low',
+                },
+                {
+                    id: 'plan-step-2',
+                    index: 1,
+                    title: '输出实施计划',
+                    goal: '输出实施计划',
+                    kind: 'summarize',
+                    status: 'pending',
+                    expectedOutput: '产出可执行计划',
+                    tools: ['get_diagnostics'],
+                    requiresUserApproval: true,
+                    riskLevel: 'medium',
+                },
+            ],
+        });
 
         assistant.activeMode.value = 'agent';
         assistant.draft.value = '在当前文件里整理数据库备份示例';
@@ -467,128 +526,35 @@ describe('useAiAssistant streaming integration', () => {
 
         expect(assistant.messages.value).toHaveLength(2);
         expect(assistant.messages.value[0]?.role).toBe('user');
-        expect(aiServiceMock.chatStream).toHaveBeenCalledTimes(2);
-        expect(aiServiceMock.chatStream.mock.calls[0]?.[0]?.messages[0]).toEqual(
-            expect.objectContaining({
-                role: 'system',
-            }),
-        );
-        expect(aiServiceMock.chatStream.mock.calls[1]?.[0]?.messages).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({
-                    role: 'system',
-                    content: expect.stringContaining('工具 get_diagnostics 已执行。'),
-                }),
-            ]),
-        );
-        expect(assistant.messages.value[1]?.content).toBe('已根据当前诊断给出修复建议。');
-        expect(assistant.messages.value[1]?.toolCalls).toEqual([
-            {
-                id: 'agent-tool-1',
-                name: 'get_diagnostics',
-                status: 'succeeded',
-                summary: '读取当前诊断',
-            },
-        ]);
-        expect(assistant.agentSteps.value).toEqual([
-            {
-                id: 'agent-tool-1',
-                title: '读取当前诊断',
-                status: 'completed',
-            },
-        ]);
+        expect(aiServiceMock.classifyTask).toHaveBeenCalledTimes(1);
+        expect(aiServiceMock.planTask).toHaveBeenCalledTimes(1);
+        expect(aiServiceMock.chatStream).toHaveBeenCalledTimes(0);
+        expect(assistant.messages.value[1]?.content).toContain('已进入 Plan Mode，请先确认计划');
+        expect(assistant.agentSteps.value).toHaveLength(2);
     });
 
-    it('silently applies patch in agent mode and keeps the change rollbackable via AED timeline', async () => {
-        const { assistant, document } = createAssistantHarnessContext();
-        document.value.path = 'D:/test/xiaojianc.sh';
-        document.value.name = 'xiaojianc.sh';
-        document.value.content = 'echo old';
-        document.value.savedContent = 'echo old';
-        document.value.lineCount = 1;
-        document.value.charCount = 8;
+    it('falls back to normal chat path when task is classified as simple in agent mode', async () => {
+        const { assistant } = createAssistantHarnessContext();
 
-        aiServiceMock.queueStreamResponse(
-            JSON.stringify({
-                type: 'tool_call',
-                name: 'propose_patch',
-                summary: '静默写入当前文件',
-                arguments: {
-                    updatedContent: 'echo new',
-                    summary: '修正脚本输出',
-                },
-            }),
-        );
-        aiServiceMock.queueStreamResponse(
-            JSON.stringify({
-                type: 'final',
-                content: '脚本已经直接写入，可在 AED 时间线中回滚。',
-            }),
-        );
-        aiServiceMock.proposePatch.mockResolvedValueOnce({
-            patch: {
-                summary: '修正脚本输出',
-                files: [
-                    {
-                        path: 'D:/test/xiaojianc.sh',
-                        originalHash: 'fnv64:test',
-                        hunks: [
-                            {
-                                oldStart: 1,
-                                oldLines: 1,
-                                newStart: 1,
-                                newLines: 1,
-                                lines: ['-echo old', '+echo new'],
-                            },
-                        ],
-                    },
-                ],
-            },
+        aiServiceMock.classifyTask.mockResolvedValueOnce({
+            classification: 'simple',
+            shouldEnterPlanMode: false,
+            reason: '简单任务，可直接执行。',
         });
-        aiServiceMock.applyPatch.mockResolvedValueOnce({
-            appliedFiles: [
-                {
-                    path: String.raw`\\?\D:\test\xiaojianc.sh`,
-                    byteSize: 8,
-                },
-            ],
-        });
+        aiServiceMock.queueStreamResponse(
+            '{"type":"final","content":"已按简单任务直接给出处理结论。"}',
+        );
 
         assistant.activeMode.value = 'agent';
-        assistant.draft.value = '把当前脚本的输出改成 echo new';
+        assistant.draft.value = '解释当前脚本';
 
         await assistant.sendMessage();
 
-        expect(aiServiceMock.applyPatch).toHaveBeenCalledTimes(1);
-        expect(aiServiceMock.applyPatch).toHaveBeenCalledWith(expect.objectContaining({
-            patch: expect.objectContaining({
-                summary: '修正脚本输出',
-            }),
-            metadata: expect.objectContaining({
-                reason: '修正脚本输出',
-                confirmedByUser: true,
-            }),
-        }));
-        expect(document.value.content).toBe('echo new');
-        expect(document.value.savedContent).toBe('echo new');
-        expect(document.value.isDirty).toBe(false);
-        expect(assistant.messages.value[1]?.content).toBe('脚本已经直接写入，可在 AED 时间线中回滚。');
-        expect(assistant.messages.value[1]?.toolCalls).toEqual([
-            {
-                id: 'agent-tool-1',
-                name: 'propose_patch',
-                status: 'succeeded',
-                summary: '静默写入当前文件',
-            },
-        ]);
-        expect(assistant.agentSteps.value).toEqual([
-            {
-                id: 'agent-tool-1',
-                title: '静默写入当前文件',
-                status: 'completed',
-            },
-        ]);
-        expect(assistant.proposedPatch.value).toBeNull();
+        expect(aiServiceMock.classifyTask).toHaveBeenCalledTimes(1);
+        expect(aiServiceMock.planTask).toHaveBeenCalledTimes(0);
+        expect(aiServiceMock.chatStream).toHaveBeenCalledTimes(1);
+        expect(aiServiceMock.applyPatch).toHaveBeenCalledTimes(0);
+        expect(assistant.messages.value[1]?.content).toContain('已按简单任务直接给出处理结论');
     });
 
     it('applies patch by normalizing the returned path and syncing the current document', async () => {
@@ -601,7 +567,7 @@ describe('useAiAssistant streaming integration', () => {
         document.value.charCount = 8;
 
         assistant.proposedPatch.value = {
-            summary: '应用 AI 代码块',
+            summary: '修正脚本输出',
             files: [
                 {
                     path: 'D:/test/xiaojianc.sh',

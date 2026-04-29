@@ -806,10 +806,24 @@ const aiCodeActionIpc = definePayloadIpc(
   { audit: 'sensitive', timeoutMs: 60_000, measureInput: buildPayloadMetrics },
 );
 
+const aiAgentClassifyTaskIpc = definePayloadIpc(
+  'ai_agent_classify_task',
+  '分类 AI Agent 任务复杂度',
+  tauriContracts.aiAgentClassifyTask,
+  { audit: 'sensitive', timeoutMs: 30_000, measureInput: measureAiChatInput },
+);
+
 const aiPlanTaskIpc = definePayloadIpc(
   'ai_plan_task',
   '规划 AI Agent 任务',
   tauriContracts.aiPlanTask,
+  { audit: 'sensitive', timeoutMs: 30_000, measureInput: measureAiChatInput },
+);
+
+const aiAgentApprovePlanIpc = definePayloadIpc(
+  'ai_agent_approve_plan',
+  '批准 AI Agent 计划',
+  tauriContracts.aiAgentApprovePlan,
   { audit: 'sensitive', timeoutMs: 30_000, measureInput: measureAiChatInput },
 );
 
@@ -1098,7 +1112,9 @@ export const tauriService: ITauriService & {
 
   aiConnectProvider: aiConnectProviderIpc,
 
-  aiChat: aiChatIpc,
+  aiChat(payload, options) {
+    return aiChatIpc(payload, options) as ReturnType<ITauriService['aiChat']>;
+  },
 
   aiChatStream: aiChatStreamIpc,
 
@@ -1120,7 +1136,11 @@ export const tauriService: ITauriService & {
 
   aiCodeAction: aiCodeActionIpc,
 
+  aiAgentClassifyTask: aiAgentClassifyTaskIpc,
+
   aiPlanTask: aiPlanTaskIpc,
+
+  aiAgentApprovePlan: aiAgentApprovePlanIpc,
 
   aiBuildIndex: aiBuildIndexIpc,
 

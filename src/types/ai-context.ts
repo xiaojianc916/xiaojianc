@@ -1,4 +1,27 @@
-﻿export type {
-  IAiContextReference,
-  TAiContextKind,
-} from './ai';
+﻿export type TAiContextKind =
+  | 'current-file'
+  | 'selection'
+  | 'cursor-window'
+  | 'diagnostics'
+  | 'git-diff'
+  | 'terminal-log'
+  | 'search-result'
+  | 'image-attachment'
+  | 'symbol-definition'
+  | 'symbol-references'
+  | 'project-tree';
+
+export interface IAiContextRange {
+  startLine: number;
+  endLine: number;
+}
+
+export interface IAiContextReference {
+  id: string;
+  kind: TAiContextKind;
+  label: string;
+  path: string | null;
+  range: IAiContextRange | null;
+  contentPreview: string;
+  redacted: boolean;
+}

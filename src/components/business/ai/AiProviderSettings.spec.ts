@@ -118,7 +118,7 @@ describe('AiProviderSettings', () => {
 
         expect(wrapper.find('[aria-label="复制"]').exists()).toBe(true);
         expect(wrapper.find('[aria-label="显示 / 隐藏"]').exists()).toBe(false);
-        expect(wrapper.get('input[type="password"]').exists()).toBe(true);
+        expect(wrapper.find('input[type="password"]').exists()).toBe(true);
     });
 
     it('keeps the dialog open after testing connection even after the success toast timeout', async () => {

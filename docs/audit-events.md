@@ -38,6 +38,9 @@
 | `ai.edit.pruned` | AED retention 自动清理超出保留窗口的本地历史 | `traceId`, `pruned_operation_count`, `pruned_snapshot_count`, `pruned_blob_count`, `reclaimed_bytes`, `retained_operation_limit`, `retained_snapshot_limit` | HIGH |
 | `ai.edit.task_reverted` | 用户按任务回滚当前任务内全部有效 AED 编辑 | `traceId`, `task_id`, `reverted_operation_count`, `restored_file_count` | HIGH |
 | `ai.edit.snapshot_restored` | 用户恢复 AED 快照 | `traceId`, `snapshot_id`, `pre_revert_snapshot_id`, `restored_snapshot_id`, `task_id`, `restored_file_count` | HIGH |
+| `ai.agent.plan.created` | Agent 生成计划 | `traceId`, `goal_hash`, `step_count`, `classification` | HIGH |
+| `ai.agent.plan.approved` | 用户批准 Agent 计划 | `traceId`, `goal_hash`, `step_count`, `approved_at` | HIGH |
+| `ai.agent.permission.changed` | Agent 权限等级变化（standard/elevated） | `traceId`, `from_level`, `to_level`, `scope` | HIGH |
 
 ---
 

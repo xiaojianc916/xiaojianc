@@ -19,6 +19,10 @@ import {
   aiEditUndoOperationRequestSchema,
 } from '@/types/ai-edit.schema';
 import {
+  aiAgentApprovePlanPayloadSchema,
+  aiAgentApprovePlanRequestSchema,
+  aiAgentClassifyTaskPayloadSchema,
+  aiAgentClassifyTaskRequestSchema,
   aiAgentPlanPayloadSchema,
   aiAgentPlanRequestSchema,
   aiApplyPatchMetadataSchema,
@@ -569,9 +573,17 @@ export const tauriContracts = {
     inSchema: aiCodeActionRequestSchema,
     outSchema: aiCodeActionPayloadSchema,
   },
+  aiAgentClassifyTask: {
+    inSchema: aiAgentClassifyTaskRequestSchema,
+    outSchema: aiAgentClassifyTaskPayloadSchema,
+  },
   aiPlanTask: {
     inSchema: aiAgentPlanRequestSchema,
     outSchema: aiAgentPlanPayloadSchema,
+  },
+  aiAgentApprovePlan: {
+    inSchema: aiAgentApprovePlanRequestSchema,
+    outSchema: aiAgentApprovePlanPayloadSchema,
   },
   aiBuildIndex: {
     inSchema: z.object({

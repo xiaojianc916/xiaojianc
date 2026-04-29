@@ -61,7 +61,7 @@ const handleSelect = (key: string): void => {
 
 onMounted(() => {
     autoApply.loadAuthState().catch(() => undefined);
-);
+});
 </script>
 
 <template>

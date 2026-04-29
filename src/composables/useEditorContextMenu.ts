@@ -3,10 +3,10 @@ import type {
   IEditorContextMenuItem,
   TEditorContextMenuAction,
 } from '@/components/editor/editor-context-menu.types';
+import type { IAiCodeActionRequest } from '@/types/ai';
 import { tryReadClipboardText, writeClipboardText } from '@/utils/clipboard';
 import { monaco } from '@/utils/monaco';
 import { onBeforeUnmount, reactive, ref } from 'vue';
-import type { IAiCodeActionRequest } from '@/types/ai';
 
 const MENU_WIDTH = 224;
 const SUBMENU_SAFE_WIDTH = 224;
@@ -301,6 +301,30 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
     const selectedText = resolveEditorSelectionText(editor)?.trim() ?? '';
     const canRunAiAction = hasModel && selectedText.length > 0 && Boolean(options.onAiCodeActionRequest);
 
+    const aiChildren: IEditorContextMenuItem[] = [
+      {
+        key: 'ai-explain-selection',
+        label: 'AI 解释选区',
+        icon: 'command',
+        action: 'ai-explain-selection',
+        disabled: !canRunAiAction,
+      },
+      {
+        key: 'ai-fix-diagnostic',
+        label: 'AI 修复诊断',
+        icon: 'command',
+        action: 'ai-fix-diagnostic',
+        disabled: !canRunAiAction,
+      },
+      {
+        key: 'ai-generate-tests',
+        label: 'AI 生成测试',
+        icon: 'command',
+        action: 'ai-generate-tests',
+        disabled: !canRunAiAction,
+      },
+    ];
+
     const formatChildren: IEditorContextMenuItem[] = [
       {
         key: 'format-with-shfmt',
@@ -341,33 +365,6 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
 
     return [
       {
-        key: 'ai-actions',
-        title: 'AI',
-        items: [
-          {
-            key: 'ai-explain-selection',
-            label: 'AI 解释选区',
-            icon: 'command',
-            action: 'ai-explain-selection',
-            disabled: !canRunAiAction,
-          },
-          {
-            key: 'ai-fix-diagnostic',
-            label: 'AI 修复诊断',
-            icon: 'command',
-            action: 'ai-fix-diagnostic',
-            disabled: !canRunAiAction,
-          },
-          {
-            key: 'ai-generate-tests',
-            label: 'AI 生成测试',
-            icon: 'command',
-            action: 'ai-generate-tests',
-            disabled: !canRunAiAction,
-          },
-        ],
-      },
-      {
         key: 'run-actions',
         title: 'RUN',
         items: [
@@ -407,6 +404,13 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
         key: 'code-actions',
         title: 'EDITOR ACTIONS',
         items: [
+          {
+            key: 'ai-tools',
+            label: 'AI',
+            icon: 'command',
+            children: aiChildren,
+            disabled: aiChildren.every((item) => item.disabled),
+          },
           {
             key: 'format-tools',
             label: '格式与注释',

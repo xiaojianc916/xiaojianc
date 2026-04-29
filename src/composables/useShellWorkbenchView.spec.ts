@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent } from 'vue';
 import type { PropType } from 'vue';
+import { defineComponent } from 'vue';
 
 const {
     initializeMock,
@@ -134,8 +134,18 @@ const TestHost = defineComponent({
         },
     },
     setup(props) {
-        const { editorViewportRef } = useShellWorkbenchView(props.onReady);
-        return { editorViewportRef };
+        const {
+            editorViewportRef,
+            handleSelectSidebarView,
+            isSidebarVisible,
+            activeSidebarView,
+        } = useShellWorkbenchView(props.onReady);
+        return {
+            editorViewportRef,
+            handleSelectSidebarView,
+            isSidebarVisible,
+            activeSidebarView,
+        };
     },
     template: '<div ref="editorViewportRef"></div>',
 });
@@ -254,6 +264,22 @@ describe('useShellWorkbenchView', () => {
 
         expect(event.defaultPrevented).toBe(true);
         expect(saveDocumentMock).not.toHaveBeenCalled();
+
+        wrapper.unmount();
+    });
+
+    it('重复点击源代码管理会收起左侧边栏', async () => {
+        const wrapper = mount(TestHost, {
+            props: { onReady: vi.fn() },
+        });
+        await flushPromises();
+
+        await wrapper.vm.handleSelectSidebarView('source-control');
+        expect(wrapper.vm.activeSidebarView).toBe('source-control');
+        expect(wrapper.vm.isSidebarVisible).toBe(true);
+
+        await wrapper.vm.handleSelectSidebarView('source-control');
+        expect(wrapper.vm.isSidebarVisible).toBe(false);
 
         wrapper.unmount();
     });

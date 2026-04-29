@@ -1,29 +1,33 @@
 ﻿import { tauriService } from '@/services/tauri';
 import type {
-  IAiChatPayload,
-  IAiChatRequest,
-  IAiChatStreamEventPayload,
-  IAiChatStreamPayload,
+  IAiAgentApprovePlanPayload,
+  IAiAgentApprovePlanRequest,
+  IAiAgentClassifyTaskPayload,
+  IAiAgentClassifyTaskRequest,
   IAiAgentPlanPayload,
   IAiAgentPlanRequest,
   IAiApplyPatchPayload,
   IAiApplyPatchRequest,
   IAiBuildIndexPayload,
   IAiBuildIndexRequest,
+  IAiChatPayload,
+  IAiChatRequest,
+  IAiChatStreamEventPayload,
+  IAiChatStreamPayload,
   IAiCodeActionRequest,
   IAiCodeActionResult,
   IAiConfigPayload,
   IAiInlineCompletionRequest,
   IAiInlineCompletionResult,
-  IAiProviderTestPayload,
-  IAiProviderConnectionPayload,
-  IAiProviderConnectionRequest,
   IAiProposePatchPayload,
   IAiProposePatchRequest,
+  IAiProviderConnectionPayload,
+  IAiProviderConnectionRequest,
+  IAiProviderTestPayload,
   IAiQueryIndexPayload,
   IAiQueryIndexRequest,
-  IAiSaveCredentialsRequest,
   IAiSaveConfigRequest,
+  IAiSaveCredentialsRequest,
   IAiToolDefinitionPayload,
 } from '@/types/ai';
 
@@ -67,8 +71,14 @@ export const aiService = {
   codeAction(payload: IAiCodeActionRequest): Promise<IAiCodeActionResult> {
     return tauriService.aiCodeAction(payload);
   },
+  classifyTask(payload: IAiAgentClassifyTaskRequest): Promise<IAiAgentClassifyTaskPayload> {
+    return tauriService.aiAgentClassifyTask(payload);
+  },
   planTask(payload: IAiAgentPlanRequest): Promise<IAiAgentPlanPayload> {
     return tauriService.aiPlanTask(payload);
+  },
+  approvePlan(payload: IAiAgentApprovePlanRequest): Promise<IAiAgentApprovePlanPayload> {
+    return tauriService.aiAgentApprovePlan(payload);
   },
   buildIndex(payload: IAiBuildIndexRequest): Promise<IAiBuildIndexPayload> {
     return tauriService.aiBuildIndex(payload);

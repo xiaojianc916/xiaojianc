@@ -1,5 +1,6 @@
 import { computed, ref, type Ref } from 'vue';
 
+import { useAiAgentPlan } from '@/composables/useAiAgentPlan';
 import { useAiStream } from '@/composables/useAiStream';
 import { aiService } from '@/services/modules/ai';
 import {
@@ -11,6 +12,7 @@ import {
 } from '@/services/modules/ai-context';
 import { tauriService } from '@/services/tauri';
 import { useAiConversationStore } from '@/store/aiConversation';
+
 import type {
   IAiChatMessage,
   IAiChatStreamEventPayload,
@@ -18,7 +20,6 @@ import type {
   IAiContextReference,
   IAiPatchSet,
   IAiProviderConnectionRequest,
-  IAiTaskPlanStep,
   IAiToolDefinitionPayload,
   TAiChatMessageActionId,
 } from '@/types/ai';
@@ -30,6 +31,7 @@ import type {
   IEditorSelectionSummary,
 } from '@/types/editor';
 import type { IGitRepositoryStatusPayload } from '@/types/git';
+
 import { toErrorMessage } from '@/utils/error';
 import { areFileSystemPathsEqual, normalizeFileSystemPath } from '@/utils/path';
 
@@ -38,8 +40,11 @@ import { areFileSystemPathsEqual, normalizeFileSystemPath } from '@/utils/path';
 // ---------------------------------------------------------------------------
 
 type TAiQuickActionId = 'explain' | 'fix' | 'review';
+
 type TAiAssistantMode = 'chat' | 'agent';
+
 type TAiAttachmentKind = 'text' | 'image';
+
 type TAgentToolName =
   | 'read_current_file'
   | 'read_selected_text'
@@ -50,6 +55,14 @@ type TAgentToolName =
   | 'get_git_diff'
   | 'get_terminal_log'
   | 'propose_patch';
+
+type TAgentExecutionStepStatus =
+  | 'pending'
+  | 'running'
+  | 'failed'
+  | 'cancelled'
+  | 'done'
+  | 'skipped';
 
 interface IAiImageDimensions {
   width: number;
@@ -72,6 +85,12 @@ interface IAgentToolExecutionResult {
   summary: string;
   content: string;
   status: 'succeeded' | 'failed';
+}
+
+interface IAgentExecutionStep {
+  id: string;
+  title: string;
+  status: TAgentExecutionStepStatus;
 }
 
 export interface IAiAttachedFile {
@@ -107,18 +126,25 @@ const MAX_IMAGE_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
 const TEXT_ATTACHMENT_PATTERN =
   /^(application\/(json|xml|x-sh|x-shellscript|javascript|typescript)|text\/)/i;
+
 const TEXT_ATTACHMENT_EXTENSION_PATTERN =
   /\.(bash|cjs|conf|css|csv|env|js|json|jsx|log|md|mjs|ps1|py|rs|sh|sql|toml|ts|tsx|txt|vue|xml|yaml|yml|zsh)$/i;
+
 const IMAGE_ATTACHMENT_PATTERN = /^image\//i;
-const IMAGE_ATTACHMENT_EXTENSION_PATTERN = /\.(avif|bmp|gif|ico|jpe?g|png|svg|webp)$/i;
+
+const IMAGE_ATTACHMENT_EXTENSION_PATTERN =
+  /\.(avif|bmp|gif|ico|jpe?g|png|svg|webp)$/i;
+
 const CONTEXT_TOKEN_PATTERN =
   /(^|\s)@(file|current-file|selection|terminal|log|diagnostics|shellcheck|git-diff|git|project|folder|search|symbol)(?=\s|$)/gi;
 
 const CODE_BLOCK_PATTERN = /```[a-zA-Z0-9_-]*\n([\s\S]*?)```/;
 
 const PROJECT_SEARCH_TOKENS = ['project', 'folder', 'search', 'symbol'] as const;
+
 const MAX_AGENT_TOOL_ROUNDS = 6;
 const MAX_AGENT_TOOL_RESULT_CHARS = 6_000;
+
 const AGENT_TOOL_LABELS: Record<TAgentToolName, string> = {
   read_current_file: '读取当前文件',
   read_selected_text: '读取当前选区',
@@ -130,6 +156,7 @@ const AGENT_TOOL_LABELS: Record<TAgentToolName, string> = {
   get_terminal_log: '读取终端日志',
   propose_patch: '静默写入当前文件',
 };
+
 const FALLBACK_AGENT_TOOLS: IAiToolDefinitionPayload[] = [
   { name: 'read_current_file', readOnly: true, destructive: false, requiresConfirmation: false },
   { name: 'read_selected_text', readOnly: true, destructive: false, requiresConfirmation: false },
@@ -142,7 +169,6 @@ const FALLBACK_AGENT_TOOLS: IAiToolDefinitionPayload[] = [
   { name: 'propose_patch', readOnly: false, destructive: false, requiresConfirmation: false },
 ];
 
-// 占位中文文案：请按你仓库的实际原文回填（原贴的 `?` 串疑似编码丢失）
 const MSG_STREAM_CANCELLED = 'AI 流已被取消';
 const MSG_STREAM_ERROR = 'AI 响应出错';
 const MSG_CALL_FAILED = 'AI 调用失败';
@@ -160,6 +186,7 @@ const normalizePatchDisplayPath = (path: string): string => {
     trimTrailingSeparator: true,
     foldWindowsCase: false,
   });
+
   return normalized || path;
 };
 
@@ -202,16 +229,19 @@ const syncPatchedDocument = (
   }
 
   const patchFile = patch.files.find((file) => areFileSystemPathsEqual(file.path, document.path));
+
   if (!patchFile) {
     return;
   }
 
   const wasApplied = appliedPaths.some((path) => areFileSystemPathsEqual(path, patchFile.path));
+
   if (!wasApplied) {
     return;
   }
 
   const nextContent = materializePatchedContent(patchFile);
+
   if (nextContent === null) {
     return;
   }
@@ -226,7 +256,11 @@ const syncPatchedDocument = (
 
 const clipText = (value: string, limit: number): string => {
   const chars = [...value];
-  if (chars.length <= limit) return value;
+
+  if (chars.length <= limit) {
+    return value;
+  }
+
   return `${chars.slice(0, limit).join('')}\n\n[内容已截断，仅发送前 ${limit} 个字符]`;
 };
 
@@ -234,11 +268,13 @@ const clipAgentToolResult = (value: string): string => clipText(value, MAX_AGENT
 
 const extractAgentJsonCandidate = (value: string): string => {
   const trimmed = value.trim();
+
   if (trimmed.startsWith('```')) {
     const withoutFence = trimmed
       .replace(/^```[a-zA-Z0-9_-]*\s*/, '')
       .replace(/```\s*$/, '')
       .trim();
+
     if (withoutFence) {
       return withoutFence;
     }
@@ -246,6 +282,7 @@ const extractAgentJsonCandidate = (value: string): string => {
 
   const firstBrace = trimmed.indexOf('{');
   const lastBrace = trimmed.lastIndexOf('}');
+
   if (firstBrace !== -1 && lastBrace > firstBrace) {
     return trimmed.slice(firstBrace, lastBrace + 1);
   }
@@ -261,6 +298,7 @@ const parseAgentEnvelope = (value: string): IAgentToolCallEnvelope | IAgentFinal
 
   try {
     const parsed = JSON.parse(candidate) as Record<string, unknown>;
+
     if (parsed.type === 'tool_call' && isAgentToolName(parsed.name)) {
       return {
         type: 'tool_call',
@@ -299,9 +337,11 @@ const getPositiveLimitArgument = (
 ): number => {
   const rawValue = argumentsMap[key];
   const value = typeof rawValue === 'number' ? rawValue : Number(rawValue);
+
   if (!Number.isFinite(value) || value <= 0) {
     return fallback;
   }
+
   return Math.min(Math.floor(value), 20);
 };
 
@@ -309,8 +349,14 @@ const countPatchHunks = (patch: IAiPatchSet): number =>
   patch.files.reduce((total, file) => total + file.hunks.length, 0);
 
 const formatBytes = (bytes: number): string => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
 
@@ -322,33 +368,59 @@ const isImageAttachment = (file: File): boolean =>
 
 const inferImageExtension = (mimeType: string): string => {
   const normalized = mimeType.toLowerCase();
-  if (normalized === 'image/jpeg') return 'jpg';
-  if (normalized === 'image/svg+xml') return 'svg';
-  if (normalized.startsWith('image/')) return normalized.slice('image/'.length);
+
+  if (normalized === 'image/jpeg') {
+    return 'jpg';
+  }
+
+  if (normalized === 'image/svg+xml') {
+    return 'svg';
+  }
+
+  if (normalized.startsWith('image/')) {
+    return normalized.slice('image/'.length);
+  }
+
   return 'png';
 };
 
 const normalizeAttachmentName = (file: File): string => {
   const normalizedName = file.name.trim();
-  if (normalizedName) return normalizedName;
-  if (isImageAttachment(file)) return `pasted-image.${inferImageExtension(file.type)}`;
+
+  if (normalizedName) {
+    return normalizedName;
+  }
+
+  if (isImageAttachment(file)) {
+    return `pasted-image.${inferImageExtension(file.type)}`;
+  }
+
   return 'pasted-attachment.txt';
 };
 
 const formatImageDimensions = (dimensions: IAiImageDimensions | null): string | null => {
-  if (!dimensions) return null;
+  if (!dimensions) {
+    return null;
+  }
+
   return `${dimensions.width} × ${dimensions.height}`;
 };
 
 const readImageDimensions = async (file: File): Promise<IAiImageDimensions | null> => {
-  if (typeof globalThis.createImageBitmap !== 'function') return null;
+  if (typeof globalThis.createImageBitmap !== 'function') {
+    return null;
+  }
+
   try {
     const bitmap = await globalThis.createImageBitmap(file);
+
     const dimensions = {
       width: bitmap.width,
       height: bitmap.height,
     };
+
     bitmap.close?.();
+
     return dimensions;
   } catch {
     return null;
@@ -358,10 +430,21 @@ const readImageDimensions = async (file: File): Promise<IAiImageDimensions | nul
 const mapStreamStatus = (
   status: ReturnType<typeof useAiStream>['status']['value'],
 ): NonNullable<IAiChatMessage['stream']>['status'] => {
-  if (status === 'cancelled') return 'cancelled';
-  if (status === 'completed') return 'completed';
+  if (status === 'cancelled') {
+    return 'cancelled';
+  }
+
+  if (status === 'completed') {
+    return 'completed';
+  }
+
   return 'streaming';
 };
+
+const mapToolExecutionStatus = (
+  status: IAgentToolExecutionResult['status'],
+): Extract<TAgentExecutionStepStatus, 'done' | 'failed'> =>
+  status === 'succeeded' ? 'done' : 'failed';
 
 // ---------------------------------------------------------------------------
 // Public quick actions
@@ -379,6 +462,7 @@ export const AI_QUICK_ACTIONS: IAiQuickAction[] = [
 
 export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const conversationStore = useAiConversationStore();
+
   const config = ref<IAiConfigPayload>({
     providerType: 'mock',
     selectedModel: 'mock-ide-assistant',
@@ -397,8 +481,10 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       conversationStore.replaceMessages(nextMessages);
     },
   });
+
   const historyThreads = computed(() => conversationStore.historyThreads);
   const activeConversationId = computed(() => conversationStore.activeThreadId);
+
   const draft = ref('');
   const isSending = ref(false);
   const errorMessage = ref('');
@@ -408,10 +494,9 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const proposedPatch = ref<IAiPatchSet | null>(null);
   const isApplyingPatch = ref(false);
   const activeMode = ref<TAiAssistantMode>('chat');
-  const agentSteps = ref<IAiTaskPlanStep[]>([]);
+  const agentSteps = ref<IAgentExecutionStep[]>([]);
   const toolDefinitions = ref<IAiToolDefinitionPayload[]>([]);
   const attachedFiles = ref<IAiAttachedFile[]>([]);
-
   const activeAbortController = ref<AbortController | null>(null);
   const activeStreamId = ref<string | null>(null);
   const activeAgentMessageId = ref<string | null>(null);
@@ -420,6 +505,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const activeAssistantBaseMessages = ref<IAiChatMessage[]>([]);
 
   const aiStream = useAiStream();
+  const agentPlan = useAiAgentPlan();
 
   const replaceMessageById = (
     messageId: string,
@@ -428,7 +514,9 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     const nextMessages = messages.value.map((message) => (
       message.id === messageId ? updater(message) : message
     ));
+
     messages.value = nextMessages;
+
     return nextMessages;
   };
 
@@ -447,7 +535,8 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       '3. 除以上 JSON 外不要输出任何多余前缀、解释或代码块。',
       '可用工具：',
       ...((toolDefinitions.value.length ? toolDefinitions.value : FALLBACK_AGENT_TOOLS)
-        .filter((tool): tool is IAiToolDefinitionPayload & { name: TAgentToolName } => isAgentToolName(tool.name))
+        .filter((tool): tool is IAiToolDefinitionPayload & { name: TAgentToolName } =>
+          isAgentToolName(tool.name))
         .map((tool) => {
           const suffix = tool.name === 'propose_patch'
             ? '参数：updatedContent（完整新文件内容），summary（可选）；执行后会直接写盘并可回滚'
@@ -456,6 +545,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
               : tool.name === 'read_current_file'
                 ? '参数：path（可选，默认当前文件）'
                 : '参数：无';
+
           return `- ${tool.name}：${AGENT_TOOL_LABELS[tool.name]}；${suffix}`;
         })),
       `当前任务：${goal}`,
@@ -467,17 +557,32 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const updateAgentStep = (
     stepId: string,
     title: string,
-    status: IAiTaskPlanStep['status'],
+    status: TAgentExecutionStepStatus,
   ): void => {
     const existing = agentSteps.value.find((step) => step.id === stepId);
+
     if (existing) {
       agentSteps.value = agentSteps.value.map((step) => (
-        step.id === stepId ? { ...step, title, status } : step
+        step.id === stepId
+          ? {
+            ...step,
+            title,
+            status,
+          }
+          : step
       ));
+
       return;
     }
 
-    agentSteps.value = [...agentSteps.value, { id: stepId, title, status }];
+    agentSteps.value = [
+      ...agentSteps.value,
+      {
+        id: stepId,
+        title,
+        status,
+      },
+    ];
   };
 
   const updateAgentExecutionMessage = (
@@ -518,30 +623,60 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         case 'read_current_file': {
           const document = options.document.value;
           const requestedPath = getStringArgument(argumentsMap, 'path');
-          if (!requestedPath || areFileSystemPathsEqual(requestedPath, document.path)) {
+
+          const shouldReadCurrentDocument =
+            !requestedPath ||
+            (document.path
+              ? areFileSystemPathsEqual(requestedPath, document.path)
+              : requestedPath === document.name);
+
+          if (shouldReadCurrentDocument) {
             if (document.kind !== 'text') {
-              return { summary, content: '当前没有可读取的文本文件。', status: 'failed' };
+              return {
+                summary,
+                content: '当前没有可读取的文本文件。',
+                status: 'failed',
+              };
             }
+
             return {
               summary,
-              content: formatLoadedScript(document.path ?? document.name, document.name, document.content, document.isDirty),
+              content: formatLoadedScript(
+                document.path ?? document.name,
+                document.name,
+                document.content,
+                document.isDirty,
+              ),
               status: 'succeeded',
             };
           }
 
           const payload = await tauriService.loadScript(requestedPath);
+
           return {
             summary,
-            content: formatLoadedScript(payload.path, payload.name, payload.content, false),
+            content: formatLoadedScript(
+              payload.path,
+              payload.name,
+              payload.content,
+              false,
+            ),
             status: 'succeeded',
           };
         }
+
         case 'read_selected_text': {
           const selection = options.selection.value;
           const document = options.document.value;
+
           if (!selection?.text.trim()) {
-            return { summary, content: '当前没有选中的文本片段。', status: 'failed' };
+            return {
+              summary,
+              content: '当前没有选中的文本片段。',
+              status: 'failed',
+            };
           }
+
           return {
             summary,
             content: [
@@ -555,16 +690,27 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
             status: 'succeeded',
           };
         }
+
         case 'search_files':
         case 'search_text':
         case 'search_symbols': {
           const workspaceRootPath = options.workspaceRootPath.value;
           const query = getStringArgument(argumentsMap, 'query');
+
           if (!workspaceRootPath) {
-            return { summary, content: '当前没有可搜索的工作区根目录。', status: 'failed' };
+            return {
+              summary,
+              content: '当前没有可搜索的工作区根目录。',
+              status: 'failed',
+            };
           }
+
           if (!query) {
-            return { summary, content: '搜索关键词不能为空。', status: 'failed' };
+            return {
+              summary,
+              content: '搜索关键词不能为空。',
+              status: 'failed',
+            };
           }
 
           const scope = call.name === 'search_files'
@@ -572,6 +718,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
             : call.name === 'search_symbols'
               ? 'symbol'
               : 'content';
+
           const payload = await tauriService.searchWorkspace({
             workspaceRootPath,
             query,
@@ -601,44 +748,69 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
             status: 'succeeded',
           };
         }
+
         case 'get_diagnostics': {
-          const reference = buildDiagnosticsReference(options.analysis.value, options.document.value);
+          const reference = buildDiagnosticsReference(
+            options.analysis.value,
+            options.document.value,
+          );
+
           return {
             summary,
             content: reference?.contentPreview || '当前没有可用的诊断信息。',
             status: reference ? 'succeeded' : 'failed',
           };
         }
+
         case 'get_git_diff': {
           const reference = buildGitDiffReference(options.gitStatus.value);
+
           return {
             summary,
             content: reference?.contentPreview || '当前没有 Git 变更信息。',
             status: reference ? 'succeeded' : 'failed',
           };
         }
+
         case 'get_terminal_log': {
           const reference = buildActiveRunReference(options.activeRun.value);
+
           return {
             summary,
             content: reference?.contentPreview || '当前没有可读取的终端运行记录。',
             status: reference ? 'succeeded' : 'failed',
           };
         }
+
         case 'propose_patch': {
           const document = options.document.value;
           const requestedPath = getStringArgument(argumentsMap, 'path');
           const updatedContent = getStringArgument(argumentsMap, 'updatedContent');
-          const patchSummary = getStringArgument(argumentsMap, 'summary') || 'Agent 自动静默写盘';
+          const patchSummary =
+            getStringArgument(argumentsMap, 'summary') || 'Agent 自动静默写盘';
 
           if (document.kind !== 'text' || !document.path) {
-            return { summary, content: '当前文件尚未保存，无法静默写盘。', status: 'failed' };
+            return {
+              summary,
+              content: '当前文件尚未保存，无法静默写盘。',
+              status: 'failed',
+            };
           }
+
           if (requestedPath && !areFileSystemPathsEqual(requestedPath, document.path)) {
-            return { summary, content: '当前只支持对已打开的当前文件静默写盘。', status: 'failed' };
+            return {
+              summary,
+              content: '当前只支持对已打开的当前文件静默写盘。',
+              status: 'failed',
+            };
           }
+
           if (!updatedContent) {
-            return { summary, content: 'propose_patch 需要提供 updatedContent（完整新文件内容）。', status: 'failed' };
+            return {
+              summary,
+              content: 'propose_patch 需要提供 updatedContent（完整新文件内容）。',
+              status: 'failed',
+            };
           }
 
           const payload = await aiService.proposePatch({
@@ -647,11 +819,15 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
             updatedContent,
             summary: patchSummary,
           });
+
           const result = await aiService.applyPatch({
             patch: payload.patch,
             metadata: {
               taskId: activeConversationId.value,
-              turnId: activeAgentMessageId.value ?? messages.value.at(-1)?.id ?? activeConversationId.value,
+              turnId:
+                activeAgentMessageId.value ??
+                messages.value.at(-1)?.id ??
+                activeConversationId.value,
               reason: payload.patch.summary,
               toolCallId: `agent-tool:${summary}`,
               confirmedByUser: true,
@@ -659,7 +835,9 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
           });
 
           const appliedPaths = result.appliedFiles.map((file) => file.path);
+
           syncPatchedDocument(document, payload.patch, appliedPaths);
+
           proposedPatch.value = null;
 
           return {
@@ -669,7 +847,9 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
               `摘要：${payload.patch.summary}`,
               `文件数：${payload.patch.files.length}`,
               `Hunk 数：${countPatchHunks(payload.patch)}`,
-              `已写入路径：${appliedPaths.map((path) => normalizePatchDisplayPath(path)).join('、')}`,
+              `已写入路径：${appliedPaths
+                .map((path) => normalizePatchDisplayPath(path))
+                .join('、')}`,
             ].join('\n'),
             status: 'succeeded',
           };
@@ -700,11 +880,12 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       activeStreamId.value = null;
     };
 
-    return new Promise<string>(async (resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       const settle = (handler: () => void): void => {
         if (isSettled) {
           return;
         }
+
         isSettled = true;
         cleanup();
         handler();
@@ -714,50 +895,55 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         settle(() => reject(new Error(message)));
       };
 
-      try {
-        unlisten = await aiService.onChatStream((event) => {
-          if (!localStreamId && event.kind === 'start') {
-            localStreamId = event.streamId;
-            activeStreamId.value = event.streamId;
-            return;
-          }
+      const run = async (): Promise<void> => {
+        try {
+          unlisten = await aiService.onChatStream((event) => {
+            if (!localStreamId && event.kind === 'start') {
+              localStreamId = event.streamId;
+              activeStreamId.value = event.streamId;
+              return;
+            }
 
-          if (localStreamId && event.streamId !== localStreamId) {
-            return;
-          }
+            if (localStreamId && event.streamId !== localStreamId) {
+              return;
+            }
 
-          if (event.kind === 'delta' && event.delta) {
-            collectedContent += event.delta;
-            return;
-          }
+            if (event.kind === 'delta' && event.delta) {
+              collectedContent += event.delta;
+              return;
+            }
 
-          if (event.kind === 'done') {
-            settle(() => resolve(collectedContent.trim()));
-            return;
-          }
+            if (event.kind === 'done') {
+              settle(() => resolve(collectedContent.trim()));
+              return;
+            }
 
-          if (event.kind === 'cancelled') {
-            fail(event.message ?? MSG_STREAM_CANCELLED);
-            return;
-          }
+            if (event.kind === 'cancelled') {
+              fail(event.message ?? MSG_STREAM_CANCELLED);
+              return;
+            }
 
-          if (event.kind === 'error') {
-            fail(event.message ?? MSG_STREAM_ERROR);
-          }
-        });
+            if (event.kind === 'error') {
+              fail(event.message ?? MSG_STREAM_ERROR);
+            }
+          });
 
-        const stream = await aiService.chatStream({
-          threadId: null,
-          messages: requestMessages,
-          references,
-        });
-        localStreamId = stream.streamId;
-        activeStreamId.value = stream.streamId;
-        activeStreamResolve.value = () => fail(MSG_STREAM_CANCELLED);
-      } catch (error) {
-        cleanup();
-        reject(error);
-      }
+          const stream = await aiService.chatStream({
+            threadId: null,
+            messages: requestMessages,
+            references,
+          });
+
+          localStreamId = stream.streamId;
+          activeStreamId.value = stream.streamId;
+          activeStreamResolve.value = () => fail(MSG_STREAM_CANCELLED);
+        } catch (error) {
+          cleanup();
+          reject(error);
+        }
+      };
+
+      void run();
     });
   };
 
@@ -771,6 +957,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     agentSteps.value = [];
 
     const placeholderMessageId = createMessageId('assistant');
+
     const placeholderMessage: IAiChatMessage = {
       id: placeholderMessageId,
       role: 'assistant',
@@ -788,6 +975,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       createAgentExecutionSystemMessage(messageContent),
       ...visibleMessages,
     ];
+
     const toolCalls: NonNullable<IAiChatMessage['toolCalls']> = [];
 
     try {
@@ -801,19 +989,23 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
             envelope.content || 'Agent 已完成，但模型没有返回额外说明。',
             toolCalls,
           );
+
           attachedFiles.value = [];
           return;
         }
 
         const toolCallId = `agent-tool-${round + 1}`;
         const toolLabel = envelope.summary?.trim() || AGENT_TOOL_LABELS[envelope.name];
+
         toolCalls.push({
           id: toolCallId,
           name: envelope.name,
           status: 'running',
           summary: toolLabel,
         });
+
         updateAgentStep(toolCallId, toolLabel, 'running');
+
         updateAgentExecutionMessage(
           placeholderMessageId,
           `AI 正在自动使用工具：${toolLabel}`,
@@ -821,15 +1013,19 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         );
 
         const result = await executeAgentTool(envelope);
+        const nextStatus = mapToolExecutionStatus(result.status);
         const toolCall = toolCalls.find((item) => item.id === toolCallId);
+
         if (toolCall) {
-          toolCall.status = result.status;
+          toolCall.status = nextStatus;
         }
+
         updateAgentStep(
           toolCallId,
           toolLabel,
-          result.status === 'succeeded' ? 'completed' : 'failed',
+          nextStatus,
         );
+
         updateAgentExecutionMessage(
           placeholderMessageId,
           `AI 已自动完成工具调用：${toolLabel}`,
@@ -843,6 +1039,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
           createdAt: new Date().toISOString(),
           references: [],
         });
+
         transcript.push({
           id: createMessageId('system'),
           role: 'system',
@@ -865,12 +1062,14 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       );
     } catch (error) {
       const wasAborted = activeAbortController.value?.signal.aborted;
+
       if (!wasAborted) {
         updateAgentExecutionMessage(
           placeholderMessageId,
           `Agent 执行失败：${toErrorMessage(error, MSG_CALL_FAILED)}`,
           [...toolCalls],
         );
+
         errorMessage.value = toErrorMessage(error, MSG_CALL_FAILED);
         draft.value = messageContent;
       }
@@ -896,13 +1095,17 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const latestAssistantCodeBlock = computed(() => {
     const message = [...messages.value].reverse().find((item) => item.role === 'assistant');
     const match = message?.content.match(CODE_BLOCK_PATTERN);
+
     return match?.[1] ?? '';
   });
 
   const canPreviewPatch = computed(() => {
     const document = options.document.value;
+
     return Boolean(
-      document.path && document.kind === 'text' && latestAssistantCodeBlock.value.trim(),
+      document.path &&
+      document.kind === 'text' &&
+      latestAssistantCodeBlock.value.trim(),
     );
   });
 
@@ -912,9 +1115,11 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
   const buildDocumentContext = (): string => {
     const document = options.document.value;
+
     if (!document.id || document.kind !== 'text') {
       return '当前没有可用的文本脚本文档。';
     }
+
     return [
       `文件名：${document.name}`,
       `路径：${document.path ?? '未保存'}`,
@@ -928,7 +1133,11 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
   const buildRunContext = (): string => {
     const activeRun = options.activeRun.value;
-    if (!activeRun) return '当前没有正在运行或最近触发的运行记录。';
+
+    if (!activeRun) {
+      return '当前没有正在运行或最近触发的运行记录。';
+    }
+
     return [
       `运行文件：${activeRun.documentName}`,
       `命令：${activeRun.commandLine}`,
@@ -940,28 +1149,37 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
   const buildQuickPrompt = (actionId: TAiQuickActionId): string => {
     const documentContext = buildDocumentContext();
+
     if (actionId === 'explain') {
       return `请解释当前脚本的执行流程、关键变量、外部依赖和潜在风险。\n\n${documentContext}`;
     }
+
     if (actionId === 'fix') {
       return `请根据当前脚本和运行上下文定位问题根因，并给出最小修改方案。如果上下文不足，请列出还需要哪些信息。\n\n${documentContext}\n\n运行上下文：\n${buildRunContext()}`;
     }
+
     return `请按安全、参数可靠性、可维护性、边界条件和可验证性审查当前脚本。请只给出基于代码能确认的问题。\n\n${documentContext}`;
   };
 
   const resolveContextTokens = (prompt: string): Set<string> => {
     const tokens = new Set<string>();
+
     for (const match of prompt.matchAll(CONTEXT_TOKEN_PATTERN)) {
       const token = match[2]?.toLowerCase();
-      if (token) tokens.add(token);
+
+      if (token) {
+        tokens.add(token);
+      }
     }
+
     return tokens;
   };
 
   const shouldIncludeReference = (
     tokens: Set<string>,
     aliases: readonly string[],
-  ): boolean => tokens.size === 0 || aliases.some((alias) => tokens.has(alias));
+  ): boolean =>
+    tokens.size === 0 || aliases.some((alias) => tokens.has(alias));
 
   const buildProjectSearchReference = async (
     prompt: string,
@@ -969,21 +1187,30 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     const tokens = resolveContextTokens(prompt);
     const shouldSearchProject = PROJECT_SEARCH_TOKENS.some((item) => tokens.has(item));
     const workspaceRootPath = options.workspaceRootPath.value;
-    if (!shouldSearchProject || !workspaceRootPath) return null;
+
+    if (!shouldSearchProject || !workspaceRootPath) {
+      return null;
+    }
 
     const query = prompt
       .replace(CONTEXT_TOKEN_PATTERN, ' ')
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 120);
-    if (!query) return null;
+
+    if (!query) {
+      return null;
+    }
 
     const payload = await aiService.queryIndex({
       workspaceRootPath,
       query,
       limit: 8,
     });
-    if (payload.results.length === 0) return null;
+
+    if (payload.results.length === 0) {
+      return null;
+    }
 
     return {
       id: `search-result:${workspaceRootPath}:${query}`,
@@ -992,10 +1219,8 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       path: workspaceRootPath,
       range: null,
       contentPreview: payload.results
-        .map(
-          (item) =>
-            `${item.path}${item.lineNumber ? `:${item.lineNumber}` : ''}\n${item.preview}`,
-        )
+        .map((item) =>
+          `${item.path}${item.lineNumber ? `:${item.lineNumber}` : ''}\n${item.preview}`)
         .join('\n---\n'),
       redacted: false,
     };
@@ -1028,7 +1253,10 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       .map(([reference]) => reference)
       .filter((item): item is IAiContextReference => item !== null);
 
-    return [...references, ...attachedFiles.value.map((file) => file.reference)];
+    return [
+      ...references,
+      ...attachedFiles.value.map((file) => file.reference),
+    ];
   };
 
   // -----------------------------------------------------------------------
@@ -1058,7 +1286,10 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     apiKey: string,
     providerType = config.value.providerType,
   ): Promise<void> => {
-    config.value = await aiService.saveCredentials({ providerType, apiKey });
+    config.value = await aiService.saveCredentials({
+      providerType,
+      apiKey,
+    });
   };
 
   const createProviderConnectionRequest = (
@@ -1081,10 +1312,12 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     const result = await aiService.testProviderConfig(
       createProviderConnectionRequest(nextConfig, apiKey),
     );
+
     if (!result.ok) {
       errorMessage.value = result.message;
       throw new Error(result.message);
     }
+
     return result.message;
   };
 
@@ -1095,16 +1328,20 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     const result = await aiService.connectProvider(
       createProviderConnectionRequest(nextConfig, apiKey),
     );
+
     config.value = result.config;
+
     return result.test.message;
   };
 
   const testProvider = async (): Promise<string> => {
     const result = await aiService.testProvider();
+
     if (!result.ok) {
       errorMessage.value = result.message;
       throw new Error(result.message);
     }
+
     return result.message;
   };
 
@@ -1114,9 +1351,11 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
   const applyQuickAction = (action: IAiQuickAction): void => {
     draft.value = buildQuickPrompt(action.id);
+
     void buildReferences(draft.value).then((references) => {
       currentReferences.value = references;
     });
+
     errorMessage.value = '';
   };
 
@@ -1130,12 +1369,14 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       }
 
       const content = await file.text().catch((): null => null);
+
       if (content === null) {
         errorMessage.value = '读取附件失败，请确认文件可访问后重试。';
         return;
       }
 
       const id = `attachment:${normalizedName}:${file.lastModified}:${file.size}`;
+
       const reference: IAiContextReference = {
         id,
         kind: 'search-result',
@@ -1161,8 +1402,10 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
           reference,
         },
       ];
+
       currentReferences.value = await buildReferences(draft.value);
       errorMessage.value = '';
+
       return;
     }
 
@@ -1175,6 +1418,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       const dimensions = await readImageDimensions(file);
       const dimensionsLabel = formatImageDimensions(dimensions);
       const id = `attachment:${normalizedName}:${file.lastModified}:${file.size}`;
+
       const reference: IAiContextReference = {
         id,
         kind: 'image-attachment',
@@ -1202,8 +1446,10 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
           reference,
         },
       ];
+
       currentReferences.value = await buildReferences(draft.value);
       errorMessage.value = '';
+
       return;
     }
 
@@ -1212,13 +1458,14 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
   const removeAttachedFile = (id: string): void => {
     attachedFiles.value = attachedFiles.value.filter((item) => item.id !== id);
+
     void buildReferences(draft.value).then((references) => {
       currentReferences.value = references;
     });
   };
 
   // -----------------------------------------------------------------------
-  // Streaming pipeline (extracted from sendMessage)
+  // Streaming pipeline
   // -----------------------------------------------------------------------
 
   interface IStreamPipeline {
@@ -1239,29 +1486,49 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
     const syncAssistantMessage = (): void => {
       const current = activeAssistantMessage.value;
-      if (!current) return;
+
+      if (!current) {
+        return;
+      }
+
       current.content = aiStream.content.value;
       current.stream = {
         stableContent: aiStream.stableContent.value,
         openBlock: aiStream.openCodeBlock.value,
         status: mapStreamStatus(aiStream.status.value),
       };
-      messages.value = [...activeAssistantBaseMessages.value, { ...current }];
+
+      messages.value = [
+        ...activeAssistantBaseMessages.value,
+        { ...current },
+      ];
     };
 
     const flushPendingDelta = (): void => {
       animationFrameId = null;
-      if (!pendingDelta || isStreamClosed) return;
+
+      if (!pendingDelta || isStreamClosed) {
+        return;
+      }
+
       const chunk = pendingDelta;
       pendingDelta = '';
+
       aiStream.append(chunk);
       syncAssistantMessage();
     };
 
     const scheduleDelta = (delta: string): void => {
-      if (isStreamClosed) return;
+      if (isStreamClosed) {
+        return;
+      }
+
       pendingDelta += delta;
-      if (animationFrameId !== null) return;
+
+      if (animationFrameId !== null) {
+        return;
+      }
+
       animationFrameId = window.requestAnimationFrame(flushPendingDelta);
     };
 
@@ -1272,30 +1539,37 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       }
     };
 
-    const startAssistantStream = (streamId: string, assistantMessageId: string): void => {
-      if (hasStartedStream) return;
+    const startAssistantStream = (
+      streamId: string,
+      assistantMessageId: string,
+    ): void => {
+      if (hasStartedStream) {
+        return;
+      }
+
       hasStartedStream = true;
       activeStreamId.value = streamId;
       assistantMessage.id = assistantMessageId;
+
       aiStream.start({ messageId: assistantMessageId });
       syncAssistantMessage();
     };
 
     const handleEvent = (event: IAiChatStreamEventPayload): void => {
-      // First-seen `start` event bootstraps the stream id binding.
       if (!activeStreamId.value && event.kind === 'start') {
         startAssistantStream(event.streamId, event.assistantMessageId);
         return;
       }
-      // Drop events from cancelled / superseded streams (incl. late deltas).
-      if (event.streamId !== activeStreamId.value) return;
+
+      if (event.streamId !== activeStreamId.value) {
+        return;
+      }
 
       if (event.kind === 'delta' && event.delta) {
         scheduleDelta(event.delta);
         return;
       }
 
-      // Any non-delta terminal event: drain pending RAF then close.
       cleanupRaf();
       flushPendingDelta();
       isStreamClosed = true;
@@ -1325,7 +1599,11 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       }
     };
 
-    return { handleEvent, startAssistantStream, cleanupRaf };
+    return {
+      handleEvent,
+      startAssistantStream,
+      cleanupRaf,
+    };
   };
 
   const executeAiRequest = async (
@@ -1343,20 +1621,30 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       content: '',
       createdAt: new Date().toISOString(),
       references: [],
-      stream: { stableContent: '', openBlock: null, status: 'streaming' },
+      stream: {
+        stableContent: '',
+        openBlock: null,
+        status: 'streaming',
+      },
     };
+
     activeAssistantMessage.value = assistantMessage;
     activeAssistantBaseMessages.value = visibleMessages;
     messages.value = [...visibleMessages, assistantMessage];
 
     let unlisten: (() => void) | null = null;
     let hasSettledStream = false;
+
     const settle = (): void => {
       hasSettledStream = true;
       activeStreamResolve.value?.();
     };
 
-    const pipeline = createStreamPipeline(assistantMessage, messageContent, settle);
+    const pipeline = createStreamPipeline(
+      assistantMessage,
+      messageContent,
+      settle,
+    );
 
     try {
       unlisten = await aiService.onChatStream(pipeline.handleEvent);
@@ -1366,18 +1654,24 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         messages: requestMessages,
         references,
       });
-      pipeline.startAssistantStream(stream.streamId, stream.assistantMessageId);
+
+      pipeline.startAssistantStream(
+        stream.streamId,
+        stream.assistantMessageId,
+      );
 
       await new Promise<void>((resolve) => {
         if (hasSettledStream) {
           resolve();
           return;
         }
+
         activeStreamResolve.value = resolve;
       });
     } finally {
       pipeline.cleanupRaf();
       unlisten?.();
+
       activeStreamResolve.value = null;
       activeStreamId.value = null;
       activeAbortController.value = null;
@@ -1395,18 +1689,25 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     _messageId: string,
     _actionId: TAiChatMessageActionId,
   ): Promise<void> => {
+    void _messageId;
+    void _actionId;
+
     return Promise.resolve();
   };
 
   const sendMessage = async (): Promise<void> => {
     const content = draft.value.trim();
-    if ((!content && attachedFiles.value.length === 0) || isSending.value) return;
+
+    if ((!content && attachedFiles.value.length === 0) || isSending.value) {
+      return;
+    }
 
     if (!config.value.chatEnabled) {
       errorMessage.value = '请先启用 AI Chat。';
       isSettingsOpen.value = true;
       return;
     }
+
     if (!config.value.isConfigured) {
       errorMessage.value = 'AI Provider 还没配置完整，请先保存当前厂商配置和 API Key。';
       isSettingsOpen.value = true;
@@ -1415,6 +1716,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
     const messageContent = content || '请分析我添加的附件内容。';
     const references = await buildReferences(messageContent);
+
     currentReferences.value = references;
 
     const userMessage: IAiChatMessage = {
@@ -1424,18 +1726,72 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       createdAt: new Date().toISOString(),
       references,
     };
+
     const nextMessages = [...messages.value, userMessage];
+
     messages.value = nextMessages;
     draft.value = '';
     errorMessage.value = '';
 
     if (activeMode.value === 'agent') {
-      await executeAgentRequest(nextMessages, messageContent, references);
-      return;
+      try {
+        await agentPlan.classifyTask(messageContent, references);
+
+        if (agentPlan.store.shouldEnterPlanMode) {
+          const steps = await agentPlan.createPlan(
+            messageContent,
+            references,
+          );
+
+          agentSteps.value = steps.map((step) => ({
+            id: step.id,
+            title: step.title,
+            status: step.status,
+          }));
+
+          const planLines = steps.map((step) =>
+            `${step.index + 1}. ${step.title}`,
+          );
+
+          const planMessage: IAiChatMessage = {
+            id: createMessageId('assistant'),
+            role: 'assistant',
+            content: [
+              '已进入 Plan Mode，请先确认计划：',
+              '',
+              ...planLines,
+            ].join('\n'),
+            createdAt: new Date().toISOString(),
+            references,
+          };
+
+          messages.value = [...nextMessages, planMessage];
+
+          return;
+        }
+
+        await executeAiRequest(
+          nextMessages,
+          nextMessages,
+          messageContent,
+          references,
+        );
+
+        return;
+      } catch (error) {
+        errorMessage.value = toErrorMessage(error, '生成计划失败。');
+        draft.value = messageContent;
+        return;
+      }
     }
 
     try {
-      await executeAiRequest(nextMessages, nextMessages, messageContent, references);
+      await executeAiRequest(
+        nextMessages,
+        nextMessages,
+        messageContent,
+        references,
+      );
     } catch (error) {
       errorMessage.value = toErrorMessage(error, MSG_CALL_FAILED);
       draft.value = messageContent;
@@ -1451,6 +1807,9 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     currentReferences.value = [];
     proposedPatch.value = null;
     agentSteps.value = [];
+
+    agentPlan.resetPlan();
+
     attachedFiles.value = [];
     errorMessage.value = '';
     activeAssistantMessage.value = null;
@@ -1477,6 +1836,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const previewPatchFromLastAnswer = async (): Promise<void> => {
     const document = options.document.value;
     const updatedContent = latestAssistantCodeBlock.value;
+
     if (!document.path || document.kind !== 'text' || !updatedContent.trim()) {
       errorMessage.value = '没有可预览的代码块，或当前文件尚未保存。';
       return;
@@ -1488,24 +1848,31 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       updatedContent,
       summary: '应用 AI 回复中的代码块',
     });
+
     proposedPatch.value = payload.patch;
     errorMessage.value = '';
   };
 
-  const previewPatchFromCodeBlock = async (block: IAiCodeBlock): Promise<void> => {
+  const previewPatchFromCodeBlock = async (
+    block: IAiCodeBlock,
+  ): Promise<void> => {
     const document = options.document.value;
+
     if (!document.path || document.kind !== 'text') {
       errorMessage.value = '当前文件尚未保存，无法生成 Patch 预览。';
       return;
     }
+
     if (block.fence.meta.filePath && block.fence.meta.filePath !== document.path) {
       errorMessage.value = '代码块目标文件不是当前文件，暂不能直接生成 Patch 预览。';
       return;
     }
+
     if (!block.content.trim()) {
       errorMessage.value = '代码块内容为空，无法生成 Patch 预览。';
       return;
     }
+
     try {
       const payload = await aiService.proposePatch({
         path: document.path,
@@ -1513,6 +1880,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         updatedContent: block.content,
         summary: '应用 AI 代码块',
       });
+
       proposedPatch.value = payload.patch;
       errorMessage.value = '';
     } catch (error) {
@@ -1522,8 +1890,13 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
   const applyProposedPatch = async (): Promise<void> => {
     const patch = proposedPatch.value;
-    if (!patch || isApplyingPatch.value) return;
+
+    if (!patch || isApplyingPatch.value) {
+      return;
+    }
+
     isApplyingPatch.value = true;
+
     try {
       const result = await aiService.applyPatch({
         patch,
@@ -1535,18 +1908,24 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
           confirmedByUser: true,
         },
       });
+
       const appliedPaths = result.appliedFiles.map((file) => file.path);
+
       syncPatchedDocument(options.document.value, patch, appliedPaths);
+
       messages.value = [
         ...messages.value,
         {
           id: createMessageId('assistant'),
           role: 'assistant',
-          content: `Patch 已应用：${appliedPaths.map((file) => normalizePatchDisplayPath(file)).join('、')}`,
+          content: `Patch 已应用：${appliedPaths
+            .map((file) => normalizePatchDisplayPath(file))
+            .join('、')}`,
           createdAt: new Date().toISOString(),
           references: [],
         },
       ];
+
       proposedPatch.value = null;
       errorMessage.value = '';
     } catch (error) {
@@ -1558,15 +1937,15 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
   const stopCurrentRequest = (): void => {
     const streamId = activeStreamId.value;
-    if (streamId) void aiService.cancel({ streamId });
+
+    if (streamId) {
+      void aiService.cancel({ streamId });
+    }
 
     activeAbortController.value?.abort();
     activeAbortController.value = null;
 
-    // 关键：先清掉 streamId，让 pipeline 内的 `event.streamId !== activeStreamId.value`
-    // 把后续的 late delta 全部丢弃。
     activeStreamId.value = null;
-
     activeStreamResolve.value?.();
     activeStreamResolve.value = null;
 
@@ -1579,6 +1958,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         status: 'cancelled',
       };
       activeAssistantMessage.value.content = aiStream.content.value;
+
       messages.value = [
         ...activeAssistantBaseMessages.value,
         { ...activeAssistantMessage.value },
@@ -1586,7 +1966,10 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     }
 
     if (activeAgentMessageId.value) {
-      updateAgentExecutionMessage(activeAgentMessageId.value, 'Agent 执行已取消。');
+      updateAgentExecutionMessage(
+        activeAgentMessageId.value,
+        'Agent 执行已取消。',
+      );
       activeAgentMessageId.value = null;
     }
 
@@ -1599,6 +1982,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   // -----------------------------------------------------------------------
 
   return {
+    agentPlan,
     config,
     messages,
     historyThreads,
@@ -1628,6 +2012,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     applyQuickAction,
     attachFile,
     removeAttachedFile,
+    executeAgentRequest,
     sendMessage,
     handleMessageAction,
     stopCurrentRequest,

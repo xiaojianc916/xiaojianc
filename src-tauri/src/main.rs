@@ -12,7 +12,8 @@ mod error;
 mod terminal;
 
 use commands::{
-    ai_apply_patch, ai_build_index, ai_cancel, ai_chat, ai_chat_stream, ai_clear_credentials, ai_code_action, ai_connect_provider, ai_edit_get_auth_level,
+    ai_agent_approve_plan, ai_agent_classify_task, ai_apply_patch, ai_build_index,
+    ai_cancel, ai_chat, ai_chat_stream, ai_clear_credentials, ai_code_action, ai_connect_provider, ai_edit_get_auth_level,
     ai_edit_create_snapshot, ai_edit_get_diff, ai_edit_list_timeline, ai_edit_restore_snapshot,
     ai_edit_revert_file, ai_edit_revert_hunk, ai_edit_revert_task, ai_edit_set_auth_level,
     ai_edit_undo_operation, ai_get_config, ai_inline_complete, ai_list_tools, ai_plan_task,
@@ -146,7 +147,9 @@ fn main() {
             ai_cancel,
             ai_inline_complete,
             ai_code_action,
+            ai_agent_classify_task,
             ai_plan_task,
+            ai_agent_approve_plan,
             ai_build_index,
             ai_query_index,
             ai_propose_patch,

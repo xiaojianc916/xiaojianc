@@ -63,6 +63,19 @@ const createAssistantMock = (
     const attachedFiles = ref([] as Array<{ id: string; name: string; sizeLabel: string; kind: 'text' | 'image' }>);
     const proposedPatch = ref<IAiPatchSet | null>(null);
     const isApplyingPatch = ref(false);
+    const agentPlanStore = {
+        mode: 'chat' as const,
+        activeGoal: '',
+        steps: [] as IAiTaskPlanStep[],
+        classification: null,
+        classificationReason: '',
+        shouldEnterPlanMode: false,
+        isPlanning: false,
+        isApproving: false,
+        approvedAt: null,
+        errorMessage: '',
+        hasPlan: false,
+    };
 
     return {
         config,
@@ -80,6 +93,16 @@ const createAssistantMock = (
         attachedFiles,
         proposedPatch,
         isApplyingPatch,
+        agentPlan: {
+            store: agentPlanStore,
+            classifyTask: vi.fn(),
+            createPlan: vi.fn(),
+            regeneratePlan: vi.fn(),
+            updateStep: vi.fn(),
+            removeStep: vi.fn(),
+            approvePlan: vi.fn(),
+            resetPlan: vi.fn(),
+        },
         canPreviewPatch: computed(() => false),
         sendButtonLabel: computed(() => '发送'),
         loadConfig: vi.fn().mockResolvedValue(undefined),
@@ -165,6 +188,65 @@ const createGitStatus = (): IGitRepositoryStatusPayload => ({
 });
 
 describe('AiAssistantPanel', () => {
+    it('shows plan panel in agent mode when a plan exists', () => {
+        const assistantMock = createAssistantMock([]);
+        assistantMock.activeMode.value = 'agent';
+        assistantMock.agentPlan.store.hasPlan = true;
+        assistantMock.agentPlan.store.activeGoal = '补齐计划模式 UI 接线';
+        assistantMock.agentPlan.store.steps = [
+            {
+                id: 'plan-step-1',
+                index: 0,
+                title: '收集上下文',
+                goal: '收集上下文',
+                kind: 'inspect',
+                status: 'pending',
+                expectedOutput: '影响范围',
+                tools: ['search_text'],
+                requiresUserApproval: false,
+                riskLevel: 'low',
+            },
+            {
+                id: 'plan-step-2',
+                index: 1,
+                title: '输出计划',
+                goal: '输出计划',
+                kind: 'summarize',
+                status: 'pending',
+                expectedOutput: '可执行计划',
+                tools: ['get_diagnostics'],
+                requiresUserApproval: true,
+                riskLevel: 'medium',
+            },
+        ];
+        useAiAssistantMock.mockReturnValue(assistantMock);
+
+        const wrapper = mount(AiAssistantPanel, {
+            props: {
+                document: createDocument(),
+                activeRun: null as IActiveRunSummary | null,
+                analysis: createAnalysis(),
+                selection: null as IEditorSelectionSummary | null,
+                gitStatus: createGitStatus(),
+                workspaceRootPath: 'd:/com.xiaojianc/my_desktop_app',
+                onOpenCodePath: () => undefined,
+            },
+            global: {
+                stubs: {
+                    AiChatThread: { template: '<div />' },
+                    AiContextChips: { template: '<div />' },
+                    AiPatchPreview: { template: '<div />' },
+                    AiPromptInput: { template: '<div />' },
+                    AiProviderSettings: { template: '<div />' },
+                    AiPlanModePanel: { template: '<div data-testid="plan-mode-panel" />' },
+                    teleport: true,
+                },
+            },
+        });
+
+        expect(wrapper.find('[data-testid="plan-mode-panel"]').exists()).toBe(true);
+    });
+
     it('renders a scrollable history view with the latest 20 conversations', async () => {
         const historyThreads = Array.from({ length: 25 }, (_value, index) => createThread(index + 1));
         useAiAssistantMock.mockReturnValue(
@@ -186,6 +268,7 @@ describe('AiAssistantPanel', () => {
                     AiChatThread: { template: '<div />' },
                     AiContextChips: { template: '<div />' },
                     AiPatchPreview: { template: '<div />' },
+                    AiPlanModePanel: { template: '<div />' },
                     AiPromptInput: { template: '<div />' },
                     AiProviderSettings: { template: '<div />' },
                     AiTaskPlan: { template: '<div />' },
@@ -222,6 +305,7 @@ describe('AiAssistantPanel', () => {
                     AiChatThread: { template: '<div />' },
                     AiContextChips: { template: '<div />' },
                     AiPatchPreview: { template: '<div />' },
+                    AiPlanModePanel: { template: '<div />' },
                     AiPromptInput: { template: '<div />' },
                     AiProviderSettings: { template: '<div />' },
                     teleport: true,
@@ -254,6 +338,7 @@ describe('AiAssistantPanel', () => {
                     AiChatThread: { template: '<div />' },
                     AiContextChips: { template: '<div />' },
                     AiPatchPreview: { template: '<div />' },
+                    AiPlanModePanel: { template: '<div />' },
                     AiPromptInput: { template: '<div />' },
                     AiProviderSettings: { template: '<div />' },
                     teleport: true,

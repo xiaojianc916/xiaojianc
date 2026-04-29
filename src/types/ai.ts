@@ -1,4 +1,5 @@
 ﻿import type { IAiCodeBlock } from '@/types/ai-code';
+import type { IAiContextReference } from '@/types/ai-context';
 
 export type TAiProviderType =
   | 'mock'
@@ -14,28 +15,27 @@ export type TAiProviderType =
   | 'custom-gateway';
 export type TAiStatus = 'idle' | 'generating' | 'streaming' | 'error';
 export type TAiChatRole = 'user' | 'assistant' | 'system' | 'tool';
-export type TAiContextKind =
-  | 'current-file'
-  | 'selection'
-  | 'cursor-window'
-  | 'diagnostics'
-  | 'git-diff'
-  | 'terminal-log'
-  | 'search-result'
-  | 'image-attachment'
-  | 'symbol-definition'
-  | 'symbol-references'
-  | 'project-tree';
+export type {
+  IAiContextRange,
+  IAiContextReference,
+  TAiContextKind,
+} from '@/types/ai-context';
 
-export interface IAiContextReference {
-  id: string;
-  kind: TAiContextKind;
-  label: string;
-  path: string | null;
-  range: { startLine: number; endLine: number } | null;
-  contentPreview: string;
-  redacted: boolean;
-}
+export type {
+  IAiAgentApprovePlanPayload,
+  IAiAgentApprovePlanRequest,
+  IAiAgentClassifyTaskPayload,
+  IAiAgentClassifyTaskRequest,
+  IAiAgentPermissionState,
+  IAiAgentPlanPayload,
+  IAiAgentPlanReference,
+  IAiAgentPlanRequest,
+  IAiTaskPlanStep,
+  TAiAgentPlanRiskLevel,
+  TAiAgentPlanStepKind,
+  TAiAgentPlanStepStatus,
+  TAiAgentTaskClassification,
+} from '@/types/ai-agent';
 
 export interface IAiChatStreamRenderState {
   stableContent: string;
@@ -220,21 +220,6 @@ export interface IAiCodeActionRequest {
   language: string;
   selection: string;
   diagnostics: string[];
-}
-
-export interface IAiTaskPlanStep {
-  id: string;
-  title: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'requires-confirmation';
-}
-
-export interface IAiAgentPlanRequest {
-  goal: string;
-  context: IAiContextReference[];
-}
-
-export interface IAiAgentPlanPayload {
-  steps: IAiTaskPlanStep[];
 }
 
 export interface IAiBuildIndexRequest {

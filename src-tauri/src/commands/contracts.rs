@@ -907,19 +907,66 @@ pub struct AiAgentPlanRequest {
     pub(crate) context: Vec<AiContextReferencePayload>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentClassifyTaskRequest {
+    pub(crate) goal: String,
+    pub(crate) context: Vec<AiContextReferencePayload>,
+}
+
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentClassifyTaskPayload {
+    pub(crate) classification: String,
+    pub(crate) should_enter_plan_mode: bool,
+    pub(crate) reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiTaskPlanReferencePayload {
+    pub(crate) r#type: String,
+    pub(crate) label: String,
+    pub(crate) uri: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiTaskPlanStepPayload {
     pub(crate) id: String,
+    pub(crate) index: usize,
     pub(crate) title: String,
-    /// 已知值："pending" | "in-progress" | "done" | "failed" | "skipped"。
+    pub(crate) goal: String,
+    pub(crate) kind: String,
+    /// 已知值："pending" | "running" | "done" | "failed" | "skipped" | "cancelled"。
     pub(crate) status: String,
+    pub(crate) expected_output: String,
+    pub(crate) tools: Vec<String>,
+    pub(crate) references: Option<Vec<AiTaskPlanReferencePayload>>,
+    pub(crate) is_active: Option<bool>,
+    pub(crate) requires_user_approval: bool,
+    pub(crate) risk_level: String,
+    pub(crate) rollback_strategy: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiAgentPlanPayload {
     pub(crate) steps: Vec<AiTaskPlanStepPayload>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentApprovePlanRequest {
+    pub(crate) goal: String,
+    pub(crate) steps: Vec<AiTaskPlanStepPayload>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentApprovePlanPayload {
+    pub(crate) approved_at: String,
+    pub(crate) step_count: usize,
 }
 
 #[derive(Debug, Clone, Deserialize)]

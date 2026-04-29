@@ -1,6 +1,8 @@
 use super::contracts::{
-    AiAgentPlanPayload, AiAgentPlanRequest, AiApplyPatchPayload, AiApplyPatchRequest,
-    AiBuildIndexPayload, AiBuildIndexRequest, AiCancelRequest, AiChatMessagePayload, AiChatPayload, AiChatRequest, AiChatStreamPayload,
+    AiAgentApprovePlanPayload, AiAgentApprovePlanRequest, AiAgentClassifyTaskPayload,
+    AiAgentClassifyTaskRequest, AiAgentPlanPayload, AiAgentPlanRequest, AiApplyPatchPayload,
+    AiApplyPatchRequest, AiBuildIndexPayload, AiBuildIndexRequest, AiCancelRequest,
+    AiChatMessagePayload, AiChatPayload, AiChatRequest, AiChatStreamPayload,
     AiCodeActionPayload, AiCodeActionRequest, AiConfigPayload, AiInlineCompletionRangePayload,
     AiEditCreateSnapshotPayload, AiEditCreateSnapshotRequest,
     AiEditAuthStatePayload, AiEditListTimelinePayload, AiEditListTimelineRequest,
@@ -196,8 +198,22 @@ pub async fn ai_code_action(payload: AiCodeActionRequest) -> Result<AiCodeAction
 }
 
 #[tauri::command]
+pub async fn ai_agent_classify_task(
+    payload: AiAgentClassifyTaskRequest,
+) -> Result<AiAgentClassifyTaskPayload, String> {
+    gateway::classify_task(payload).await
+}
+
+#[tauri::command]
 pub async fn ai_plan_task(payload: AiAgentPlanRequest) -> Result<AiAgentPlanPayload, String> {
     gateway::plan_task(payload).await
+}
+
+#[tauri::command]
+pub async fn ai_agent_approve_plan(
+    payload: AiAgentApprovePlanRequest,
+) -> Result<AiAgentApprovePlanPayload, String> {
+    gateway::approve_plan(payload).await
 }
 
 #[tauri::command]
