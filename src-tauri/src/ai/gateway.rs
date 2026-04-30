@@ -6,6 +6,10 @@ use super::provider::{AiProviderChatRequest, AiProviderMessage, AiProviderRespon
 use super::redaction::redact_text;
 use super::stream_manager;
 use crate::ai_agent::planner::AgentPlanner;
+use crate::ai_agent::provider_loop::{
+    run_agent_provider_loop_async, AgentProviderLoopOutcome, AgentProviderLoopRequest,
+};
+use crate::ai_agent::tool_loop::AgentToolRuntimeServices;
 use crate::commands::contracts::{
     AiAgentApprovePlanPayload, AiAgentApprovePlanRequest, AiAgentClassifyTaskPayload,
     AiAgentClassifyTaskRequest, AiAgentPlanPayload, AiAgentPlanRequest, AiChatRequest,
@@ -324,7 +328,7 @@ pub async fn chat(payload: AiChatRequest) -> Result<AiProviderResponse, String> 
 
         let _thread_id = payload.thread_id.as_deref();
         let messages = collect_messages(payload.messages, payload.references)?;
-        let request = AiProviderChatRequest { messages };
+        let request = AiProviderChatRequest::new(messages);
 
         if config.provider_type == "mock" {
             return Ok(MockProvider::chat(request));
@@ -353,6 +357,60 @@ pub async fn chat(payload: AiChatRequest) -> Result<AiProviderResponse, String> 
     }
 }
 
+pub async fn agent_tool_loop_chat(
+    request: AgentProviderLoopRequest,
+    services: Option<&dyn AgentToolRuntimeServices>,
+) -> Result<AgentProviderLoopOutcome, String> {
+    audit::emit(AiAuditEventKind::ChatStarted);
+
+    let result = async {
+        let config = current_config()?;
+        ensure_chat_enabled(&config)?;
+
+        run_agent_provider_loop_async(
+            request,
+            services,
+            |provider_request| {
+                let config = config.clone();
+                async move { call_provider_once(config, provider_request).await }
+            },
+            || false,
+        )
+        .await
+    }
+    .await;
+
+    match result {
+        Ok(outcome) => {
+            audit::emit(AiAuditEventKind::ChatCompleted);
+            Ok(outcome)
+        }
+        Err(error) => {
+            audit::emit(AiAuditEventKind::ChatFailed);
+            Err(error)
+        }
+    }
+}
+
+async fn call_provider_once(
+    config: AiRuntimeConfig,
+    request: AiProviderChatRequest,
+) -> Result<AiProviderResponse, String> {
+    if config.provider_type == "mock" {
+        return Ok(MockProvider::chat(request));
+    }
+
+    let base_url = resolve_base_url(&config)?.to_string();
+    let api_key = CredentialStore::get(&config.provider_type)?;
+    let model = config
+        .selected_model
+        .as_deref()
+        .unwrap_or(DEFAULT_OPENAI_MODEL)
+        .to_string();
+
+    openai_compatible::chat(&base_url, &api_key, &model, request).await
+}
+
 pub async fn chat_stream(
     app: AppHandle,
     payload: AiChatRequest,
@@ -363,7 +421,7 @@ pub async fn chat_stream(
     ensure_chat_enabled(&config)?;
 
     let messages = collect_messages(payload.messages, payload.references)?;
-    let request = AiProviderChatRequest { messages };
+    let request = AiProviderChatRequest::new(messages);
 
     let stream_id = next_runtime_id("ai-stream");
     let assistant_message_id = next_runtime_id("assistant");
@@ -552,12 +610,10 @@ pub async fn inline_complete(
     }
 
     let prompt = build_inline_prompt(&payload);
-    let request = AiProviderChatRequest {
-        messages: vec![AiProviderMessage {
-            role: "user".to_string(),
-            content: prompt,
-        }],
-    };
+    let request = AiProviderChatRequest::new(vec![AiProviderMessage {
+        role: "user".to_string(),
+        content: prompt,
+    }]);
 
     let base_url = resolve_base_url(&config)?;
     let api_key = CredentialStore::get(&config.provider_type)?;
@@ -598,12 +654,10 @@ pub async fn code_action(payload: AiCodeActionRequest) -> Result<AiCodeActionPay
         audit::emit(AiAuditEventKind::SecretDetected);
     }
 
-    let request = AiProviderChatRequest {
-        messages: vec![AiProviderMessage {
-            role: "user".to_string(),
-            content: redacted_prompt.text,
-        }],
-    };
+    let request = AiProviderChatRequest::new(vec![AiProviderMessage {
+        role: "user".to_string(),
+        content: redacted_prompt.text,
+    }]);
 
     let response = if config.provider_type == "mock" {
         MockProvider::chat(request)
@@ -646,7 +700,7 @@ pub async fn approve_plan(
     AgentPlanner::approve_plan(payload)
 }
 
-fn collect_messages(
+pub(crate) fn collect_messages(
     messages: Vec<crate::commands::contracts::AiChatMessagePayload>,
     references: Vec<AiContextReferencePayload>,
 ) -> Result<Vec<AiProviderMessage>, String> {

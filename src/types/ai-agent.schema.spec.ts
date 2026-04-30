@@ -7,6 +7,7 @@ import {
   aiAgentRunPlanRequestSchema,
   aiAgentPermissionStateSchema,
   aiAgentPlanPayloadSchema,
+  aiAgentToolLoopChatPayloadSchema,
 } from '@/types/ai-agent.schema';
 import { describe, expect, it } from 'vitest';
 
@@ -31,6 +32,42 @@ describe('AI agent schema', () => {
 
     expect(parsed.steps).toHaveLength(2);
     expect(parsed.steps[0]?.tools).toEqual(['search_text']);
+  });
+
+  it('accepts Rust plan payload with nullable optional fields', () => {
+    const parsed = aiAgentPlanPayloadSchema.parse({
+      steps: [
+        {
+          ...createStep(0),
+          toolInputs: null,
+          references: null,
+          isActive: null,
+          rollbackStrategy: null,
+        },
+        {
+          ...createStep(1),
+          toolInputs: {
+            webSearch: null,
+            webFetch: null,
+            proposePatch: null,
+            autoApplyPatch: null,
+            runCommand: null,
+            stageFile: null,
+            createCommit: null,
+          },
+          references: null,
+          isActive: null,
+          rollbackStrategy: '只读步骤无需回滚',
+        },
+      ],
+    });
+
+    expect(parsed.steps).toHaveLength(2);
+    expect(parsed.steps[0]?.toolInputs).toBeUndefined();
+    expect(parsed.steps[0]?.references).toBeUndefined();
+    expect(parsed.steps[0]?.isActive).toBeUndefined();
+    expect(parsed.steps[0]?.rollbackStrategy).toBeUndefined();
+    expect(parsed.steps[1]?.toolInputs?.webSearch).toBeUndefined();
   });
 
   it('拒绝少于 2 步的计划', () => {
@@ -156,5 +193,48 @@ describe('AI agent schema', () => {
         status: 'unknown',
       }),
     ).toThrow();
+  });
+
+  it('accepts Rust pending-confirmation payload with nullable option fields', () => {
+    const parsed = aiAgentToolLoopChatPayloadSchema.parse({
+      content: '',
+      model: 'deepseek-v4-pro',
+      stopReason: 'tool-confirmation-required',
+      turns: 4,
+      pendingDecisionKey: 'call_00_h3Afrhbr3X1s3Vrp5HMRvNT3',
+      pendingConfirmation: {
+        id: 'call_00_h3Afrhbr3X1s3Vrp5HMRvNT3',
+        runId: 'agent-tool-loop-1777525705908-6obhnx',
+        stepId: 'tool-call-step:propose_patch:call_00_h3Afrhbr3X1s3Vrp5HMRvNT3',
+        toolName: 'propose_patch',
+        question: '允许 Agent 使用 propose_patch 吗？',
+        summary: 'Tool propose_patch requires inline user confirmation.',
+        riskLevel: 'medium',
+        impact: null,
+        reversible: true,
+        createdAt: '2026-04-30T12:00:00.000Z',
+        options: [{
+          id: 'allow-once',
+          label: '允许本次',
+          tone: null,
+        }],
+      },
+      toolResults: [{
+        id: 'agent-tool-loop-1777525705908-6obhnx:tool-call-step:propose_patch:call_00_h3Afrhbr3X1s3Vrp5HMRvNT3:propose_patch',
+        runId: 'agent-tool-loop-1777525705908-6obhnx',
+        stepId: 'tool-call-step:propose_patch:call_00_h3Afrhbr3X1s3Vrp5HMRvNT3',
+        toolName: 'propose_patch',
+        status: 'failed',
+        requiresUserConfirmation: true,
+        summary: 'Tool propose_patch requires inline user confirmation.',
+        outputRef: null,
+        startedAt: '2026-04-30T12:00:00.000Z',
+        endedAt: '2026-04-30T12:00:01.000Z',
+      }],
+    });
+
+    expect(parsed.pendingConfirmation?.impact).toBeUndefined();
+    expect(parsed.pendingConfirmation?.options[0]?.tone).toBeUndefined();
+    expect(parsed.toolResults[0]?.outputRef).toBeUndefined();
   });
 });

@@ -64,10 +64,21 @@ const findButtonByText = (
 };
 
 describe('AiPlanModePanel', () => {
+  it('在分类阶段先显示输入框上方的计划生成状态', () => {
+    const wrapper = mountPanel({
+      steps: [],
+      isClassifying: true,
+    });
+
+    expect(wrapper.text()).toContain('待办事项');
+    expect(wrapper.text()).toContain('正在判断是否需要计划');
+    expect(wrapper.find('.ai-plan-tool-dots').exists()).toBe(true);
+  });
+
   it('展示计划步骤并支持批准计划', async () => {
     const wrapper = mountPanel();
 
-    expect(wrapper.text()).toContain('接入 Agent Plan Mode');
+    expect(wrapper.text()).toContain('待办事项(0/3)');
     const titleInputs = wrapper.findAll<HTMLInputElement>('input[aria-label="编辑计划步骤标题"]');
     expect(titleInputs[0]?.element.value).toBe('收集上下文');
     expect(titleInputs[1]?.element.value).toBe('输出方案');
@@ -129,6 +140,29 @@ describe('AiPlanModePanel', () => {
     expect(wrapper.emitted('cancelRun')).toHaveLength(1);
   });
 
+  it('有工具确认待处理时禁用继续执行按钮', () => {
+    const steps = [createStep(0), createStep(1), createStep(2)];
+    const wrapper = mountPanel({
+      steps,
+      approvedAt: '2026-04-29T10:00:00.000Z',
+      activeRun: createRun(steps),
+      toolConfirmation: {
+        id: 'provider-confirmation-1',
+        runId: 'agent-run-1',
+        stepId: 'plan-step-1',
+        toolName: 'run_test',
+        question: '允许 Agent 使用 run_test 吗？',
+        summary: '步骤请求运行测试。',
+        riskLevel: 'medium',
+        reversible: true,
+        createdAt: '2026-04-29T10:00:00.000Z',
+        options: [],
+      },
+    });
+
+    expect(findButtonByText(wrapper, '执行下一步').attributes('disabled')).toBeDefined();
+  });
+
   it('在计划下方展示当前 Web 工具活动', () => {
     const wrapper = mountPanel({
       webActivity: {
@@ -142,6 +176,22 @@ describe('AiPlanModePanel', () => {
 
     expect(wrapper.text()).toContain('Tauri docs');
     expect(wrapper.find('.ai-web-activity-dots').exists()).toBe(true);
+  });
+
+  it('在计划下方实时展示当前普通工具活动', () => {
+    const wrapper = mountPanel({
+      toolActivity: {
+        id: 'tool-activity-1',
+        stepId: 'plan-step-1',
+        toolName: 'read_current_file',
+        state: 'running',
+        label: '正在读取当前文件…',
+        startedAt: '2026-04-29T10:00:00.000Z',
+      },
+    });
+
+    expect(wrapper.text()).toContain('正在读取当前文件…');
+    expect(wrapper.find('.ai-plan-tool-dots').exists()).toBe(true);
   });
 
   it('展示当前 step detail 的工具结果与来源摘要', () => {

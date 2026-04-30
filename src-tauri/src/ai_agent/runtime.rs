@@ -9,7 +9,8 @@ use crate::ai::audit::{self, AiAuditEventKind};
 use crate::ai::errors;
 use crate::ai_agent::planner;
 use crate::ai_agent::tool_loop::{
-    build_tool_result_messages, validate_step_tools, AgentRunMessage, AgentToolUseContext,
+    build_tool_loop_messages_with_services, validate_step_tools, AgentRunMessage,
+    AgentToolRuntimeServices, AgentToolUseContext,
 };
 use crate::commands::contracts::{
     AiAgentListRunsPayload, AiAgentNetworkPermissionPayload, AiAgentResolveToolConfirmationRequest,
@@ -104,6 +105,13 @@ pub fn run_plan(payload: AiAgentRunPlanRequest) -> Result<AiAgentRunEnvelopePayl
 }
 
 pub fn run_step(payload: AiAgentRunStepRequest) -> Result<AiAgentRunEnvelopePayload, String> {
+    run_step_with_services(payload, None)
+}
+
+pub fn run_step_with_services(
+    payload: AiAgentRunStepRequest,
+    services: Option<&dyn AgentToolRuntimeServices>,
+) -> Result<AiAgentRunEnvelopePayload, String> {
     let mut guard = lock_runs()?;
     let run = get_run_mut(&mut guard, &payload.run_id)?;
 
@@ -159,7 +167,11 @@ pub fn run_step(payload: AiAgentRunStepRequest) -> Result<AiAgentRunEnvelopePayl
                 references: get_run_context(&run.id)?,
                 tool_decisions: get_step_tool_decisions(&run.id, &completed_step.id)?,
             };
-            let tool_messages = build_tool_result_messages(&context, &completed_step)?;
+            let tool_messages = if payload.skip_tool_execution {
+                Vec::new()
+            } else {
+                build_tool_loop_messages_with_services(&context, &completed_step, services)?
+            };
 
             run.steps[step_index].status = "done".to_string();
             run.steps[step_index].is_active = None;
@@ -776,6 +788,7 @@ mod tests {
         let running = runtime::run_step(AiAgentRunStepRequest {
             run_id: run_id.clone(),
             step_id: None,
+            skip_tool_execution: false,
         })
         .expect("step should start");
 
@@ -785,6 +798,7 @@ mod tests {
         let done = runtime::run_step(AiAgentRunStepRequest {
             run_id,
             step_id: None,
+            skip_tool_execution: false,
         })
         .expect("step should complete");
 
@@ -811,11 +825,13 @@ mod tests {
         runtime::run_step(AiAgentRunStepRequest {
             run_id: run_id.clone(),
             step_id: None,
+            skip_tool_execution: false,
         })
         .expect("step should start");
         runtime::run_step(AiAgentRunStepRequest {
             run_id: run_id.clone(),
             step_id: None,
+            skip_tool_execution: false,
         })
         .expect("step should complete");
 
@@ -824,6 +840,41 @@ mod tests {
         assert!(!messages.is_empty());
         assert!(format!("{messages:?}").contains("ToolResult"));
         assert!(!format!("{messages:?}").contains("```"));
+    }
+
+    #[test]
+    fn skipped_step_tool_execution_only_updates_step_state() {
+        let plan = AgentPlanner::create_plan(AiAgentPlanRequest {
+            goal: "Provider loop 已单独执行工具".to_string(),
+            context: Vec::new(),
+        })
+        .expect("plan should be created");
+
+        let created = runtime::run_plan(AiAgentRunPlanRequest {
+            goal: "Provider loop 已单独执行工具".to_string(),
+            steps: plan.steps,
+            context: Vec::new(),
+        })
+        .expect("run should be created");
+        let run_id = created.run.id;
+
+        runtime::run_step(AiAgentRunStepRequest {
+            run_id: run_id.clone(),
+            step_id: None,
+            skip_tool_execution: false,
+        })
+        .expect("step should start");
+        let done = runtime::run_step(AiAgentRunStepRequest {
+            run_id: run_id.clone(),
+            step_id: None,
+            skip_tool_execution: true,
+        })
+        .expect("step should complete without legacy tool execution");
+
+        let messages = runtime::list_run_messages_for_test(&run_id);
+
+        assert_eq!(done.run.steps[0].status, "done");
+        assert!(messages.is_empty());
     }
 
     #[test]

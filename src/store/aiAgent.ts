@@ -25,6 +25,7 @@ export const useAiAgentStore = defineStore('ai-agent', () => {
     const classification = ref<TAiAgentTaskClassification | null>(null);
     const classificationReason = ref<string>('');
     const shouldEnterPlanMode = ref<boolean>(false);
+    const isClassifying = ref<boolean>(false);
     const isPlanning = ref<boolean>(false);
     const isApproving = ref<boolean>(false);
     const approvedAt = ref<string | null>(null);
@@ -40,24 +41,31 @@ export const useAiAgentStore = defineStore('ai-agent', () => {
     const activeRun = computed(() =>
         runs.value.find((run) => run.id === activeRunId.value) ?? null,
     );
+    const isActiveToolActivity = (activity: IAiToolActivityInline): boolean =>
+        activity.state === 'starting' ||
+        activity.state === 'running' ||
+        activity.state === 'waiting-confirmation';
+
+    const findLatestActiveToolActivity = (
+        activities: IAiToolActivityInline[],
+    ): IAiToolActivityInline | null =>
+        [...activities].reverse().find(isActiveToolActivity) ?? null;
+
     const activeToolActivity = computed(() => {
         if (pendingToolConfirmation.value) {
             return null;
         }
 
         const runId = activeRunId.value;
+        const currentRunActivity = runId
+            ? findLatestActiveToolActivity(toolActivities.value[runId] ?? [])
+            : null;
 
-        if (!runId) {
-            return null;
+        if (currentRunActivity) {
+            return currentRunActivity;
         }
 
-        return [...(toolActivities.value[runId] ?? [])]
-            .reverse()
-            .find((activity) =>
-                activity.state === 'starting' ||
-                activity.state === 'running' ||
-                activity.state === 'waiting-confirmation',
-            ) ?? null;
+        return findLatestActiveToolActivity(Object.values(toolActivities.value).flat());
     });
 
     const getStepDetailKey = (runId: string, stepId: string): string => `${runId}:${stepId}`;
@@ -106,6 +114,9 @@ export const useAiAgentStore = defineStore('ai-agent', () => {
         classificationReason.value = '';
         classification.value = null;
         shouldEnterPlanMode.value = false;
+        isClassifying.value = false;
+        isPlanning.value = false;
+        isApproving.value = false;
         errorMessage.value = '';
         activeRunId.value = null;
     };
@@ -237,6 +248,7 @@ export const useAiAgentStore = defineStore('ai-agent', () => {
         classification,
         classificationReason,
         shouldEnterPlanMode,
+        isClassifying,
         isPlanning,
         isApproving,
         approvedAt,

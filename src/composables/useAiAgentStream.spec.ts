@@ -220,4 +220,26 @@ describe('useAiAgentStream', () => {
       '已校验工具 search_text',
     );
   });
+
+  it('shows provider tool-loop activity even when there is no Agent run yet', () => {
+    const agentStream = useAiAgentStream();
+    const store = useAiAgentStore();
+
+    agentStream.handleEvent({
+      event: 'tool.activity',
+      seq: 1,
+      runId: 'agent-tool-loop-1',
+      activity: {
+        id: 'activity-provider-read',
+        stepId: 'tool-call-step:read_current_file:call-1',
+        toolName: 'read_current_file',
+        state: 'running',
+        label: '正在读取当前文件…',
+        startedAt: '2026-04-29T10:00:01.000Z',
+      },
+    });
+
+    expect(store.activeRun).toBeNull();
+    expect(store.activeToolActivity?.label).toBe('正在读取当前文件…');
+  });
 });

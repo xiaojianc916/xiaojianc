@@ -24,6 +24,10 @@ const TOOL_NAME_LABELS: Record<string, string> = {
   run_command: '命令',
   stage_file: 'Git 暂存',
   create_commit: 'Git 提交',
+  read_file: '文件',
+  list_open_files: '打开文件',
+  get_package_scripts: 'package scripts',
+  get_test_targets: '测试目标',
 };
 
 const getBaseLabel = (toolCall: IAiToolCall): string => {
@@ -48,11 +52,15 @@ const getRunningLabel = (toolCall: IAiToolCall): string => {
     case 'search_symbols':
       return `正在搜索：${baseLabel}…`;
     case 'read_current_file':
+    case 'read_file':
     case 'read_selected_text':
     case 'get_diagnostics':
     case 'get_git_diff':
     case 'get_terminal_log':
-      return `正在读取：${baseLabel}…`;
+    case 'list_open_files':
+    case 'get_package_scripts':
+    case 'get_test_targets':
+      return `正在读取 ${baseLabel}…`;
     case 'propose_patch':
     case 'auto_apply_patch':
       return `正在应用：${baseLabel}…`;
@@ -78,10 +86,14 @@ const getSucceededLabel = (toolCall: IAiToolCall): string => {
     case 'search_symbols':
       return `已搜索：${baseLabel}`;
     case 'read_current_file':
+    case 'read_file':
     case 'read_selected_text':
     case 'get_diagnostics':
     case 'get_git_diff':
     case 'get_terminal_log':
+    case 'list_open_files':
+    case 'get_package_scripts':
+    case 'get_test_targets':
       return `已读取：${baseLabel}`;
     case 'propose_patch':
     case 'auto_apply_patch':

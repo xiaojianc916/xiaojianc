@@ -32,7 +32,7 @@ const handleRemoveStep = (stepId: string): void => {
 <style scoped>
 .ai-plan-step-list {
     display: grid;
-    gap: 8px;
+    gap: 2px;
     margin: 0;
     padding: 0;
     list-style: none;

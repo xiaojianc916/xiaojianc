@@ -1,5 +1,6 @@
 import type { IAiContextReference } from './ai-context';
 import type { TAiAgentPermissionLevel, TAiAgentToolName } from './ai-tools';
+import type { IAiWebFetchInput, IAiWebSearchInput } from './ai-web';
 import type { TAiWebSourceEntryStatus, TAiWebSourceType } from './ai-web';
 
 export const AI_AGENT_PLAN_STEP_KINDS = [
@@ -122,7 +123,42 @@ export interface IAiCreateCommitToolInput {
   allowEmpty?: boolean;
 }
 
+export interface IAiProposePatchToolInput {
+  path: string;
+  originalContent: string;
+  updatedContent: string;
+  summary: string;
+}
+
+export interface IAiPatchHunkToolInput {
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  lines: string[];
+}
+
+export interface IAiPatchFileToolInput {
+  path: string;
+  originalHash: string;
+  hunks: IAiPatchHunkToolInput[];
+}
+
+export interface IAiPatchSetToolInput {
+  summary: string;
+  files: IAiPatchFileToolInput[];
+}
+
+export interface IAiAutoApplyPatchToolInput {
+  patch: IAiPatchSetToolInput;
+  reason: string;
+}
+
 export interface IAiAgentToolInputs {
+  webSearch?: IAiWebSearchInput;
+  webFetch?: IAiWebFetchInput;
+  proposePatch?: IAiProposePatchToolInput;
+  autoApplyPatch?: IAiAutoApplyPatchToolInput;
   runCommand?: IAiRunCommandToolInput;
   stageFile?: IAiStageFileToolInput;
   createCommit?: IAiCreateCommitToolInput;
@@ -241,10 +277,49 @@ export interface IAiAgentRunPlanRequest {
 export interface IAiAgentRunStepRequest {
   runId: string;
   stepId?: string;
+  skipToolExecution?: boolean;
 }
 
 export interface IAiAgentRunIdRequest {
   runId: string;
+}
+
+export interface IAiAgentToolLoopChatRequest {
+  runId: string;
+  messages: Array<{
+    id: string;
+    role: 'user' | 'assistant' | 'system' | 'tool';
+    content: string;
+    createdAt: string;
+    references: IAiContextReference[];
+  }>;
+  context: IAiContextReference[];
+  workspaceRootPath?: string | null;
+  toolDecisions?: Record<string, TAiToolConfirmationDecision>;
+  maxToolTurns?: number;
+}
+
+export interface IAiAgentToolLoopResult {
+  id: string;
+  runId: string;
+  stepId: string;
+  toolName: TAiAgentToolName;
+  status: 'succeeded' | 'failed';
+  requiresUserConfirmation: boolean;
+  summary: string;
+  outputRef?: string;
+  startedAt: string;
+  endedAt: string;
+}
+
+export interface IAiAgentToolLoopChatPayload {
+  content: string;
+  model: string;
+  stopReason: 'completed' | 'tool-confirmation-required';
+  turns: number;
+  pendingDecisionKey: string | null;
+  pendingConfirmation: IAiToolConfirmationRequest | null;
+  toolResults: IAiAgentToolLoopResult[];
 }
 
 export interface IAiAgentRunPayload {

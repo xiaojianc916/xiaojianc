@@ -4,8 +4,13 @@ import { aiService } from '@/services/modules/ai';
 import { useAiAgentStore } from '@/store/aiAgent';
 
 import type { TAiAgentStreamEvent } from '@/types/ai';
+import type { IAiToolActivityInline } from '@/types/ai';
 
-export const useAiAgentStream = () => {
+interface IUseAiAgentStreamOptions {
+  onToolActivity?: (runId: string, activity: IAiToolActivityInline) => void;
+}
+
+export const useAiAgentStream = (options: IUseAiAgentStreamOptions = {}) => {
   const store = useAiAgentStore();
   const isListening = ref(false);
   let unlistenAgentStream: (() => void) | null = null;
@@ -20,6 +25,7 @@ export const useAiAgentStream = () => {
         break;
       case 'tool.activity':
         store.appendToolActivity(event.runId, event.activity);
+        options.onToolActivity?.(event.runId, event.activity);
         if (event.activity.state === 'succeeded' || event.activity.state === 'failed') {
           store.appendStepToolResults(event.runId, event.activity.stepId, [{
             id: event.activity.id,

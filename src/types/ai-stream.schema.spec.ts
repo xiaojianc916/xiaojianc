@@ -64,4 +64,26 @@ describe('AI Agent stream schema', () => {
 
     expect(parsed.event).toBe('tool.confirmation');
   });
+
+  it('accepts Rust tool.activity event with nullable optional fields', () => {
+    const parsed = aiAgentStreamEventSchema.parse({
+      event: 'tool.activity',
+      seq: 3,
+      runId: 'agent-tool-loop-1',
+      activity: {
+        id: 'activity-read-current-file',
+        stepId: 'tool-call-step:read_current_file:call-1',
+        toolName: 'read_current_file',
+        state: 'running',
+        label: '正在读取当前文件…',
+        targetPreview: null,
+        startedAt: '2026-04-29T10:00:00.000Z',
+        elapsedMs: null,
+      },
+    });
+
+    expect(parsed.event).toBe('tool.activity');
+    expect(parsed.activity.targetPreview).toBeUndefined();
+    expect(parsed.activity.elapsedMs).toBeUndefined();
+  });
 });

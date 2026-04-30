@@ -1,4 +1,4 @@
-﻿import { tauriService } from '@/services/tauri';
+import { tauriService } from '@/services/tauri';
 import type {
   IAiEditGetDiffPayload,
   IAiEditGetDiffRequest,
@@ -18,6 +18,8 @@ import type {
   IAiAgentRunStepRequest,
   IAiAgentResolveToolConfirmationRequest,
   IAiAgentSetNetworkPermissionRequest,
+  IAiAgentToolLoopChatPayload,
+  IAiAgentToolLoopChatRequest,
   IAiApplyPatchPayload,
   IAiApplyPatchRequest,
   IAiBuildIndexPayload,
@@ -130,6 +132,9 @@ export const aiService = {
     payload: IAiAgentResolveToolConfirmationRequest,
   ): Promise<IAiAgentRunPayload> {
     return tauriService.aiAgentResolveToolConfirmation(payload);
+  },
+  toolLoopChat(payload: IAiAgentToolLoopChatRequest): Promise<IAiAgentToolLoopChatPayload> {
+    return tauriService.aiAgentToolLoopChat(payload);
   },
   webSearch(payload: IAiWebSearchInput): Promise<IAiWebSearchPayload> {
     return tauriService.aiWebSearch(payload);

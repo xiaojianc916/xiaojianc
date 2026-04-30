@@ -33,6 +33,8 @@ import {
   aiAgentRunStepRequestSchema,
   aiAgentResolveToolConfirmationRequestSchema,
   aiAgentSetNetworkPermissionRequestSchema,
+  aiAgentToolLoopChatPayloadSchema,
+  aiAgentToolLoopChatRequestSchema,
   aiApplyPatchMetadataSchema,
   aiChatPayloadSchema,
   aiChatRequestSchema,
@@ -632,6 +634,10 @@ export const tauriContracts = {
   aiAgentResolveToolConfirmation: {
     inSchema: aiAgentResolveToolConfirmationRequestSchema,
     outSchema: aiAgentRunPayloadSchema,
+  },
+  aiAgentToolLoopChat: {
+    inSchema: aiAgentToolLoopChatRequestSchema,
+    outSchema: aiAgentToolLoopChatPayloadSchema,
   },
   aiWebSearch: {
     inSchema: aiWebSearchInputSchema,

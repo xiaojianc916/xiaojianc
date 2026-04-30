@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::ops::Deref;
 
@@ -635,7 +636,7 @@ pub struct AiCodeActionPayload {
     pub(crate) follow_up_questions: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiProposePatchRequest {
     pub(crate) path: String,
@@ -650,7 +651,7 @@ pub struct AiProposePatchPayload {
     pub(crate) patch: AiPatchSetPayload,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiApplyPatchMetadataRequest {
     pub(crate) task_id: Option<String>,
@@ -662,7 +663,7 @@ pub struct AiApplyPatchMetadataRequest {
     pub(crate) agent_step_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiApplyPatchRequest {
     pub(crate) patch: AiPatchSetPayload,
@@ -742,8 +743,10 @@ pub struct AiToolActivityInlinePayload {
     pub(crate) tool_name: String,
     pub(crate) state: String,
     pub(crate) label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) target_preview: Option<String>,
     pub(crate) started_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) elapsed_ms: Option<u64>,
 }
 
@@ -761,6 +764,7 @@ pub struct AiAgentToolActivityStreamEventPayload {
 pub struct AiToolConfirmationOptionPayload {
     pub(crate) id: String,
     pub(crate) label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) tone: Option<String>,
 }
 
@@ -774,6 +778,7 @@ pub struct AiToolConfirmationRequestPayload {
     pub(crate) question: String,
     pub(crate) summary: String,
     pub(crate) risk_level: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) impact: Option<String>,
     pub(crate) reversible: bool,
     pub(crate) created_at: String,
@@ -1075,8 +1080,19 @@ pub struct AiCreateCommitToolInputPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiAgentToolInputsPayload {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) web_search: Option<AiWebSearchInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) web_fetch: Option<AiWebFetchInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) propose_patch: Option<AiProposePatchRequest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) auto_apply_patch: Option<AiApplyPatchRequest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) run_command: Option<AiRunCommandToolInputPayload>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) stage_file: Option<AiStageFileToolInputPayload>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) create_commit: Option<AiCreateCommitToolInputPayload>,
 }
 
@@ -1092,11 +1108,15 @@ pub struct AiTaskPlanStepPayload {
     pub(crate) status: String,
     pub(crate) expected_output: String,
     pub(crate) tools: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) tool_inputs: Option<AiAgentToolInputsPayload>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) references: Option<Vec<AiTaskPlanReferencePayload>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) is_active: Option<bool>,
     pub(crate) requires_user_approval: bool,
     pub(crate) risk_level: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) rollback_strategy: Option<String>,
 }
 
@@ -1151,12 +1171,54 @@ pub struct AiAgentRunPlanRequest {
 pub struct AiAgentRunStepRequest {
     pub(crate) run_id: String,
     pub(crate) step_id: Option<String>,
+    #[serde(default)]
+    pub(crate) skip_tool_execution: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiAgentRunIdRequest {
     pub(crate) run_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentToolLoopChatRequest {
+    pub(crate) run_id: String,
+    pub(crate) messages: Vec<AiChatMessagePayload>,
+    #[serde(default)]
+    pub(crate) context: Vec<AiContextReferencePayload>,
+    pub(crate) workspace_root_path: Option<String>,
+    #[serde(default)]
+    pub(crate) tool_decisions: HashMap<String, String>,
+    pub(crate) max_tool_turns: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentToolLoopResultPayload {
+    pub(crate) id: String,
+    pub(crate) run_id: String,
+    pub(crate) step_id: String,
+    pub(crate) tool_name: String,
+    pub(crate) status: String,
+    pub(crate) requires_user_confirmation: bool,
+    pub(crate) summary: String,
+    pub(crate) output_ref: Option<String>,
+    pub(crate) started_at: String,
+    pub(crate) ended_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentToolLoopChatPayload {
+    pub(crate) content: String,
+    pub(crate) model: String,
+    pub(crate) stop_reason: String,
+    pub(crate) turns: usize,
+    pub(crate) pending_decision_key: Option<String>,
+    pub(crate) pending_confirmation: Option<AiToolConfirmationRequestPayload>,
+    pub(crate) tool_results: Vec<AiAgentToolLoopResultPayload>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1191,7 +1253,7 @@ pub struct AiAgentNetworkPermissionPayload {
     pub(crate) permission: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiWebSearchInput {
     pub(crate) query: String,
@@ -1216,7 +1278,7 @@ pub struct AiWebSearchPayload {
     pub(crate) results: Vec<AiWebSearchResultPayload>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiWebFetchInput {
     pub(crate) url: String,

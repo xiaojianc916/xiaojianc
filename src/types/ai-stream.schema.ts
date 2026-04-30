@@ -16,15 +16,18 @@ export const aiToolActivityStateSchema = z.enum(AI_TOOL_ACTIVITY_STATES);
 
 export const aiAgentStreamEndReasonSchema = z.enum(AI_AGENT_STREAM_END_REASONS);
 
+const nullishOptional = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((value) => (value === null ? undefined : value), schema.optional());
+
 export const aiToolActivityInlineSchema = z.object({
   id: z.string().min(1),
   stepId: z.string().min(1),
   toolName: aiAgentToolNameSchema,
   state: aiToolActivityStateSchema,
   label: z.string().min(1),
-  targetPreview: z.string().min(1).optional(),
+  targetPreview: nullishOptional(z.string().min(1)),
   startedAt: z.string().min(1),
-  elapsedMs: z.number().int().nonnegative().optional(),
+  elapsedMs: nullishOptional(z.number().int().nonnegative()),
 });
 
 export const aiAgentStreamErrorPayloadSchema = z.object({

@@ -13,6 +13,8 @@ import type {
   IAiAgentRunStepRequest,
   IAiAgentResolveToolConfirmationRequest,
   IAiAgentSetNetworkPermissionRequest,
+  IAiAgentToolLoopChatPayload,
+  IAiAgentToolLoopChatRequest,
   IAiApplyPatchPayload,
   IAiApplyPatchRequest,
   IAiBuildIndexPayload,
@@ -254,6 +256,9 @@ export interface ITauriService {
   aiAgentResolveToolConfirmation(
     payload: IAiAgentResolveToolConfirmationRequest,
   ): Promise<IAiAgentRunPayload>;
+  aiAgentToolLoopChat(
+    payload: IAiAgentToolLoopChatRequest,
+  ): Promise<IAiAgentToolLoopChatPayload>;
   aiBuildIndex(payload: IAiBuildIndexRequest): Promise<IAiBuildIndexPayload>;
   aiQueryIndex(payload: IAiQueryIndexRequest): Promise<IAiQueryIndexPayload>;
   aiProposePatch(payload: IAiProposePatchRequest): Promise<IAiProposePatchPayload>;

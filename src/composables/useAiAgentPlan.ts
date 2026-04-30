@@ -2,6 +2,7 @@ import { ref } from 'vue';
 
 import { aiService } from '@/services/modules/ai';
 import { useAiAgentStore } from '@/store/aiAgent';
+import { toErrorMessage } from '@/utils/error';
 
 import type {
     IAiContextReference,
@@ -10,18 +11,6 @@ import type {
 
 const MIN_PLAN_STEPS = 2;
 const MAX_PLAN_STEPS = 6;
-
-const toErrorMessage = (error: unknown, fallback: string): string => {
-    if (error instanceof Error && error.message.trim()) {
-        return error.message;
-    }
-
-    if (typeof error === 'string' && error.trim()) {
-        return error;
-    }
-
-    return fallback;
-};
 
 const cloneContext = (
     context: IAiContextReference[],
@@ -50,6 +39,7 @@ export const useAiAgentPlan = () => {
         goal: string,
         context: IAiContextReference[],
     ): Promise<void> => {
+        store.isClassifying = true;
         store.errorMessage = '';
 
         try {
@@ -65,6 +55,8 @@ export const useAiAgentPlan = () => {
         } catch (error) {
             store.errorMessage = toErrorMessage(error, '任务分类失败。');
             throw error;
+        } finally {
+            store.isClassifying = false;
         }
     };
 

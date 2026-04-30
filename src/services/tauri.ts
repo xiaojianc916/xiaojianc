@@ -161,6 +161,18 @@ const buildPayloadMetricsFromSerialized = (serialized: string): IPayloadMetrics 
 const buildPayloadMetrics = (value: unknown): IPayloadMetrics =>
   buildPayloadMetricsFromSerialized(serializeForLog(value));
 
+const formatZodIssueSummary = (issues: z.ZodIssue[]): string => {
+  const issue = issues[0];
+
+  if (!issue) {
+    return '未返回具体字段错误。';
+  }
+
+  const path = issue.path.length ? issue.path.join('.') : '响应根节点';
+
+  return `${path}: ${issue.message}`;
+};
+
 const buildPayloadMetricsOmittingTextFields = <T extends Record<string, unknown>>(
   value: T,
   omittedFields: readonly string[],
@@ -441,11 +453,10 @@ export const defineIpc = <TInSchema extends z.ZodTypeAny, TOutSchema extends z.Z
 
       if (!parsedOutput.success) {
         payloadSummary = shouldAudit ? ensureOutputMetrics().summary : undefined;
+        const issueSummary = formatZodIssueSummary(parsedOutput.error.issues);
         throw new AppError({
           code: 'ipc.contract-violation',
-          message: payloadSummary
-            ? `IPC 契约不一致(${options.name})，traceId=${traceId}，payload=${payloadSummary}`
-            : `IPC 契约不一致(${options.name})，已记录 traceId=${traceId}。`,
+          message: `IPC 契约不一致(${options.name})，traceId=${traceId}，${issueSummary}`,
           scope: 'validation',
           traceId,
           cause: {
@@ -891,6 +902,13 @@ const aiAgentResolveToolConfirmationIpc = definePayloadIpc(
   { audit: 'sensitive', timeoutMs: 15_000 },
 );
 
+const aiAgentToolLoopChatIpc = definePayloadIpc(
+  'ai_agent_tool_loop_chat',
+  '执行 AI Agent Provider 工具循环',
+  tauriContracts.aiAgentToolLoopChat,
+  { audit: 'sensitive', timeoutMs: 180_000, measureInput: measureAiChatInput },
+);
+
 const aiWebSearchIpc = definePayloadIpc(
   'ai_web_search',
   '执行 AI Agent 网络搜索',
@@ -1249,6 +1267,8 @@ export const tauriService: ITauriService & {
   aiAgentSetNetworkPermission: aiAgentSetNetworkPermissionIpc,
 
   aiAgentResolveToolConfirmation: aiAgentResolveToolConfirmationIpc,
+
+  aiAgentToolLoopChat: aiAgentToolLoopChatIpc,
 
   aiWebSearch: aiWebSearchIpc,
 

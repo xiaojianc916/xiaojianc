@@ -7,7 +7,6 @@ import AiToolConfirmationCard from '@/components/business/ai/AiToolConfirmationC
 import AiWebSearchActivity from '@/components/business/ai/AiWebSearchActivity.vue';
 import type {
     IAiAgentRun,
-    IAiAgentStepDetail,
     IAiToolConfirmationRequest,
     IAiToolActivityInline,
     IAiTaskPlanStep,
@@ -26,10 +25,10 @@ const props = defineProps<{
     approvedAt: string | null;
     activeRun: IAiAgentRun | null;
     isRunActionPending: boolean;
+    isClassifying?: boolean;
     webActivity?: IAiWebActivity | null;
     toolActivity?: IAiToolActivityInline | null;
     toolConfirmation?: IAiToolConfirmationRequest | null;
-    activeStepDetail?: IAiAgentStepDetail | null;
 }>();
 
 const emit = defineEmits<{
@@ -92,11 +91,53 @@ const currentStepTitle = computed(() => {
 });
 
 const completedStepCount = computed(() =>
-    props.activeRun?.steps.filter((step) => step.status === 'done').length ?? 0,
+    props.steps.filter((step) => step.status === 'done').length,
+);
+
+const totalStepCount = computed(() =>
+    props.steps.length,
+);
+
+const todoTitle = computed(() =>
+    totalStepCount.value > 0
+        ? `待办事项(${completedStepCount.value}/${totalStepCount.value})`
+        : '待办事项',
+);
+
+const planStateLabel = computed(() => {
+    if (props.isClassifying) {
+        return '判断任务';
+    }
+
+    if (props.isPlanning) {
+        return '生成计划';
+    }
+
+    if (props.activeRun) {
+        return runStatusLabel.value;
+    }
+
+    if (props.approvedAt) {
+        return '已批准';
+    }
+
+    if (props.steps.length) {
+        return '待确认';
+    }
+
+    return '计划';
+});
+
+const loadingLabel = computed(() =>
+    props.isClassifying ? '正在判断是否需要计划…' : '正在生成计划…',
+);
+
+const shouldShowContextLine = computed(() =>
+    !props.steps.length && Boolean(props.goal || props.classificationReason),
 );
 
 const canRunStep = computed(() => {
-    if (!props.activeRun || props.isRunActionPending) {
+    if (!props.activeRun || props.isRunActionPending || props.toolConfirmation) {
         return false;
     }
 
@@ -129,9 +170,6 @@ const runStepLabel = computed(() =>
     props.activeRun?.status === 'running-step' ? '完成当前步骤' : '执行下一步',
 );
 
-const hasActiveStepDetail = computed(() =>
-    Boolean(props.activeStepDetail?.webSources.length || props.activeStepDetail?.toolResults.length),
-);
 const handleUpdateStepTitle = (stepId: string, title: string): void => {
     emit('updateStepTitle', stepId, title);
 };
@@ -144,16 +182,30 @@ const handleRemoveStep = (stepId: string): void => {
 <template>
     <section class="ai-plan-mode-panel" aria-label="计划模式">
         <header class="ai-plan-header">
-            <h3>Plan Mode</h3>
-            <span>{{ steps.length }} 步</span>
+            <div class="ai-plan-title-group">
+                <span class="ai-plan-caret" aria-hidden="true">⌄</span>
+                <h3>{{ todoTitle }}</h3>
+            </div>
+            <span>{{ planStateLabel }}</span>
         </header>
 
-        <p v-if="goal" class="ai-plan-goal">目标：{{ goal }}</p>
-        <p v-if="classificationReason" class="ai-plan-reason">{{ classificationReason }}</p>
+        <p v-if="shouldShowContextLine" class="ai-plan-reason">
+            {{ goal || classificationReason }}
+        </p>
         <p v-if="approvedAt && !activeRun" class="ai-plan-approved">计划已批准，正在等待启动 Agent run。</p>
-        <p v-if="errorMessage" class="ai-plan-error">{{ errorMessage }}</p>
+        <p v-if="errorMessage" class="ai-plan-error">
+            <strong>计划生成失败</strong>
+            <span>{{ errorMessage }}</span>
+        </p>
 
-        <div v-if="isPlanning" class="ai-plan-loading">计划生成中...</div>
+        <div v-if="isClassifying || isPlanning" class="ai-plan-loading">
+            <span class="ai-plan-tool-dots" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+            </span>
+            <span>{{ loadingLabel }}</span>
+        </div>
 
         <AiPlanStepList
             v-if="steps.length"
@@ -180,23 +232,6 @@ const handleRemoveStep = (stepId: string): void => {
             <span>{{ toolActivity.label }}</span>
         </div>
 
-        <section v-if="hasActiveStepDetail" class="ai-plan-step-detail" aria-label="当前步骤详情">
-            <header class="ai-plan-step-detail-header">
-                <strong>Step Detail</strong>
-                <span>{{ activeStepDetail?.webSources.length ?? 0 }} sources</span>
-            </header>
-            <ul v-if="activeStepDetail?.toolResults.length" class="ai-plan-tool-result-list">
-                <li v-for="result in activeStepDetail.toolResults" :key="result.id" :class="`is-${result.status}`">
-                    <span>{{ result.toolName }}</span>
-                    <em>{{ result.summary }}</em>
-                </li>
-            </ul>
-            <div v-if="activeStepDetail?.webSources.length" class="ai-plan-source-chip-list">
-                <span v-for="source in activeStepDetail.webSources" :key="source.id" class="ai-plan-source-chip">
-                    {{ source.title }}
-                </span>
-            </div>
-        </section>
         <section v-if="activeRun" class="ai-plan-run-card" aria-label="Agent run 状态">
             <header class="ai-plan-run-header">
                 <span class="ai-plan-run-dot" :class="runStatusClass" aria-hidden="true"></span>
@@ -244,7 +279,7 @@ const handleRemoveStep = (stepId: string): void => {
         </section>
 
         <AiPlanApprovalBar
-            :is-planning="isPlanning"
+            :is-planning="Boolean(isClassifying) || isPlanning"
             :is-approving="isApproving"
             :can-approve="canApprove"
             :approved-at="approvedAt"
@@ -258,15 +293,30 @@ const handleRemoveStep = (stepId: string): void => {
 <style scoped>
 .ai-plan-mode-panel {
     display: grid;
-    gap: 10px;
+    gap: 6px;
     border-top: 1px solid var(--shell-divider);
-    padding: 10px 12px;
+    background: color-mix(in srgb, var(--panel-bg) 86%, transparent);
+    padding: 8px 12px;
 }
 
 .ai-plan-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
+}
+
+.ai-plan-title-group {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+}
+
+.ai-plan-caret {
+    color: var(--text-quaternary);
+    font-size: 13px;
+    line-height: 1;
 }
 
 .ai-plan-header h3 {
@@ -279,6 +329,7 @@ const handleRemoveStep = (stepId: string): void => {
 .ai-plan-header span {
     color: var(--text-quaternary);
     font-size: 11px;
+    white-space: nowrap;
 }
 
 .ai-plan-goal,
@@ -300,7 +351,20 @@ const handleRemoveStep = (stepId: string): void => {
 }
 
 .ai-plan-error {
+    display: grid;
+    gap: 2px;
     color: var(--danger);
+}
+
+.ai-plan-error strong {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.ai-plan-error span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .ai-plan-approved {
@@ -308,6 +372,9 @@ const handleRemoveStep = (stepId: string): void => {
 }
 
 .ai-plan-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
     color: var(--text-quaternary);
 }
 
@@ -349,87 +416,6 @@ const handleRemoveStep = (stepId: string): void => {
 
 .ai-plan-tool-dots span:nth-child(3) {
     animation-delay: 240ms;
-}
-
-.ai-plan-step-detail {
-    display: grid;
-    gap: 7px;
-    border: 1px solid color-mix(in srgb, var(--shell-divider) 78%, transparent);
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--surface-soft) 46%, transparent);
-    padding: 8px;
-}
-
-.ai-plan-step-detail-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.ai-plan-step-detail-header strong {
-    color: var(--text-primary);
-    font-size: 11px;
-    font-weight: 600;
-}
-
-.ai-plan-step-detail-header span {
-    color: var(--text-quaternary);
-    font-size: 11px;
-}
-
-.ai-plan-tool-result-list {
-    display: grid;
-    gap: 4px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.ai-plan-tool-result-list li {
-    display: flex;
-    min-width: 0;
-    align-items: baseline;
-    gap: 6px;
-    color: var(--text-tertiary);
-    font-size: 11px;
-    line-height: 16px;
-}
-
-.ai-plan-tool-result-list li.is-failed {
-    color: var(--danger);
-}
-
-.ai-plan-tool-result-list span {
-    flex: 0 0 auto;
-    color: var(--text-quaternary);
-}
-
-.ai-plan-tool-result-list em {
-    min-width: 0;
-    overflow: hidden;
-    font-style: normal;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.ai-plan-source-chip-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-}
-
-.ai-plan-source-chip {
-    max-width: 100%;
-    overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--shell-divider) 72%, transparent);
-    border-radius: 999px;
-    color: var(--text-quaternary);
-    font-size: 10px;
-    line-height: 16px;
-    padding: 0 6px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 .ai-plan-run-card {

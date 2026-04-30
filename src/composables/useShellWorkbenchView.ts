@@ -698,7 +698,7 @@ export const useShellWorkbenchView = (onReady: () => void) => {
   );
 
   watch(
-    () => workbench.editorStore.documents.map((item) => item.id),
+    () => (workbench.editorStore.documents ?? []).map((item) => item.id),
     (documentIds) => {
       const documentIdSet = new Set(documentIds);
       documentBackStack.value = documentBackStack.value.filter((documentId) => documentIdSet.has(documentId));

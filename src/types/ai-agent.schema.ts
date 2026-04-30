@@ -20,7 +20,12 @@ import {
   AI_AGENT_PERMISSION_LEVELS,
   AI_AGENT_TOOL_NAMES,
 } from '@/types/ai-tools';
-import { aiWebSourceEntryStatusSchema, aiWebSourceTypeSchema } from '@/types/ai-web.schema';
+import {
+  aiWebFetchInputSchema,
+  aiWebSearchInputSchema,
+  aiWebSourceEntryStatusSchema,
+  aiWebSourceTypeSchema,
+} from '@/types/ai-web.schema';
 
 export const aiAgentToolNameSchema = z.enum(AI_AGENT_TOOL_NAMES);
 
@@ -52,6 +57,16 @@ export const aiToolConfirmationDecisionSchema = z.enum(AI_TOOL_CONFIRMATION_DECI
 
 export const aiToolConfirmationOptionToneSchema = z.enum(AI_TOOL_CONFIRMATION_OPTION_TONES);
 
+export const AI_AGENT_TOOL_LOOP_DEFAULT_MAX_TURNS = 16;
+export const AI_AGENT_TOOL_LOOP_MAX_TURNS = 24;
+export const AI_AGENT_TOOL_LOOP_MAX_RETURNED_TURNS = AI_AGENT_TOOL_LOOP_MAX_TURNS + 1;
+
+const nullableOptionalTextSchema = z
+  .preprocess((value) => (value === null ? undefined : value), z.string().min(1).optional());
+
+const nullishOptional = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((value) => (value === null ? undefined : value), schema.optional());
+
 export const aiAgentPlanReferenceSchema = z.object({
   type: aiAgentPlanReferenceTypeSchema,
   label: z.string().min(1),
@@ -62,7 +77,7 @@ export const aiRunCommandToolInputSchema = z.object({
   command: z.string().trim().min(1),
   reason: z.string().trim().min(1),
   cwdPolicy: z.literal('workspace-root'),
-  timeoutMs: z.number().int().min(1_000).max(120_000).optional(),
+  timeoutMs: nullishOptional(z.number().int().min(1_000).max(120_000)),
 });
 
 export const aiStageFileToolInputSchema = z.object({
@@ -73,14 +88,49 @@ export const aiStageFileToolInputSchema = z.object({
 export const aiCreateCommitToolInputSchema = z.object({
   message: z.string().trim().min(1).max(500),
   reason: z.string().trim().min(1),
-  allowEmpty: z.boolean().optional(),
+  allowEmpty: nullishOptional(z.boolean()),
 });
 
-export const aiAgentToolInputsSchema = z.object({
-  runCommand: aiRunCommandToolInputSchema.optional(),
-  stageFile: aiStageFileToolInputSchema.optional(),
-  createCommit: aiCreateCommitToolInputSchema.optional(),
-}).optional();
+export const aiProposePatchToolInputSchema = z.object({
+  path: z.string().trim().min(1),
+  originalContent: z.string(),
+  updatedContent: z.string(),
+  summary: z.string().trim().min(1),
+});
+
+export const aiPatchHunkToolInputSchema = z.object({
+  oldStart: z.number().int().nonnegative(),
+  oldLines: z.number().int().nonnegative(),
+  newStart: z.number().int().nonnegative(),
+  newLines: z.number().int().nonnegative(),
+  lines: z.array(z.string()).min(1),
+});
+
+export const aiPatchFileToolInputSchema = z.object({
+  path: z.string().trim().min(1),
+  originalHash: z.string().trim().min(1),
+  hunks: z.array(aiPatchHunkToolInputSchema).min(1),
+});
+
+export const aiPatchSetToolInputSchema = z.object({
+  summary: z.string().trim().min(1),
+  files: z.array(aiPatchFileToolInputSchema).min(1).max(20),
+});
+
+export const aiAutoApplyPatchToolInputSchema = z.object({
+  patch: aiPatchSetToolInputSchema,
+  reason: z.string().trim().min(1),
+});
+
+export const aiAgentToolInputsSchema = nullishOptional(z.object({
+  webSearch: nullishOptional(aiWebSearchInputSchema),
+  webFetch: nullishOptional(aiWebFetchInputSchema),
+  proposePatch: nullishOptional(aiProposePatchToolInputSchema),
+  autoApplyPatch: nullishOptional(aiAutoApplyPatchToolInputSchema),
+  runCommand: nullishOptional(aiRunCommandToolInputSchema),
+  stageFile: nullishOptional(aiStageFileToolInputSchema),
+  createCommit: nullishOptional(aiCreateCommitToolInputSchema),
+}));
 
 export const aiTaskPlanStepSchema = z.object({
   id: z.string().min(1),
@@ -92,11 +142,11 @@ export const aiTaskPlanStepSchema = z.object({
   expectedOutput: z.string().min(1),
   tools: z.array(aiAgentToolNameSchema).min(1),
   toolInputs: aiAgentToolInputsSchema,
-  references: z.array(aiAgentPlanReferenceSchema).optional(),
-  isActive: z.boolean().optional(),
+  references: nullishOptional(z.array(aiAgentPlanReferenceSchema)),
+  isActive: nullishOptional(z.boolean()),
   requiresUserApproval: z.boolean(),
   riskLevel: aiAgentPlanRiskLevelSchema,
-  rollbackStrategy: z.string().min(1).optional(),
+  rollbackStrategy: nullableOptionalTextSchema,
 });
 
 export const aiAgentPlanRequestSchema = z.object({
@@ -151,10 +201,41 @@ export const aiAgentRunPlanRequestSchema = z.object({
 export const aiAgentRunStepRequestSchema = z.object({
   runId: z.string().trim().min(1),
   stepId: z.string().trim().min(1).optional(),
+  skipToolExecution: z.boolean().optional(),
 });
 
 export const aiAgentRunIdRequestSchema = z.object({
   runId: z.string().trim().min(1),
+});
+
+const aiAgentToolLoopMessageSchema = z.object({
+  id: z.string().min(1),
+  role: z.enum(['user', 'assistant', 'system', 'tool']),
+  content: z.string(),
+  createdAt: z.string().min(1),
+  references: z.array(aiContextReferenceSchema),
+});
+
+export const aiAgentToolLoopChatRequestSchema = z.object({
+  runId: z.string().trim().min(1),
+  messages: z.array(aiAgentToolLoopMessageSchema).min(1),
+  context: z.array(aiContextReferenceSchema).default([]),
+  workspaceRootPath: z.string().min(1).nullable().optional(),
+  toolDecisions: z.record(z.string().min(1), aiToolConfirmationDecisionSchema).default({}),
+  maxToolTurns: z.number().int().min(1).max(AI_AGENT_TOOL_LOOP_MAX_TURNS).optional(),
+});
+
+export const aiAgentToolLoopResultSchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  stepId: z.string().min(1),
+  toolName: aiAgentToolNameSchema,
+  status: z.enum(['succeeded', 'failed']),
+  requiresUserConfirmation: z.boolean(),
+  summary: z.string().min(1),
+  outputRef: nullableOptionalTextSchema,
+  startedAt: z.string().min(1),
+  endedAt: z.string().min(1),
 });
 
 export const aiAgentRunPayloadSchema = z.object({
@@ -173,8 +254,8 @@ export const aiAgentStepWebSourceSummarySchema = z.object({
   status: aiWebSourceEntryStatusSchema,
   queryPreview: z.string(),
   fetchedAt: z.string().min(1),
-  textRef: z.string().min(1).optional(),
-  excerpt: z.string().optional(),
+  textRef: nullableOptionalTextSchema,
+  excerpt: nullishOptional(z.string()),
 });
 
 export const aiAgentStepToolResultSummarySchema = z.object({
@@ -186,7 +267,7 @@ export const aiAgentStepToolResultSummarySchema = z.object({
   summary: z.string().min(1),
   startedAt: z.string().min(1),
   endedAt: z.string().min(1),
-  outputRef: z.string().min(1).optional(),
+  outputRef: nullableOptionalTextSchema,
 });
 
 export const aiAgentStepDetailSchema = z.object({
@@ -205,8 +286,8 @@ export const aiAgentTimelineItemSchema = z.object({
   title: z.string().min(1),
   status: aiAgentTimelineItemStatusSchema,
   createdAt: z.string().min(1),
-  subtitle: z.string().min(1).optional(),
-  detailRef: z.string().min(1).optional(),
+  subtitle: nullableOptionalTextSchema,
+  detailRef: nullableOptionalTextSchema,
 });
 
 export const aiAgentSetNetworkPermissionRequestSchema = z.object({
@@ -228,7 +309,10 @@ export const aiAgentPermissionStateSchema = z.object({
 export const aiToolConfirmationOptionSchema = z.object({
   id: aiToolConfirmationOptionIdSchema,
   label: z.string().min(1),
-  tone: aiToolConfirmationOptionToneSchema.optional(),
+  tone: z.preprocess(
+    (value) => (value === null ? undefined : value),
+    aiToolConfirmationOptionToneSchema.optional(),
+  ),
 });
 
 export const aiToolConfirmationRequestSchema = z.object({
@@ -239,10 +323,20 @@ export const aiToolConfirmationRequestSchema = z.object({
   question: z.string().min(1),
   summary: z.string().min(1),
   riskLevel: aiAgentPlanRiskLevelSchema,
-  impact: z.string().min(1).optional(),
+  impact: nullableOptionalTextSchema,
   reversible: z.boolean(),
   createdAt: z.string().min(1),
   options: z.array(aiToolConfirmationOptionSchema).min(1),
+});
+
+export const aiAgentToolLoopChatPayloadSchema = z.object({
+  content: z.string(),
+  model: z.string().min(1),
+  stopReason: z.enum(['completed', 'tool-confirmation-required']),
+  turns: z.number().int().min(1).max(AI_AGENT_TOOL_LOOP_MAX_RETURNED_TURNS),
+  pendingDecisionKey: z.string().min(1).nullable(),
+  pendingConfirmation: aiToolConfirmationRequestSchema.nullable(),
+  toolResults: z.array(aiAgentToolLoopResultSchema),
 });
 
 export const aiAgentResolveToolConfirmationRequestSchema = z.object({

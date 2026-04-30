@@ -209,4 +209,127 @@ describe('tauriService', () => {
 
     expect(caughtError).toBeInstanceOf(AppError);
   });
+
+  it('aiAgentToolLoopChat accepts Rust pending confirmation payload with null optional refs', async () => {
+    invokeMock.mockResolvedValue({
+      content: '',
+      model: 'deepseek-v4-pro',
+      stopReason: 'tool-confirmation-required',
+      turns: 4,
+      pendingDecisionKey: 'call_00_h3Afrhbr3X1s3Vrp5HMRvNT3',
+      pendingConfirmation: {
+        id: 'call_00_h3Afrhbr3X1s3Vrp5HMRvNT3',
+        runId: 'agent-tool-loop-1777525705908-6obhnx',
+        stepId: 'tool-call-step:propose_patch:call_00_h3Afrhbr3X1s3Vrp5HMRvNT3',
+        toolName: 'propose_patch',
+        question: '允许 Agent 使用 propose_patch 吗？',
+        summary: 'Tool propose_patch requires inline user confirmation.',
+        riskLevel: 'medium',
+        impact: null,
+        reversible: true,
+        createdAt: '2026-04-30T12:00:00.000Z',
+        options: [{
+          id: 'allow-once',
+          label: '允许本次',
+          tone: null,
+        }],
+      },
+      toolResults: [{
+        id: 'agent-tool-loop-1777525705908-6obhnx:tool-call-step:propose_patch:call_00_h3Afrhbr3X1s3Vrp5HMRvNT3:propose_patch',
+        runId: 'agent-tool-loop-1777525705908-6obhnx',
+        stepId: 'tool-call-step:propose_patch:call_00_h3Afrhbr3X1s3Vrp5HMRvNT3',
+        toolName: 'propose_patch',
+        status: 'failed',
+        requiresUserConfirmation: true,
+        summary: 'Tool propose_patch requires inline user confirmation.',
+        outputRef: null,
+        startedAt: '2026-04-30T12:00:00.000Z',
+        endedAt: '2026-04-30T12:00:01.000Z',
+      }],
+    });
+
+    await expect(tauriService.aiAgentToolLoopChat({
+      runId: 'agent-tool-loop-1777525705908-6obhnx',
+      messages: [{
+        id: 'user-1',
+        role: 'user',
+        content: '丰富一下目前的脚本内容',
+        createdAt: '2026-04-30T12:00:00.000Z',
+        references: [],
+      }],
+      context: [],
+      workspaceRootPath: 'D:/com.xiaojianc/my_desktop_app',
+      toolDecisions: {},
+      maxToolTurns: 6,
+    })).resolves.toMatchObject({
+      stopReason: 'tool-confirmation-required',
+      pendingDecisionKey: 'call_00_h3Afrhbr3X1s3Vrp5HMRvNT3',
+      pendingConfirmation: {
+        toolName: 'propose_patch',
+      },
+    });
+  });
+
+  it('aiPlanTask accepts Rust plan payload with null optional fields', async () => {
+    invokeMock.mockResolvedValue({
+      steps: [
+        {
+          id: 'plan-step-1',
+          index: 0,
+          title: '收集现有上下文与影响面',
+          goal: '读取当前文件、诊断与项目搜索结果',
+          kind: 'inspect',
+          status: 'pending',
+          expectedOutput: '产出受影响文件、相关符号与边界说明',
+          tools: ['search_text', 'read_current_file', 'get_diagnostics'],
+          toolInputs: null,
+          references: null,
+          isActive: null,
+          requiresUserApproval: false,
+          riskLevel: 'low',
+          rollbackStrategy: '只读步骤无需回滚',
+        },
+        {
+          id: 'plan-step-2',
+          index: 1,
+          title: '输出结果摘要',
+          goal: '基于已收集上下文回答用户',
+          kind: 'summarize',
+          status: 'pending',
+          expectedOutput: '输出简要结论与必要后续建议',
+          tools: ['get_diagnostics'],
+          toolInputs: {
+            webSearch: null,
+            webFetch: null,
+            proposePatch: null,
+            autoApplyPatch: null,
+            runCommand: null,
+            stageFile: null,
+            createCommit: null,
+          },
+          references: null,
+          isActive: null,
+          requiresUserApproval: false,
+          riskLevel: 'low',
+          rollbackStrategy: null,
+        },
+      ],
+    });
+
+    await expect(tauriService.aiPlanTask({
+      goal: '你修改一下',
+      context: [],
+    })).resolves.toMatchObject({
+      steps: [
+        {
+          id: 'plan-step-1',
+          title: '收集现有上下文与影响面',
+        },
+        {
+          id: 'plan-step-2',
+          title: '输出结果摘要',
+        },
+      ],
+    });
+  });
 });

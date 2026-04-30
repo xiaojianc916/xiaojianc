@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
+use reqwest::header::{ACCEPT, ACCEPT_ENCODING};
 use serde_json::Value;
 
 use crate::ai::audit::{self, AiAuditEventKind};
@@ -13,11 +14,24 @@ const MAX_WEB_SEARCH_RESULTS: usize = 8;
 const WEB_SEARCH_TIMEOUT_SECS: u64 = 12;
 
 pub async fn search(input: AiWebSearchInput) -> Result<AiWebSearchPayload, String> {
+    search_with_permission(input, true).await
+}
+
+pub async fn search_confirmed(input: AiWebSearchInput) -> Result<AiWebSearchPayload, String> {
+    search_with_permission(input, false).await
+}
+
+async fn search_with_permission(
+    input: AiWebSearchInput,
+    require_runtime_permission: bool,
+) -> Result<AiWebSearchPayload, String> {
     validate_search_input(&input)?;
 
-    if let Err(error) = runtime::ensure_network_allowed() {
-        audit::emit(AiAuditEventKind::AgentWebSearchDenied);
-        return Err(error);
+    if require_runtime_permission {
+        if let Err(error) = runtime::ensure_network_allowed() {
+            audit::emit(AiAuditEventKind::AgentWebSearchDenied);
+            return Err(error);
+        }
     }
 
     let redacted_query = redact_text(input.query.trim());
@@ -38,6 +52,11 @@ pub async fn search(input: AiWebSearchInput) -> Result<AiWebSearchPayload, Strin
         .timeout(Duration::from_secs(WEB_SEARCH_TIMEOUT_SECS))
         .redirect(reqwest::redirect::Policy::limited(3))
         .user_agent("Xiaojianc-Agent/0.1")
+        .http1_only()
+        .no_gzip()
+        .no_brotli()
+        .no_deflate()
+        .no_zstd()
         .build()
         .map_err(|error| {
             errors::error(
@@ -46,12 +65,18 @@ pub async fn search(input: AiWebSearchInput) -> Result<AiWebSearchPayload, Strin
             )
         })?;
 
-    let response = client.get(url).send().await.map_err(|error| {
-        errors::error(
-            "AI_AGENT_WEB_SEARCH_FAILED",
-            format!("网络搜索失败：{error}"),
-        )
-    })?;
+    let response = client
+        .get(url)
+        .header(ACCEPT, "application/json")
+        .header(ACCEPT_ENCODING, "identity")
+        .send()
+        .await
+        .map_err(|error| {
+            errors::error(
+                "AI_AGENT_WEB_SEARCH_FAILED",
+                format!("网络搜索失败：{error}"),
+            )
+        })?;
 
     if !response.status().is_success() {
         return Err(errors::error(
@@ -60,7 +85,14 @@ pub async fn search(input: AiWebSearchInput) -> Result<AiWebSearchPayload, Strin
         ));
     }
 
-    let value = response.json::<Value>().await.map_err(|error| {
+    let body = response.bytes().await.map_err(|error| {
+        errors::error(
+            "AI_AGENT_WEB_SEARCH_FAILED",
+            format!("读取网络搜索结果失败：{error}"),
+        )
+    })?;
+    let text = String::from_utf8_lossy(body.as_ref()).to_string();
+    let value = serde_json::from_str::<Value>(&text).map_err(|error| {
         errors::error(
             "AI_AGENT_WEB_SEARCH_FAILED",
             format!("解析网络搜索结果失败：{error}"),

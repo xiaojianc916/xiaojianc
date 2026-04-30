@@ -4,6 +4,8 @@ use std::net::IpAddr;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
+use reqwest::header::{ACCEPT, ACCEPT_ENCODING};
+
 use crate::ai::audit::{self, AiAuditEventKind};
 use crate::ai::errors;
 use crate::ai_agent::runtime;
@@ -20,10 +22,23 @@ fn text_refs() -> &'static Mutex<HashMap<String, String>> {
 }
 
 pub async fn fetch(input: AiWebFetchInput) -> Result<AiWebFetchPayload, String> {
+    fetch_with_permission(input, true).await
+}
+
+pub async fn fetch_confirmed(input: AiWebFetchInput) -> Result<AiWebFetchPayload, String> {
+    fetch_with_permission(input, false).await
+}
+
+async fn fetch_with_permission(
+    input: AiWebFetchInput,
+    require_runtime_permission: bool,
+) -> Result<AiWebFetchPayload, String> {
     let url = validate_fetch_url(&input.url)?;
-    if let Err(error) = runtime::ensure_network_allowed() {
-        audit::emit(AiAuditEventKind::AgentWebFetchFailed);
-        return Err(error);
+    if require_runtime_permission {
+        if let Err(error) = runtime::ensure_network_allowed() {
+            audit::emit(AiAuditEventKind::AgentWebFetchFailed);
+            return Err(error);
+        }
     }
 
     let reason = input.reason.trim();
@@ -42,6 +57,11 @@ pub async fn fetch(input: AiWebFetchInput) -> Result<AiWebFetchPayload, String> 
         .timeout(Duration::from_secs(WEB_FETCH_TIMEOUT_SECS))
         .redirect(reqwest::redirect::Policy::limited(5))
         .user_agent("Xiaojianc-Agent/0.1")
+        .http1_only()
+        .no_gzip()
+        .no_brotli()
+        .no_deflate()
+        .no_zstd()
         .build()
         .map_err(|error| {
             errors::error(
@@ -50,13 +70,19 @@ pub async fn fetch(input: AiWebFetchInput) -> Result<AiWebFetchPayload, String> 
             )
         })?;
 
-    let response = client.get(url.clone()).send().await.map_err(|error| {
-        audit::emit(AiAuditEventKind::AgentWebFetchFailed);
-        errors::error(
-            "AI_AGENT_WEB_FETCH_FAILED",
-            format!("网页读取失败：{error}"),
-        )
-    })?;
+    let response = client
+        .get(url.clone())
+        .header(ACCEPT, "text/html,application/xhtml+xml,text/plain,*/*")
+        .header(ACCEPT_ENCODING, "identity")
+        .send()
+        .await
+        .map_err(|error| {
+            audit::emit(AiAuditEventKind::AgentWebFetchFailed);
+            errors::error(
+                "AI_AGENT_WEB_FETCH_FAILED",
+                format!("网页读取失败：{error}"),
+            )
+        })?;
 
     if !response.status().is_success() {
         audit::emit(AiAuditEventKind::AgentWebFetchFailed);

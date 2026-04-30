@@ -106,6 +106,17 @@ mod tests {
     }
 
     #[test]
+    fn classifies_short_modify_request_as_complex() {
+        let decision = classify_task(AgentTaskPolicyInput {
+            goal: "你修改一下",
+            referenced_file_count: 1,
+        });
+
+        assert_eq!(decision.classification, AgentTaskClassification::Complex);
+        assert!(decision.should_enter_plan_mode);
+    }
+
+    #[test]
     fn classifies_multi_file_task_as_complex() {
         let decision = classify_task(AgentTaskPolicyInput {
             goal: "调整样式",

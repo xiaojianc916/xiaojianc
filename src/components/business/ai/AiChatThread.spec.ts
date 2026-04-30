@@ -88,4 +88,39 @@ describe('AiChatThread', () => {
       ['message-1', 'allow-agent-execution'],
     ]);
   });
+
+  it('renders realtime provider tool activity inside the assistant message', () => {
+    const wrapper = mount(AiChatThread, {
+      props: {
+        messages: [
+          createMessage({
+            content: 'AI 正在自动使用工具：read_file',
+            toolCalls: [{
+              id: 'tool-call-read-file',
+              name: 'read_file',
+              status: 'running',
+              summary: 'test.sh',
+            }],
+            stream: {
+              stableContent: '',
+              openBlock: null,
+              status: 'streaming',
+            },
+          }),
+        ],
+        isTyping: true,
+        avatarUrl: null,
+        avatarAlt: 'AI',
+      },
+      global: {
+        stubs: {
+          AiMarkdown: { template: '<div />' },
+        },
+      },
+    });
+
+    expect(wrapper.text()).toContain('正在读取 test.sh…');
+    expect(wrapper.find('.ai-tool-running-dots').exists()).toBe(true);
+    expect(wrapper.find('.ai-message-typing').exists()).toBe(false);
+  });
 });

@@ -12,6 +12,7 @@ import {
 } from '@/services/modules/ai-context';
 import { tauriService } from '@/services/tauri';
 import { useAiConversationStore } from '@/store/aiConversation';
+import { AI_AGENT_TOOL_LOOP_DEFAULT_MAX_TURNS } from '@/types/ai-agent.schema';
 
 import type {
   IAiApplyPatchMetadata,
@@ -19,11 +20,14 @@ import type {
   IAiChatStreamEventPayload,
   IAiConfigPayload,
   IAiContextReference,
+  IAiAgentToolLoopChatPayload,
+  IAiToolActivityInline,
   IAiPatchSet,
   IAiProviderConnectionRequest,
   IAiToolCall,
   IAiToolDefinitionPayload,
   TAiChatMessageActionId,
+  TAiToolConfirmationDecision,
 } from '@/types/ai';
 import type { IAiCodeBlock } from '@/types/ai-code';
 import type {
@@ -89,6 +93,15 @@ interface IAgentToolExecutionResult {
   status: 'succeeded' | 'failed';
 }
 
+interface IProviderToolLoopSession {
+  runId: string;
+  assistantMessageId: string;
+  baseMessages: IAiChatMessage[];
+  messageContent: string;
+  references: IAiContextReference[];
+  toolDecisions: Record<string, TAiToolConfirmationDecision>;
+}
+
 interface IAgentExecutionStep {
   id: string;
   title: string;
@@ -149,7 +162,7 @@ const CODE_BLOCK_PATTERN = /```[a-zA-Z0-9_-]*\n([\s\S]*?)```/;
 
 const PROJECT_SEARCH_TOKENS = ['project', 'folder', 'search', 'symbol'] as const;
 
-const MAX_AGENT_TOOL_ROUNDS = 6;
+const MAX_AGENT_TOOL_ROUNDS = AI_AGENT_TOOL_LOOP_DEFAULT_MAX_TURNS;
 const MAX_AGENT_TOOL_RESULT_CHARS = 6_000;
 
 const AGENT_TOOL_LABELS: Record<TAgentToolName, string> = {
@@ -515,6 +528,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const activeStreamResolve = ref<(() => void) | null>(null);
   const activeAssistantMessage = ref<IAiChatMessage | null>(null);
   const activeAssistantBaseMessages = ref<IAiChatMessage[]>([]);
+  const activeProviderToolLoopSession = ref<IProviderToolLoopSession | null>(null);
 
   const aiStream = useAiStream();
   const agentPlan = useAiAgentPlan();
@@ -1135,6 +1149,221 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       activeAgentMessageId.value = null;
       isSending.value = false;
     }
+  };
+
+  const createProviderToolLoopRunId = (): string =>
+    `agent-tool-loop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const buildProviderToolCalls = (
+    payload: IAiAgentToolLoopChatPayload,
+  ): IAiToolCall[] =>
+    payload.toolResults.map((result) => ({
+      id: result.id,
+      name: result.toolName,
+      status: result.status,
+      summary: result.summary,
+    }));
+
+  const mapProviderToolActivityStatus = (
+    state: IAiToolActivityInline['state'],
+  ): IAiToolCall['status'] => {
+    switch (state) {
+      case 'starting':
+      case 'running':
+      case 'waiting-confirmation':
+        return 'running';
+      case 'succeeded':
+        return 'succeeded';
+      case 'failed':
+        return 'failed';
+      case 'cancelled':
+        return 'denied';
+      default:
+        return 'running';
+    }
+  };
+
+  const applyProviderToolActivity = (
+    runId: string,
+    activity: IAiToolActivityInline,
+  ): void => {
+    const session = activeProviderToolLoopSession.value;
+
+    if (!session || session.runId !== runId) {
+      return;
+    }
+
+    const nextToolCall: IAiToolCall = {
+      id: activity.id,
+      name: activity.toolName,
+      status: mapProviderToolActivityStatus(activity.state),
+      summary: activity.label,
+    };
+
+    const currentMessage = messages.value.find((message) => message.id === session.assistantMessageId);
+    const previousToolCalls = currentMessage?.toolCalls ?? [];
+    const nextToolCalls = [
+      ...previousToolCalls.filter((toolCall) => toolCall.name !== activity.toolName),
+      nextToolCall,
+    ];
+
+    const content = nextToolCall.status === 'running'
+      ? `AI 正在自动使用工具：${activity.label}`
+      : currentMessage?.content || 'AI 正在自动使用工具…';
+
+    updateAgentExecutionMessage(session.assistantMessageId, content, nextToolCalls);
+  };
+
+  const buildProviderToolLoopSummary = (
+    payload: IAiAgentToolLoopChatPayload,
+  ): string => {
+    if (payload.content.trim()) {
+      return payload.content.trim();
+    }
+
+    if (payload.pendingConfirmation) {
+      return `Agent 正在等待确认：${payload.pendingConfirmation.question}`;
+    }
+
+    if (payload.toolResults.length) {
+      return [
+        'Agent 已完成工具调用。',
+        ...payload.toolResults.map((result) => `- ${result.toolName}: ${result.summary}`),
+      ].join('\n');
+    }
+
+    return 'Agent 已完成。';
+  };
+
+  const executeAgentToolLoopRequest = async (
+    visibleMessages: IAiChatMessage[],
+    messageContent: string,
+    references: IAiContextReference[],
+    existingSession: IProviderToolLoopSession | null = null,
+  ): Promise<void> => {
+    errorMessage.value = '';
+    isSending.value = true;
+    agentSteps.value = [];
+
+    const session = existingSession ?? {
+      runId: createProviderToolLoopRunId(),
+      assistantMessageId: createMessageId('assistant'),
+      baseMessages: visibleMessages,
+      messageContent,
+      references,
+      toolDecisions: {},
+    };
+
+    activeProviderToolLoopSession.value = session;
+    activeAgentMessageId.value = session.assistantMessageId;
+    activeAbortController.value = new AbortController();
+
+    const placeholderMessage: IAiChatMessage = {
+      id: session.assistantMessageId,
+      role: 'assistant',
+      content: 'Agent 正在调用工具…',
+      createdAt: new Date().toISOString(),
+      references: [],
+      toolCalls: [],
+    };
+
+    if (!existingSession) {
+      messages.value = [...visibleMessages, placeholderMessage];
+    } else {
+      updateAgentExecutionMessage(
+        session.assistantMessageId,
+        'Agent 正在根据你的确认继续执行…',
+      );
+    }
+
+    try {
+      const payload = await aiService.toolLoopChat({
+        runId: session.runId,
+        messages: session.baseMessages,
+        context: session.references,
+        workspaceRootPath: options.workspaceRootPath.value,
+        toolDecisions: session.toolDecisions,
+        maxToolTurns: MAX_AGENT_TOOL_ROUNDS,
+      });
+
+      const toolCalls = buildProviderToolCalls(payload);
+
+      for (const toolCall of toolCalls) {
+        updateAgentStep(
+          toolCall.id,
+          toolCall.summary,
+          toolCall.status === 'succeeded' ? 'done' : 'failed',
+        );
+      }
+
+      updateAgentExecutionMessage(
+        session.assistantMessageId,
+        buildProviderToolLoopSummary(payload),
+        toolCalls,
+      );
+
+      if (payload.pendingConfirmation) {
+        agentPlan.store.setPendingToolConfirmation(payload.pendingConfirmation);
+        activeProviderToolLoopSession.value = session;
+        return;
+      }
+
+      agentPlan.store.clearPendingToolConfirmation();
+      activeProviderToolLoopSession.value = null;
+      attachedFiles.value = [];
+    } catch (error) {
+      const wasAborted = activeAbortController.value?.signal.aborted;
+
+      if (!wasAborted) {
+        const message = toErrorMessage(error, MSG_CALL_FAILED);
+        updateAgentExecutionMessage(
+          session.assistantMessageId,
+          `Agent 执行失败：${message}`,
+        );
+        errorMessage.value = message;
+        draft.value = messageContent;
+      }
+    } finally {
+      activeAbortController.value = null;
+      activeAgentMessageId.value = null;
+      isSending.value = false;
+    }
+  };
+
+  const resolveProviderToolLoopConfirmation = async (
+    decision: TAiToolConfirmationDecision,
+  ): Promise<void> => {
+    const session = activeProviderToolLoopSession.value;
+    const confirmation = agentPlan.store.pendingToolConfirmation;
+
+    if (!session || !confirmation) {
+      errorMessage.value = '当前没有可继续的 Agent 工具确认。';
+      return;
+    }
+
+    session.toolDecisions = {
+      ...session.toolDecisions,
+      [confirmation.id]: decision,
+      [confirmation.toolName]: decision,
+    };
+
+    agentPlan.store.clearPendingToolConfirmation(confirmation.id);
+
+    if (decision === 'stop') {
+      activeProviderToolLoopSession.value = null;
+      updateAgentExecutionMessage(
+        session.assistantMessageId,
+        'Agent 工具调用已停止。',
+      );
+      return;
+    }
+
+    await executeAgentToolLoopRequest(
+      session.baseMessages,
+      session.messageContent,
+      session.references,
+      session,
+    );
   };
 
   // -----------------------------------------------------------------------
@@ -1806,29 +2035,10 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
             status: step.status,
           }));
 
-          const planLines = steps.map((step) =>
-            `${step.index + 1}. ${step.title}`,
-          );
-
-          const planMessage: IAiChatMessage = {
-            id: createMessageId('assistant'),
-            role: 'assistant',
-            content: [
-              '已进入 Plan Mode，请先确认计划：',
-              '',
-              ...planLines,
-            ].join('\n'),
-            createdAt: new Date().toISOString(),
-            references,
-          };
-
-          messages.value = [...nextMessages, planMessage];
-
           return;
         }
 
-        await executeAiRequest(
-          nextMessages,
+        await executeAgentToolLoopRequest(
           nextMessages,
           messageContent,
           references,
@@ -1872,6 +2082,8 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     activeAssistantMessage.value = null;
     activeAssistantBaseMessages.value = [];
     activeAgentMessageId.value = null;
+    activeProviderToolLoopSession.value = null;
+    agentPlan.store.clearPendingToolConfirmation();
     isClearDialogOpen.value = false;
   };
 
@@ -2030,6 +2242,8 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       activeAgentMessageId.value = null;
     }
 
+    activeProviderToolLoopSession.value = null;
+    agentPlan.store.clearPendingToolConfirmation();
     isSending.value = false;
     errorMessage.value = MSG_STREAM_CANCELLED;
   };
@@ -2070,6 +2284,8 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     attachFile,
     removeAttachedFile,
     executeAgentRequest,
+    applyProviderToolActivity,
+    resolveProviderToolLoopConfirmation,
     sendMessage,
     handleMessageAction,
     stopCurrentRequest,

@@ -34,6 +34,7 @@ import type {
   IEditorSelectionSummary,
 } from '@/types/editor';
 import type { IGitRepositoryStatusPayload } from '@/types/git';
+import { toErrorMessage } from '@/utils/error';
 import { computed, onMounted, ref } from 'vue';
 
 const MAX_HISTORY_MESSAGES = 20;
@@ -67,7 +68,9 @@ const assistant = useAiAssistant({
 });
 const agentRun = useAiAgentRun();
 const agentNetwork = useAiAgentNetwork();
-const agentStream = useAiAgentStream();
+const agentStream = useAiAgentStream({
+  onToolActivity: assistant.applyProviderToolActivity,
+});
 const webSources = useAiWebSources();
 const settingsDraft = ref<IAiConfigPayload>({ ...assistant.config.value });
 const settingsApiKey = ref('');
@@ -103,7 +106,12 @@ const planVisible = computed(() => {
     return false;
   }
 
-  return planStore.value.hasPlan || planStore.value.isPlanning || Boolean(planStore.value.errorMessage);
+  return planStore.value.hasPlan ||
+    planStore.value.isClassifying ||
+    planStore.value.isPlanning ||
+    Boolean(planStore.value.errorMessage) ||
+    Boolean(planStore.value.activeToolActivity) ||
+    Boolean(planStore.value.pendingToolConfirmation);
 });
 const activePlanStep = computed(() => {
   const currentStepId = planStore.value.activeRun?.currentStepId;
@@ -114,23 +122,12 @@ const activePlanStep = computed(() => {
 
   return planStore.value.steps.find((step) => step.isActive) ?? null;
 });
-const activeStepDetail = computed(() => {
-  const runId = planStore.value.activeRunId ?? planStore.value.activeRun?.id ?? null;
-  const step = activePlanStep.value;
-
-  if (!runId || !step) {
-    return null;
-  }
-
-  return planStore.value.getStepDetail(runId, step.id);
-});
 const webSourcesVisible = computed(() => {
   if (assistant.activeMode.value !== 'agent') {
     return false;
   }
 
-  return planVisible.value ||
-    webSources.sources.value.length > 0 ||
+  return webSources.sources.value.length > 0 ||
     Boolean(webSources.activity.value) ||
     Boolean(webSources.errorMessage.value);
 });
@@ -185,9 +182,6 @@ const getHistoryPreview = (messages: IAiChatMessage[]): string => {
 };
 
 const getHistoryMessageCountLabel = (messages: IAiChatMessage[]): string => `${messages.length} 条消息`;
-
-const toErrorMessage = (error: unknown, fallback: string): string =>
-  error instanceof Error && error.message.trim() ? error.message : fallback;
 
 const clipQueryPreview = (value: string): string => {
   const characters = Array.from(value.replace(/\s+/g, ' ').trim());
@@ -421,21 +415,14 @@ const handleResetPlan = (): void => {
 };
 
 const handleRunStep = async (): Promise<void> => {
-  const runningStep = findRunningStep(planStore.value.activeRun);
-
-  if (runningStep && await runWebToolsForStep(runningStep)) {
-    return;
-  }
-
-  const run = await withAgentRunAction(
-    (runId) => agentRun.runStep(runId),
+  await withAgentRunAction(
+    (runId) => agentRun.runStepWithProviderLoop(runId, {
+      goal: planStore.value.activeGoal,
+      context: assistant.currentReferences.value,
+      workspaceRootPath: props.workspaceRootPath,
+    }),
     '执行 Agent step 失败。',
   );
-  const nextRunningStep = findRunningStep(run);
-
-  if (nextRunningStep) {
-    await runWebToolsForStep(nextRunningStep);
-  }
 };
 const handlePauseRun = async (): Promise<void> => {
   await withAgentRunAction(
@@ -465,6 +452,36 @@ const handleResolveToolConfirmation = async (
 
   if (!confirmation) {
     planStore.value.errorMessage = '当前没有待处理的工具确认。';
+    return;
+  }
+
+  if (!planStore.value.activeRun) {
+    isAgentRunActionPending.value = true;
+    planStore.value.errorMessage = '';
+
+    try {
+      await assistant.resolveProviderToolLoopConfirmation(decision);
+    } catch (error) {
+      setPlanError(error, '处理 Provider 工具确认失败。');
+    } finally {
+      isAgentRunActionPending.value = false;
+    }
+
+    return;
+  }
+
+  if (agentRun.hasProviderStepToolConfirmation(confirmation.id)) {
+    isAgentRunActionPending.value = true;
+    planStore.value.errorMessage = '';
+
+    try {
+      await agentRun.resolveProviderStepToolConfirmation(confirmation.id, decision);
+    } catch (error) {
+      setPlanError(error, '处理 Provider step 工具确认失败。');
+    } finally {
+      isAgentRunActionPending.value = false;
+    }
+
     return;
   }
 
@@ -692,7 +709,17 @@ onMounted(() => {
     <AiContextChips :references="assistant.currentReferences.value" />
     <AiChatThread :messages="assistant.messages.value" :is-typing="assistant.isSending.value" :avatar-url="aiAvatarUrl"
       :avatar-alt="aiAvatarAlt" @apply-code="assistant.previewPatchFromCodeBlock"
-      @open-code-path="emit('openCodePath', $event)" @message-action="handleMessageAction" />
+      @open-code-path="emit('openCodePath', $event)" @message-action="handleMessageAction">
+      <template #after-messages>
+        <AiAgentRunTimeline
+          v-if="planStore.activeRun"
+          :run="planStore.activeRun"
+          :step-details="planStore.stepDetails"
+          :patch-summaries="planStore.getPatchSummaries(planStore.activeRun.id)"
+          @open-diff="handleOpenDiffPreview"
+        />
+      </template>
+    </AiChatThread>
     <div v-if="assistant.canPreviewPatch.value" class="ai-patch-entry">
       <button type="button" class="ai-quick-action" @click="assistant.previewPatchFromLastAnswer">
         预览为 Patch
@@ -700,39 +727,6 @@ onMounted(() => {
     </div>
     <AiPatchPreview :patch="assistant.proposedPatch.value" :is-applying="assistant.isApplyingPatch.value"
       @apply="assistant.applyProposedPatch" @close="assistant.proposedPatch.value = null" />
-    <AiPlanModePanel
-      v-if="planVisible"
-      :goal="planStore.activeGoal"
-      :steps="planStore.steps"
-      :classification-reason="planStore.classificationReason"
-      :error-message="planStore.errorMessage"
-      :is-planning="planStore.isPlanning"
-      :is-approving="planStore.isApproving"
-      :approved-at="planStore.approvedAt"
-      :active-run="planStore.activeRun"
-      :is-run-action-pending="isAgentRunActionPending"
-      :web-activity="webSources.activity.value"
-      :tool-activity="planStore.activeToolActivity"
-      :tool-confirmation="planStore.pendingToolConfirmation"
-      :active-step-detail="activeStepDetail"
-      @update-step-title="handleUpdatePlanStepTitle"
-      @remove-step="handleRemovePlanStep"
-      @regenerate="handleRegeneratePlan"
-      @approve="handleApprovePlan"
-      @reset="handleResetPlan"
-      @run-step="handleRunStep"
-      @pause-run="handlePauseRun"
-      @resume-run="handleResumeRun"
-      @cancel-run="handleCancelRun"
-      @resolve-tool-confirmation="handleResolveToolConfirmation"
-    />
-    <AiAgentRunTimeline
-      v-if="planStore.activeRun"
-      :run="planStore.activeRun"
-      :step-details="planStore.stepDetails"
-      :patch-summaries="planStore.getPatchSummaries(planStore.activeRun.id)"
-      @open-diff="handleOpenDiffPreview"
-    />
     <AiWebSourcesPanel
       v-if="webSourcesVisible"
       :sources="webSources.sources.value"
@@ -744,12 +738,40 @@ onMounted(() => {
       @fetch-source="handleFetchWebSource"
       @clear="webSources.clear"
     />
-    <AiPromptInput v-model="assistant.draft.value" :disabled="assistant.isSending.value"
-      :error-message="assistant.errorMessage.value"
-      :submit-label="assistant.activeMode.value === 'agent' ? '开始执行' : assistant.sendButtonLabel.value"
-      :attachments="assistant.attachedFiles.value" :has-attachments="assistant.attachedFiles.value.length > 0"
-      @submit="assistant.sendMessage" @stop="assistant.stopCurrentRequest" @file-selected="assistant.attachFile"
-      @remove-file="assistant.removeAttachedFile" />
+    <div class="ai-composer-shell" :class="{ 'has-plan': planVisible }">
+      <AiPlanModePanel
+        v-if="planVisible"
+        :goal="planStore.activeGoal"
+        :steps="planStore.steps"
+        :classification-reason="planStore.classificationReason"
+        :error-message="planStore.errorMessage"
+        :is-classifying="planStore.isClassifying"
+        :is-planning="planStore.isPlanning"
+        :is-approving="planStore.isApproving"
+        :approved-at="planStore.approvedAt"
+        :active-run="planStore.activeRun"
+        :is-run-action-pending="isAgentRunActionPending"
+        :web-activity="webSources.activity.value"
+        :tool-activity="planStore.activeToolActivity"
+        :tool-confirmation="planStore.pendingToolConfirmation"
+        @update-step-title="handleUpdatePlanStepTitle"
+        @remove-step="handleRemovePlanStep"
+        @regenerate="handleRegeneratePlan"
+        @approve="handleApprovePlan"
+        @reset="handleResetPlan"
+        @run-step="handleRunStep"
+        @pause-run="handlePauseRun"
+        @resume-run="handleResumeRun"
+        @cancel-run="handleCancelRun"
+        @resolve-tool-confirmation="handleResolveToolConfirmation"
+      />
+      <AiPromptInput v-model="assistant.draft.value" :disabled="assistant.isSending.value"
+        :error-message="assistant.errorMessage.value"
+        :submit-label="assistant.activeMode.value === 'agent' ? '开始执行' : assistant.sendButtonLabel.value"
+        :attachments="assistant.attachedFiles.value" :has-attachments="assistant.attachedFiles.value.length > 0"
+        @submit="assistant.sendMessage" @stop="assistant.stopCurrentRequest" @file-selected="assistant.attachFile"
+        @remove-file="assistant.removeAttachedFile" />
+    </div>
 
     <AiProviderSettings v-model:draft="settingsDraft" v-model:api-key="settingsApiKey"
       :open="assistant.isSettingsOpen.value" :config="assistant.config.value"
@@ -1198,6 +1220,31 @@ onMounted(() => {
 .ai-quick-action:hover {
   background: var(--surface-soft);
   color: var(--text-primary);
+}
+
+.ai-composer-shell {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--shell-divider);
+  background: color-mix(in srgb, var(--panel-bg) 92%, var(--sidebar-bg));
+}
+
+.ai-composer-shell.has-plan {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel-bg) 96%, transparent),
+      color-mix(in srgb, var(--panel-bg) 90%, var(--sidebar-bg))
+    );
+}
+
+.ai-composer-shell :deep(.ai-plan-mode-panel) {
+  border-top: 0;
+  background: transparent;
+  padding: 8px 10px 0;
+}
+
+.ai-composer-shell :deep(.ai-composer) {
+  padding: 8px 10px 10px;
 }
 
 .ai-dialog-backdrop {

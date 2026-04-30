@@ -342,4 +342,19 @@ mod tests {
 
         assert!(error.contains("AI_AGENT_TOOL_NOT_ALLOWED"));
     }
+
+    #[test]
+    fn omits_null_optional_fields_from_plan_payload() {
+        let payload = AgentPlanner::create_plan(AiAgentPlanRequest {
+            goal: "你修改一下".to_string(),
+            context: Vec::new(),
+        })
+        .expect("plan should be created");
+        let value = serde_json::to_value(payload).expect("plan payload should serialize");
+        let first_step = &value["steps"][0];
+
+        assert!(first_step.get("toolInputs").is_none());
+        assert!(first_step.get("references").is_none());
+        assert!(first_step.get("isActive").is_none());
+    }
 }

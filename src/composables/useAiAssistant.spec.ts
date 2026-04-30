@@ -100,6 +100,16 @@ const aiServiceMock = vi.hoisted(() => {
         model: MOCK_MODEL,
     }));
 
+    const toolLoopChat = vi.fn(async () => ({
+        content: '已按简单任务直接给出处理结论。',
+        model: MOCK_MODEL,
+        stopReason: 'completed' as const,
+        turns: 1,
+        pendingDecisionKey: null,
+        pendingConfirmation: null,
+        toolResults: [],
+    }));
+
     const cancel = vi.fn(async (payload: { streamId: string }) => {
         void payload;
     });
@@ -164,6 +174,7 @@ const aiServiceMock = vi.hoisted(() => {
         onChatStream,
         chat,
         chatStream,
+        toolLoopChat,
         cancel,
         queryIndex,
         proposePatch,
@@ -201,6 +212,7 @@ const aiServiceMock = vi.hoisted(() => {
             onChatStream.mockClear();
             chat.mockClear();
             chatStream.mockClear();
+            toolLoopChat.mockClear();
             cancel.mockClear();
             queryIndex.mockClear();
             proposePatch.mockClear();
@@ -217,6 +229,7 @@ vi.mock('@/services/modules/ai', () => ({
         onChatStream: aiServiceMock.onChatStream,
         chat: aiServiceMock.chat,
         chatStream: aiServiceMock.chatStream,
+        toolLoopChat: aiServiceMock.toolLoopChat,
         cancel: aiServiceMock.cancel,
         queryIndex: aiServiceMock.queryIndex,
         proposePatch: aiServiceMock.proposePatch,
@@ -525,16 +538,16 @@ describe('useAiAssistant streaming integration', () => {
 
         await assistant.sendMessage();
 
-        expect(assistant.messages.value).toHaveLength(2);
+        expect(assistant.messages.value).toHaveLength(1);
         expect(assistant.messages.value[0]?.role).toBe('user');
         expect(aiServiceMock.classifyTask).toHaveBeenCalledTimes(1);
         expect(aiServiceMock.planTask).toHaveBeenCalledTimes(1);
         expect(aiServiceMock.chatStream).toHaveBeenCalledTimes(0);
-        expect(assistant.messages.value[1]?.content).toContain('已进入 Plan Mode，请先确认计划');
         expect(assistant.agentSteps.value).toHaveLength(2);
+        expect(assistant.agentPlan.store.steps).toHaveLength(2);
     });
 
-    it('falls back to normal chat path when task is classified as simple in agent mode', async () => {
+    it('uses provider tool loop when task is classified as simple in agent mode', async () => {
         const { assistant } = createAssistantHarnessContext();
 
         aiServiceMock.classifyTask.mockResolvedValueOnce({
@@ -542,9 +555,6 @@ describe('useAiAssistant streaming integration', () => {
             shouldEnterPlanMode: false,
             reason: '简单任务，可直接执行。',
         });
-        aiServiceMock.queueStreamResponse(
-            '{"type":"final","content":"已按简单任务直接给出处理结论。"}',
-        );
 
         assistant.activeMode.value = 'agent';
         assistant.draft.value = '解释当前脚本';
@@ -553,9 +563,165 @@ describe('useAiAssistant streaming integration', () => {
 
         expect(aiServiceMock.classifyTask).toHaveBeenCalledTimes(1);
         expect(aiServiceMock.planTask).toHaveBeenCalledTimes(0);
-        expect(aiServiceMock.chatStream).toHaveBeenCalledTimes(1);
+        expect(aiServiceMock.chatStream).toHaveBeenCalledTimes(0);
+        expect(aiServiceMock.toolLoopChat).toHaveBeenCalledTimes(1);
         expect(aiServiceMock.applyPatch).toHaveBeenCalledTimes(0);
         expect(assistant.messages.value[1]?.content).toContain('已按简单任务直接给出处理结论');
+    });
+
+    it('updates the current assistant message when provider tool activity streams in', async () => {
+        const { assistant } = createAssistantHarnessContext();
+        let resolveToolLoop!: (value: Awaited<ReturnType<typeof aiServiceMock.toolLoopChat>>) => void;
+        const toolLoopPromise = new Promise<Awaited<ReturnType<typeof aiServiceMock.toolLoopChat>>>((resolve) => {
+            resolveToolLoop = resolve;
+        });
+
+        aiServiceMock.classifyTask.mockResolvedValueOnce({
+            classification: 'simple',
+            shouldEnterPlanMode: false,
+            reason: '简单任务，可直接执行。',
+        });
+        aiServiceMock.toolLoopChat.mockImplementationOnce(async () => toolLoopPromise);
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '@current-file · test.sh\n丰富一下目前的脚本内容';
+
+        const sendPromise = assistant.sendMessage();
+        for (let attempt = 0; attempt < 8 && aiServiceMock.toolLoopChat.mock.calls.length === 0; attempt += 1) {
+            await flushMicrotasks();
+        }
+
+        const request = aiServiceMock.toolLoopChat.mock.calls[0]?.[0];
+        expect(request?.runId).toBeTruthy();
+
+        assistant.applyProviderToolActivity(request?.runId ?? '', {
+            id: 'activity-read-file',
+            stepId: 'tool-call-step:read_file:call-read',
+            toolName: 'read_file',
+            state: 'running',
+            label: '正在读取 test.sh…',
+            startedAt: '2026-04-29T00:00:00.000Z',
+        });
+
+        expect(assistant.messages.value[1]?.toolCalls?.[0]).toMatchObject({
+            name: 'read_file',
+            status: 'running',
+            summary: '正在读取 test.sh…',
+        });
+
+        resolveToolLoop({
+            content: '我已经读取 test.sh，并给出增强方案。',
+            model: MOCK_MODEL,
+            stopReason: 'completed' as const,
+            turns: 2,
+            pendingDecisionKey: null,
+            pendingConfirmation: null,
+            toolResults: [{
+                id: 'call-read',
+                runId: request?.runId ?? '',
+                stepId: 'tool-call-step:read_file:call-read',
+                toolName: 'read_file',
+                status: 'succeeded' as const,
+                requiresUserConfirmation: false,
+                summary: 'Read file content for test.sh (21 bytes).',
+                outputRef: 'agent-tool-output:read_file:test',
+                startedAt: '2026-04-29T00:00:00.000Z',
+                endedAt: '2026-04-29T00:00:01.000Z',
+            }],
+        });
+        await sendPromise;
+
+        expect(assistant.messages.value[1]?.content).toContain('增强方案');
+        expect(assistant.messages.value[1]?.toolCalls?.[0]?.status).toBe('succeeded');
+    });
+
+    it('continues provider tool loop after inline tool confirmation is approved', async () => {
+        const { assistant } = createAssistantHarnessContext();
+        const agentStore = useAiAgentStore();
+        const timestamp = '2026-04-29T00:00:00.000Z';
+
+        aiServiceMock.classifyTask.mockResolvedValueOnce({
+            classification: 'simple',
+            shouldEnterPlanMode: false,
+            reason: '简单任务，可直接执行。',
+        });
+        aiServiceMock.toolLoopChat
+            .mockResolvedValueOnce({
+                content: '',
+                model: MOCK_MODEL,
+                stopReason: 'tool-confirmation-required' as const,
+                turns: 1,
+                pendingDecisionKey: 'call-run-command',
+                pendingConfirmation: {
+                    id: 'call-run-command',
+                    runId: 'agent-tool-loop-test',
+                    stepId: 'call-run-command',
+                    toolName: 'run_command',
+                    question: '允许 Agent 执行 pnpm test 吗？',
+                    summary: '运行最小验证命令。',
+                    riskLevel: 'medium',
+                    impact: '会在当前工作区执行测试命令。',
+                    reversible: false,
+                    createdAt: timestamp,
+                    options: [
+                        { id: 'allow-once', label: '允许一次', tone: 'primary' },
+                        { id: 'deny', label: '拒绝' },
+                        { id: 'stop', label: '停止', tone: 'danger' },
+                    ],
+                },
+                toolResults: [
+                    {
+                        id: 'call-run-command',
+                        runId: 'agent-tool-loop-test',
+                        stepId: 'call-run-command',
+                        toolName: 'run_command',
+                        status: 'failed' as const,
+                        requiresUserConfirmation: true,
+                        summary: '等待用户确认。',
+                        startedAt: timestamp,
+                        endedAt: timestamp,
+                    },
+                ],
+            })
+            .mockResolvedValueOnce({
+                content: '验证已完成。',
+                model: MOCK_MODEL,
+                stopReason: 'completed' as const,
+                turns: 2,
+                pendingDecisionKey: null,
+                pendingConfirmation: null,
+                toolResults: [
+                    {
+                        id: 'call-run-command',
+                        runId: 'agent-tool-loop-test',
+                        stepId: 'call-run-command',
+                        toolName: 'run_command',
+                        status: 'succeeded' as const,
+                        requiresUserConfirmation: false,
+                        summary: '测试命令执行完成。',
+                        startedAt: timestamp,
+                        endedAt: timestamp,
+                    },
+                ],
+            });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '运行一次最小验证';
+
+        await assistant.sendMessage();
+
+        expect(agentStore.pendingToolConfirmation?.id).toBe('call-run-command');
+        expect(assistant.messages.value[1]?.content).toContain('Agent 正在等待确认');
+
+        await assistant.resolveProviderToolLoopConfirmation('allow-once');
+
+        expect(aiServiceMock.toolLoopChat).toHaveBeenCalledTimes(2);
+        expect(aiServiceMock.toolLoopChat.mock.calls[1]?.[0]?.toolDecisions).toMatchObject({
+            'call-run-command': 'allow-once',
+            run_command: 'allow-once',
+        });
+        expect(agentStore.pendingToolConfirmation).toBeNull();
+        expect(assistant.messages.value[1]?.content).toContain('验证已完成');
     });
 
     it('applies patch by normalizing the returned path and syncing the current document', async () => {

@@ -1,5 +1,13 @@
 import AiAssistantPanel from '@/components/business/ai/AiAssistantPanel.vue';
-import type { IAiChatMessage, IAiConfigPayload, IAiContextReference, IAiPatchSet, IAiTaskPlanStep } from '@/types/ai';
+import type {
+    IAiChatMessage,
+    IAiConfigPayload,
+    IAiContextReference,
+    IAiPatchSet,
+    IAiTaskPlanStep,
+    IAiToolConfirmationRequest,
+} from '@/types/ai';
+import { createPinia, setActivePinia } from 'pinia';
 import type {
     IActiveRunSummary,
     IAnalyzeScriptPayload,
@@ -8,7 +16,7 @@ import type {
 } from '@/types/editor';
 import type { IGitRepositoryStatusPayload } from '@/types/git';
 import { mount } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { computed, ref } from 'vue';
 
 const useAiAssistantMock = vi.hoisted(() => vi.fn());
@@ -75,6 +83,9 @@ const createAssistantMock = (
         approvedAt: null,
         errorMessage: '',
         hasPlan: false,
+        activeRun: null,
+        pendingToolConfirmation: null as IAiToolConfirmationRequest | null,
+        activeToolActivity: null,
     };
 
     return {
@@ -188,6 +199,10 @@ const createGitStatus = (): IGitRepositoryStatusPayload => ({
 });
 
 describe('AiAssistantPanel', () => {
+    beforeEach(() => {
+        setActivePinia(createPinia());
+    });
+
     it('shows plan panel in agent mode when a plan exists', () => {
         const assistantMock = createAssistantMock([]);
         assistantMock.activeMode.value = 'agent';
@@ -219,6 +234,54 @@ describe('AiAssistantPanel', () => {
                 riskLevel: 'medium',
             },
         ];
+        useAiAssistantMock.mockReturnValue(assistantMock);
+
+        const wrapper = mount(AiAssistantPanel, {
+            props: {
+                document: createDocument(),
+                activeRun: null as IActiveRunSummary | null,
+                analysis: createAnalysis(),
+                selection: null as IEditorSelectionSummary | null,
+                gitStatus: createGitStatus(),
+                workspaceRootPath: 'd:/com.xiaojianc/my_desktop_app',
+                onOpenCodePath: () => undefined,
+            },
+            global: {
+                stubs: {
+                    AiChatThread: { template: '<div />' },
+                    AiContextChips: { template: '<div />' },
+                    AiPatchPreview: { template: '<div />' },
+                    AiPromptInput: { template: '<div />' },
+                    AiProviderSettings: { template: '<div />' },
+                    AiPlanModePanel: { template: '<div data-testid="plan-mode-panel" />' },
+                    teleport: true,
+                },
+            },
+        });
+
+        expect(wrapper.find('[data-testid="plan-mode-panel"]').exists()).toBe(true);
+    });
+
+    it('shows inline confirmation in agent mode even without an active plan', () => {
+        const assistantMock = createAssistantMock([]);
+        assistantMock.activeMode.value = 'agent';
+        assistantMock.agentPlan.store.pendingToolConfirmation = {
+            id: 'call-run-command',
+            runId: 'agent-tool-loop-test',
+            stepId: 'call-run-command',
+            toolName: 'run_command',
+            question: '允许 Agent 执行 pnpm test 吗？',
+            summary: '运行最小验证命令。',
+            riskLevel: 'medium',
+            impact: '会在当前工作区执行测试命令。',
+            reversible: false,
+            createdAt: '2026-04-29T00:00:00.000Z',
+            options: [
+                { id: 'allow-once', label: '允许一次', tone: 'primary' },
+                { id: 'deny', label: '拒绝' },
+                { id: 'stop', label: '停止', tone: 'danger' },
+            ],
+        };
         useAiAssistantMock.mockReturnValue(assistantMock);
 
         const wrapper = mount(AiAssistantPanel, {

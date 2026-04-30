@@ -156,7 +156,7 @@ const buildToolItems = (
       stepId: result.stepId,
       type: 'tool-result',
       title: result.toolName,
-      status: result.status === 'succeeded' ? 'succeeded' : 'failed',
+      status: toToolResultTimelineStatus(result.status),
       createdAt: result.endedAt,
       subtitle: result.summary,
     };
@@ -167,6 +167,16 @@ const buildToolItems = (
 
     return item;
   });
+};
+
+const toToolResultTimelineStatus = (status: string): TAiAgentTimelineItemStatus => {
+  if (status === 'succeeded') {
+    return 'succeeded';
+  }
+  if (status === 'failed') {
+    return 'failed';
+  }
+  return 'running';
 };
 
 const buildWebSourceItem = (
@@ -279,6 +289,10 @@ const runStatusLabel = computed(() => RUN_STATUS_LABELS[props.run.status]);
       <span>{{ completedStepCount }}/{{ run.steps.length }} 步</span>
     </header>
 
+    <p v-if="run.errorMessage" class="ai-agent-run-timeline-error">
+      {{ run.errorMessage }}
+    </p>
+
     <ol class="ai-agent-timeline-list">
       <li
         v-for="group in timelineGroups"
@@ -345,8 +359,10 @@ const runStatusLabel = computed(() => RUN_STATUS_LABELS[props.run.status]);
 .ai-agent-run-timeline {
   display: grid;
   gap: 9px;
-  border-top: 1px solid var(--shell-divider);
-  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--shell-divider) 86%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-soft) 44%, transparent);
+  padding: 10px;
 }
 
 .ai-agent-run-timeline-header {
@@ -373,6 +389,18 @@ const runStatusLabel = computed(() => RUN_STATUS_LABELS[props.run.status]);
 .ai-agent-run-timeline-header > span {
   color: var(--text-quaternary);
   font-size: 11px;
+}
+
+.ai-agent-run-timeline-error {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--danger) 24%, var(--shell-divider));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 16px;
+  padding: 7px 8px;
+  overflow-wrap: anywhere;
 }
 
 .ai-agent-timeline-list {

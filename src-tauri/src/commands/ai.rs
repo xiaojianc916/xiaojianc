@@ -6,26 +6,32 @@ use super::contracts::{
     AiAgentRunPayload, AiAgentRunPlanRequest, AiAgentRunStepRequest, AiAgentRunStreamEventPayload,
     AiAgentSetNetworkPermissionRequest, AiAgentStepStreamEventPayload,
     AiAgentStreamEndEventPayload, AiAgentToolActivityStreamEventPayload,
-    AiAgentToolConfirmationStreamEventPayload, AiApplyPatchPayload, AiApplyPatchRequest,
-    AiBuildIndexPayload, AiBuildIndexRequest, AiCancelRequest, AiChatMessagePayload, AiChatPayload,
-    AiChatRequest, AiChatStreamPayload, AiCodeActionPayload, AiCodeActionRequest, AiConfigPayload,
-    AiEditAuthStatePayload, AiEditCreateSnapshotPayload, AiEditCreateSnapshotRequest,
-    AiEditGetDiffPayload, AiEditGetDiffRequest, AiEditListTimelinePayload,
-    AiEditListTimelineRequest, AiEditRestoreSnapshotPayload, AiEditRestoreSnapshotRequest,
-    AiEditRevertFilePayload, AiEditRevertFileRequest, AiEditRevertHunkPayload,
-    AiEditRevertHunkRequest, AiEditRevertTaskPayload, AiEditRevertTaskRequest,
-    AiEditSetAuthLevelRequest, AiEditUndoOperationPayload, AiEditUndoOperationRequest,
-    AiInlineCompletionRangePayload, AiInlineCompletionRequest, AiInlineCompletionResult,
-    AiProposePatchPayload, AiProposePatchRequest, AiProviderConnectionPayload,
-    AiProviderConnectionRequest, AiProviderTestPayload, AiQueryIndexPayload, AiQueryIndexRequest,
-    AiSaveConfigRequest, AiSaveCredentialsRequest, AiTaskPlanStepPayload,
-    AiToolActivityInlinePayload, AiToolDefinitionPayload, AiWebFetchInput, AiWebFetchPayload,
+    AiAgentToolConfirmationStreamEventPayload, AiAgentToolLoopChatPayload,
+    AiAgentToolLoopChatRequest, AiAgentToolLoopResultPayload, AiApplyPatchPayload,
+    AiApplyPatchRequest, AiBuildIndexPayload, AiBuildIndexRequest, AiCancelRequest,
+    AiChatMessagePayload, AiChatPayload, AiChatRequest, AiChatStreamPayload, AiCodeActionPayload,
+    AiCodeActionRequest, AiConfigPayload, AiEditAuthStatePayload, AiEditCreateSnapshotPayload,
+    AiEditCreateSnapshotRequest, AiEditGetDiffPayload, AiEditGetDiffRequest,
+    AiEditListTimelinePayload, AiEditListTimelineRequest, AiEditRestoreSnapshotPayload,
+    AiEditRestoreSnapshotRequest, AiEditRevertFilePayload, AiEditRevertFileRequest,
+    AiEditRevertHunkPayload, AiEditRevertHunkRequest, AiEditRevertTaskPayload,
+    AiEditRevertTaskRequest, AiEditSetAuthLevelRequest, AiEditUndoOperationPayload,
+    AiEditUndoOperationRequest, AiInlineCompletionRangePayload, AiInlineCompletionRequest,
+    AiInlineCompletionResult, AiProposePatchPayload, AiProposePatchRequest,
+    AiProviderConnectionPayload, AiProviderConnectionRequest, AiProviderTestPayload,
+    AiQueryIndexPayload, AiQueryIndexRequest, AiSaveConfigRequest, AiSaveCredentialsRequest,
+    AiTaskPlanStepPayload, AiToolActivityInlinePayload, AiToolConfirmationOptionPayload,
+    AiToolConfirmationRequestPayload, AiToolDefinitionPayload, AiWebFetchInput, AiWebFetchPayload,
     AiWebSearchInput, AiWebSearchPayload,
 };
 use crate::ai::audit::{self, AiAuditEventKind};
 use crate::ai::gateway;
 use crate::ai::stream_manager;
+use crate::ai_agent::provider_loop::AgentProviderLoopRequest;
 use crate::ai_agent::runtime as agent_runtime;
+use crate::ai_agent::tool_loop::{
+    AgentRunMessage, AgentToolResultMessage, AgentToolRuntimeServices, AgentToolUseContext,
+};
 use crate::ai_edit;
 use crate::ai_edit::AiEditState;
 use crate::ai_index;
@@ -51,6 +57,56 @@ fn resolve_ai_edit_storage_root(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|error| ai_edit::errors::storage_path_unavailable(&error.to_string()))?
         .join(".notion-ide-ai")
         .join("edits"))
+}
+
+struct AiAgentAedRuntimeServices<'a> {
+    app: &'a AppHandle,
+    state: &'a AiEditState,
+}
+
+impl AgentToolRuntimeServices for AiAgentAedRuntimeServices<'_> {
+    fn auto_apply_patch(
+        &self,
+        payload: AiApplyPatchRequest,
+        context: &AgentToolUseContext,
+    ) -> Result<(String, Option<String>), String> {
+        let snapshot_root = resolve_ai_edit_storage_root(self.app)?;
+        let patch = payload.patch.clone();
+        let metadata = payload.metadata.clone();
+        let result = ai_patch::apply_patch(payload, self.state, &snapshot_root)?;
+
+        if let Some(metadata) = metadata.as_ref() {
+            emit_agent_patch_summary(self.app, &patch, &result, metadata);
+        }
+
+        Ok((
+            format!(
+                "auto_apply_patch applied {} file(s) through AED.",
+                result.applied_files.len()
+            ),
+            Some(format!(
+                "agent-tool-result:auto_apply_patch:{}:{}",
+                context.run_id, context.step_id
+            )),
+        ))
+    }
+
+    fn emit_tool_activity(
+        &self,
+        context: &AgentToolUseContext,
+        tool_name: &str,
+        state: &str,
+        label: String,
+    ) {
+        emit_agent_tool_activity(
+            self.app,
+            &context.run_id,
+            &context.step_id,
+            tool_name,
+            state,
+            label,
+        );
+    }
 }
 
 #[tauri::command]
@@ -244,13 +300,18 @@ pub fn ai_agent_run_plan(
 pub fn ai_agent_run_step(
     app: AppHandle,
     payload: AiAgentRunStepRequest,
+    state: State<AiEditState>,
 ) -> Result<AiAgentRunEnvelopePayload, String> {
     let before = agent_runtime::get_run(AiAgentRunIdRequest {
         run_id: payload.run_id.clone(),
     })
     .ok()
     .map(|envelope| envelope.run);
-    let envelope = agent_runtime::run_step(payload)?;
+    let services = AiAgentAedRuntimeServices {
+        app: &app,
+        state: state.inner(),
+    };
+    let envelope = agent_runtime::run_step_with_services(payload, Some(&services))?;
     emit_agent_step_transition(&app, before.as_ref(), &envelope.run);
     if let Some(confirmation) = agent_runtime::pending_tool_confirmation(&envelope.run.id) {
         emit_agent_tool_confirmation(&app, &envelope.run.id, confirmation);
@@ -262,6 +323,58 @@ pub fn ai_agent_run_step(
     }
 
     Ok(envelope)
+}
+
+#[tauri::command]
+pub async fn ai_agent_tool_loop_chat(
+    app: AppHandle,
+    payload: AiAgentToolLoopChatRequest,
+    state: State<'_, AiEditState>,
+) -> Result<AiAgentToolLoopChatPayload, String> {
+    let messages = gateway::collect_messages(payload.messages, payload.context.clone())?;
+    let services = AiAgentAedRuntimeServices {
+        app: &app,
+        state: state.inner(),
+    };
+
+    let outcome = gateway::agent_tool_loop_chat(
+        AgentProviderLoopRequest {
+            run_id: payload.run_id.clone(),
+            messages,
+            workspace_root: payload.workspace_root_path.clone(),
+            references: payload.context,
+            tool_decisions: payload.tool_decisions,
+            max_tool_turns: payload.max_tool_turns,
+        },
+        Some(&services),
+    )
+    .await?;
+
+    let tool_results = collect_tool_loop_result_payloads(&outcome.run_messages);
+    let pending_result = tool_results
+        .iter()
+        .find(|result| result.requires_user_confirmation)
+        .cloned();
+    let pending_decision_key = pending_result
+        .as_ref()
+        .map(|result| provider_tool_decision_key(&result.step_id, &result.tool_name));
+    let pending_confirmation = pending_result.as_ref().map(|result| {
+        build_provider_loop_confirmation(&payload.run_id, pending_decision_key.as_deref(), result)
+    });
+
+    if let Some(confirmation) = pending_confirmation.clone() {
+        emit_agent_tool_confirmation(&app, &payload.run_id, confirmation);
+    }
+
+    Ok(AiAgentToolLoopChatPayload {
+        content: outcome.final_response.content,
+        model: outcome.final_response.model,
+        stop_reason: outcome.stop_reason,
+        turns: outcome.turns,
+        pending_decision_key,
+        pending_confirmation,
+        tool_results,
+    })
 }
 
 #[tauri::command]
@@ -396,6 +509,78 @@ fn emit_agent_patch_summary(
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.emit("ai:agent-stream", event);
     }
+}
+
+fn collect_tool_loop_result_payloads(
+    messages: &[AgentRunMessage],
+) -> Vec<AiAgentToolLoopResultPayload> {
+    messages
+        .iter()
+        .filter_map(|message| match message {
+            AgentRunMessage::ToolResult(result) => Some(tool_result_payload(result)),
+            AgentRunMessage::ToolCall(_) => None,
+        })
+        .collect()
+}
+
+fn tool_result_payload(result: &AgentToolResultMessage) -> AiAgentToolLoopResultPayload {
+    AiAgentToolLoopResultPayload {
+        id: result.id.clone(),
+        run_id: result.run_id.clone(),
+        step_id: result.step_id.clone(),
+        tool_name: result.tool_name.clone(),
+        status: result.status.clone(),
+        requires_user_confirmation: result.requires_user_confirmation,
+        summary: result.summary.clone(),
+        output_ref: result.output_ref.clone(),
+        started_at: result.started_at.clone(),
+        ended_at: result.ended_at.clone(),
+    }
+}
+
+fn build_provider_loop_confirmation(
+    run_id: &str,
+    decision_key: Option<&str>,
+    result: &AiAgentToolLoopResultPayload,
+) -> AiToolConfirmationRequestPayload {
+    AiToolConfirmationRequestPayload {
+        id: decision_key.unwrap_or(&result.tool_name).to_string(),
+        run_id: run_id.to_string(),
+        step_id: result.step_id.clone(),
+        tool_name: result.tool_name.clone(),
+        question: format!("允许 Agent 使用 {} 吗？", result.tool_name),
+        summary: result.summary.clone(),
+        risk_level: "medium".to_string(),
+        impact: Some("该确认只会授权当前 Provider tool call；实际写盘仍必须经过 AED。".to_string()),
+        reversible: result.tool_name != "create_commit" && result.tool_name != "stage_file",
+        created_at: chrono::Utc::now().to_rfc3339(),
+        options: vec![
+            AiToolConfirmationOptionPayload {
+                id: "allow-once".to_string(),
+                label: "允许本次".to_string(),
+                tone: Some("primary".to_string()),
+            },
+            AiToolConfirmationOptionPayload {
+                id: "skip".to_string(),
+                label: "跳过".to_string(),
+                tone: Some("secondary".to_string()),
+            },
+            AiToolConfirmationOptionPayload {
+                id: "stop".to_string(),
+                label: "停止任务".to_string(),
+                tone: Some("danger".to_string()),
+            },
+        ],
+    }
+}
+
+fn provider_tool_decision_key(step_id: &str, tool_name: &str) -> String {
+    let prefix = format!("tool-call-step:{tool_name}:");
+    step_id
+        .strip_prefix(&prefix)
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(tool_name)
+        .to_string()
 }
 
 fn emit_agent_run_event(app: &AppHandle, run: &AiAgentRunPayload) {
