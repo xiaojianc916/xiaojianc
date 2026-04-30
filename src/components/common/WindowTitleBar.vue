@@ -1,15 +1,7 @@
 <template>
   <header class="window-titlebar" @mousedown="handleStartWindowDrag">
     <div class="grid h-10 grid-cols-[minmax(0,1fr)_minmax(240px,420px)_minmax(0,1fr)] items-center gap-3 px-3">
-      <div class="flex min-w-0 items-center gap-3">
-        <div class="flex h-6 w-6 items-center justify-center rounded-md bg-(--accent-muted) text-(--accent-strong)">
-          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-            <path d="M14 3v5h5" />
-          </svg>
-        </div>
-      </div>
+      <div class="flex min-w-0 items-center"></div>
 
       <div ref="commandPaletteRef" class="relative flex justify-center" data-no-window-drag @dblclick.stop>
         <button v-if="!isCommandPaletteOpen" type="button" class="window-command-bar w-full justify-center text-[12px]"

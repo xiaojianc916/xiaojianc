@@ -10,7 +10,19 @@ type TDiffOperation = 'equal' | 'insert' | 'delete';
 
 const MAX_DIFF_MATRIX_CELLS = 1_200_000;
 
-const splitLines = (content: string): string[] => (content.length === 0 ? [] : content.split('\n'));
+const splitLines = (content: string): string[] => {
+  if (content.length === 0) {
+    return [];
+  }
+
+  const lines = content.split('\n');
+  // Monaco 文本常以结尾换行收束；该哨兵空行不应单独算作新增/删除行。
+  if (lines.length > 1 && lines[lines.length - 1] === '') {
+    lines.pop();
+  }
+
+  return lines;
+};
 
 const clampLineNumber = (lineNumber: number, currentLineCount: number): number => {
   if (currentLineCount <= 0) {

@@ -1,4 +1,5 @@
 import { aiChatStreamEventPayloadSchema } from '@/types/ai.schema';
+import { aiAgentStreamEventSchema } from '@/types/ai-stream.schema';
 import { AppError, isAppError } from '@/types/app-error';
 import type { ITauriService } from '@/types/tauri';
 import { assertDesktopRuntime } from '@/utils/desktop-runtime';
@@ -827,6 +828,83 @@ const aiAgentApprovePlanIpc = definePayloadIpc(
   { audit: 'sensitive', timeoutMs: 30_000, measureInput: measureAiChatInput },
 );
 
+const aiAgentRunPlanIpc = definePayloadIpc(
+  'ai_agent_run_plan',
+  '启动 AI Agent 计划执行',
+  tauriContracts.aiAgentRunPlan,
+  { audit: 'sensitive', timeoutMs: 30_000, measureInput: measureAiChatInput },
+);
+
+const aiAgentRunStepIpc = definePayloadIpc(
+  'ai_agent_run_step',
+  '推进 AI Agent 计划步骤',
+  tauriContracts.aiAgentRunStep,
+  { audit: 'sensitive', timeoutMs: 30_000, measureInput: measureAiChatInput },
+);
+
+const aiAgentPauseIpc = definePayloadIpc(
+  'ai_agent_pause',
+  '暂停 AI Agent run',
+  tauriContracts.aiAgentPause,
+  { audit: 'sensitive', timeoutMs: 15_000 },
+);
+
+const aiAgentResumeIpc = definePayloadIpc(
+  'ai_agent_resume',
+  '继续 AI Agent run',
+  tauriContracts.aiAgentResume,
+  { audit: 'sensitive', timeoutMs: 15_000 },
+);
+
+const aiAgentCancelIpc = definePayloadIpc(
+  'ai_agent_cancel',
+  '取消 AI Agent run',
+  tauriContracts.aiAgentCancel,
+  { audit: 'sensitive', timeoutMs: 15_000 },
+);
+
+const aiAgentGetRunIpc = definePayloadIpc(
+  'ai_agent_get_run',
+  '读取 AI Agent run',
+  tauriContracts.aiAgentGetRun,
+  { idempotent: true, audit: 'sensitive', timeoutMs: 15_000 },
+);
+
+const aiAgentListRunsIpc = defineContractIpc(
+  'ai_agent_list_runs',
+  '读取 AI Agent run 列表',
+  tauriContracts.aiAgentListRuns,
+  { idempotent: true, audit: 'sensitive', timeoutMs: 15_000 },
+);
+
+const aiAgentSetNetworkPermissionIpc = definePayloadIpc(
+  'ai_agent_set_network_permission',
+  '设置 AI Agent 网络权限',
+  tauriContracts.aiAgentSetNetworkPermission,
+  { audit: 'sensitive', timeoutMs: 15_000 },
+);
+
+const aiAgentResolveToolConfirmationIpc = definePayloadIpc(
+  'ai_agent_resolve_tool_confirmation',
+  '处理 AI Agent 工具确认',
+  tauriContracts.aiAgentResolveToolConfirmation,
+  { audit: 'sensitive', timeoutMs: 15_000 },
+);
+
+const aiWebSearchIpc = definePayloadIpc(
+  'ai_web_search',
+  '执行 AI Agent 网络搜索',
+  tauriContracts.aiWebSearch,
+  { idempotent: true, audit: 'sensitive', timeoutMs: 30_000 },
+);
+
+const aiWebFetchIpc = definePayloadIpc(
+  'ai_web_fetch',
+  '读取 AI Agent 网页来源',
+  tauriContracts.aiWebFetch,
+  { idempotent: true, audit: 'sensitive', timeoutMs: 30_000 },
+);
+
 const aiBuildIndexIpc = definePayloadIpc(
   'ai_build_index',
   '构建 AI 代码索引',
@@ -1132,6 +1210,18 @@ export const tauriService: ITauriService & {
     });
   },
 
+  async onAiAgentStream(handler) {
+    await assertDesktopRuntime('监听 AI Agent 流式事件');
+    const { listen } = await loadTauriEvent();
+    return listen('ai:agent-stream', (event) => {
+      const parsed = aiAgentStreamEventSchema.safeParse(event.payload);
+      if (!parsed.success) {
+        return;
+      }
+      handler(parsed.data);
+    });
+  },
+
   aiInlineComplete: aiInlineCompleteIpc,
 
   aiCodeAction: aiCodeActionIpc,
@@ -1141,6 +1231,28 @@ export const tauriService: ITauriService & {
   aiPlanTask: aiPlanTaskIpc,
 
   aiAgentApprovePlan: aiAgentApprovePlanIpc,
+
+  aiAgentRunPlan: aiAgentRunPlanIpc,
+
+  aiAgentRunStep: aiAgentRunStepIpc,
+
+  aiAgentPause: aiAgentPauseIpc,
+
+  aiAgentResume: aiAgentResumeIpc,
+
+  aiAgentCancel: aiAgentCancelIpc,
+
+  aiAgentGetRun: aiAgentGetRunIpc,
+
+  aiAgentListRuns: () => aiAgentListRunsIpc(undefined),
+
+  aiAgentSetNetworkPermission: aiAgentSetNetworkPermissionIpc,
+
+  aiAgentResolveToolConfirmation: aiAgentResolveToolConfirmationIpc,
+
+  aiWebSearch: aiWebSearchIpc,
+
+  aiWebFetch: aiWebFetchIpc,
 
   aiBuildIndex: aiBuildIndexIpc,
 

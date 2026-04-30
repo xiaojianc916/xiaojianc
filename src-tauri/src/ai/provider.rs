@@ -1,4 +1,7 @@
-﻿use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
+
+const MOCK_PROVIDER_MODEL: &str = "mock-ide-assistant";
+const MOCK_PREVIEW_MAX_CHARS: usize = 180;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -7,10 +10,59 @@ pub struct AiProviderMessage {
     pub content: String,
 }
 
+impl AiProviderMessage {
+    pub fn new(role: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            role: role.into(),
+            content: content.into(),
+        }
+    }
+
+    pub fn user(content: impl Into<String>) -> Self {
+        Self::new("user", content)
+    }
+
+    pub fn assistant(content: impl Into<String>) -> Self {
+        Self::new("assistant", content)
+    }
+
+    pub fn system(content: impl Into<String>) -> Self {
+        Self::new("system", content)
+    }
+
+    pub fn is_user(&self) -> bool {
+        self.role == "user"
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.content.trim().is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiProviderChatRequest {
     pub messages: Vec<AiProviderMessage>,
+}
+
+impl AiProviderChatRequest {
+    pub fn new(messages: Vec<AiProviderMessage>) -> Self {
+        Self { messages }
+    }
+
+    pub fn single_user(content: impl Into<String>) -> Self {
+        Self {
+            messages: vec![AiProviderMessage::user(content)],
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.messages.iter().all(AiProviderMessage::is_empty)
+    }
+
+    pub fn last_user_message(&self) -> Option<&AiProviderMessage> {
+        self.messages.iter().rev().find(|message| message.is_user())
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -20,25 +72,90 @@ pub struct AiProviderResponse {
     pub model: String,
 }
 
+impl AiProviderResponse {
+    pub fn new(content: impl Into<String>, model: impl Into<String>) -> Self {
+        Self {
+            content: content.into(),
+            model: model.into(),
+        }
+    }
+}
+
 pub struct MockProvider;
 
 impl MockProvider {
     pub fn chat(request: AiProviderChatRequest) -> AiProviderResponse {
         let last_user = request
-            .messages
-            .iter()
-            .rev()
-            .find(|message| message.role == "user")
-            .map(|message| message.content.as_str())
+            .last_user_message()
+            .map(|message| message.content.trim())
+            .filter(|content| !content.is_empty())
             .unwrap_or("未提供问题");
-        let preview: String = last_user.chars().take(180).collect();
 
-        AiProviderResponse {
-            content: format!(
+        let preview = clip_chars(last_user, MOCK_PREVIEW_MAX_CHARS);
+
+        AiProviderResponse::new(
+            format!(
                 "MockProvider 已收到请求。\n\n当前仅启用通用 IDE AI 架构基线，不会调用真实模型。\n\n问题预览：{}",
                 preview
             ),
-            model: "mock-ide-assistant".to_string(),
-        }
+            MOCK_PROVIDER_MODEL,
+        )
+    }
+}
+
+fn clip_chars(value: &str, max_chars: usize) -> String {
+    let mut chars = value.chars();
+
+    let clipped: String = chars.by_ref().take(max_chars).collect();
+
+    if chars.next().is_some() {
+        format!("{clipped}…")
+    } else {
+        clipped
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AiProviderChatRequest, AiProviderMessage, MockProvider, MOCK_PROVIDER_MODEL};
+
+    #[test]
+    fn mock_provider_uses_last_user_message() {
+        let response = MockProvider::chat(AiProviderChatRequest::new(vec![
+            AiProviderMessage::user("first"),
+            AiProviderMessage::assistant("assistant response"),
+            AiProviderMessage::user("second"),
+        ]));
+
+        assert!(response.content.contains("second"));
+        assert!(!response.content.contains("first"));
+        assert_eq!(response.model, MOCK_PROVIDER_MODEL);
+    }
+
+    #[test]
+    fn mock_provider_handles_empty_request() {
+        let response = MockProvider::chat(AiProviderChatRequest::new(Vec::new()));
+
+        assert!(response.content.contains("未提供问题"));
+        assert_eq!(response.model, MOCK_PROVIDER_MODEL);
+    }
+
+    #[test]
+    fn mock_provider_clips_long_preview() {
+        let long_prompt = "a".repeat(300);
+        let response = MockProvider::chat(AiProviderChatRequest::single_user(long_prompt));
+
+        assert!(response.content.contains('…'));
+        assert!(response.content.chars().count() < 300);
+    }
+
+    #[test]
+    fn chat_request_detects_empty_content() {
+        let request = AiProviderChatRequest::new(vec![
+            AiProviderMessage::system("   "),
+            AiProviderMessage::user("\n"),
+        ]);
+
+        assert!(request.is_empty());
     }
 }

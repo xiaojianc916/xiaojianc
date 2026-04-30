@@ -1,17 +1,30 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import AiChatThread from '@/components/business/ai/AiChatThread.vue';
 import AiContextChips from '@/components/business/ai/AiContextChips.vue';
+import AiAgentRunTimeline from '@/components/business/ai/AiAgentRunTimeline.vue';
 import AiPatchPreview from '@/components/business/ai/AiPatchPreview.vue';
 import AiPlanModePanel from '@/components/business/ai/AiPlanModePanel.vue';
 import AiPromptInput from '@/components/business/ai/AiPromptInput.vue';
 import AiProviderSettings from '@/components/business/ai/AiProviderSettings.vue';
+import AiWebSourcesPanel from '@/components/business/ai/AiWebSourcesPanel.vue';
+import { useAiAgentNetwork } from '@/composables/useAiAgentNetwork';
+import { useAiAgentRun } from '@/composables/useAiAgentRun';
+import { useAiAgentStream } from '@/composables/useAiAgentStream';
 import { useAiAssistant } from '@/composables/useAiAssistant';
+import { useAiWebSources } from '@/composables/useAiWebSources';
 import { findAiProviderPreset } from '@/constants/ai-providers';
 import type {
   IAiChatMessage,
   IAiConfigPayload,
   IAiProviderSettingsActionFeedback,
+  IAiAgentRun,
+  IAiAgentStepToolResultSummary,
+  IAiAgentStepWebSourceSummary,
+  IAiTaskPlanStep,
+  IAiWebSourceEntry,
+  TAiAgentNetworkPermission,
   TAiChatMessageActionId,
+  TAiToolConfirmationDecision,
 } from '@/types/ai';
 import type { IAiCodePathTarget } from '@/types/ai-code';
 import type {
@@ -52,9 +65,16 @@ const assistant = useAiAssistant({
   gitStatus: gitStatusRef,
   workspaceRootPath: workspaceRootPathRef,
 });
+const agentRun = useAiAgentRun();
+const agentNetwork = useAiAgentNetwork();
+const agentStream = useAiAgentStream();
+const webSources = useAiWebSources();
 const settingsDraft = ref<IAiConfigPayload>({ ...assistant.config.value });
 const settingsApiKey = ref('');
+const isAgentRunActionPending = ref(false);
 const isModeMenuOpen = ref(false);
+const isNetworkMenuOpen = ref(false);
+const isNetworkPermissionPending = ref(false);
 const isHistoryOpen = ref(false);
 const currentProviderPreset = computed(() =>
   findAiProviderPreset(assistant.config.value.providerType),
@@ -65,6 +85,18 @@ const aiAvatarUrl = computed(() =>
 const aiAvatarAlt = computed(() => currentProviderPreset.value.label);
 const historyThreads = computed(() => assistant.historyThreads.value.slice(-MAX_HISTORY_MESSAGES).reverse());
 const historyCountLabel = computed(() => `最近 ${historyThreads.value.length} 组`);
+const networkPermissionLabel = computed(() => {
+  switch (agentNetwork.store.networkPermission) {
+    case 'off':
+      return 'Network Off';
+    case 'allowed-this-run':
+      return 'Network Allowed';
+    case 'ask':
+      return 'Network Ask';
+    default:
+      return 'Network Ask';
+  }
+});
 const planStore = computed(() => assistant.agentPlan.store);
 const planVisible = computed(() => {
   if (assistant.activeMode.value !== 'agent') {
@@ -73,9 +105,39 @@ const planVisible = computed(() => {
 
   return planStore.value.hasPlan || planStore.value.isPlanning || Boolean(planStore.value.errorMessage);
 });
+const activePlanStep = computed(() => {
+  const currentStepId = planStore.value.activeRun?.currentStepId;
+
+  if (currentStepId) {
+    return planStore.value.steps.find((step) => step.id === currentStepId) ?? null;
+  }
+
+  return planStore.value.steps.find((step) => step.isActive) ?? null;
+});
+const activeStepDetail = computed(() => {
+  const runId = planStore.value.activeRunId ?? planStore.value.activeRun?.id ?? null;
+  const step = activePlanStep.value;
+
+  if (!runId || !step) {
+    return null;
+  }
+
+  return planStore.value.getStepDetail(runId, step.id);
+});
+const webSourcesVisible = computed(() => {
+  if (assistant.activeMode.value !== 'agent') {
+    return false;
+  }
+
+  return planVisible.value ||
+    webSources.sources.value.length > 0 ||
+    Boolean(webSources.activity.value) ||
+    Boolean(webSources.errorMessage.value);
+});
 
 const openSettings = (): void => {
   settingsDraft.value = { ...assistant.config.value };
+  isNetworkMenuOpen.value = false;
   assistant.isSettingsOpen.value = true;
 };
 
@@ -85,6 +147,7 @@ const startNewConversation = (): void => {
   }
   isHistoryOpen.value = false;
   isModeMenuOpen.value = false;
+  isNetworkMenuOpen.value = false;
   assistant.startNewConversation();
 };
 
@@ -95,11 +158,13 @@ const openHistoryThread = (threadId: string): void => {
   assistant.switchConversation(threadId);
   isHistoryOpen.value = false;
   isModeMenuOpen.value = false;
+  isNetworkMenuOpen.value = false;
 };
 
 const selectMode = (mode: 'chat' | 'agent'): void => {
   assistant.activeMode.value = mode;
   isModeMenuOpen.value = false;
+  isNetworkMenuOpen.value = false;
 };
 
 const getHistoryTimeLabel = (timestampText: string): string => {
@@ -124,10 +189,200 @@ const getHistoryMessageCountLabel = (messages: IAiChatMessage[]): string => `${m
 const toErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error && error.message.trim() ? error.message : fallback;
 
+const clipQueryPreview = (value: string): string => {
+  const characters = Array.from(value.replace(/\s+/g, ' ').trim());
+
+  if (characters.length <= 48) {
+    return characters.join('');
+  }
+
+  return `${characters.slice(0, 48).join('')}…`;
+};
+
+const toStepWebSourceSummaries = (
+  sources: readonly IAiWebSourceEntry[],
+): IAiAgentStepWebSourceSummary[] =>
+  sources.map((source) => ({
+    id: source.id,
+    title: source.result.title,
+    url: source.result.url,
+    sourceType: source.result.sourceType,
+    status: source.status,
+    queryPreview: clipQueryPreview(source.query),
+    fetchedAt: source.fetchedSource?.fetchedAt ?? source.result.fetchedAt,
+    ...(source.fetchedSource?.textRef ? { textRef: source.fetchedSource.textRef } : {}),
+    ...(source.fetchedSource?.excerpt ? { excerpt: source.fetchedSource.excerpt } : {}),
+  }));
+
+const buildWebToolResults = (
+  runId: string,
+  step: IAiTaskPlanStep,
+  sources: readonly IAiWebSourceEntry[],
+  status: 'succeeded' | 'failed',
+  startedAt: string,
+  endedAt: string,
+  errorMessage?: string,
+): IAiAgentStepToolResultSummary[] => {
+  const resultIdBase = `${runId}:${step.id}:${endedAt}`;
+  const results: IAiAgentStepToolResultSummary[] = [];
+
+  if (step.tools.includes('web_search')) {
+    results.push({
+      id: `${resultIdBase}:web_search`,
+      runId,
+      stepId: step.id,
+      toolName: 'web_search',
+      status,
+      summary: status === 'succeeded'
+        ? `搜索到 ${sources.length} 个来源`
+        : errorMessage ?? '网络搜索失败',
+      startedAt,
+      endedAt,
+    });
+  }
+
+  if (step.tools.includes('web_fetch')) {
+    const fetchedCount = sources.filter((source) => source.status === 'fetched').length;
+    const fetchedRef = sources.find((source) => source.fetchedSource?.textRef)?.fetchedSource?.textRef;
+    results.push({
+      id: `${resultIdBase}:web_fetch`,
+      runId,
+      stepId: step.id,
+      toolName: 'web_fetch',
+      status,
+      summary: status === 'succeeded'
+        ? `读取 ${fetchedCount} 个网页正文引用`
+        : errorMessage ?? '网页读取失败',
+      startedAt,
+      endedAt,
+      ...(fetchedRef ? { outputRef: fetchedRef } : {}),
+    });
+  }
+
+  return results;
+};
+
 const setPlanError = (error: unknown, fallback: string): void => {
   planStore.value.errorMessage = toErrorMessage(error, fallback);
 };
 
+const handleSetNetworkPermission = async (
+  permission: TAiAgentNetworkPermission,
+): Promise<void> => {
+  isNetworkPermissionPending.value = true;
+
+  try {
+    await agentNetwork.setNetworkPermission(permission);
+    isNetworkMenuOpen.value = false;
+  } catch (error) {
+    setPlanError(error, '设置 AI Agent 网络权限失败。');
+  } finally {
+    isNetworkPermissionPending.value = false;
+  }
+};
+
+const handleSearchWebSources = async (query: string): Promise<void> => {
+  const step = activePlanStep.value;
+
+  try {
+    await webSources.search(
+      {
+        query,
+        intent: 'general',
+        maxResults: 5,
+        recency: 'any',
+      },
+      step ? { stepId: step.id, stepTitle: step.title } : {},
+    );
+  } catch (error) {
+    setPlanError(error, '网络搜索失败。');
+  }
+};
+const handleFetchWebSource = async (sourceId: string): Promise<void> => {
+  try {
+    await webSources.fetchSource(sourceId);
+  } catch (error) {
+    setPlanError(error, '网页读取失败。');
+  }
+};
+
+const getActiveAgentRunId = (): string | null =>
+  planStore.value.activeRunId ?? planStore.value.activeRun?.id ?? null;
+
+const withAgentRunAction = async <T,>(
+  action: (runId: string) => Promise<T>,
+  fallback: string,
+): Promise<T | null> => {
+  const runId = getActiveAgentRunId();
+
+  if (!runId) {
+    planStore.value.errorMessage = '当前没有可执行的 Agent run。';
+    return null;
+  }
+
+  isAgentRunActionPending.value = true;
+  planStore.value.errorMessage = '';
+
+  try {
+    return await action(runId);
+  } catch (error) {
+    setPlanError(error, fallback);
+    return null;
+  } finally {
+    isAgentRunActionPending.value = false;
+  }
+};
+
+const findRunningStep = (run: IAiAgentRun | null): IAiTaskPlanStep | null => {
+  if (!run) {
+    return null;
+  }
+
+  if (run.currentStepId) {
+    return run.steps.find((step) => step.id === run.currentStepId && step.status === 'running') ?? null;
+  }
+
+  return run.steps.find((step) => step.status === 'running') ?? null;
+};
+
+const runWebToolsForStep = async (step: IAiTaskPlanStep): Promise<boolean> => {
+  if (!webSources.shouldRunWebToolsForStep(step)) {
+    return false;
+  }
+
+  const runId = getActiveAgentRunId();
+  const startedAt = new Date().toISOString();
+
+  if (!runId) {
+    planStore.value.errorMessage = '当前没有可记录工具结果的 Agent run。';
+    return true;
+  }
+
+  try {
+    const sources = await webSources.runStepWebTools(step);
+    const endedAt = new Date().toISOString();
+    planStore.value.setStepWebSources(runId, step.id, toStepWebSourceSummaries(sources));
+    planStore.value.appendStepToolResults(
+      runId,
+      step.id,
+      buildWebToolResults(runId, step, sources, 'succeeded', startedAt, endedAt),
+    );
+    return true;
+  } catch (error) {
+    const endedAt = new Date().toISOString();
+    const message = toErrorMessage(error, '执行 Web 工具失败。');
+    const currentSources = webSources.sources.value.filter((source) => source.stepId === step.id);
+
+    planStore.value.setStepWebSources(runId, step.id, toStepWebSourceSummaries(currentSources));
+    planStore.value.appendStepToolResults(
+      runId,
+      step.id,
+      buildWebToolResults(runId, step, currentSources, 'failed', startedAt, endedAt, message),
+    );
+    setPlanError(error, '执行 Web 工具失败。');
+    return true;
+  }
+};
 const handleUpdatePlanStepTitle = (stepId: string, title: string): void => {
   assistant.agentPlan.updateStep(stepId, { title });
 };
@@ -151,13 +406,106 @@ const handleRegeneratePlan = async (): Promise<void> => {
 const handleApprovePlan = async (): Promise<void> => {
   try {
     await assistant.agentPlan.approvePlan();
+    await agentRun.runPlan(
+      planStore.value.activeGoal,
+      planStore.value.steps,
+      assistant.currentReferences.value,
+    );
   } catch (error) {
-    setPlanError(error, '批准计划失败。');
+    setPlanError(error, '批准或启动计划失败。');
   }
 };
 
 const handleResetPlan = (): void => {
   assistant.agentPlan.resetPlan();
+};
+
+const handleRunStep = async (): Promise<void> => {
+  const runningStep = findRunningStep(planStore.value.activeRun);
+
+  if (runningStep && await runWebToolsForStep(runningStep)) {
+    return;
+  }
+
+  const run = await withAgentRunAction(
+    (runId) => agentRun.runStep(runId),
+    '执行 Agent step 失败。',
+  );
+  const nextRunningStep = findRunningStep(run);
+
+  if (nextRunningStep) {
+    await runWebToolsForStep(nextRunningStep);
+  }
+};
+const handlePauseRun = async (): Promise<void> => {
+  await withAgentRunAction(
+    (runId) => agentRun.pauseRun(runId),
+    '暂停 Agent run 失败。',
+  );
+};
+
+const handleResumeRun = async (): Promise<void> => {
+  await withAgentRunAction(
+    (runId) => agentRun.resumeRun(runId),
+    '继续 Agent run 失败。',
+  );
+};
+
+const handleCancelRun = async (): Promise<void> => {
+  await withAgentRunAction(
+    (runId) => agentRun.cancelRun(runId),
+    '取消 Agent run 失败。',
+  );
+};
+
+const handleResolveToolConfirmation = async (
+  decision: TAiToolConfirmationDecision,
+): Promise<void> => {
+  const confirmation = planStore.value.pendingToolConfirmation;
+
+  if (!confirmation) {
+    planStore.value.errorMessage = '当前没有待处理的工具确认。';
+    return;
+  }
+
+  const resolvedRun = await withAgentRunAction(
+    (runId) => agentRun.resolveToolConfirmation(runId, confirmation.id, decision),
+    '处理工具确认失败。',
+  );
+
+  if (decision === 'stop' || !resolvedRun) {
+    return;
+  }
+
+  const run = await withAgentRunAction(
+    (runId) => agentRun.runStep(runId),
+    '继续执行 Agent step 失败。',
+  );
+  const nextRunningStep = findRunningStep(run);
+
+  if (nextRunningStep) {
+    await runWebToolsForStep(nextRunningStep);
+  }
+};
+
+const handleOpenDiffPreview = (payload: {
+  diffRef: string;
+  filePath: string;
+  patchRef?: string;
+  runId: string;
+  stepId: string;
+}): void => {
+  emit('openCodePath', {
+    kind: 'ai-diff',
+    path: payload.filePath,
+    startLine: null,
+    endLine: null,
+    title: `${payload.filePath} (AI Diff)`,
+    diffRef: payload.diffRef,
+    ...(payload.patchRef ? { patchRef: payload.patchRef } : {}),
+    runId: payload.runId,
+    stepId: payload.stepId,
+  });
 };
 
 const saveSettings = async (
@@ -213,6 +561,7 @@ onMounted(() => {
     settingsDraft.value = { ...assistant.config.value };
   }).catch(() => undefined);
   assistant.loadTools().catch(() => undefined);
+  agentStream.start().catch(() => undefined);
 });
 </script>
 
@@ -238,6 +587,51 @@ onMounted(() => {
           <button type="button" role="menuitemradio" :aria-checked="assistant.activeMode.value === 'agent'"
             :class="{ active: assistant.activeMode.value === 'agent' }" @click="selectMode('agent')">
             Agent
+          </button>
+        </div>
+      </div>
+      <div class="ai-network-anchor">
+        <button
+          type="button"
+          class="ai-network-button"
+          :aria-expanded="isNetworkMenuOpen"
+          aria-haspopup="menu"
+          :disabled="isNetworkPermissionPending"
+          @click="isNetworkMenuOpen = !isNetworkMenuOpen"
+        >
+          <span class="ai-network-dot" :class="`is-${agentNetwork.store.networkPermission}`" aria-hidden="true"></span>
+          <span>{{ networkPermissionLabel }}</span>
+        </button>
+        <div v-if="isNetworkMenuOpen" class="ai-network-menu" role="menu" aria-label="AI Agent 网络权限">
+          <button
+            type="button"
+            role="menuitemradio"
+            :aria-checked="agentNetwork.store.networkPermission === 'ask'"
+            :class="{ active: agentNetwork.store.networkPermission === 'ask' }"
+            :disabled="isNetworkPermissionPending"
+            @click="handleSetNetworkPermission('ask')"
+          >
+            Ask
+          </button>
+          <button
+            type="button"
+            role="menuitemradio"
+            :aria-checked="agentNetwork.store.networkPermission === 'allowed-this-run'"
+            :class="{ active: agentNetwork.store.networkPermission === 'allowed-this-run' }"
+            :disabled="isNetworkPermissionPending"
+            @click="handleSetNetworkPermission('allowed-this-run')"
+          >
+            Allowed this run
+          </button>
+          <button
+            type="button"
+            role="menuitemradio"
+            :aria-checked="agentNetwork.store.networkPermission === 'off'"
+            :class="{ active: agentNetwork.store.networkPermission === 'off' }"
+            :disabled="isNetworkPermissionPending"
+            @click="handleSetNetworkPermission('off')"
+          >
+            Off
           </button>
         </div>
       </div>
@@ -296,11 +690,6 @@ onMounted(() => {
     </header>
 
     <AiContextChips :references="assistant.currentReferences.value" />
-    <AiPlanModePanel v-if="planVisible" :goal="planStore.activeGoal" :steps="planStore.steps"
-      :classification-reason="planStore.classificationReason" :error-message="planStore.errorMessage"
-      :is-planning="planStore.isPlanning" :is-approving="planStore.isApproving"
-      @update-step-title="handleUpdatePlanStepTitle" @remove-step="handleRemovePlanStep"
-      @regenerate="handleRegeneratePlan" @approve="handleApprovePlan" @reset="handleResetPlan" />
     <AiChatThread :messages="assistant.messages.value" :is-typing="assistant.isSending.value" :avatar-url="aiAvatarUrl"
       :avatar-alt="aiAvatarAlt" @apply-code="assistant.previewPatchFromCodeBlock"
       @open-code-path="emit('openCodePath', $event)" @message-action="handleMessageAction" />
@@ -311,6 +700,50 @@ onMounted(() => {
     </div>
     <AiPatchPreview :patch="assistant.proposedPatch.value" :is-applying="assistant.isApplyingPatch.value"
       @apply="assistant.applyProposedPatch" @close="assistant.proposedPatch.value = null" />
+    <AiPlanModePanel
+      v-if="planVisible"
+      :goal="planStore.activeGoal"
+      :steps="planStore.steps"
+      :classification-reason="planStore.classificationReason"
+      :error-message="planStore.errorMessage"
+      :is-planning="planStore.isPlanning"
+      :is-approving="planStore.isApproving"
+      :approved-at="planStore.approvedAt"
+      :active-run="planStore.activeRun"
+      :is-run-action-pending="isAgentRunActionPending"
+      :web-activity="webSources.activity.value"
+      :tool-activity="planStore.activeToolActivity"
+      :tool-confirmation="planStore.pendingToolConfirmation"
+      :active-step-detail="activeStepDetail"
+      @update-step-title="handleUpdatePlanStepTitle"
+      @remove-step="handleRemovePlanStep"
+      @regenerate="handleRegeneratePlan"
+      @approve="handleApprovePlan"
+      @reset="handleResetPlan"
+      @run-step="handleRunStep"
+      @pause-run="handlePauseRun"
+      @resume-run="handleResumeRun"
+      @cancel-run="handleCancelRun"
+      @resolve-tool-confirmation="handleResolveToolConfirmation"
+    />
+    <AiAgentRunTimeline
+      v-if="planStore.activeRun"
+      :run="planStore.activeRun"
+      :step-details="planStore.stepDetails"
+      :patch-summaries="planStore.getPatchSummaries(planStore.activeRun.id)"
+      @open-diff="handleOpenDiffPreview"
+    />
+    <AiWebSourcesPanel
+      v-if="webSourcesVisible"
+      :sources="webSources.sources.value"
+      :activity="planVisible ? null : webSources.activity.value"
+      :error-message="webSources.errorMessage.value"
+      :is-searching="webSources.isSearching.value"
+      :network-permission="agentNetwork.store.networkPermission"
+      @search="handleSearchWebSources"
+      @fetch-source="handleFetchWebSource"
+      @clear="webSources.clear"
+    />
     <AiPromptInput v-model="assistant.draft.value" :disabled="assistant.isSending.value"
       :error-message="assistant.errorMessage.value"
       :submit-label="assistant.activeMode.value === 'agent' ? '开始执行' : assistant.sendButtonLabel.value"
@@ -456,6 +889,94 @@ onMounted(() => {
 .ai-mode-menu button.active {
   background: var(--surface-soft);
   color: var(--text-primary);
+}
+
+.ai-network-anchor {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.ai-network-button {
+  display: inline-flex;
+  height: 26px;
+  max-width: 120px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--shell-divider) 74%, transparent);
+  border-radius: 999px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1;
+  padding: 0 8px;
+}
+
+.ai-network-button:hover {
+  background: var(--surface-soft);
+  color: var(--text-primary);
+}
+
+.ai-network-button:disabled {
+  opacity: 0.58;
+  cursor: wait;
+}
+
+.ai-network-button span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-network-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--text-quaternary);
+}
+
+.ai-network-dot.is-allowed-this-run {
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.ai-network-dot.is-off {
+  background: var(--danger);
+}
+
+.ai-network-menu {
+  position: absolute;
+  top: 31px;
+  right: 0;
+  z-index: 6;
+  display: grid;
+  width: 148px;
+  gap: 2px;
+  border: 1px solid color-mix(in srgb, var(--shell-divider) 100%, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-bg) 96%, var(--sidebar-bg));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  padding: 5px;
+}
+
+.ai-network-menu button {
+  height: 26px;
+  border-radius: 5px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-align: left;
+  padding: 0 8px;
+}
+
+.ai-network-menu button:hover,
+.ai-network-menu button.active {
+  background: var(--surface-soft);
+  color: var(--text-primary);
+}
+
+.ai-network-menu button:disabled {
+  opacity: 0.58;
+  cursor: wait;
 }
 
 .ai-icon-button {

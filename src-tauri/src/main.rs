@@ -6,30 +6,34 @@ mod ai_context;
 mod ai_edit;
 mod ai_index;
 mod ai_patch;
+mod ai_security;
 mod ai_tools;
 mod commands;
 mod error;
 mod terminal;
 
-use commands::{
-    ai_agent_approve_plan, ai_agent_classify_task, ai_apply_patch, ai_build_index,
-    ai_cancel, ai_chat, ai_chat_stream, ai_clear_credentials, ai_code_action, ai_connect_provider, ai_edit_get_auth_level,
-    ai_edit_create_snapshot, ai_edit_get_diff, ai_edit_list_timeline, ai_edit_restore_snapshot,
-    ai_edit_revert_file, ai_edit_revert_hunk, ai_edit_revert_task, ai_edit_set_auth_level,
-    ai_edit_undo_operation, ai_get_config, ai_inline_complete, ai_list_tools, ai_plan_task,
-    ai_propose_patch, ai_query_index,
-    ai_save_config, ai_save_credentials, ai_test_provider, ai_test_provider_config, analyze_script, apply_window_stage,
-    begin_startup_transition, cancel_terminal_run, close_terminal_session, commit_git_index,
-    create_ssh_directory, create_workspace_path, delete_ssh_path, delete_workspace_path,
-    detect_execution_environment, discard_git_paths, dispatch_script_to_terminal,
-    download_ssh_file, ensure_terminal_session, finalize_startup_transition, format_script,
-    get_git_file_baseline, get_git_repository_status, init_git_repository, list_ssh_config_hosts,
-    list_ssh_directory, list_workspace_entries, load_image_asset, load_script, rename_ssh_path,
-    rename_workspace_path, resize_terminal_session, save_script, search_workspace,
-    set_window_background, shutdown_all_terminal_sessions, stage_git_paths, test_ssh_connection,
-    unstage_git_paths, upload_ssh_file, write_terminal_input, TerminalSessionState,
-};
 use ai_edit::AiEditState;
+use commands::{
+    ai_agent_approve_plan, ai_agent_cancel, ai_agent_classify_task, ai_agent_get_run,
+    ai_agent_list_runs, ai_agent_pause, ai_agent_resolve_tool_confirmation, ai_agent_resume,
+    ai_agent_run_plan, ai_agent_run_step, ai_agent_set_network_permission, ai_apply_patch,
+    ai_build_index, ai_cancel, ai_chat, ai_chat_stream, ai_clear_credentials, ai_code_action,
+    ai_connect_provider, ai_edit_create_snapshot, ai_edit_get_auth_level, ai_edit_get_diff,
+    ai_edit_list_timeline, ai_edit_restore_snapshot, ai_edit_revert_file, ai_edit_revert_hunk,
+    ai_edit_revert_task, ai_edit_set_auth_level, ai_edit_undo_operation, ai_get_config,
+    ai_inline_complete, ai_list_tools, ai_plan_task, ai_propose_patch, ai_query_index,
+    ai_save_config, ai_save_credentials, ai_test_provider, ai_test_provider_config, ai_web_fetch,
+    ai_web_search, analyze_script, apply_window_stage, begin_startup_transition,
+    cancel_terminal_run, close_terminal_session, commit_git_index, create_ssh_directory,
+    create_workspace_path, delete_ssh_path, delete_workspace_path, detect_execution_environment,
+    discard_git_paths, dispatch_script_to_terminal, download_ssh_file, ensure_terminal_session,
+    finalize_startup_transition, format_script, get_git_file_baseline, get_git_repository_status,
+    init_git_repository, list_ssh_config_hosts, list_ssh_directory, list_workspace_entries,
+    load_image_asset, load_script, rename_ssh_path, rename_workspace_path, resize_terminal_session,
+    save_script, search_workspace, set_window_background, shutdown_all_terminal_sessions,
+    stage_git_paths, test_ssh_connection, unstage_git_paths, upload_ssh_file, write_terminal_input,
+    TerminalSessionState,
+};
 use tauri::{Manager, WindowEvent};
 
 #[cfg(windows)]
@@ -150,6 +154,17 @@ fn main() {
             ai_agent_classify_task,
             ai_plan_task,
             ai_agent_approve_plan,
+            ai_agent_run_plan,
+            ai_agent_run_step,
+            ai_agent_pause,
+            ai_agent_resume,
+            ai_agent_cancel,
+            ai_agent_get_run,
+            ai_agent_list_runs,
+            ai_agent_set_network_permission,
+            ai_agent_resolve_tool_confirmation,
+            ai_web_search,
+            ai_web_fetch,
             ai_build_index,
             ai_query_index,
             ai_propose_patch,

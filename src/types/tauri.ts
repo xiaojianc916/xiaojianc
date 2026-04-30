@@ -3,8 +3,16 @@ import type {
   IAiAgentApprovePlanRequest,
   IAiAgentClassifyTaskPayload,
   IAiAgentClassifyTaskRequest,
+  IAiAgentListRunsPayload,
+  IAiAgentNetworkPermissionPayload,
   IAiAgentPlanPayload,
   IAiAgentPlanRequest,
+  IAiAgentRunIdRequest,
+  IAiAgentRunPayload,
+  IAiAgentRunPlanRequest,
+  IAiAgentRunStepRequest,
+  IAiAgentResolveToolConfirmationRequest,
+  IAiAgentSetNetworkPermissionRequest,
   IAiApplyPatchPayload,
   IAiApplyPatchRequest,
   IAiBuildIndexPayload,
@@ -16,6 +24,7 @@ import type {
   IAiCodeActionRequest,
   IAiCodeActionResult,
   IAiConfigPayload,
+  TAiAgentStreamEvent,
   IAiInlineCompletionRequest,
   IAiInlineCompletionResult,
   IAiProposePatchPayload,
@@ -28,6 +37,10 @@ import type {
   IAiSaveConfigRequest,
   IAiSaveCredentialsRequest,
   IAiToolDefinitionPayload,
+  IAiWebFetchInput,
+  IAiWebFetchPayload,
+  IAiWebSearchInput,
+  IAiWebSearchPayload,
 } from './ai';
 import type {
   IAiEditAuthState,
@@ -220,11 +233,27 @@ export interface ITauriService {
   aiChatStream(payload: IAiChatRequest): Promise<IAiChatStreamPayload>;
   aiCancel(payload: { streamId: string }): Promise<void>;
   onAiChatStream(handler: (payload: IAiChatStreamEventPayload) => void): Promise<() => void>;
+  onAiAgentStream(handler: (payload: TAiAgentStreamEvent) => void): Promise<() => void>;
   aiInlineComplete(payload: IAiInlineCompletionRequest): Promise<IAiInlineCompletionResult>;
   aiCodeAction(payload: IAiCodeActionRequest): Promise<IAiCodeActionResult>;
   aiAgentClassifyTask(payload: IAiAgentClassifyTaskRequest): Promise<IAiAgentClassifyTaskPayload>;
   aiPlanTask(payload: IAiAgentPlanRequest): Promise<IAiAgentPlanPayload>;
   aiAgentApprovePlan(payload: IAiAgentApprovePlanRequest): Promise<IAiAgentApprovePlanPayload>;
+  aiAgentRunPlan(payload: IAiAgentRunPlanRequest): Promise<IAiAgentRunPayload>;
+  aiAgentRunStep(payload: IAiAgentRunStepRequest): Promise<IAiAgentRunPayload>;
+  aiAgentPause(payload: IAiAgentRunIdRequest): Promise<IAiAgentRunPayload>;
+  aiAgentResume(payload: IAiAgentRunIdRequest): Promise<IAiAgentRunPayload>;
+  aiAgentCancel(payload: IAiAgentRunIdRequest): Promise<IAiAgentRunPayload>;
+  aiAgentGetRun(payload: IAiAgentRunIdRequest): Promise<IAiAgentRunPayload>;
+  aiAgentListRuns(): Promise<IAiAgentListRunsPayload>;
+  aiWebSearch(payload: IAiWebSearchInput): Promise<IAiWebSearchPayload>;
+  aiWebFetch(payload: IAiWebFetchInput): Promise<IAiWebFetchPayload>;
+  aiAgentSetNetworkPermission(
+    payload: IAiAgentSetNetworkPermissionRequest,
+  ): Promise<IAiAgentNetworkPermissionPayload>;
+  aiAgentResolveToolConfirmation(
+    payload: IAiAgentResolveToolConfirmationRequest,
+  ): Promise<IAiAgentRunPayload>;
   aiBuildIndex(payload: IAiBuildIndexRequest): Promise<IAiBuildIndexPayload>;
   aiQueryIndex(payload: IAiQueryIndexRequest): Promise<IAiQueryIndexPayload>;
   aiProposePatch(payload: IAiProposePatchRequest): Promise<IAiProposePatchPayload>;

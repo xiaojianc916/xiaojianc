@@ -1,5 +1,10 @@
 import {
   aiAgentApprovePlanRequestSchema,
+  aiAgentSetNetworkPermissionRequestSchema,
+  aiAgentStepDetailSchema,
+  aiAgentTimelineItemSchema,
+  aiAgentRunPayloadSchema,
+  aiAgentRunPlanRequestSchema,
   aiAgentPermissionStateSchema,
   aiAgentPlanPayloadSchema,
 } from '@/types/ai-agent.schema';
@@ -57,5 +62,99 @@ describe('AI agent schema', () => {
     });
 
     expect(parsed.allowedHighRiskTools).toEqual(['run_command', 'create_commit']);
+  });
+
+  it('仅接受受控的网络权限值', () => {
+    const parsed = aiAgentSetNetworkPermissionRequestSchema.parse({
+      permission: 'allowed-this-run',
+    });
+
+    expect(parsed.permission).toBe('allowed-this-run');
+    expect(() =>
+      aiAgentSetNetworkPermissionRequestSchema.parse({
+        permission: 'always',
+      }),
+    ).toThrow();
+  });
+
+  it('校验 run_plan 请求与 run payload', () => {
+    const steps = [createStep(0), createStep(1)];
+    const request = aiAgentRunPlanRequestSchema.parse({
+      goal: '实现 Step Runtime',
+      steps,
+    });
+
+    expect(request.steps).toHaveLength(2);
+
+    const payload = aiAgentRunPayloadSchema.parse({
+      run: {
+        id: 'agent-run-1',
+        goal: request.goal,
+        status: 'running-plan',
+        steps,
+        currentStepId: null,
+        createdAt: '2026-04-29T10:00:00.000Z',
+        updatedAt: '2026-04-29T10:00:00.000Z',
+        startedAt: '2026-04-29T10:00:00.000Z',
+        completedAt: null,
+        errorMessage: null,
+      },
+    });
+
+    expect(payload.run.status).toBe('running-plan');
+  });
+
+  it('校验 step detail 仅包含来源摘要和 ref', () => {
+    const parsed = aiAgentStepDetailSchema.parse({
+      runId: 'run-1',
+      stepId: 'step-1',
+      updatedAt: '2026-04-29T10:00:00.000Z',
+      webSources: [{
+        id: 'web-source-1',
+        title: 'Tauri Docs',
+        url: 'https://tauri.app/start/',
+        sourceType: 'docs',
+        status: 'fetched',
+        queryPreview: 'Tauri docs',
+        fetchedAt: '2026-04-29T10:00:00.000Z',
+        textRef: 'web-text:abc',
+        excerpt: '短摘要',
+      }],
+      toolResults: [{
+        id: 'tool-result-1',
+        runId: 'run-1',
+        stepId: 'step-1',
+        toolName: 'web_fetch',
+        status: 'succeeded',
+        summary: '读取 1 个网页正文引用',
+        startedAt: '2026-04-29T10:00:00.000Z',
+        endedAt: '2026-04-29T10:00:01.000Z',
+        outputRef: 'web-text:abc',
+      }],
+    });
+
+    expect(parsed.webSources[0]?.textRef).toBe('web-text:abc');
+  });
+
+  it('校验 timeline item 只保存摘要与 ref', () => {
+    const parsed = aiAgentTimelineItemSchema.parse({
+      id: 'timeline-tool-1',
+      runId: 'run-1',
+      stepId: 'step-1',
+      type: 'tool-result',
+      title: 'web_fetch',
+      status: 'succeeded',
+      createdAt: '2026-04-29T10:00:01.000Z',
+      subtitle: '读取 1 个网页正文引用',
+      detailRef: 'web-text:abc',
+    });
+
+    expect(parsed.detailRef).toBe('web-text:abc');
+    expect(() =>
+      aiAgentTimelineItemSchema.parse({
+        ...parsed,
+        status: 'unknown',
+      }),
+    ).toThrow();
   });
 });

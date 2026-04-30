@@ -1,3 +1,5 @@
+import type { IAiDiffEditorPreview } from '@/types/ai-patch';
+
 export type TDocumentEncoding =
   | 'utf-8'
   | 'utf-8-bom'
@@ -6,7 +8,7 @@ export type TDocumentEncoding =
   | 'utf-16le'
   | 'utf-16be';
 
-export type TDocumentKind = 'text' | 'image';
+export type TDocumentKind = 'text' | 'image' | 'ai-diff';
 export type TExecutorKind = 'wsl';
 export type TLogLevel = 'info' | 'success' | 'error';
 export type TRunLogScope = 'run' | 'workspace' | 'editor' | 'system';
@@ -25,6 +27,7 @@ export interface IEditorDocument {
   isDirty: boolean;
   lineCount: number;
   charCount: number;
+  aiDiffPreview?: IAiDiffEditorPreview;
 }
 
 export interface ICommandTemplate {

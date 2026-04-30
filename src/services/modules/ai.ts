@@ -1,11 +1,23 @@
 ﻿import { tauriService } from '@/services/tauri';
 import type {
+  IAiEditGetDiffPayload,
+  IAiEditGetDiffRequest,
+} from '@/types/ai-edit';
+import type {
   IAiAgentApprovePlanPayload,
   IAiAgentApprovePlanRequest,
   IAiAgentClassifyTaskPayload,
   IAiAgentClassifyTaskRequest,
+  IAiAgentListRunsPayload,
+  IAiAgentNetworkPermissionPayload,
   IAiAgentPlanPayload,
   IAiAgentPlanRequest,
+  IAiAgentRunIdRequest,
+  IAiAgentRunPayload,
+  IAiAgentRunPlanRequest,
+  IAiAgentRunStepRequest,
+  IAiAgentResolveToolConfirmationRequest,
+  IAiAgentSetNetworkPermissionRequest,
   IAiApplyPatchPayload,
   IAiApplyPatchRequest,
   IAiBuildIndexPayload,
@@ -17,6 +29,7 @@ import type {
   IAiCodeActionRequest,
   IAiCodeActionResult,
   IAiConfigPayload,
+  TAiAgentStreamEvent,
   IAiInlineCompletionRequest,
   IAiInlineCompletionResult,
   IAiProposePatchPayload,
@@ -29,6 +42,10 @@ import type {
   IAiSaveConfigRequest,
   IAiSaveCredentialsRequest,
   IAiToolDefinitionPayload,
+  IAiWebFetchInput,
+  IAiWebFetchPayload,
+  IAiWebSearchInput,
+  IAiWebSearchPayload,
 } from '@/types/ai';
 
 export const aiService = {
@@ -65,6 +82,9 @@ export const aiService = {
   onChatStream(handler: (payload: IAiChatStreamEventPayload) => void): Promise<() => void> {
     return tauriService.onAiChatStream(handler);
   },
+  onAgentStream(handler: (payload: TAiAgentStreamEvent) => void): Promise<() => void> {
+    return tauriService.onAiAgentStream(handler);
+  },
   inlineComplete(payload: IAiInlineCompletionRequest): Promise<IAiInlineCompletionResult> {
     return tauriService.aiInlineComplete(payload);
   },
@@ -80,6 +100,43 @@ export const aiService = {
   approvePlan(payload: IAiAgentApprovePlanRequest): Promise<IAiAgentApprovePlanPayload> {
     return tauriService.aiAgentApprovePlan(payload);
   },
+  runPlan(payload: IAiAgentRunPlanRequest): Promise<IAiAgentRunPayload> {
+    return tauriService.aiAgentRunPlan(payload);
+  },
+  runStep(payload: IAiAgentRunStepRequest): Promise<IAiAgentRunPayload> {
+    return tauriService.aiAgentRunStep(payload);
+  },
+  pauseRun(payload: IAiAgentRunIdRequest): Promise<IAiAgentRunPayload> {
+    return tauriService.aiAgentPause(payload);
+  },
+  resumeRun(payload: IAiAgentRunIdRequest): Promise<IAiAgentRunPayload> {
+    return tauriService.aiAgentResume(payload);
+  },
+  cancelRun(payload: IAiAgentRunIdRequest): Promise<IAiAgentRunPayload> {
+    return tauriService.aiAgentCancel(payload);
+  },
+  getRun(payload: IAiAgentRunIdRequest): Promise<IAiAgentRunPayload> {
+    return tauriService.aiAgentGetRun(payload);
+  },
+  listRuns(): Promise<IAiAgentListRunsPayload> {
+    return tauriService.aiAgentListRuns();
+  },
+  setNetworkPermission(
+    payload: IAiAgentSetNetworkPermissionRequest,
+  ): Promise<IAiAgentNetworkPermissionPayload> {
+    return tauriService.aiAgentSetNetworkPermission(payload);
+  },
+  resolveToolConfirmation(
+    payload: IAiAgentResolveToolConfirmationRequest,
+  ): Promise<IAiAgentRunPayload> {
+    return tauriService.aiAgentResolveToolConfirmation(payload);
+  },
+  webSearch(payload: IAiWebSearchInput): Promise<IAiWebSearchPayload> {
+    return tauriService.aiWebSearch(payload);
+  },
+  webFetch(payload: IAiWebFetchInput): Promise<IAiWebFetchPayload> {
+    return tauriService.aiWebFetch(payload);
+  },
   buildIndex(payload: IAiBuildIndexRequest): Promise<IAiBuildIndexPayload> {
     return tauriService.aiBuildIndex(payload);
   },
@@ -91,6 +148,9 @@ export const aiService = {
   },
   applyPatch(payload: IAiApplyPatchRequest): Promise<IAiApplyPatchPayload> {
     return tauriService.aiApplyPatch(payload);
+  },
+  getEditDiff(payload: IAiEditGetDiffRequest): Promise<IAiEditGetDiffPayload> {
+    return tauriService.aiEditGetDiff(payload);
   },
   listTools(): Promise<IAiToolDefinitionPayload[]> {
     return tauriService.aiListTools();

@@ -23,8 +23,16 @@ import {
   aiAgentApprovePlanRequestSchema,
   aiAgentClassifyTaskPayloadSchema,
   aiAgentClassifyTaskRequestSchema,
+  aiAgentListRunsPayloadSchema,
+  aiAgentNetworkPermissionPayloadSchema,
   aiAgentPlanPayloadSchema,
   aiAgentPlanRequestSchema,
+  aiAgentRunIdRequestSchema,
+  aiAgentRunPayloadSchema,
+  aiAgentRunPlanRequestSchema,
+  aiAgentRunStepRequestSchema,
+  aiAgentResolveToolConfirmationRequestSchema,
+  aiAgentSetNetworkPermissionRequestSchema,
   aiApplyPatchMetadataSchema,
   aiChatPayloadSchema,
   aiChatRequestSchema,
@@ -38,6 +46,10 @@ import {
   aiProviderTestPayloadSchema,
   aiProviderTypeSchema,
   aiToolDefinitionPayloadSchema,
+  aiWebFetchInputSchema,
+  aiWebFetchPayloadSchema,
+  aiWebSearchInputSchema,
+  aiWebSearchPayloadSchema,
 } from '@/types/ai.schema';
 import { z } from 'zod';
 
@@ -584,6 +596,50 @@ export const tauriContracts = {
   aiAgentApprovePlan: {
     inSchema: aiAgentApprovePlanRequestSchema,
     outSchema: aiAgentApprovePlanPayloadSchema,
+  },
+  aiAgentRunPlan: {
+    inSchema: aiAgentRunPlanRequestSchema,
+    outSchema: aiAgentRunPayloadSchema,
+  },
+  aiAgentRunStep: {
+    inSchema: aiAgentRunStepRequestSchema,
+    outSchema: aiAgentRunPayloadSchema,
+  },
+  aiAgentPause: {
+    inSchema: aiAgentRunIdRequestSchema,
+    outSchema: aiAgentRunPayloadSchema,
+  },
+  aiAgentResume: {
+    inSchema: aiAgentRunIdRequestSchema,
+    outSchema: aiAgentRunPayloadSchema,
+  },
+  aiAgentCancel: {
+    inSchema: aiAgentRunIdRequestSchema,
+    outSchema: aiAgentRunPayloadSchema,
+  },
+  aiAgentGetRun: {
+    inSchema: aiAgentRunIdRequestSchema,
+    outSchema: aiAgentRunPayloadSchema,
+  },
+  aiAgentListRuns: {
+    inSchema: z.void(),
+    outSchema: aiAgentListRunsPayloadSchema,
+  },
+  aiAgentSetNetworkPermission: {
+    inSchema: aiAgentSetNetworkPermissionRequestSchema,
+    outSchema: aiAgentNetworkPermissionPayloadSchema,
+  },
+  aiAgentResolveToolConfirmation: {
+    inSchema: aiAgentResolveToolConfirmationRequestSchema,
+    outSchema: aiAgentRunPayloadSchema,
+  },
+  aiWebSearch: {
+    inSchema: aiWebSearchInputSchema,
+    outSchema: aiWebSearchPayloadSchema,
+  },
+  aiWebFetch: {
+    inSchema: aiWebFetchInputSchema,
+    outSchema: aiWebFetchPayloadSchema,
   },
   aiBuildIndex: {
     inSchema: z.object({

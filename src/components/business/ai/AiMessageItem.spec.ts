@@ -197,4 +197,41 @@ describe('AiMessageItem', () => {
       ['assistant-message', 'allow-agent-execution'],
     ]);
   });
+
+  it('以时间线样式展示工具调用活动并隐藏临时进度气泡', () => {
+    const wrapper = mount(AiMessageItem, {
+      props: {
+        message: createMessage({
+          content: 'AI 正在自动使用工具：搜索项目内容',
+          toolCalls: [
+            {
+              id: 'tool-1',
+              name: 'search_text',
+              status: 'succeeded',
+              summary: '搜索项目内容',
+            },
+            {
+              id: 'tool-2',
+              name: 'web_fetch',
+              status: 'running',
+              summary: 'registry.npmjs.org/mini-cc',
+            },
+          ],
+        }),
+        avatarUrl: null,
+        avatarAlt: 'AI',
+      },
+      global: {
+        stubs: {
+          AiMarkdown: { template: '<div class="markdown-stub" />' },
+        },
+      },
+    });
+
+    expect(wrapper.find('.ai-tool-activity-inline').exists()).toBe(true);
+    expect(wrapper.text()).toContain('已搜索：搜索项目内容');
+    expect(wrapper.text()).toContain('正在加载网页: registry.npmjs.org/mini-cc…');
+    expect(wrapper.find('.ai-tool-running-dots').exists()).toBe(true);
+    expect(wrapper.find('.ai-message-bubble').exists()).toBe(false);
+  });
 });

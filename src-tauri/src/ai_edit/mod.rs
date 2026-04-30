@@ -9,13 +9,11 @@ pub mod timeline;
 
 use crate::ai::audit::{self, AiAuditEventKind};
 use crate::commands::contracts::{
-    AiApplyPatchMetadataRequest,
-    AiEditAuthStatePayload, AiEditCreateSnapshotPayload, AiEditCreateSnapshotRequest,
-    AiEditGetDiffPayload, AiEditGetDiffRequest,
-    AiEditListTimelinePayload, AiEditListTimelineRequest,
-    AiEditRevertFilePayload, AiEditRevertFileRequest,
-    AiEditOperationPayload, AiEditRestoreSnapshotPayload, AiEditRestoreSnapshotRequest,
-    AiEditRevertHunkPayload, AiEditRevertHunkRequest,
+    AiApplyPatchMetadataRequest, AiEditAuthStatePayload, AiEditCreateSnapshotPayload,
+    AiEditCreateSnapshotRequest, AiEditGetDiffPayload, AiEditGetDiffRequest,
+    AiEditListTimelinePayload, AiEditListTimelineRequest, AiEditOperationPayload,
+    AiEditRestoreSnapshotPayload, AiEditRestoreSnapshotRequest, AiEditRevertFilePayload,
+    AiEditRevertFileRequest, AiEditRevertHunkPayload, AiEditRevertHunkRequest,
     AiEditRevertTaskPayload, AiEditRevertTaskRequest, AiEditSetAuthLevelRequest,
     AiEditTimelineEntryPayload, AiEditUndoOperationPayload, AiEditUndoOperationRequest,
     AiSnapshotPayload,
@@ -158,7 +156,10 @@ pub(crate) fn ensure_auto_apply_authorized(
     )
 }
 
-pub(crate) fn mark_snapshot_scope(state: &AiEditState, key: impl Into<String>) -> Result<bool, String> {
+pub(crate) fn mark_snapshot_scope(
+    state: &AiEditState,
+    key: impl Into<String>,
+) -> Result<bool, String> {
     let mut guard = state
         .snapshot_markers
         .lock()
@@ -173,7 +174,10 @@ pub fn list_timeline_with_state(
     stored_operations: Vec<AiEditOperationPayload>,
 ) -> Result<AiEditListTimelinePayload, String> {
     let entries = {
-        let guard = state.timeline.lock().map_err(|_| errors::state_poisoned())?;
+        let guard = state
+            .timeline
+            .lock()
+            .map_err(|_| errors::state_poisoned())?;
         let known_snapshot_ids = guard
             .iter()
             .filter_map(|entry| match entry {
@@ -213,7 +217,10 @@ pub fn append_operations(
 ) -> Result<(), String> {
     edit_journal::append_operations(storage_root, operations)?;
     {
-        let mut guard = state.timeline.lock().map_err(|_| errors::state_poisoned())?;
+        let mut guard = state
+            .timeline
+            .lock()
+            .map_err(|_| errors::state_poisoned())?;
         guard.extend(
             operations
                 .iter()
@@ -231,7 +238,10 @@ pub fn append_snapshot(
     snapshot: AiSnapshotPayload,
 ) -> Result<(), String> {
     {
-        let mut guard = state.timeline.lock().map_err(|_| errors::state_poisoned())?;
+        let mut guard = state
+            .timeline
+            .lock()
+            .map_err(|_| errors::state_poisoned())?;
         guard.push(AiEditTimelineEntryPayload::Snapshot(snapshot));
     }
     run_retention_policy_best_effort(state, storage_root);
@@ -256,7 +266,8 @@ fn apply_retention_policy(state: &AiEditState, storage_root: &Path) -> Result<()
         storage_root,
         RETAINED_SNAPSHOT_LIMIT,
         RETAINED_OPERATION_LIMIT,
-    )? else {
+    )?
+    else {
         return Ok(());
     };
 
@@ -331,14 +342,17 @@ fn apply_retention_policy_with_limits(
     }
 
     {
-        let mut guard = state.timeline.lock().map_err(|_| errors::state_poisoned())?;
+        let mut guard = state
+            .timeline
+            .lock()
+            .map_err(|_| errors::state_poisoned())?;
         guard.retain(|entry| match entry {
             AiEditTimelineEntryPayload::Snapshot(snapshot) => {
                 !snapshot_outcome.removed_snapshot_ids.contains(&snapshot.id)
             }
-            AiEditTimelineEntryPayload::Operation(operation) => {
-                !journal_outcome.removed_operation_ids.contains(&operation.id)
-            }
+            AiEditTimelineEntryPayload::Operation(operation) => !journal_outcome
+                .removed_operation_ids
+                .contains(&operation.id),
         });
     }
 
@@ -402,9 +416,7 @@ pub fn create_snapshot(
         }
 
         let content = fs::read_to_string(path).map_err(|error| {
-            errors::snapshot_store_failed(format!(
-                "读取手动快照文件失败（{file_ref}）：{error}"
-            ))
+            errors::snapshot_store_failed(format!("读取手动快照文件失败（{file_ref}）：{error}"))
         })?;
         let content_hash = crate::ai_patch::hash_text(&content);
         file_buffers.push((file_ref.clone(), content_hash, content));
@@ -424,13 +436,11 @@ pub fn create_snapshot(
         reason: Some(label.clone()),
         tool_call_id: None,
         confirmed_by_user: Some(true),
+        agent_run_id: None,
+        agent_step_id: None,
     };
-    let snapshot = snapshot::store_manual_snapshot(
-        storage_root,
-        &snapshot_sources,
-        Some(&metadata),
-        &label,
-    )?;
+    let snapshot =
+        snapshot::store_manual_snapshot(storage_root, &snapshot_sources, Some(&metadata), &label)?;
 
     append_snapshot(state, storage_root, snapshot.clone())?;
 
@@ -572,6 +582,8 @@ mod tests {
                 reason: None,
                 tool_call_id: None,
                 confirmed_by_user: None,
+                agent_run_id: None,
+                agent_step_id: None,
             }),
         )
         .expect_err("manual mode should block patch apply");
@@ -599,6 +611,8 @@ mod tests {
                 reason: None,
                 tool_call_id: None,
                 confirmed_by_user: None,
+                agent_run_id: None,
+                agent_step_id: None,
             }),
         )
         .expect("matching task id should pass");
@@ -624,6 +638,8 @@ mod tests {
                 reason: None,
                 tool_call_id: None,
                 confirmed_by_user: None,
+                agent_run_id: None,
+                agent_step_id: None,
             }),
         )
         .expect_err("mismatched task id should be rejected");
@@ -643,6 +659,8 @@ mod tests {
                 reason: None,
                 tool_call_id: None,
                 confirmed_by_user: Some(true),
+                agent_run_id: None,
+                agent_step_id: None,
             }),
         )
         .expect("user confirmed patch should bypass auto-apply gate");

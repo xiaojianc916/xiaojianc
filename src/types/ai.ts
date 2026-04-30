@@ -1,4 +1,4 @@
-﻿import type { IAiCodeBlock } from '@/types/ai-code';
+import type { IAiCodeBlock } from '@/types/ai-code';
 import type { IAiContextReference } from '@/types/ai-context';
 
 export type TAiProviderType =
@@ -22,19 +22,75 @@ export type {
 } from '@/types/ai-context';
 
 export type {
+  IAiWebFetchInput,
+  IAiWebFetchPayload,
+  IAiWebFetchResult,
+  IAiWebActivity,
+  IAiWebSearchInput,
+  IAiWebSearchPayload,
+  IAiWebSearchResult,
+  IAiWebSourceEntry,
+  TAiWebSearchIntent,
+  TAiWebSearchRecency,
+  TAiWebActivityState,
+  TAiWebSourceEntryStatus,
+  TAiWebSourceType,
+} from '@/types/ai-web';
+
+export type {
+  IAiAgentChangedFile,
+  IAiAgentPatchSummary,
+  IAiDiffHunkPreview,
+  IAiDiffEditorPreview,
+  IAiDiffPreviewLine,
+  TAiAgentChangedFileStatus,
+  TAiDiffPreviewLineKind,
+} from '@/types/ai-patch';
+
+export type {
+  IAiAgentStreamErrorPayload,
+  IAiToolActivityInline,
+  TAiAgentStreamEndReason,
+  TAiAgentStreamEvent,
+  TAiToolActivityState,
+} from '@/types/ai-stream';
+
+export type {
   IAiAgentApprovePlanPayload,
   IAiAgentApprovePlanRequest,
   IAiAgentClassifyTaskPayload,
   IAiAgentClassifyTaskRequest,
+  IAiAgentNetworkPermissionPayload,
   IAiAgentPermissionState,
   IAiAgentPlanPayload,
   IAiAgentPlanReference,
   IAiAgentPlanRequest,
+  IAiAgentListRunsPayload,
   IAiTaskPlanStep,
+  IAiAgentRun,
+  IAiAgentRunIdRequest,
+  IAiAgentRunPayload,
+  IAiAgentRunPlanRequest,
+  IAiAgentRunStepRequest,
+  IAiAgentResolveToolConfirmationRequest,
+  IAiAgentSetNetworkPermissionRequest,
+  IAiAgentStepDetail,
+  IAiAgentStepToolResultSummary,
+  IAiAgentStepWebSourceSummary,
+  IAiAgentTimelineItem,
+  IAiToolConfirmationOption,
+  IAiToolConfirmationRequest,
+  TAiAgentNetworkPermission,
   TAiAgentPlanRiskLevel,
   TAiAgentPlanStepKind,
   TAiAgentPlanStepStatus,
+  TAiAgentRunStatus,
   TAiAgentTaskClassification,
+  TAiAgentTimelineItemStatus,
+  TAiAgentTimelineItemType,
+  TAiToolConfirmationDecision,
+  TAiToolConfirmationOptionId,
+  TAiToolConfirmationOptionTone,
 } from '@/types/ai-agent';
 
 export interface IAiChatStreamRenderState {
@@ -267,6 +323,8 @@ export interface IAiApplyPatchMetadata {
   reason?: string | null;
   toolCallId?: string | null;
   confirmedByUser?: boolean | null;
+  agentRunId?: string | null;
+  agentStepId?: string | null;
 }
 
 export interface IAiApplyPatchRequest {

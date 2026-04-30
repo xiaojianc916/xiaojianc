@@ -19,15 +19,9 @@
         </p>
       </template>
     </section>
-    <EditorContextMenu
-      :open="contextMenuState.open"
-      :x="contextMenuState.x"
-      :y="contextMenuState.y"
-      :groups="contextMenuGroups"
-      :theme="props.theme"
-      :submenu-direction="submenuDirection"
-      @select="handleContextMenuItemSelect"
-    />
+    <EditorContextMenu :open="contextMenuState.open" :x="contextMenuState.x" :y="contextMenuState.y"
+      :groups="contextMenuGroups" :theme="props.theme" :submenu-direction="submenuDirection"
+      @select="handleContextMenuItemSelect" />
   </div>
 </template>
 
@@ -37,18 +31,17 @@ import EditorContextMenu from '@/components/editor/EditorContextMenu.vue';
 import { useEditorContextMenu } from '@/composables/useEditorContextMenu';
 import { aiService } from '@/services/modules/ai';
 import { useEditorStore } from '@/store/editor';
+import type { IAiCodeActionRequest, IAiCodeActionResult } from '@/types/ai';
 import type { TThemeMode } from '@/types/app';
-import type { IAnalyzeScriptPayload, TScriptDiagnosticSeverity } from '@/types/editor';
-import type { IEditorSelectionSummary } from '@/types/editor';
+import type { IAnalyzeScriptPayload, IEditorSelectionSummary, TScriptDiagnosticSeverity } from '@/types/editor';
 import type { IGitFileBaselinePayload } from '@/types/git';
 import type { IEditorSettings } from '@/types/settings';
-import type { IAiCodeActionRequest, IAiCodeActionResult } from '@/types/ai';
 import { computeGitLineChanges } from '@/utils/git-diff';
 import { applyMonacoTheme, monaco } from '@/utils/monaco';
 import {
-    SHELL_WINDOW_RESIZE_END_EVENT,
-    SHELL_WINDOW_RESIZE_SETTLED_EVENT,
-    SHELL_WINDOW_RESIZE_START_EVENT,
+  SHELL_WINDOW_RESIZE_END_EVENT,
+  SHELL_WINDOW_RESIZE_SETTLED_EVENT,
+  SHELL_WINDOW_RESIZE_START_EVENT,
 } from '@/utils/window-resize-events';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
@@ -387,13 +380,26 @@ const buildGitDecorations = (): monaco.editor.IModelDeltaDecoration[] => {
   const currentContent = props.modelValue ?? '';
   const gitBaseline = props.gitBaseline;
 
+  const resolveDiffLineCount = (content: string): number => {
+    if (content.length === 0) {
+      return 0;
+    }
+
+    const lines = content.split('\n');
+    if (lines.length > 1 && lines[lines.length - 1] === '') {
+      lines.pop();
+    }
+
+    return lines.length;
+  };
+
   if (!gitBaseline?.available || !gitBaseline.repositoryRootPath) {
     return [];
   }
 
   const lineChanges = !gitBaseline.isTracked
     ? (() => {
-      const lineCount = currentContent.length === 0 ? 0 : currentContent.split('\n').length;
+      const lineCount = resolveDiffLineCount(currentContent);
       return lineCount === 0
         ? []
         : [{ type: 'added', startLine: 1, endLine: lineCount }];
@@ -752,8 +758,12 @@ watch(
     }
 
     if (editorInstance.getValue() !== value) {
+      const viewState = editorInstance.saveViewState();
       suppressModelValueEmit = true;
       editorInstance.setValue(value);
+      if (viewState) {
+        editorInstance.restoreViewState(viewState);
+      }
       suppressModelValueEmit = false;
     }
 

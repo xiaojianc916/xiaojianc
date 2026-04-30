@@ -167,7 +167,11 @@ mod tests {
             ("node_modules/vue/index.js", true, "node_modules/**"),
             ("D:/repo/node_modules/vue/index.js", true, "node_modules/**"),
             ("src/node_modules_hint.ts", false, "node_modules/**"),
-            ("src-tauri/target/debug/app.exe", true, "src-tauri/target/**"),
+            (
+                "src-tauri/target/debug/app.exe",
+                true,
+                "src-tauri/target/**",
+            ),
             (
                 "D:/repo/src-tauri/target/debug/app.exe",
                 true,

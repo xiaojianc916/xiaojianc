@@ -658,6 +658,8 @@ pub struct AiApplyPatchMetadataRequest {
     pub(crate) reason: Option<String>,
     pub(crate) tool_call_id: Option<String>,
     pub(crate) confirmed_by_user: Option<bool>,
+    pub(crate) agent_run_id: Option<String>,
+    pub(crate) agent_step_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -678,6 +680,122 @@ pub struct AiApplyPatchFilePayload {
 #[serde(rename_all = "camelCase")]
 pub struct AiApplyPatchPayload {
     pub(crate) applied_files: Vec<AiApplyPatchFilePayload>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentChangedFilePayload {
+    pub(crate) path: String,
+    pub(crate) status: String,
+    pub(crate) additions: u32,
+    pub(crate) deletions: u32,
+    pub(crate) diff_ref: String,
+    pub(crate) rollback_ref: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentPatchSummaryPayload {
+    pub(crate) id: String,
+    pub(crate) run_id: String,
+    pub(crate) step_id: String,
+    pub(crate) files: Vec<AiAgentChangedFilePayload>,
+    pub(crate) total_additions: u32,
+    pub(crate) total_deletions: u32,
+    pub(crate) patch_ref: String,
+    pub(crate) applied_at: Option<String>,
+    pub(crate) reverted_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentPatchSummaryStreamEventPayload {
+    pub(crate) event: String,
+    pub(crate) seq: u64,
+    pub(crate) run_id: String,
+    pub(crate) summary: AiAgentPatchSummaryPayload,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentRunStreamEventPayload {
+    pub(crate) event: String,
+    pub(crate) seq: u64,
+    pub(crate) run_id: String,
+    pub(crate) run: AiAgentRunPayload,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentStepStreamEventPayload {
+    pub(crate) event: String,
+    pub(crate) seq: u64,
+    pub(crate) run_id: String,
+    pub(crate) step: AiTaskPlanStepPayload,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiToolActivityInlinePayload {
+    pub(crate) id: String,
+    pub(crate) step_id: String,
+    pub(crate) tool_name: String,
+    pub(crate) state: String,
+    pub(crate) label: String,
+    pub(crate) target_preview: Option<String>,
+    pub(crate) started_at: String,
+    pub(crate) elapsed_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentToolActivityStreamEventPayload {
+    pub(crate) event: String,
+    pub(crate) seq: u64,
+    pub(crate) run_id: String,
+    pub(crate) activity: AiToolActivityInlinePayload,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiToolConfirmationOptionPayload {
+    pub(crate) id: String,
+    pub(crate) label: String,
+    pub(crate) tone: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiToolConfirmationRequestPayload {
+    pub(crate) id: String,
+    pub(crate) run_id: String,
+    pub(crate) step_id: String,
+    pub(crate) tool_name: String,
+    pub(crate) question: String,
+    pub(crate) summary: String,
+    pub(crate) risk_level: String,
+    pub(crate) impact: Option<String>,
+    pub(crate) reversible: bool,
+    pub(crate) created_at: String,
+    pub(crate) options: Vec<AiToolConfirmationOptionPayload>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentToolConfirmationStreamEventPayload {
+    pub(crate) event: String,
+    pub(crate) seq: u64,
+    pub(crate) run_id: String,
+    pub(crate) confirmation: AiToolConfirmationRequestPayload,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentStreamEndEventPayload {
+    pub(crate) event: String,
+    pub(crate) seq: u64,
+    pub(crate) run_id: String,
+    pub(crate) reason: String,
 }
 
 // ============================================================================
@@ -932,6 +1050,38 @@ pub struct AiTaskPlanReferencePayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AiRunCommandToolInputPayload {
+    pub(crate) command: String,
+    pub(crate) reason: String,
+    pub(crate) cwd_policy: String,
+    pub(crate) timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiStageFileToolInputPayload {
+    pub(crate) paths: Vec<String>,
+    pub(crate) reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiCreateCommitToolInputPayload {
+    pub(crate) message: String,
+    pub(crate) reason: String,
+    pub(crate) allow_empty: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentToolInputsPayload {
+    pub(crate) run_command: Option<AiRunCommandToolInputPayload>,
+    pub(crate) stage_file: Option<AiStageFileToolInputPayload>,
+    pub(crate) create_commit: Option<AiCreateCommitToolInputPayload>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AiTaskPlanStepPayload {
     pub(crate) id: String,
     pub(crate) index: usize,
@@ -942,6 +1092,7 @@ pub struct AiTaskPlanStepPayload {
     pub(crate) status: String,
     pub(crate) expected_output: String,
     pub(crate) tools: Vec<String>,
+    pub(crate) tool_inputs: Option<AiAgentToolInputsPayload>,
     pub(crate) references: Option<Vec<AiTaskPlanReferencePayload>>,
     pub(crate) is_active: Option<bool>,
     pub(crate) requires_user_approval: bool,
@@ -967,6 +1118,128 @@ pub struct AiAgentApprovePlanRequest {
 pub struct AiAgentApprovePlanPayload {
     pub(crate) approved_at: String,
     pub(crate) step_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentRunPayload {
+    pub(crate) id: String,
+    pub(crate) goal: String,
+    /// 已知值："running-plan" | "running-step" | "paused" | "completed"
+    /// | "failed" | "cancelled"。
+    pub(crate) status: String,
+    pub(crate) steps: Vec<AiTaskPlanStepPayload>,
+    pub(crate) current_step_id: Option<String>,
+    pub(crate) created_at: String,
+    pub(crate) updated_at: String,
+    pub(crate) started_at: Option<String>,
+    pub(crate) completed_at: Option<String>,
+    pub(crate) error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentRunPlanRequest {
+    pub(crate) goal: String,
+    pub(crate) steps: Vec<AiTaskPlanStepPayload>,
+    #[serde(default)]
+    pub(crate) context: Vec<AiContextReferencePayload>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentRunStepRequest {
+    pub(crate) run_id: String,
+    pub(crate) step_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentRunIdRequest {
+    pub(crate) run_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentRunEnvelopePayload {
+    pub(crate) run: AiAgentRunPayload,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentListRunsPayload {
+    pub(crate) runs: Vec<AiAgentRunPayload>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentSetNetworkPermissionRequest {
+    pub(crate) permission: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentResolveToolConfirmationRequest {
+    pub(crate) run_id: String,
+    pub(crate) confirmation_id: String,
+    pub(crate) decision: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAgentNetworkPermissionPayload {
+    pub(crate) permission: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiWebSearchInput {
+    pub(crate) query: String,
+    pub(crate) intent: String,
+    pub(crate) max_results: usize,
+    pub(crate) recency: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiWebSearchResultPayload {
+    pub(crate) title: String,
+    pub(crate) url: String,
+    pub(crate) snippet: String,
+    pub(crate) source_type: String,
+    pub(crate) fetched_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiWebSearchPayload {
+    pub(crate) results: Vec<AiWebSearchResultPayload>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiWebFetchInput {
+    pub(crate) url: String,
+    pub(crate) reason: String,
+    pub(crate) max_bytes: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiWebFetchResultPayload {
+    pub(crate) url: String,
+    pub(crate) title: String,
+    pub(crate) text_ref: String,
+    pub(crate) excerpt: String,
+    pub(crate) bytes: usize,
+    pub(crate) fetched_at: String,
+    pub(crate) truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiWebFetchPayload {
+    pub(crate) source: AiWebFetchResultPayload,
 }
 
 #[derive(Debug, Clone, Deserialize)]

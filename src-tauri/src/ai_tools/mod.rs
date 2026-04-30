@@ -8,3 +8,5 @@ pub mod registry;
 pub mod run_test;
 pub mod search_symbol;
 pub mod search_text;
+pub mod web_fetch;
+pub mod web_search;

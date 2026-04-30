@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
 import { useAiAssistant } from '@/composables/useAiAssistant';
+import { useAiAgentStore } from '@/store/aiAgent';
 import { useAiConversationStore } from '@/store/aiConversation';
 import type { IAiChatStreamEventPayload } from '@/types/ai';
 import type { IAnalyzeScriptPayload, IEditorDocument } from '@/types/editor';
@@ -604,5 +605,106 @@ describe('useAiAssistant streaming integration', () => {
         expect(document.value.charCount).toBe(8);
         expect(assistant.messages.value.at(-1)?.content).toBe('Patch 已应用：D:/test/xiaojianc.sh');
         expect(assistant.proposedPatch.value).toBeNull();
+    });
+
+    it('passes Agent run and step metadata when tool-loop applies a patch', async () => {
+        const { assistant, document } = createAssistantHarnessContext();
+        const agentStore = useAiAgentStore();
+
+        document.value.path = 'D:/test/xiaojianc.sh';
+        document.value.name = 'xiaojianc.sh';
+        document.value.content = 'echo old';
+        document.value.savedContent = 'echo old';
+
+        agentStore.upsertRun({
+            id: 'run-1',
+            goal: '更新当前脚本',
+            status: 'running-step',
+            currentStepId: 'step-1',
+            createdAt: '2026-04-29T10:00:00.000Z',
+            updatedAt: '2026-04-29T10:00:00.000Z',
+            startedAt: '2026-04-29T10:00:00.000Z',
+            completedAt: null,
+            errorMessage: null,
+            steps: [
+                {
+                    id: 'step-1',
+                    index: 0,
+                    title: '应用 patch',
+                    goal: '应用 patch',
+                    kind: 'edit',
+                    status: 'running',
+                    expectedOutput: '当前文件已更新',
+                    tools: ['propose_patch'],
+                    requiresUserApproval: true,
+                    riskLevel: 'medium',
+                },
+                {
+                    id: 'step-2',
+                    index: 1,
+                    title: '验证修改',
+                    goal: '验证修改',
+                    kind: 'verify',
+                    status: 'pending',
+                    expectedOutput: '验证结果',
+                    tools: ['get_diagnostics'],
+                    requiresUserApproval: false,
+                    riskLevel: 'low',
+                },
+            ],
+        });
+
+        aiServiceMock.queueStreamResponse(JSON.stringify({
+            type: 'tool_call',
+            name: 'propose_patch',
+            summary: '应用当前脚本 patch',
+            arguments: {
+                updatedContent: 'echo new',
+                summary: '更新输出',
+            },
+        }));
+        aiServiceMock.queueStreamResponse(JSON.stringify({
+            type: 'final',
+            content: '已完成。',
+        }));
+        aiServiceMock.proposePatch.mockResolvedValueOnce({
+            patch: {
+                summary: '更新输出',
+                files: [
+                    {
+                        path: 'D:/test/xiaojianc.sh',
+                        originalHash: 'fnv64:test',
+                        hunks: [
+                            {
+                                oldStart: 1,
+                                oldLines: 1,
+                                newStart: 1,
+                                newLines: 1,
+                                lines: ['-echo old', '+echo new'],
+                            },
+                        ],
+                    },
+                ],
+            },
+        });
+        aiServiceMock.applyPatch.mockResolvedValueOnce({
+            appliedFiles: [
+                {
+                    path: 'D:/test/xiaojianc.sh',
+                    byteSize: 8,
+                },
+            ],
+        });
+
+        await assistant.executeAgentRequest([], '更新当前脚本', []);
+
+        expect(aiServiceMock.applyPatch).toHaveBeenCalledWith(expect.objectContaining({
+            metadata: expect.objectContaining({
+                agentRunId: 'run-1',
+                agentStepId: 'step-1',
+                confirmedByUser: true,
+            }),
+        }));
+        expect(agentStore.getPatchSummaries('run-1')).toHaveLength(0);
     });
 });

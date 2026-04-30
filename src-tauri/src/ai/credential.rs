@@ -1,6 +1,7 @@
-﻿use super::errors;
+use super::errors;
 
 const SERVICE_NAME: &str = "calamex.ai";
+
 const OPENAI_COMPATIBLE_USER: &str = "openai-compatible";
 const OPENAI_USER: &str = "openai";
 const DEEPSEEK_USER: &str = "deepseek";
@@ -9,20 +10,37 @@ const DASHSCOPE_USER: &str = "dashscope";
 const ZHIPU_USER: &str = "zhipu";
 const SILICONFLOW_USER: &str = "siliconflow";
 
+const PROVIDER_ACCOUNTS: &[(&str, &str)] = &[
+    ("openai-compatible", OPENAI_COMPATIBLE_USER),
+    ("openai", OPENAI_USER),
+    ("deepseek", DEEPSEEK_USER),
+    ("moonshot", MOONSHOT_USER),
+    ("dashscope", DASHSCOPE_USER),
+    ("zhipu", ZHIPU_USER),
+    ("siliconflow", SILICONFLOW_USER),
+];
+
 pub struct CredentialStore;
 
 impl CredentialStore {
     pub fn save(provider_type: &str, api_key: &str) -> Result<(), String> {
         let account = provider_account(provider_type)?;
+        let trimmed_api_key = api_key.trim();
+
+        if trimmed_api_key.is_empty() {
+            return Err(errors::error("AI_PROVIDER_AUTH_FAILED", "请填写 API Key。"));
+        }
+
         keyring::Entry::new(SERVICE_NAME, account)
             .map_err(|error| errors::error("AI_PROVIDER_UNAVAILABLE", error.to_string()))?
-            .set_password(api_key)
+            .set_password(trimmed_api_key)
             .map_err(|error| errors::error("AI_PROVIDER_UNAVAILABLE", error.to_string()))
     }
 
     pub fn get(provider_type: &str) -> Result<String, String> {
         let account = provider_account(provider_type)?;
-        keyring::Entry::new(SERVICE_NAME, account)
+
+        let password = keyring::Entry::new(SERVICE_NAME, account)
             .map_err(|error| errors::error("AI_PROVIDER_UNAVAILABLE", error.to_string()))?
             .get_password()
             .map_err(|_| {
@@ -30,23 +48,39 @@ impl CredentialStore {
                     "AI_PROVIDER_AUTH_FAILED",
                     "未找到当前 Provider 的 API Key，请在 AI 设置里填写并保存。",
                 )
-            })
+            })?;
+
+        let trimmed = password.trim();
+
+        if trimmed.is_empty() {
+            return Err(errors::error(
+                "AI_PROVIDER_AUTH_FAILED",
+                "当前 Provider 的 API Key 为空，请在 AI 设置里重新填写并保存。",
+            ));
+        }
+
+        Ok(trimmed.to_string())
+    }
+
+    pub fn delete(provider_type: &str) -> Result<(), String> {
+        let account = provider_account(provider_type)?;
+
+        let entry = keyring::Entry::new(SERVICE_NAME, account)
+            .map_err(|error| errors::error("AI_PROVIDER_UNAVAILABLE", error.to_string()))?;
+
+        let _ = entry.delete_credential();
+
+        Ok(())
     }
 
     pub fn clear() -> Result<(), String> {
-        for account in [
-            OPENAI_COMPATIBLE_USER,
-            OPENAI_USER,
-            DEEPSEEK_USER,
-            MOONSHOT_USER,
-            DASHSCOPE_USER,
-            ZHIPU_USER,
-            SILICONFLOW_USER,
-        ] {
+        for (_, account) in PROVIDER_ACCOUNTS {
             let entry = keyring::Entry::new(SERVICE_NAME, account)
                 .map_err(|error| errors::error("AI_PROVIDER_UNAVAILABLE", error.to_string()))?;
+
             let _ = entry.delete_credential();
         }
+
         Ok(())
     }
 
@@ -56,17 +90,54 @@ impl CredentialStore {
 }
 
 fn provider_account(provider_type: &str) -> Result<&'static str, String> {
-    match provider_type {
-        "openai" => Ok(OPENAI_USER),
-        "deepseek" => Ok(DEEPSEEK_USER),
-        "moonshot" => Ok(MOONSHOT_USER),
-        "dashscope" => Ok(DASHSCOPE_USER),
-        "zhipu" => Ok(ZHIPU_USER),
-        "siliconflow" => Ok(SILICONFLOW_USER),
-        "openai-compatible" => Ok(OPENAI_COMPATIBLE_USER),
-        _ => Err(errors::error(
-            "AI_PROVIDER_NOT_CONFIGURED",
-            "当前 Provider 不需要或不支持保存凭证。",
-        )),
+    let normalized_provider_type = provider_type.trim();
+
+    PROVIDER_ACCOUNTS
+        .iter()
+        .find_map(|(candidate_provider_type, account)| {
+            (*candidate_provider_type == normalized_provider_type).then_some(*account)
+        })
+        .ok_or_else(|| {
+            errors::error(
+                "AI_PROVIDER_NOT_CONFIGURED",
+                "当前 Provider 不需要或不支持保存凭证。",
+            )
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        provider_account, DASHSCOPE_USER, DEEPSEEK_USER, MOONSHOT_USER, OPENAI_COMPATIBLE_USER,
+        OPENAI_USER, SILICONFLOW_USER, ZHIPU_USER,
+    };
+
+    #[test]
+    fn provider_account_resolves_supported_providers() {
+        assert_eq!(
+            provider_account("openai-compatible").unwrap(),
+            OPENAI_COMPATIBLE_USER
+        );
+        assert_eq!(provider_account("openai").unwrap(), OPENAI_USER);
+        assert_eq!(provider_account("deepseek").unwrap(), DEEPSEEK_USER);
+        assert_eq!(provider_account("moonshot").unwrap(), MOONSHOT_USER);
+        assert_eq!(provider_account("dashscope").unwrap(), DASHSCOPE_USER);
+        assert_eq!(provider_account("zhipu").unwrap(), ZHIPU_USER);
+        assert_eq!(provider_account("siliconflow").unwrap(), SILICONFLOW_USER);
+    }
+
+    #[test]
+    fn provider_account_trims_provider_type() {
+        assert_eq!(provider_account(" openai ").unwrap(), OPENAI_USER);
+    }
+
+    #[test]
+    fn provider_account_rejects_mock_provider() {
+        assert!(provider_account("mock").is_err());
+    }
+
+    #[test]
+    fn provider_account_rejects_unknown_provider() {
+        assert!(provider_account("unknown-provider").is_err());
     }
 }

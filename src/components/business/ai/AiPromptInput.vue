@@ -293,7 +293,7 @@ onMounted(() => {
 }
 
 .ai-icon-button:disabled {
-  cursor: not-allowed;
+  cursor: default;
   opacity: 0.42;
 }
 

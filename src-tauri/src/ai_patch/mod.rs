@@ -7,10 +7,11 @@ pub mod validator;
 use crate::ai::audit::{self, AiAuditEventKind};
 use crate::ai::errors;
 use crate::ai_edit::auto_apply::{self, AiAutoApplyOperationKind, AiAutoApplyOperationPlan};
-use crate::ai_edit::AiEditState;
 use crate::ai_edit::protected_paths;
+use crate::ai_edit::AiEditState;
 use crate::commands::contracts::{
-    AiApplyPatchFilePayload, AiApplyPatchPayload, AiApplyPatchRequest, AiPatchFilePayload,
+    AiAgentChangedFilePayload, AiAgentPatchSummaryPayload, AiApplyPatchFilePayload,
+    AiApplyPatchMetadataRequest, AiApplyPatchPayload, AiApplyPatchRequest, AiPatchFilePayload,
     AiPatchHunkPayload, AiPatchSetPayload, AiProposePatchPayload, AiProposePatchRequest,
 };
 use std::fs;
@@ -18,6 +19,8 @@ use std::path::{Path, PathBuf};
 
 const FNV_OFFSET: u64 = 0xcbf29ce484222325;
 const FNV_PRIME: u64 = 0x100000001b3;
+const AED_DIFF_REF_PREFIX: &str = "aed-diff:";
+const AED_PATCH_REF_PREFIX: &str = "aed-patch:";
 
 pub fn propose_patch(payload: AiProposePatchRequest) -> Result<AiProposePatchPayload, String> {
     if payload.path.trim().is_empty() {
@@ -126,7 +129,10 @@ pub fn apply_patch(
 
     if applied_files.is_empty() {
         audit::emit(AiAuditEventKind::PatchFailed);
-        return Err(errors::error("AI_PATCH_APPLY_FAILED", "Patch 未产生任何写入结果。"));
+        return Err(errors::error(
+            "AI_PATCH_APPLY_FAILED",
+            "Patch 未产生任何写入结果。",
+        ));
     }
 
     tracing::info!(
@@ -156,6 +162,129 @@ pub fn hash_text(value: &str) -> String {
         hash = hash.wrapping_mul(FNV_PRIME);
     }
     format!("fnv64:{hash:016x}")
+}
+
+pub fn build_agent_patch_summary(
+    patch: &AiPatchSetPayload,
+    applied_files: &[AiApplyPatchFilePayload],
+    metadata: &AiApplyPatchMetadataRequest,
+    applied_at: String,
+    seq: u64,
+) -> Option<AiAgentPatchSummaryPayload> {
+    let task_id = metadata.task_id.as_deref()?.trim();
+    let run_id = metadata.agent_run_id.as_deref()?.trim();
+    let step_id = metadata.agent_step_id.as_deref()?.trim();
+
+    if task_id.is_empty() || run_id.is_empty() || step_id.is_empty() || applied_files.is_empty() {
+        return None;
+    }
+
+    let files = patch
+        .files
+        .iter()
+        .filter(|file| {
+            applied_files
+                .iter()
+                .any(|applied_file| paths_equal(&applied_file.path, &file.path))
+        })
+        .map(|file| {
+            let (additions, deletions) = count_patch_file_stats(file);
+            AiAgentChangedFilePayload {
+                path: file.path.clone(),
+                status: infer_changed_file_status(file, additions, deletions),
+                additions,
+                deletions,
+                diff_ref: build_aed_diff_ref(task_id, &file.path),
+                rollback_ref: None,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if files.is_empty() {
+        return None;
+    }
+
+    let total_additions = files.iter().map(|file| file.additions).sum::<u32>();
+    let total_deletions = files.iter().map(|file| file.deletions).sum::<u32>();
+
+    Some(AiAgentPatchSummaryPayload {
+        id: format!("patch-summary:{run_id}:{step_id}:{seq}"),
+        run_id: run_id.to_string(),
+        step_id: step_id.to_string(),
+        files,
+        total_additions,
+        total_deletions,
+        patch_ref: format!("{AED_PATCH_REF_PREFIX}{}", percent_encode(task_id)),
+        applied_at: Some(applied_at),
+        reverted_at: None,
+    })
+}
+
+fn count_patch_file_stats(file: &AiPatchFilePayload) -> (u32, u32) {
+    file.hunks.iter().flat_map(|hunk| hunk.lines.iter()).fold(
+        (0, 0),
+        |(additions, deletions), line| {
+            if line.starts_with('+') && !line.starts_with("+++") {
+                (additions + 1, deletions)
+            } else if line.starts_with('-') && !line.starts_with("---") {
+                (additions, deletions + 1)
+            } else {
+                (additions, deletions)
+            }
+        },
+    )
+}
+
+fn infer_changed_file_status(file: &AiPatchFilePayload, additions: u32, deletions: u32) -> String {
+    if additions > 0 && deletions == 0 && file.hunks.iter().all(|hunk| hunk.old_lines == 0) {
+        return "added".to_string();
+    }
+
+    if deletions > 0 && additions == 0 && file.hunks.iter().all(|hunk| hunk.new_lines == 0) {
+        return "deleted".to_string();
+    }
+
+    "modified".to_string()
+}
+
+fn build_aed_diff_ref(task_id: &str, path: &str) -> String {
+    format!(
+        "{AED_DIFF_REF_PREFIX}{}:{}",
+        percent_encode(task_id),
+        percent_encode(path)
+    )
+}
+
+fn percent_encode(value: &str) -> String {
+    let mut encoded = String::new();
+
+    for byte in value.as_bytes() {
+        let is_unreserved =
+            byte.is_ascii_alphanumeric() || matches!(*byte, b'-' | b'_' | b'.' | b'~');
+
+        if is_unreserved {
+            encoded.push(char::from(*byte));
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+
+    encoded
+}
+
+fn normalize_compare_path(value: &str) -> String {
+    let replaced = value.replace('\\', "/");
+    let stripped = replaced
+        .strip_prefix("//?/UNC/")
+        .map(|rest| format!("//{rest}"))
+        .or_else(|| replaced.strip_prefix("//?/").map(|rest| rest.to_string()))
+        .unwrap_or(replaced);
+
+    stripped.trim_end_matches('/').to_lowercase()
+}
+
+fn paths_equal(left: &str, right: &str) -> bool {
+    normalize_compare_path(left) == normalize_compare_path(right)
 }
 
 fn validate_patch(patch: &AiPatchSetPayload) -> Result<(), String> {
@@ -237,12 +366,14 @@ fn count_lines(value: &str) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_patch, hash_text, propose_patch, validate_writable_path};
+    use super::{
+        apply_patch, build_agent_patch_summary, hash_text, propose_patch, validate_writable_path,
+    };
     use crate::ai_edit::{self, edit_journal, AiEditState};
     use crate::commands::contracts::{
-        AiApplyPatchMetadataRequest, AiApplyPatchRequest, AiEditListTimelineRequest,
-        AiEditSetAuthLevelRequest, AiEditTimelineEntryPayload, AiPatchFilePayload,
-        AiPatchHunkPayload, AiPatchSetPayload, AiProposePatchRequest,
+        AiApplyPatchFilePayload, AiApplyPatchMetadataRequest, AiApplyPatchRequest,
+        AiEditListTimelineRequest, AiEditSetAuthLevelRequest, AiEditTimelineEntryPayload,
+        AiPatchFilePayload, AiPatchHunkPayload, AiPatchSetPayload, AiProposePatchRequest,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -341,9 +472,18 @@ mod tests {
 
         assert_eq!(result.applied_files.len(), 1);
         assert_eq!(timeline.entries.len(), 3);
-        assert!(matches!(timeline.entries[0], AiEditTimelineEntryPayload::Operation(_)));
-        assert!(matches!(timeline.entries[1], AiEditTimelineEntryPayload::Snapshot(_)));
-        assert!(matches!(timeline.entries[2], AiEditTimelineEntryPayload::Snapshot(_)));
+        assert!(matches!(
+            timeline.entries[0],
+            AiEditTimelineEntryPayload::Operation(_)
+        ));
+        assert!(matches!(
+            timeline.entries[1],
+            AiEditTimelineEntryPayload::Snapshot(_)
+        ));
+        assert!(matches!(
+            timeline.entries[2],
+            AiEditTimelineEntryPayload::Snapshot(_)
+        ));
         if let AiEditTimelineEntryPayload::Operation(operation) = &timeline.entries[0] {
             assert!(operation.source_snapshot_id.is_some());
         }
@@ -389,6 +529,8 @@ mod tests {
                     reason: None,
                     tool_call_id: None,
                     confirmed_by_user: None,
+                    agent_run_id: None,
+                    agent_step_id: None,
                 }),
             },
             &state,
@@ -397,7 +539,10 @@ mod tests {
         .expect_err("manual mode should block patch apply");
 
         assert!(error.contains("AI_EDIT_AUTH_BLOCKED"));
-        assert_eq!(fs::read_to_string(&file_path).expect("file should still exist"), "echo old");
+        assert_eq!(
+            fs::read_to_string(&file_path).expect("file should still exist"),
+            "echo old"
+        );
 
         let _ = fs::remove_file(&file_path);
         let _ = fs::remove_dir_all(&temp_dir);
@@ -449,6 +594,8 @@ mod tests {
                     reason: None,
                     tool_call_id: None,
                     confirmed_by_user: None,
+                    agent_run_id: None,
+                    agent_step_id: None,
                 }),
             },
             &state,
@@ -457,7 +604,10 @@ mod tests {
         .expect("session mode should allow patch apply");
 
         assert_eq!(result.applied_files.len(), 1);
-        assert_eq!(fs::read_to_string(&file_path).expect("patched file should exist"), "echo new");
+        assert_eq!(
+            fs::read_to_string(&file_path).expect("patched file should exist"),
+            "echo new"
+        );
 
         let _ = fs::remove_file(&file_path);
         let _ = fs::remove_dir_all(&temp_dir);
@@ -501,6 +651,8 @@ mod tests {
                     reason: None,
                     tool_call_id: None,
                     confirmed_by_user: Some(true),
+                    agent_run_id: None,
+                    agent_step_id: None,
                 }),
             },
             &state,
@@ -509,9 +661,69 @@ mod tests {
         .expect("manual mode should allow user confirmed patch apply");
 
         assert_eq!(result.applied_files.len(), 1);
-        assert_eq!(fs::read_to_string(&file_path).expect("patched file should exist"), "echo new");
+        assert_eq!(
+            fs::read_to_string(&file_path).expect("patched file should exist"),
+            "echo new"
+        );
 
         let _ = fs::remove_file(&file_path);
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn build_agent_patch_summary_uses_refs_and_stats_without_patch_body() {
+        let patch = AiPatchSetPayload {
+            summary: "更新 Agent 文件".to_string(),
+            files: vec![AiPatchFilePayload {
+                path: "D:/workspace/src/App.vue".to_string(),
+                original_hash: "fnv64:test".to_string(),
+                hunks: vec![AiPatchHunkPayload {
+                    old_start: 1,
+                    old_lines: 2,
+                    new_start: 1,
+                    new_lines: 3,
+                    lines: vec![
+                        "--- a/src/App.vue".to_string(),
+                        "+++ b/src/App.vue".to_string(),
+                        " const a = 1;".to_string(),
+                        "-const oldValue = true;".to_string(),
+                        "+const nextValue = true;".to_string(),
+                        "+const enabled = true;".to_string(),
+                    ],
+                }],
+            }],
+        };
+        let metadata = AiApplyPatchMetadataRequest {
+            task_id: Some("thread:1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+            reason: None,
+            tool_call_id: None,
+            confirmed_by_user: Some(true),
+            agent_run_id: Some("run-1".to_string()),
+            agent_step_id: Some("step-1".to_string()),
+        };
+        let summary = build_agent_patch_summary(
+            &patch,
+            &[AiApplyPatchFilePayload {
+                path: r"\\?\D:\workspace\src\App.vue".to_string(),
+                byte_size: 128,
+            }],
+            &metadata,
+            "2026-04-29T10:00:00Z".to_string(),
+            7,
+        )
+        .expect("summary should be built");
+
+        assert_eq!(summary.id, "patch-summary:run-1:step-1:7");
+        assert_eq!(summary.run_id, "run-1");
+        assert_eq!(summary.step_id, "step-1");
+        assert_eq!(summary.total_additions, 2);
+        assert_eq!(summary.total_deletions, 1);
+        assert_eq!(summary.patch_ref, "aed-patch:thread%3A1");
+        assert_eq!(summary.files.len(), 1);
+        assert_eq!(
+            summary.files[0].diff_ref,
+            "aed-diff:thread%3A1:D%3A%2Fworkspace%2Fsrc%2FApp.vue"
+        );
     }
 }

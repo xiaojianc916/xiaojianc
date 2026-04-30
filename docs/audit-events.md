@@ -39,7 +39,23 @@
 | `ai.edit.task_reverted` | 用户按任务回滚当前任务内全部有效 AED 编辑 | `traceId`, `task_id`, `reverted_operation_count`, `restored_file_count` | HIGH |
 | `ai.edit.snapshot_restored` | 用户恢复 AED 快照 | `traceId`, `snapshot_id`, `pre_revert_snapshot_id`, `restored_snapshot_id`, `task_id`, `restored_file_count` | HIGH |
 | `ai.agent.plan.created` | Agent 生成计划 | `traceId`, `goal_hash`, `step_count`, `classification` | HIGH |
+| `ai.agent.plan.updated` | 用户编辑、删除或重生成 Agent 计划 | `traceId`, `goal_hash`, `step_count`, `changed_field_count` | HIGH |
 | `ai.agent.plan.approved` | 用户批准 Agent 计划 | `traceId`, `goal_hash`, `step_count`, `approved_at` | HIGH |
+| `ai.agent.plan.rejected` | 用户拒绝或取消 Agent 计划 | `traceId`, `goal_hash`, `step_count` | HIGH |
+| `ai.agent.run.started` | Agent 计划开始执行 | `traceId`, `run_id`, `step_count`, `permission_level` | HIGH |
+| `ai.agent.run.completed` | Agent 计划执行完成 | `traceId`, `run_id`, `step_count`, `duration_ms` | HIGH |
+| `ai.agent.run.failed` | Agent 计划执行失败 | `traceId`, `run_id`, `failed_step_id`, `error_code` | HIGH |
+| `ai.agent.step.started` | Agent step 开始执行 | `traceId`, `run_id`, `step_id`, `tool_count` | HIGH |
+| `ai.agent.step.completed` | Agent step 执行完成 | `traceId`, `run_id`, `step_id`, `duration_ms` | HIGH |
+| `ai.agent.step.failed` | Agent step 执行失败 | `traceId`, `run_id`, `step_id`, `error_code` | HIGH |
+| `ai.agent.step.retried` | 用户重试 Agent step | `traceId`, `run_id`, `step_id`, `retry_count` | HIGH |
+| `ai.agent.web_search.requested` | Agent 请求网络搜索 | `traceId`, `run_id`, `step_id`, `query_hash`, `intent` | HIGH |
+| `ai.agent.web_search.approved` | 用户批准网络搜索 | `traceId`, `run_id`, `step_id`, `scope` | HIGH |
+| `ai.agent.web_search.denied` | 用户拒绝网络搜索 | `traceId`, `run_id`, `step_id`, `query_hash` | HIGH |
+| `ai.agent.web_fetch.requested` | Agent 请求读取网页 | `traceId`, `run_id`, `step_id`, `url_hash` | HIGH |
+| `ai.agent.web_fetch.completed` | 网页读取完成 | `traceId`, `run_id`, `step_id`, `url_hash`, `bytes`, `truncated` | HIGH |
+| `ai.agent.web_fetch.failed` | 网页读取失败 | `traceId`, `run_id`, `step_id`, `url_hash`, `error_code` | HIGH |
+| `ai.agent.replanned` | Agent 从某一步重新规划 | `traceId`, `run_id`, `from_step_id`, `new_step_count` | HIGH |
 | `ai.agent.permission.changed` | Agent 权限等级变化（standard/elevated） | `traceId`, `from_level`, `to_level`, `scope` | HIGH |
 
 ---

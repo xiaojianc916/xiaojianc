@@ -319,16 +319,21 @@
 
 <script setup lang="ts">
 import LinearContextMenu from '@/components/common/LinearContextMenu.vue';
-import type {
-  ILinearContextMenuGroup,
-  ILinearContextMenuItem,
-} from '@/components/common/linear-context-menu.types';
+import type { ILinearContextMenuItem } from '@/components/common/linear-context-menu.types';
 import { useDialog } from '@/composables/useDialog';
 import { useMessage } from '@/composables/useMessage';
+import {
+  useSourceControlActions,
+  type TGitEntryActionKey,
+} from '@/composables/useSourceControlActions';
+import {
+  useSourceControlContextMenu,
+  type TGitSectionKey,
+  type TSourceControlMenuGroup,
+} from '@/composables/useSourceControlContextMenu';
 import { useGitStore } from '@/store/git';
 import type {
   IGitFileStatusPayload,
-  IGitRepositoryStatusPayload,
   TGitChangeKind,
 } from '@/types/git';
 import { openExternalUrl } from '@/utils/browser';
@@ -349,21 +354,8 @@ const SOURCE_CONTROL_MENU_HEIGHT = 320;
 const SOURCE_CONTROL_MENU_VIEWPORT_PADDING = 12;
 const SOURCE_CONTROL_MENU_ROOT_SELECTOR = '.linear-context-menu-root';
 
-type TGitSectionKey = 'conflicts' | 'staged' | 'changes' | 'untracked';
 type TGitNavKey = 'changes' | 'history' | 'branches' | 'pull-requests' | 'stash';
-type TGitEntryActionKey = 'stage' | 'unstage' | 'discard';
 type TStatusTone = 'success' | 'warning' | 'danger' | 'loading';
-type TSourceControlMenuAction =
-  | 'refresh'
-  | 'stage-all'
-  | 'unstage-all'
-  | 'discard-all'
-  | 'commit'
-  | 'open-file'
-  | 'copy-path'
-  | 'stage-entry'
-  | 'unstage-entry'
-  | 'discard-entry';
 
 interface IGitSection {
   key: TGitSectionKey;
@@ -383,14 +375,6 @@ interface IGitNavItem {
   count: number;
   active: boolean;
 }
-
-interface ISourceControlMenuItem extends ILinearContextMenuItem {
-  action: TSourceControlMenuAction;
-  sectionKey?: TGitSectionKey;
-  entry?: IGitFileStatusPayload;
-}
-
-type TSourceControlMenuGroup = ILinearContextMenuGroup<ISourceControlMenuItem>;
 
 interface ISourceControlMenuState {
   open: boolean;
@@ -543,21 +527,6 @@ const syncRepositoryStatus = async (
     if (options?.showErrorMessage) {
       message.error(toErrorMessage(error, '刷新 Git 状态失败'));
     }
-  }
-};
-
-const assertWorkspaceRepositoryReady = (
-  payload: IGitRepositoryStatusPayload,
-  workspaceRootPath: string,
-): void => {
-  if (!payload.available || !payload.repositoryRootPath) {
-    throw new Error(payload.message ?? 'Git 初始化后仍未检测到仓库。');
-  }
-
-  if (!areFileSystemPathsEqual(payload.repositoryRootPath, workspaceRootPath)) {
-    throw new Error(
-      `Git 仓库根目录与当前工作区不一致：当前工作区 ${workspaceRootPath}，检测到 ${payload.repositoryRootPath}。`,
-    );
   }
 };
 
@@ -905,127 +874,6 @@ const selectNavItem = (key: TGitNavKey): void => {
   closeSourceControlMenu();
 };
 
-const collectPaths = (entries: IGitFileStatusPayload[]): string[] => entries.map((entry) => entry.path);
-
-const confirmDangerAction = async (options: {
-  title: string;
-  description: string;
-  confirmText: string;
-}): Promise<boolean> => {
-  const action = await dialog.confirm({
-    ...options,
-    cancelText: '取消',
-    variant: 'danger',
-  });
-
-  return action === 'confirm';
-};
-
-const handleRefresh = async (): Promise<void> => {
-  if (!props.workspaceRootPath) {
-    return;
-  }
-
-  sourceControlActionError.value = null;
-  await syncRepositoryStatus(props.workspaceRootPath, {
-    showSuccessMessage: true,
-    showErrorMessage: true,
-  });
-};
-
-const handleStageAll = async (): Promise<void> => {
-  const paths = collectPaths(stageableEntries.value);
-  if (paths.length === 0) {
-    message.info('没有可暂存的变更。');
-    return;
-  }
-
-  try {
-    await runWithPending('stage-all', async () => {
-      await gitStore.stagePaths(paths);
-    });
-    markStatusSynced();
-    message.success(`已暂存 ${paths.length} 项变更`);
-  } catch (error) {
-    message.error(toErrorMessage(error, '暂存全部变更失败'));
-  }
-};
-
-const handleUnstageAll = async (): Promise<void> => {
-  const paths = stagedPaths.value;
-  if (paths.length === 0) {
-    message.info('没有已暂存的变更。');
-    return;
-  }
-
-  try {
-    await runWithPending('unstage-all', async () => {
-      await gitStore.unstagePaths(paths);
-    });
-    markStatusSynced();
-    message.success(`已取消暂存 ${paths.length} 项变更`);
-  } catch (error) {
-    message.error(toErrorMessage(error, '取消暂存全部变更失败'));
-  }
-};
-
-const handleDiscardAll = async (): Promise<void> => {
-  const paths = collectPaths(discardableEntries.value);
-  if (paths.length === 0) {
-    message.info('没有可放弃的未暂存更改。');
-    return;
-  }
-
-  const confirmed = await confirmDangerAction({
-    title: '放弃所有未暂存更改？',
-    description: `将丢弃 ${paths.length} 项工作区更改；未跟踪文件会被删除。此操作无法撤销。`,
-    confirmText: '放弃更改',
-  });
-  if (!confirmed) {
-    return;
-  }
-
-  try {
-    await runWithPending('discard-all', async () => {
-      await gitStore.discardPaths(paths);
-    });
-    markStatusSynced();
-    message.success(`已放弃 ${paths.length} 项未暂存更改`);
-  } catch (error) {
-    message.error(toErrorMessage(error, '放弃未暂存更改失败'));
-  }
-};
-
-const handleInitRepository = async (): Promise<void> => {
-  const workspaceRootPath = props.workspaceRootPath;
-  if (!workspaceRootPath) {
-    return;
-  }
-
-  sourceControlActionError.value = null;
-
-  try {
-    const didRun = await runWithPending('init-repository', async () => {
-      const initializedStatus = await gitStore.initRepository(workspaceRootPath);
-      assertWorkspaceRepositoryReady(initializedStatus, workspaceRootPath);
-
-      const refreshedStatus = await gitStore.refreshRepositoryStatus(workspaceRootPath);
-      assertWorkspaceRepositoryReady(refreshedStatus, workspaceRootPath);
-    });
-
-    if (!didRun) {
-      return;
-    }
-
-    markStatusSynced();
-    message.success('Git 仓库已初始化');
-  } catch (error) {
-    const errorMessage = toErrorMessage(error, '初始化 Git 仓库失败');
-    sourceControlActionError.value = errorMessage;
-    message.error(errorMessage);
-  }
-};
-
 const handleOpenCloneGuide = (): void => {
   openExternalUrl(GIT_CLONE_GUIDE_URL);
 };
@@ -1038,233 +886,63 @@ const handleOpenFile = (path: string): void => {
   emit('open-file', path);
 };
 
-const handleCommit = async (): Promise<void> => {
-  const nextCommitMessage = commitMessage.value.trim();
-  if (!nextCommitMessage) {
-    message.warning('请先输入提交说明。');
-    return;
-  }
-
-  if (status.value.stagedCount === 0) {
-    message.warning('请先暂存至少一项变更。');
-    return;
-  }
-
-  try {
-    await runWithPending('commit', async () => {
-      const result = await gitStore.commitIndex(nextCommitMessage);
-      commitMessage.value = '';
-      markStatusSynced();
-      message.success(`已创建提交 ${result.commit.shortId}`);
-    });
-  } catch (error) {
-    message.error(toErrorMessage(error, '创建 Git 提交失败'));
-  }
-};
-
-const handleDiscardEntry = async (entry: IGitFileStatusPayload): Promise<void> => {
-  const confirmed = await confirmDangerAction({
-    title: entry.isUntracked ? '删除未跟踪文件？' : '放弃此文件的未暂存更改？',
-    description: entry.isUntracked
-      ? `将删除未跟踪文件 ${entry.relativePath}。此操作无法撤销。`
-      : `将把 ${entry.relativePath} 的工作区内容恢复到索引/HEAD。此操作无法撤销。`,
-    confirmText: entry.isUntracked ? '删除文件' : '放弃更改',
-  });
-  if (!confirmed) {
-    return;
-  }
-
-  try {
-    await runWithPending(`discard:${entry.path}`, async () => {
-      await gitStore.discardPaths([entry.path]);
-    });
-    markStatusSynced();
-    message.success(`已放弃更改 ${entry.fileName}`);
-  } catch (error) {
-    message.error(toErrorMessage(error, `放弃更改 ${entry.fileName} 失败`));
-  }
-};
-
-const handleEntryAction = async (
-  actionKey: TGitEntryActionKey,
-  sectionKey: TGitSectionKey,
-  entry: IGitFileStatusPayload,
-): Promise<void> => {
-  if (actionKey === 'discard') {
-    await handleDiscardEntry(entry);
-    return;
-  }
-
-  await handleSectionAction(sectionKey, entry);
-};
-
-const handleSectionAction = async (
-  sectionKey: TGitSectionKey,
-  entry: IGitFileStatusPayload,
-): Promise<void> => {
-  if (sectionKey === 'conflicts') {
-    return;
-  }
-
-  try {
-    if (sectionKey === 'staged') {
-      await runWithPending(`unstage:${entry.path}`, async () => {
-        await gitStore.unstagePaths([entry.path]);
-      });
-      markStatusSynced();
-      message.success(`已取消暂存 ${entry.fileName}`);
-      return;
-    }
-
-    await runWithPending(`stage:${entry.path}`, async () => {
-      await gitStore.stagePaths([entry.path]);
-    });
-    markStatusSynced();
-    message.success(`已暂存 ${entry.fileName}`);
-  } catch (error) {
-    message.error(toErrorMessage(error, 'Git 变更操作失败'));
-  }
-};
-
-const createMenuItem = (
-  item: Omit<ISourceControlMenuItem, 'children'> & {
-    children?: ISourceControlMenuItem[];
+const {
+  handleRefresh,
+  handleStageAll,
+  handleUnstageAll,
+  handleDiscardAll,
+  handleInitRepository,
+  handleCommit,
+  handleDiscardEntry,
+  handleSectionAction,
+  handleEntryAction,
+} = useSourceControlActions({
+  gitStore,
+  message,
+  dialog,
+  getWorkspaceRootPath: () => props.workspaceRootPath,
+  getStageableEntries: () => stageableEntries.value,
+  getStagedPaths: () => stagedPaths.value,
+  getDiscardableEntries: () => discardableEntries.value,
+  getStagedCount: () => status.value.stagedCount,
+  getCommitMessage: () => commitMessage.value,
+  setCommitMessage: (value) => {
+    commitMessage.value = value;
   },
-): ISourceControlMenuItem => item;
-
-const buildRepositoryMenuGroups = (): TSourceControlMenuGroup[] => [
-  {
-    key: 'repository',
-    title: 'Repository',
-    items: [
-      createMenuItem({
-        key: 'refresh',
-        label: '刷新状态',
-        icon: 'refresh',
-        shortcut: ['Ctrl', 'R'],
-        action: 'refresh',
-        disabled: isBusy.value,
-      }),
-    ],
+  runWithPending,
+  markStatusSynced,
+  setSourceControlActionError: (value) => {
+    sourceControlActionError.value = value;
   },
-  {
-    key: 'changes',
-    title: 'Changes',
-    items: [
-      createMenuItem({
-        key: 'stage-all',
-        label: '全部暂存',
-        icon: 'plus',
-        action: 'stage-all',
-        disabled: !canStageAll.value,
-      }),
-      createMenuItem({
-        key: 'unstage-all',
-        label: '全部取消暂存',
-        icon: 'minus',
-        action: 'unstage-all',
-        disabled: !canUnstageAll.value,
-      }),
-      createMenuItem({
-        key: 'discard-all',
-        label: '放弃所有未暂存更改',
-        icon: 'trash',
-        action: 'discard-all',
-        disabled: !canDiscardAll.value,
-      }),
-    ],
+  syncRepositoryStatus,
+});
+
+const {
+  buildRepositoryMenuGroups,
+  buildEntryMenuGroups,
+  handleContextMenuSelect: dispatchContextMenuSelect,
+} = useSourceControlContextMenu({
+  isBusy: () => isBusy.value,
+  canStageAll: () => canStageAll.value,
+  canUnstageAll: () => canUnstageAll.value,
+  canDiscardAll: () => canDiscardAll.value,
+  canCommit: () => canCommit.value,
+  onRefresh: handleRefresh,
+  onStageAll: handleStageAll,
+  onUnstageAll: handleUnstageAll,
+  onDiscardAll: handleDiscardAll,
+  onCommit: handleCommit,
+  onOpenFile: handleOpenFile,
+  onCopyPath: async (path) => {
+    await writeClipboardText(path);
+    message.success('已复制文件路径');
   },
-  {
-    key: 'commit',
-    title: 'Commit',
-    items: [
-      createMenuItem({
-        key: 'commit',
-        label: '提交已暂存更改',
-        icon: 'commit',
-        shortcut: ['Ctrl', 'Enter'],
-        action: 'commit',
-        disabled: !canCommit.value,
-      }),
-    ],
+  onStageEntry: handleSectionAction,
+  onUnstageEntry: async (entry) => {
+    await handleSectionAction('staged', entry);
   },
-];
-
-const buildEntryMenuGroups = (
-  sectionKey: TGitSectionKey,
-  entry: IGitFileStatusPayload,
-): TSourceControlMenuGroup[] => {
-  const changeItems: ISourceControlMenuItem[] = [];
-
-  if (sectionKey === 'staged') {
-    changeItems.push(
-      createMenuItem({
-        key: 'unstage-entry',
-        label: '取消暂存',
-        icon: 'minus',
-        action: 'unstage-entry',
-        sectionKey,
-        entry,
-        disabled: isBusy.value,
-      }),
-    );
-  } else if (sectionKey !== 'conflicts') {
-    changeItems.push(
-      createMenuItem({
-        key: 'stage-entry',
-        label: '暂存更改',
-        icon: 'plus',
-        action: 'stage-entry',
-        sectionKey,
-        entry,
-        disabled: isBusy.value,
-      }),
-      createMenuItem({
-        key: 'discard-entry',
-        label: entry.isUntracked ? '删除未跟踪文件' : '放弃更改',
-        icon: 'trash',
-        action: 'discard-entry',
-        sectionKey,
-        entry,
-        disabled: isBusy.value,
-      }),
-    );
-  }
-
-  return [
-    {
-      key: 'file',
-      title: 'File',
-      items: [
-        createMenuItem({
-          key: 'open-file',
-          label: '打开文件',
-          icon: 'goto',
-          action: 'open-file',
-          sectionKey,
-          entry,
-        }),
-        createMenuItem({
-          key: 'copy-path',
-          label: '复制路径',
-          icon: 'copy',
-          action: 'copy-path',
-          sectionKey,
-          entry,
-        }),
-      ],
-    },
-    ...(changeItems.length > 0
-      ? [
-        {
-          key: 'change',
-          title: 'Change',
-          items: changeItems,
-        },
-      ]
-      : []),
-  ];
-};
+  onDiscardEntry: handleDiscardEntry,
+});
 
 const handleMoreActions = (event: MouseEvent): void => {
   const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
@@ -1293,54 +971,8 @@ const handleEntryContextMenu = (
 };
 
 const handleContextMenuSelect = async (item: ILinearContextMenuItem): Promise<void> => {
-  const actionItem = item as ISourceControlMenuItem;
   closeSourceControlMenu();
-
-  switch (actionItem.action) {
-    case 'refresh':
-      await handleRefresh();
-      return;
-    case 'stage-all':
-      await handleStageAll();
-      return;
-    case 'unstage-all':
-      await handleUnstageAll();
-      return;
-    case 'discard-all':
-      await handleDiscardAll();
-      return;
-    case 'commit':
-      await handleCommit();
-      return;
-    case 'open-file':
-      if (actionItem.entry) {
-        handleOpenFile(actionItem.entry.path);
-      }
-      return;
-    case 'copy-path':
-      if (actionItem.entry) {
-        await writeClipboardText(actionItem.entry.path);
-        message.success('已复制文件路径');
-      }
-      return;
-    case 'stage-entry':
-      if (actionItem.entry && actionItem.sectionKey) {
-        await handleSectionAction(actionItem.sectionKey, actionItem.entry);
-      }
-      return;
-    case 'unstage-entry':
-      if (actionItem.entry) {
-        await handleSectionAction('staged', actionItem.entry);
-      }
-      return;
-    case 'discard-entry':
-      if (actionItem.entry) {
-        await handleDiscardEntry(actionItem.entry);
-      }
-      return;
-    default:
-      return;
-  }
+  await dispatchContextMenuSelect(item);
 };
 
 const isTargetInsideSourceControlMenu = (target: EventTarget | null): boolean =>
@@ -1398,7 +1030,7 @@ watch(
 );
 
 watch(
-  () => [props.isDesktopRuntime, props.workspaceRootPath],
+  [() => props.isDesktopRuntime, () => props.workspaceRootPath],
   ([ready, workspaceRootPath]) => {
     if (!ready || !workspaceRootPath) {
       gitStore.reset();
@@ -1406,7 +1038,6 @@ watch(
       sourceControlActionError.value = null;
       return;
     }
-
     void syncRepositoryStatus(workspaceRootPath);
   },
   { immediate: true },

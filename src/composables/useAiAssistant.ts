@@ -14,12 +14,14 @@ import { tauriService } from '@/services/tauri';
 import { useAiConversationStore } from '@/store/aiConversation';
 
 import type {
+  IAiApplyPatchMetadata,
   IAiChatMessage,
   IAiChatStreamEventPayload,
   IAiConfigPayload,
   IAiContextReference,
   IAiPatchSet,
   IAiProviderConnectionRequest,
+  IAiToolCall,
   IAiToolDefinitionPayload,
   TAiChatMessageActionId,
 } from '@/types/ai';
@@ -91,6 +93,11 @@ interface IAgentExecutionStep {
   id: string;
   title: string;
   status: TAgentExecutionStepStatus;
+}
+
+interface IActiveAgentPatchTarget {
+  runId: string;
+  stepId: string;
 }
 
 export interface IAiAttachedFile {
@@ -441,10 +448,15 @@ const mapStreamStatus = (
   return 'streaming';
 };
 
-const mapToolExecutionStatus = (
+const mapAgentStepExecutionStatus = (
   status: IAgentToolExecutionResult['status'],
 ): Extract<TAgentExecutionStepStatus, 'done' | 'failed'> =>
   status === 'succeeded' ? 'done' : 'failed';
+
+const mapToolCallExecutionStatus = (
+  status: IAgentToolExecutionResult['status'],
+): Extract<IAiToolCall['status'], 'succeeded' | 'failed'> =>
+  status === 'succeeded' ? 'succeeded' : 'failed';
 
 // ---------------------------------------------------------------------------
 // Public quick actions
@@ -506,6 +518,48 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
   const aiStream = useAiStream();
   const agentPlan = useAiAgentPlan();
+
+  const resolveActiveAgentPatchTarget = (): IActiveAgentPatchTarget | null => {
+    const activeRun = agentPlan.store.activeRun;
+
+    if (!activeRun) {
+      return null;
+    }
+
+    if (activeRun.currentStepId) {
+      return {
+        runId: activeRun.id,
+        stepId: activeRun.currentStepId,
+      };
+    }
+
+    const activeStep = activeRun.steps.find((step) => step.status === 'running' || step.isActive);
+
+    if (!activeStep) {
+      return null;
+    }
+
+    return {
+      runId: activeRun.id,
+      stepId: activeStep.id,
+    };
+  };
+
+  const buildActiveAgentPatchMetadata = (): Pick<
+    IAiApplyPatchMetadata,
+    'agentRunId' | 'agentStepId'
+  > | null => {
+    const target = resolveActiveAgentPatchTarget();
+
+    if (!target) {
+      return null;
+    }
+
+    return {
+      agentRunId: target.runId,
+      agentStepId: target.stepId,
+    };
+  };
 
   const replaceMessageById = (
     messageId: string,
@@ -819,6 +873,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
             updatedContent,
             summary: patchSummary,
           });
+          const activeAgentPatchMetadata = buildActiveAgentPatchMetadata();
 
           const result = await aiService.applyPatch({
             patch: payload.patch,
@@ -831,6 +886,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
               reason: payload.patch.summary,
               toolCallId: `agent-tool:${summary}`,
               confirmedByUser: true,
+              ...activeAgentPatchMetadata,
             },
           });
 
@@ -1013,17 +1069,18 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         );
 
         const result = await executeAgentTool(envelope);
-        const nextStatus = mapToolExecutionStatus(result.status);
+        const nextToolCallStatus = mapToolCallExecutionStatus(result.status);
+        const nextAgentStepStatus = mapAgentStepExecutionStatus(result.status);
         const toolCall = toolCalls.find((item) => item.id === toolCallId);
 
         if (toolCall) {
-          toolCall.status = nextStatus;
+          toolCall.status = nextToolCallStatus;
         }
 
         updateAgentStep(
           toolCallId,
           toolLabel,
-          nextStatus,
+          nextAgentStepStatus,
         );
 
         updateAgentExecutionMessage(

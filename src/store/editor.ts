@@ -1,4 +1,5 @@
 import type {
+  IAiDiffEditorPreview,
   IActiveRunSummary,
   IAnalyzeScriptPayload,
   IEditorDocument,
@@ -213,6 +214,7 @@ export const useEditorStore = defineStore('editor', () => {
   const syncSessionOpenTabs = (): void => {
     sessionSnapshot.value.openTabs = documents.value
       .filter((item) => Boolean(item.path))
+      .filter((item) => item.kind !== 'ai-diff')
       .slice(0, MAX_OPEN_TABS)
       .map((item, index) => ({
         path: item.path as string,
@@ -467,6 +469,35 @@ export const useEditorStore = defineStore('editor', () => {
     return { document: nextDocument, reusedExisting: false };
   };
 
+  const openAiDiffDocument = (
+    preview: IAiDiffEditorPreview,
+  ): { document: IEditorDocument; reusedExisting: boolean } => {
+    const existingDocument = documents.value.find(
+      (item) => item.kind === 'ai-diff' && item.aiDiffPreview?.id === preview.id,
+    );
+    if (existingDocument) {
+      existingDocument.aiDiffPreview = preview;
+      existingDocument.name = preview.title;
+      setActiveDocument(existingDocument.id);
+      touchSessionSnapshot();
+      return { document: existingDocument, reusedExisting: true };
+    }
+    const nextDocument = createDocument(documents.value, {
+      id: preview.id,
+      path: `ai-diff://${encodeURIComponent(preview.id)}`,
+      name: preview.title,
+      kind: 'ai-diff',
+      content: '',
+      savedContent: '',
+      aiDiffPreview: preview,
+    });
+    documents.value.push(nextDocument);
+    setActiveDocument(nextDocument.id);
+    syncSessionOpenTabs();
+    touchSessionSnapshot();
+    return { document: nextDocument, reusedExisting: false };
+  };
+
   const applyDocumentPayload = (
     documentId: string,
     payload: IScriptFilePayload,
@@ -716,6 +747,7 @@ export const useEditorStore = defineStore('editor', () => {
     createDocumentTab,
     openDocumentTab,
     openImageDocument,
+    openAiDiffDocument,
     applyDocumentPayload,
     updateDocumentContent,
     updateActiveDocumentContent,

@@ -115,12 +115,11 @@ pub fn query_index(payload: AiQueryIndexRequest) -> Result<AiQueryIndexPayload, 
         }
         let Ok(entry) = entry else { continue };
         let path = entry.path();
-        let Ok(metadata) = entry.metadata() else { continue };
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
 
-        if !metadata.is_file()
-            || metadata.len() > MAX_INDEX_FILE_BYTES
-            || is_sensitive_path(path)
-        {
+        if !metadata.is_file() || metadata.len() > MAX_INDEX_FILE_BYTES || is_sensitive_path(path) {
             continue;
         }
 
@@ -141,7 +140,9 @@ pub fn query_index(payload: AiQueryIndexRequest) -> Result<AiQueryIndexPayload, 
             continue;
         }
 
-        let Ok(content) = fs::read_to_string(path) else { continue };
+        let Ok(content) = fs::read_to_string(path) else {
+            continue;
+        };
 
         // 整文件 lowercase 一次性早退：未命中直接跳过，避免对每一行都做
         // to_lowercase 分配。命中后再进入逐行扫描定位行号。

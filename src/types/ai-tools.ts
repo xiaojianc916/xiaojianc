@@ -60,6 +60,8 @@ export const AI_READONLY_TOOL_NAMES = [
 ] as const;
 
 export const AI_CONFIRMATION_TOOL_NAMES = [
+  'web_search',
+  'web_fetch',
   'propose_patch',
   'auto_apply_patch',
   'run_test',

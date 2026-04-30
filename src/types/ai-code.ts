@@ -76,9 +76,15 @@ export interface IAiCodeBlock {
 }
 
 export interface IAiCodePathTarget {
+  kind?: 'file' | 'ai-diff';
   path: string;
   startLine: number | null;
   endLine: number | null;
+  title?: string;
+  diffRef?: string;
+  patchRef?: string;
+  runId?: string;
+  stepId?: string;
 }
 
 export type TAiMarkdownSegment =

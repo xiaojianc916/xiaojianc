@@ -5,27 +5,34 @@ use super::openai_compatible;
 use super::provider::{AiProviderChatRequest, AiProviderMessage, AiProviderResponse, MockProvider};
 use super::redaction::redact_text;
 use super::stream_manager;
+use crate::ai_agent::planner::AgentPlanner;
 use crate::commands::contracts::{
     AiAgentApprovePlanPayload, AiAgentApprovePlanRequest, AiAgentClassifyTaskPayload,
     AiAgentClassifyTaskRequest, AiAgentPlanPayload, AiAgentPlanRequest, AiChatRequest,
     AiCodeActionPayload, AiCodeActionRequest, AiConfigPayload, AiContextReferencePayload,
     AiInlineCompletionRangePayload, AiInlineCompletionRequest, AiInlineCompletionResult,
-    AiTaskPlanStepPayload,
 };
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Mutex, OnceLock,
+};
+use tauri::{AppHandle, Emitter, Manager};
 
 const MAX_AI_MESSAGES: usize = 32;
 const MAX_MESSAGE_CHARS: usize = 16_000;
 const MAX_CONTEXT_REFERENCES: usize = 8;
 const MAX_CONTEXT_BLOCK_CHARS: usize = 12_000;
 const MAX_REFERENCE_PREVIEW_CHARS: usize = 4_000;
+
 const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 const DEFAULT_OPENAI_MODEL: &str = "gpt-4.1-mini";
 const DEFAULT_MOCK_MODEL: &str = "mock-ide-assistant";
+
+static CONFIG: OnceLock<Mutex<AiRuntimeConfig>> = OnceLock::new();
+static STREAM_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct AiRuntimeConfig {
@@ -50,7 +57,34 @@ impl Default for AiRuntimeConfig {
     }
 }
 
-static CONFIG: OnceLock<Mutex<AiRuntimeConfig>> = OnceLock::new();
+struct AiProviderConnectionCandidate {
+    provider_type: String,
+    selected_model: Option<String>,
+    base_url: Option<String>,
+    api_key_for_test: Option<String>,
+    api_key_for_save: Option<String>,
+    inline_completion_enabled: bool,
+    chat_enabled: bool,
+    agent_enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiChatStreamEventPayload {
+    pub stream_id: String,
+    pub assistant_message_id: String,
+    pub kind: String,
+    pub delta: Option<String>,
+    pub message: Option<String>,
+    pub model: Option<String>,
+}
+
+pub struct AiChatStreamStart {
+    pub stream_id: String,
+    pub assistant_message_id: String,
+    pub provider_type: String,
+    pub model: String,
+}
 
 fn config_state() -> &'static Mutex<AiRuntimeConfig> {
     CONFIG.get_or_init(|| Mutex::new(load_config_from_disk().unwrap_or_default()))
@@ -61,6 +95,7 @@ pub fn get_config() -> AiConfigPayload {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .clone();
+
     to_payload(config)
 }
 
@@ -73,6 +108,7 @@ pub fn save_config(
     agent_enabled: bool,
 ) -> Result<AiConfigPayload, String> {
     validate_provider(provider_type)?;
+
     let normalized_base_url = normalize_base_url(provider_type, base_url)?;
     let model = selected_model
         .map(|value| value.trim().to_string())
@@ -82,48 +118,46 @@ pub fn save_config(
     let mut guard = config_state()
         .lock()
         .map_err(|_| errors::error("AI_PROVIDER_UNAVAILABLE", "AI 配置状态已损坏。"))?;
+
     guard.provider_type = provider_type.to_string();
     guard.selected_model = model;
     guard.base_url = normalized_base_url;
     guard.inline_completion_enabled = inline_completion_enabled;
     guard.chat_enabled = chat_enabled;
     guard.agent_enabled = agent_enabled;
+
     let payload = to_payload(guard.clone());
+
     persist_config(&guard)?;
     audit::emit(AiAuditEventKind::ConfigUpdated);
+
     Ok(payload)
 }
 
 pub fn save_credentials(provider_type: &str, api_key: &str) -> Result<AiConfigPayload, String> {
     validate_provider(provider_type)?;
+
     if provider_type == "mock" {
         return Err(errors::error(
             "AI_PROVIDER_NOT_CONFIGURED",
             "MockProvider 不需要 API Key。",
         ));
     }
+
     let trimmed = api_key.trim();
+
     if trimmed.is_empty() {
         return Err(errors::error("AI_PROVIDER_AUTH_FAILED", "请填写 API Key。"));
     }
+
     CredentialStore::save(provider_type, trimmed)?;
     audit::emit(AiAuditEventKind::ConfigUpdated);
+
     Ok(get_config())
 }
 
 pub fn clear_credentials() -> Result<(), String> {
     CredentialStore::clear()
-}
-
-struct AiProviderConnectionCandidate {
-    provider_type: String,
-    selected_model: Option<String>,
-    base_url: Option<String>,
-    api_key_for_test: Option<String>,
-    api_key_for_save: Option<String>,
-    inline_completion_enabled: bool,
-    chat_enabled: bool,
-    agent_enabled: bool,
 }
 
 fn build_provider_connection_candidate(
@@ -136,6 +170,7 @@ fn build_provider_connection_candidate(
     api_key: Option<&str>,
 ) -> Result<AiProviderConnectionCandidate, String> {
     validate_provider(provider_type)?;
+
     let normalized_base_url = normalize_base_url(provider_type, base_url)?;
     let model = selected_model
         .map(|value| value.trim().to_string())
@@ -159,6 +194,7 @@ fn build_provider_connection_candidate(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned);
+
     let api_key_for_test = match provided_api_key.clone() {
         Some(value) => value,
         None => CredentialStore::get(provider_type)?,
@@ -190,9 +226,12 @@ async fn test_provider_connection_candidate(
     let base_url = candidate.base_url.as_deref().ok_or_else(|| {
         errors::error("AI_PROVIDER_NOT_CONFIGURED", "请先配置 Provider API 地址。")
     })?;
-    let api_key = candidate.api_key_for_test.as_deref().ok_or_else(|| {
-        errors::error("AI_PROVIDER_AUTH_FAILED", "请填写 API Key。")
-    })?;
+
+    let api_key = candidate
+        .api_key_for_test
+        .as_deref()
+        .ok_or_else(|| errors::error("AI_PROVIDER_AUTH_FAILED", "请填写 API Key。"))?;
+
     let model = candidate
         .selected_model
         .as_deref()
@@ -203,15 +242,18 @@ async fn test_provider_connection_candidate(
 
 pub async fn test_provider() -> Result<(), String> {
     let config = current_config()?;
+
     if config.provider_type == "mock" {
         return Ok(());
     }
+
     let base_url = resolve_base_url(&config)?;
     let api_key = CredentialStore::get(&config.provider_type)?;
     let model = config
         .selected_model
         .as_deref()
         .unwrap_or(DEFAULT_OPENAI_MODEL);
+
     openai_compatible::test(base_url, &api_key, model).await
 }
 
@@ -233,6 +275,7 @@ pub async fn test_provider_config(
         agent_enabled,
         api_key,
     )?;
+
     test_provider_connection_candidate(&candidate).await
 }
 
@@ -254,6 +297,7 @@ pub async fn connect_provider(
         agent_enabled,
         api_key,
     )?;
+
     test_provider_connection_candidate(&candidate).await?;
 
     if let Some(api_key_to_save) = candidate.api_key_for_save.as_deref() {
@@ -272,56 +316,61 @@ pub async fn connect_provider(
 
 pub async fn chat(payload: AiChatRequest) -> Result<AiProviderResponse, String> {
     audit::emit(AiAuditEventKind::ChatStarted);
-    let config = current_config()?;
-    let _thread_id = payload.thread_id.as_deref();
-    let messages = collect_messages(payload.messages, payload.references)?;
-    let request = AiProviderChatRequest { messages };
 
-    let response = if config.provider_type == "mock" {
-        MockProvider::chat(request)
-    } else {
+    let result = async {
+        let config = current_config()?;
+
+        ensure_chat_enabled(&config)?;
+
+        let _thread_id = payload.thread_id.as_deref();
+        let messages = collect_messages(payload.messages, payload.references)?;
+        let request = AiProviderChatRequest { messages };
+
+        if config.provider_type == "mock" {
+            return Ok(MockProvider::chat(request));
+        }
+
         let base_url = resolve_base_url(&config)?;
         let api_key = CredentialStore::get(&config.provider_type)?;
         let model = config
             .selected_model
             .as_deref()
             .unwrap_or(DEFAULT_OPENAI_MODEL);
-        openai_compatible::chat(base_url, &api_key, model, request).await?
-    };
 
-    audit::emit(AiAuditEventKind::ChatCompleted);
-    Ok(response)
+        openai_compatible::chat(base_url, &api_key, model, request).await
+    }
+    .await;
+
+    match result {
+        Ok(response) => {
+            audit::emit(AiAuditEventKind::ChatCompleted);
+            Ok(response)
+        }
+        Err(error) => {
+            audit::emit(AiAuditEventKind::ChatFailed);
+            Err(error)
+        }
+    }
 }
 
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiChatStreamEventPayload {
-    pub stream_id: String,
-    pub assistant_message_id: String,
-    pub kind: String,
-    pub delta: Option<String>,
-    pub message: Option<String>,
-    pub model: Option<String>,
-}
-
-pub struct AiChatStreamStart {
-    pub stream_id: String,
-    pub assistant_message_id: String,
-    pub provider_type: String,
-    pub model: String,
-}
-
-pub async fn chat_stream(app: AppHandle, payload: AiChatRequest) -> Result<AiChatStreamStart, String> {
+pub async fn chat_stream(
+    app: AppHandle,
+    payload: AiChatRequest,
+) -> Result<AiChatStreamStart, String> {
     audit::emit(AiAuditEventKind::ChatStarted);
+
     let config = current_config()?;
+    ensure_chat_enabled(&config)?;
+
     let messages = collect_messages(payload.messages, payload.references)?;
     let request = AiProviderChatRequest { messages };
-    let stream_id = format!("ai-stream-{}", chrono::Utc::now().timestamp_millis());
-    let assistant_message_id = format!("assistant-{}", chrono::Utc::now().timestamp_millis());
+
+    let stream_id = next_runtime_id("ai-stream");
+    let assistant_message_id = next_runtime_id("assistant");
     let provider_type = config.provider_type.clone();
     let response_provider_type = provider_type.clone();
     let task_config = config.clone();
+
     let model = config
         .selected_model
         .clone()
@@ -333,6 +382,7 @@ pub async fn chat_stream(app: AppHandle, payload: AiChatRequest) -> Result<AiCha
     let task_stream_id = stream_id.clone();
     let task_assistant_message_id = assistant_message_id.clone();
     let task_model = model.clone();
+
     tokio::spawn(async move {
         emit_stream_event(
             &app,
@@ -347,11 +397,19 @@ pub async fn chat_stream(app: AppHandle, payload: AiChatRequest) -> Result<AiCha
         );
 
         let result = if provider_type == "mock" {
-            stream_mock_response(&app, &task_stream_id, &task_assistant_message_id, &task_model, request).await
+            stream_mock_response(
+                &app,
+                &task_stream_id,
+                &task_assistant_message_id,
+                &task_model,
+                request,
+            )
+            .await
         } else {
             let run = async {
                 let base_url = resolve_base_url(&task_config)?.to_string();
                 let api_key = CredentialStore::get(&task_config.provider_type)?;
+
                 openai_compatible::chat_stream(
                     &base_url,
                     &api_key,
@@ -369,12 +427,14 @@ pub async fn chat_stream(app: AppHandle, payload: AiChatRequest) -> Result<AiCha
                                 model: Some(task_model.clone()),
                             },
                         );
+
                         Ok(())
                     },
                     || stream_manager::is_cancelled(&task_stream_id),
                 )
                 .await
             };
+
             run.await
         };
 
@@ -394,6 +454,7 @@ pub async fn chat_stream(app: AppHandle, payload: AiChatRequest) -> Result<AiCha
                     );
                 } else {
                     audit::emit(AiAuditEventKind::ChatCompleted);
+
                     emit_stream_event(
                         &app,
                         AiChatStreamEventPayload {
@@ -409,11 +470,13 @@ pub async fn chat_stream(app: AppHandle, payload: AiChatRequest) -> Result<AiCha
             }
             Err(error) => {
                 audit::emit(AiAuditEventKind::ChatFailed);
+
                 let kind = if error.contains("AI_REQUEST_CANCELLED") {
                     "cancelled"
                 } else {
                     "error"
                 };
+
                 emit_stream_event(
                     &app,
                     AiChatStreamEventPayload {
@@ -427,6 +490,7 @@ pub async fn chat_stream(app: AppHandle, payload: AiChatRequest) -> Result<AiCha
                 );
             }
         }
+
         stream_manager::finish(&task_stream_id);
     });
 
@@ -446,11 +510,14 @@ async fn stream_mock_response(
     request: AiProviderChatRequest,
 ) -> Result<(), String> {
     let response = MockProvider::chat(request).content;
+
     for chunk in response.as_bytes().chunks(16) {
         if stream_manager::is_cancelled(stream_id) {
             return Err(errors::error("AI_REQUEST_CANCELLED", "AI 请求已取消。"));
         }
+
         let delta = String::from_utf8_lossy(chunk).to_string();
+
         emit_stream_event(
             app,
             AiChatStreamEventPayload {
@@ -462,8 +529,10 @@ async fn stream_mock_response(
                 model: Some(model.to_string()),
             },
         );
+
         tokio::time::sleep(std::time::Duration::from_millis(24)).await;
     }
+
     Ok(())
 }
 
@@ -473,11 +542,11 @@ fn emit_stream_event(app: &AppHandle, payload: AiChatStreamEventPayload) {
     }
 }
 
-
 pub async fn inline_complete(
     payload: AiInlineCompletionRequest,
 ) -> Result<AiInlineCompletionResult, String> {
     let config = current_config()?;
+
     if config.provider_type == "mock" || !config.inline_completion_enabled {
         return Ok(mock_inline_complete(payload));
     }
@@ -489,13 +558,16 @@ pub async fn inline_complete(
             content: prompt,
         }],
     };
+
     let base_url = resolve_base_url(&config)?;
     let api_key = CredentialStore::get(&config.provider_type)?;
     let model = config
         .selected_model
         .as_deref()
         .unwrap_or(DEFAULT_OPENAI_MODEL);
+
     let response = openai_compatible::chat(base_url, &api_key, model, request).await?;
+
     Ok(AiInlineCompletionResult {
         insert_text: response.content,
         range: AiInlineCompletionRangePayload {
@@ -509,6 +581,7 @@ pub async fn inline_complete(
 pub async fn code_action(payload: AiCodeActionRequest) -> Result<AiCodeActionPayload, String> {
     let config = current_config()?;
     let trimmed_selection = payload.selection.trim();
+
     if trimmed_selection.is_empty() {
         return Ok(AiCodeActionPayload {
             explanation: "当前没有选区，请先选择需要处理的代码。".to_string(),
@@ -519,12 +592,19 @@ pub async fn code_action(payload: AiCodeActionRequest) -> Result<AiCodeActionPay
     }
 
     let prompt = build_code_action_prompt(&payload);
+    let redacted_prompt = redact_text(&prompt);
+
+    if redacted_prompt.blocked {
+        audit::emit(AiAuditEventKind::SecretDetected);
+    }
+
     let request = AiProviderChatRequest {
         messages: vec![AiProviderMessage {
             role: "user".to_string(),
-            content: redact_text(&prompt).text,
+            content: redacted_prompt.text,
         }],
     };
+
     let response = if config.provider_type == "mock" {
         MockProvider::chat(request)
     } else {
@@ -534,6 +614,7 @@ pub async fn code_action(payload: AiCodeActionRequest) -> Result<AiCodeActionPay
             .selected_model
             .as_deref()
             .unwrap_or(DEFAULT_OPENAI_MODEL);
+
         openai_compatible::chat(base_url, &api_key, model, request).await?
     };
 
@@ -550,202 +631,19 @@ pub async fn code_action(payload: AiCodeActionRequest) -> Result<AiCodeActionPay
 }
 
 pub async fn plan_task(payload: AiAgentPlanRequest) -> Result<AiAgentPlanPayload, String> {
-    let goal = payload.goal.trim();
-    if goal.is_empty() {
-        return Err(errors::error(
-            "AI_AGENT_PLAN_INVALID",
-            "请输入 Agent 任务目标。",
-        ));
-    }
-
-    let should_enter_plan_mode = should_enter_plan_mode(goal);
-    let mut steps = if should_enter_plan_mode {
-        build_default_plan_steps(goal)
-    } else {
-        vec![build_step(
-            0,
-            "完成当前请求",
-            "inspect",
-            "low",
-            vec!["read_current_file"],
-            false,
-            "给出可执行结论",
-            Some("无需回滚"),
-        )]
-    };
-
-    if steps.len() < 2 {
-        steps.push(build_step(
-            1,
-            "输出结果摘要",
-            "summarize",
-            "low",
-            vec!["search_text"],
-            false,
-            "输出简要执行摘要",
-            Some("无需回滚"),
-        ));
-    }
-
-    if steps.len() > 6 {
-        steps.truncate(6);
-    }
-
-    audit::emit(AiAuditEventKind::AgentPlanCreated);
-    Ok(AiAgentPlanPayload { steps })
+    AgentPlanner::create_plan(payload)
 }
 
 pub async fn classify_task(
     payload: AiAgentClassifyTaskRequest,
 ) -> Result<AiAgentClassifyTaskPayload, String> {
-    let goal = payload.goal.trim();
-    if goal.is_empty() {
-        return Err(errors::error(
-            "AI_AGENT_PLAN_INVALID",
-            "任务描述不能为空。",
-        ));
-    }
-
-    let should_enter_plan_mode = should_enter_plan_mode(goal);
-    let classification = if should_enter_plan_mode {
-        "complex"
-    } else {
-        "simple"
-    };
-    let reason = if should_enter_plan_mode {
-        "任务包含多阶段动作或潜在写盘影响，需先计划后执行。"
-    } else {
-        "任务可在单轮内完成，可直接执行。"
-    };
-
-    Ok(AiAgentClassifyTaskPayload {
-        classification: classification.to_string(),
-        should_enter_plan_mode,
-        reason: reason.to_string(),
-    })
+    AgentPlanner::classify_task(payload)
 }
 
 pub async fn approve_plan(
     payload: AiAgentApprovePlanRequest,
 ) -> Result<AiAgentApprovePlanPayload, String> {
-    if payload.goal.trim().is_empty() {
-        return Err(errors::error(
-            "AI_AGENT_PLAN_INVALID",
-            "任务目标不能为空。",
-        ));
-    }
-
-    if payload.steps.len() < 2 {
-        return Err(errors::error(
-            "AI_AGENT_PLAN_TOO_SHORT",
-            "计划步骤数必须在 2 到 6 之间。",
-        ));
-    }
-
-    if payload.steps.len() > 6 {
-        return Err(errors::error(
-            "AI_AGENT_PLAN_TOO_LONG",
-            "计划步骤数必须在 2 到 6 之间。",
-        ));
-    }
-
-    audit::emit(AiAuditEventKind::AgentPlanApproved);
-    Ok(AiAgentApprovePlanPayload {
-        approved_at: chrono::Utc::now().to_rfc3339(),
-        step_count: payload.steps.len(),
-    })
-}
-
-fn should_enter_plan_mode(goal: &str) -> bool {
-    const COMPLEX_KEYWORDS: &[&str] = &[
-        "重构",
-        "完善",
-        "接入",
-        "实现",
-        "全链路",
-        "架构",
-        "方案",
-        "测试",
-        "构建",
-        "回滚",
-    ];
-
-    if goal.chars().count() >= 24 {
-        return true;
-    }
-
-    COMPLEX_KEYWORDS.iter().any(|keyword| goal.contains(keyword))
-}
-
-fn build_default_plan_steps(goal: &str) -> Vec<AiTaskPlanStepPayload> {
-    vec![
-        build_step(
-            0,
-            "收集现有上下文与影响面",
-            "inspect",
-            "low",
-            vec!["search_text", "read_current_file", "get_diagnostics"],
-            false,
-            "产出受影响文件与边界说明",
-            Some("无需回滚"),
-        ),
-        build_step(
-            1,
-            "设计实现方案与风险控制",
-            "design",
-            "medium",
-            vec!["search_symbols", "get_git_diff"],
-            false,
-            "产出可执行方案与风险说明",
-            Some("无需回滚"),
-        ),
-        build_step(
-            2,
-            "执行改动并验证",
-            "verify",
-            "medium",
-            vec!["propose_patch", "run_test"],
-            true,
-            "输出改动结果、验证结论与后续建议",
-            Some("通过 AED 时间线回滚本轮写盘"),
-        ),
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(index, mut step)| {
-        step.index = index;
-        step.id = format!("plan-step-{}", index + 1);
-        step.goal = format!("{}：{}", goal, step.goal);
-        step
-    })
-    .collect()
-}
-
-fn build_step(
-    index: usize,
-    title: &str,
-    kind: &str,
-    risk_level: &str,
-    tools: Vec<&str>,
-    requires_user_approval: bool,
-    expected_output: &str,
-    rollback_strategy: Option<&str>,
-) -> AiTaskPlanStepPayload {
-    AiTaskPlanStepPayload {
-        id: format!("plan-step-{}", index + 1),
-        index,
-        title: title.to_string(),
-        goal: title.to_string(),
-        kind: kind.to_string(),
-        status: "pending".to_string(),
-        expected_output: expected_output.to_string(),
-        tools: tools.into_iter().map(|item| item.to_string()).collect(),
-        references: None,
-        is_active: None,
-        requires_user_approval,
-        risk_level: risk_level.to_string(),
-        rollback_strategy: rollback_strategy.map(|item| item.to_string()),
-    }
+    AgentPlanner::approve_plan(payload)
 }
 
 fn collect_messages(
@@ -754,13 +652,16 @@ fn collect_messages(
 ) -> Result<Vec<AiProviderMessage>, String> {
     if messages.is_empty() {
         audit::emit(AiAuditEventKind::ChatFailed);
+
         return Err(errors::error(
             "AI_RESPONSE_INVALID",
             "请输入要发送给 AI 的内容。",
         ));
     }
+
     if messages.len() > MAX_AI_MESSAGES {
         audit::emit(AiAuditEventKind::ChatFailed);
+
         return Err(errors::error(
             "AI_CONTEXT_TOO_LARGE",
             "对话轮次过多，请清空部分历史后重试。",
@@ -769,25 +670,33 @@ fn collect_messages(
 
     let context_block = build_context_block(&references);
     let last_user_index = messages.iter().rposition(|message| message.role == "user");
+
     let mut result = Vec::new();
+
     for (index, message) in messages.into_iter().enumerate() {
         if message.role != "user" && message.role != "assistant" && message.role != "system" {
             continue;
         }
+
         let mut combined_content = message.content;
+
         if Some(index) == last_user_index && !context_block.trim().is_empty() {
             combined_content = format!(
                 "{combined_content}\n\n---\n以下是 IDE 收集的结构化上下文。上下文仅用于回答当前问题，不代表用户要求你直接修改文件；如需修改必须输出建议或 patch 预览。\n{context_block}"
             );
         }
+
         let raw_content: String = combined_content.chars().take(MAX_MESSAGE_CHARS).collect();
         let redacted = redact_text(&raw_content);
+
         if redacted.blocked {
             audit::emit(AiAuditEventKind::SecretDetected);
         }
+
         if redacted.text.trim().is_empty() {
             continue;
         }
+
         result.push(AiProviderMessage {
             role: message.role,
             content: redacted.text,
@@ -796,11 +705,13 @@ fn collect_messages(
 
     if result.is_empty() {
         audit::emit(AiAuditEventKind::ChatFailed);
+
         return Err(errors::error(
             "AI_RESPONSE_INVALID",
             "请输入要发送给 AI 的内容。",
         ));
     }
+
     Ok(result)
 }
 
@@ -810,27 +721,35 @@ fn build_context_block(references: &[AiContextReferencePayload]) -> String {
     }
 
     let mut block = String::new();
+
     for reference in references.iter().take(MAX_CONTEXT_REFERENCES) {
         let range = reference
             .range
             .as_ref()
             .map(|item| format!("{}-{}", item.start_line, item.end_line))
             .unwrap_or_else(|| "全文摘要".to_string());
+
         let path = reference.path.as_deref().unwrap_or("未保存");
+
         let preview: String = reference
             .content_preview
             .chars()
             .take(MAX_REFERENCE_PREVIEW_CHARS)
             .collect();
+
+        let preview = sanitize_fenced_text(&preview);
+
         let redacted_label = if reference.redacted {
             "，已脱敏"
         } else {
             ""
         };
+
         block.push_str(&format!(
             "\n[{}] {} ({path}, {range}{redacted_label})\n```text\n{preview}\n```\n",
             reference.kind, reference.label
         ));
+
         if block.chars().count() >= MAX_CONTEXT_BLOCK_CHARS {
             let clipped: String = block.chars().take(MAX_CONTEXT_BLOCK_CHARS).collect();
             block = format!("{clipped}\n[上下文已按预算截断]\n");
@@ -852,10 +771,11 @@ fn mock_inline_complete(payload: AiInlineCompletionRequest) -> AiInlineCompletio
             .map(Vec::len)
             .unwrap_or_default(),
     );
-    let insert_text = if payload.prefix.trim_end().ends_with("{") {
+
+    let insert_text = if payload.prefix.trim_end().ends_with('{') {
         "\n  // TODO: 在这里补充实现\n}".to_string()
     } else {
-        "".to_string()
+        String::new()
     };
 
     AiInlineCompletionResult {
@@ -871,20 +791,30 @@ fn mock_inline_complete(payload: AiInlineCompletionRequest) -> AiInlineCompletio
 fn build_inline_prompt(payload: &AiInlineCompletionRequest) -> String {
     format!(
         "只返回需要插入到光标处的代码，不要解释。\n语言：{}\n文件：{}\n前文：\n{}\n后文：\n{}",
-        payload.language, payload.file_path, payload.prefix, payload.suffix
+        payload.language,
+        payload.file_path,
+        sanitize_fenced_text(&payload.prefix),
+        sanitize_fenced_text(&payload.suffix)
     )
 }
 
 fn build_code_action_prompt(payload: &AiCodeActionRequest) -> String {
     let file_path = payload.file_path.as_deref().unwrap_or("未保存文件");
+
     let diagnostics = if payload.diagnostics.is_empty() {
         "无".to_string()
     } else {
         payload.diagnostics.join("\n")
     };
+
     format!(
         "你是 IDE AI。请执行代码动作：{}。\n规则：不要直接声称已修改文件；如需修改，只描述建议并等待 patch 预览确认。\n文件：{}\n语言：{}\n诊断：\n{}\n选区：\n```{}\n{}\n```",
-        payload.kind, file_path, payload.language, diagnostics, payload.language, payload.selection
+        payload.kind,
+        file_path,
+        payload.language,
+        sanitize_fenced_text(&diagnostics),
+        payload.language,
+        sanitize_fenced_text(&payload.selection)
     )
 }
 
@@ -895,17 +825,30 @@ fn current_config() -> Result<AiRuntimeConfig, String> {
         .map_err(|_| errors::error("AI_PROVIDER_UNAVAILABLE", "AI 配置状态已损坏。"))
 }
 
+fn ensure_chat_enabled(config: &AiRuntimeConfig) -> Result<(), String> {
+    if config.chat_enabled {
+        return Ok(());
+    }
+
+    Err(errors::error(
+        "AI_CHAT_DISABLED",
+        "AI Chat 当前未启用，请先在设置中启用。",
+    ))
+}
+
 fn to_payload(config: AiRuntimeConfig) -> AiConfigPayload {
     let has_credentials = if config.provider_type == "mock" {
         true
     } else {
         CredentialStore::has_provider_secret(&config.provider_type)
     };
+
     let is_base_url_configured = config
         .base_url
         .as_ref()
         .map(|value| !value.trim().is_empty())
         .unwrap_or(config.provider_type == "mock");
+
     AiConfigPayload {
         provider_type: config.provider_type.clone(),
         selected_model: config.selected_model,
@@ -937,18 +880,28 @@ fn normalize_base_url(
     if provider_type == "mock" {
         return Ok(None);
     }
+
     let value = base_url
         .map(|item| item.trim().trim_end_matches('/').to_string())
         .filter(|item| !item.is_empty())
         .or_else(|| default_base_url(provider_type))
         .unwrap_or_else(|| DEFAULT_OPENAI_BASE_URL.to_string());
-    if !(value.starts_with("https://") || value.starts_with("http://localhost")) {
+
+    if !is_allowed_base_url(&value) {
         return Err(errors::error(
             "AI_PROVIDER_NOT_CONFIGURED",
-            "AI Provider 地址必须使用 HTTPS；本地调试仅允许 http://localhost。",
+            "AI Provider 地址必须使用 HTTPS；本地调试仅允许 http://localhost、http://127.0.0.1 或 http://[::1]。",
         ));
     }
+
     Ok(Some(value))
+}
+
+fn is_allowed_base_url(value: &str) -> bool {
+    value.starts_with("https://")
+        || value.starts_with("http://localhost")
+        || value.starts_with("http://127.0.0.1")
+        || value.starts_with("http://[::1]")
 }
 
 fn default_model(provider_type: &str) -> Option<String> {
@@ -983,16 +936,33 @@ fn resolve_base_url(config: &AiRuntimeConfig) -> Result<&str, String> {
         .ok_or_else(|| errors::error("AI_PROVIDER_NOT_CONFIGURED", "请先配置 Provider API 地址。"))
 }
 
+fn next_runtime_id(prefix: &str) -> String {
+    let sequence = STREAM_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+
+    format!(
+        "{}-{}-{}",
+        prefix,
+        chrono::Utc::now().timestamp_millis(),
+        sequence
+    )
+}
+
+fn sanitize_fenced_text(value: &str) -> String {
+    value.replace("```", "`\u{200b}``")
+}
+
 fn config_file_path() -> Option<PathBuf> {
     let base = std::env::var_os("APPDATA")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(PathBuf::from))?;
+
     Some(base.join("Calamex").join("ai-config.json"))
 }
 
 fn load_config_from_disk() -> Option<AiRuntimeConfig> {
     let path = config_file_path()?;
     let content = fs::read_to_string(path).ok()?;
+
     serde_json::from_str::<AiRuntimeConfig>(&content).ok()
 }
 
@@ -1000,6 +970,7 @@ fn persist_config(config: &AiRuntimeConfig) -> Result<(), String> {
     let Some(path) = config_file_path() else {
         return Ok(());
     };
+
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|error| {
             errors::error(
@@ -1008,12 +979,14 @@ fn persist_config(config: &AiRuntimeConfig) -> Result<(), String> {
             )
         })?;
     }
+
     let content = serde_json::to_string_pretty(config).map_err(|error| {
         errors::error(
             "AI_RESPONSE_INVALID",
             &format!("AI 配置序列化失败：{error}"),
         )
     })?;
+
     fs::write(path, content).map_err(|error| {
         errors::error(
             "AI_PROVIDER_UNAVAILABLE",

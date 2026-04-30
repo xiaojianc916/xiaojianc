@@ -48,32 +48,22 @@ pub fn append_operations(
         .append(true)
         .open(&path)
         .map_err(|error| {
-            errors::journal_failed(format!(
-                "打开操作日志失败（{}）：{error}",
-                path.display()
-            ))
+            errors::journal_failed(format!("打开操作日志失败（{}）：{error}", path.display()))
         })?;
 
     let mut writer = BufWriter::new(file);
 
     for operation in operations {
-        serde_json::to_writer(&mut writer, operation).map_err(|error| {
-            errors::journal_failed(format!("序列化操作日志失败：{error}"))
-        })?;
+        serde_json::to_writer(&mut writer, operation)
+            .map_err(|error| errors::journal_failed(format!("序列化操作日志失败：{error}")))?;
         writer.write_all(b"\n").map_err(|error| {
-            errors::journal_failed(format!(
-                "写入操作日志失败（{}）：{error}",
-                path.display()
-            ))
+            errors::journal_failed(format!("写入操作日志失败（{}）：{error}", path.display()))
         })?;
     }
 
     // 显式 flush，避免 BufWriter 在 drop 时吞掉错误。
     writer.flush().map_err(|error| {
-        errors::journal_failed(format!(
-            "写入操作日志失败（{}）：{error}",
-            path.display()
-        ))
+        errors::journal_failed(format!("写入操作日志失败（{}）：{error}", path.display()))
     })
 }
 
@@ -166,10 +156,7 @@ pub fn prune_operations(
 
     if kept_operations.is_empty() {
         fs::remove_file(&path).map_err(|error| {
-            errors::journal_failed(format!(
-                "删除操作日志失败（{}）：{error}",
-                path.display()
-            ))
+            errors::journal_failed(format!("删除操作日志失败（{}）：{error}", path.display()))
         })?;
         return Ok(outcome);
     }
@@ -182,10 +169,7 @@ pub fn prune_operations(
     }
 
     fs::write(&path, content).map_err(|error| {
-        errors::journal_failed(format!(
-            "重写操作日志失败（{}）：{error}",
-            path.display()
-        ))
+        errors::journal_failed(format!("重写操作日志失败（{}）：{error}", path.display()))
     })?;
 
     Ok(outcome)
@@ -240,7 +224,10 @@ mod tests {
 
         assert_eq!(operations.len(), 1);
         assert_eq!(operations[0].id, "operation-1");
-        assert_eq!(operations[0].source_snapshot_id.as_deref(), Some("snapshot-1"));
+        assert_eq!(
+            operations[0].source_snapshot_id.as_deref(),
+            Some("snapshot-1")
+        );
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
@@ -311,10 +298,8 @@ mod tests {
         )
         .expect("operations should be appended");
 
-        let retained_operation_ids = HashSet::from([
-            "operation-2".to_string(),
-            "operation-3".to_string(),
-        ]);
+        let retained_operation_ids =
+            HashSet::from(["operation-2".to_string(), "operation-3".to_string()]);
         let outcome =
             prune_operations(&temp_dir, &retained_operation_ids).expect("journal should be pruned");
 

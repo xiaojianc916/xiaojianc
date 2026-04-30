@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AiMarkdown from '@/components/business/ai/AiMarkdown.vue';
+import AiToolActivityInline from '@/components/business/ai/AiToolActivityInline.vue';
 import { useMessage } from '@/composables/useMessage';
 import type { IAiChatMessage, TAiChatMessageActionId } from '@/types/ai';
 import type { IAiCodeBlock, IAiCodePathTarget } from '@/types/ai-code';
@@ -53,11 +54,31 @@ const hasRenderableContent = computed(() =>
   ),
 );
 
+const hasToolCalls = computed(() => Boolean(props.message.toolCalls?.length));
+
+const isToolProgressContent = computed(() => {
+  if (props.message.role !== 'assistant' || !hasToolCalls.value) {
+    return false;
+  }
+
+  const content = props.message.content.trim();
+
+  return [
+    'AI 正在自动分析并按需调用工具…',
+    'AI 正在自动使用工具：',
+    'AI 已自动完成工具调用：',
+  ].some((prefix) => content.startsWith(prefix));
+});
+
+const shouldShowMessageBubble = computed(
+  () => shouldShowInlineLoader.value || (hasRenderableContent.value && !isToolProgressContent.value),
+);
+
 const copyableContent = computed(() => {
   const parts: string[] = [];
   const markdownContent = props.message.stream?.stableContent ?? props.message.content;
 
-  if (markdownContent.trim().length > 0) {
+  if (!isToolProgressContent.value && markdownContent.trim().length > 0) {
     parts.push(markdownContent);
   }
 
@@ -99,36 +120,65 @@ onBeforeUnmount(() => {
 
 <template>
   <article class="ai-message" :class="`is-${message.role}`">
-    <svg v-if="message.role !== 'user' && !avatarUrl" class="ai-logo" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" aria-hidden="true">
+    <svg
+      v-if="message.role !== 'user' && !avatarUrl"
+      class="ai-logo"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      aria-hidden="true"
+    >
       <path d="M12 3l1.9 5.2L19 10l-5.1 1.8L12 17l-1.9-5.2L5 10l5.1-1.8L12 3z" />
       <path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8L18 15z" />
     </svg>
-    <img v-else-if="message.role !== 'user'" class="ai-logo" :src="avatarUrl" :alt="avatarAlt" loading="lazy"
-      referrerpolicy="no-referrer" />
+    <img
+      v-else-if="message.role !== 'user'"
+      class="ai-logo"
+      :src="avatarUrl"
+      :alt="avatarAlt"
+      loading="lazy"
+      referrerpolicy="no-referrer"
+    />
     <div class="ai-message-main">
-      <div class="ai-message-bubble" :class="{ 'is-loading': shouldShowInlineLoader }">
+      <AiToolActivityInline v-if="message.toolCalls?.length" :tool-calls="message.toolCalls" />
+      <div v-if="shouldShowMessageBubble" class="ai-message-bubble" :class="{ 'is-loading': shouldShowInlineLoader }">
         <div v-if="shouldShowInlineLoader" class="ai-inline-loader" aria-label="AI 正在思考">
           <span></span>
           <span></span>
           <span></span>
         </div>
-        <AiMarkdown v-else :message-id="message.id" :content="message.content"
-          :stable-content="message.stream?.stableContent" :open-block="message.stream?.openBlock"
-          :can-apply-code="message.role === 'assistant'" @apply-code="emit('applyCode', $event)"
-          @open-code-path="emit('openCodePath', $event)" />
+        <AiMarkdown
+          v-else
+          :message-id="message.id"
+          :content="message.content"
+          :stable-content="message.stream?.stableContent"
+          :open-block="message.stream?.openBlock"
+          :can-apply-code="message.role === 'assistant'"
+          @apply-code="emit('applyCode', $event)"
+          @open-code-path="emit('openCodePath', $event)"
+        />
       </div>
       <div v-if="message.actions?.length" class="ai-message-options" aria-label="AI 选项">
-        <button v-for="action in message.actions" :key="`${message.id}:${action.id}`" type="button"
-          class="ai-message-option-button" :disabled="action.disabled"
-          @click.stop="emit('messageAction', message.id, action.id)">
+        <button
+          v-for="action in message.actions"
+          :key="`${message.id}:${action.id}`"
+          type="button"
+          class="ai-message-option-button"
+          :disabled="action.disabled"
+          @click.stop="emit('messageAction', message.id, action.id)"
+        >
           {{ action.label }}
         </button>
       </div>
       <div v-if="canCopyContent" class="ai-message-actions">
-        <button type="button" class="ai-message-copy-button" :class="{ 'is-copied': isCopied }"
-          :aria-label="isCopied ? '已复制对话内容' : '复制对话内容'" :title="isCopied ? '已复制' : '复制对话内容'"
-          @click.stop="copyMessageContent">
+        <button
+          type="button"
+          class="ai-message-copy-button"
+          :class="{ 'is-copied': isCopied }"
+          :aria-label="isCopied ? '已复制对话内容' : '复制对话内容'"
+          :title="isCopied ? '已复制' : '复制对话内容'"
+          @click.stop="copyMessageContent"
+        >
           <svg v-if="isCopied" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
             <path d="M5 12.5l4.2 4.2L19 7" />
           </svg>
@@ -169,6 +219,10 @@ onBeforeUnmount(() => {
 .ai-message-main {
   min-width: 0;
   max-width: 310px;
+}
+
+.ai-message-main > .ai-tool-activity-inline + .ai-message-bubble {
+  margin-top: 6px;
 }
 
 .ai-message-bubble {

@@ -1,3 +1,5 @@
+import { useShellWorkbenchAiBridge } from '@/composables/useShellWorkbenchAiBridge';
+import { useShellWorkbenchViewportState } from '@/composables/useShellWorkbenchViewportState';
 import { useWorkbench } from '@/composables/useWorkbench';
 import { useGitStore } from '@/store/git';
 import type { TWorkbenchSidebarView } from '@/types/app';
@@ -7,6 +9,7 @@ import type {
   IEditorSelectionSummary,
   IWorkspaceDirectoryPayload,
 } from '@/types/editor';
+import type { IAiDiffEditorPreview } from '@/types/ai-patch';
 import type { ITerminalRunCompletedPayload } from '@/types/terminal';
 import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import { dispatchWorkbenchReadyEvent } from '@/utils/startup-ready';
@@ -35,6 +38,7 @@ type TWorkbenchSurfaceMode = 'workbench' | 'settings';
 
 const SETTINGS_STATUS_MESSAGE_DURATION_MS = 2200;
 const READY_PAINT_FALLBACK_TIMEOUT_MS = 96;
+const MAX_DOCUMENT_NAV_HISTORY = 120;
 const WIDE_SIDEBAR_VIEWS: readonly TWorkbenchSidebarView[] = [
   'source-control',
   'explorer',
@@ -44,46 +48,11 @@ const WIDE_SIDEBAR_VIEWS: readonly TWorkbenchSidebarView[] = [
   'ai',
 ];
 
-const clampNumber = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, value));
-
 const isPrimaryModifierShortcut = (event: KeyboardEvent, code: string, key: string): boolean =>
   (event.ctrlKey || event.metaKey) &&
   !event.altKey &&
   !event.shiftKey &&
   (event.code === code || event.key.toLowerCase() === key);
-
-const resolveDiagnosticsPanelWidth = (availableWidth: number): number => {
-  const normalizedWidth = Math.max(0, Math.round(availableWidth));
-  if (normalizedWidth <= 0) {
-    return 0;
-  }
-
-  const inset = normalizedWidth >= 960 ? 24 : 16;
-  const hardMaxWidth = Math.max(0, normalizedWidth - inset);
-  if (hardMaxWidth <= 0) {
-    return normalizedWidth;
-  }
-
-  const sizeStrategy =
-    normalizedWidth >= 1680
-      ? { ratio: 0.28, minWidth: 320, softMaxWidth: 460 }
-      : normalizedWidth >= 1440
-        ? { ratio: 0.3, minWidth: 300, softMaxWidth: 440 }
-        : normalizedWidth >= 1200
-          ? { ratio: 0.32, minWidth: 280, softMaxWidth: 420 }
-          : normalizedWidth >= 960
-            ? { ratio: 0.34, minWidth: 260, softMaxWidth: 400 }
-            : normalizedWidth >= 760
-              ? { ratio: 0.38, minWidth: 220, softMaxWidth: 360 }
-              : { ratio: 0.46, minWidth: 180, softMaxWidth: 320 };
-
-  const resolvedMaxWidth = Math.min(hardMaxWidth, sizeStrategy.softMaxWidth);
-  const resolvedMinWidth = Math.min(sizeStrategy.minWidth, resolvedMaxWidth);
-  const preferredWidth = Math.round(normalizedWidth * sizeStrategy.ratio);
-
-  return clampNumber(preferredWidth, resolvedMinWidth, resolvedMaxWidth);
-};
 
 const waitForInitialWorkbenchPaint = async (): Promise<void> =>
   new Promise((resolve) => {
@@ -142,19 +111,14 @@ export const useShellWorkbenchView = (onReady: () => void) => {
   const isTerminalMaximized = ref(false);
   const activeSidebarView = ref<TWorkbenchSidebarView>('explorer');
   const statusbarMessage = ref<string | null>(null);
-  const editorViewportWidth = ref(0);
-  const diagnosticsTransitionsEnabled = ref(true);
   const startupWorkspaceRoot = ref<IWorkspaceDirectoryPayload | null>(null);
   const hasEmittedReady = ref(false);
+  const documentBackStack = ref<string[]>([]);
+  const documentForwardStack = ref<string[]>([]);
+  let isApplyingDocumentNavigation = false;
 
-  let editorViewportResizeObserver: ResizeObserver | null = null;
-  let diagnosticsResizeSettleTimerId: number | null = null;
-  let editorViewportResizeFrameId: number | null = null;
   let nativeCloseRequestedUnlisten: (() => void) | null = null;
-  let previousEditorViewportSize = { width: 0, height: 0 };
-  let pendingEditorViewportSize: { width: number; height: number } | null = null;
   let isUnmounted = false;
-  let isShellWindowResizing = false;
   let statusbarMessageTimerId: number | null = null;
   let editorLayoutAfterSidebarFrameId: number | null = null;
   let focusBeforeSettingsOpen: HTMLElement | null = null;
@@ -163,6 +127,104 @@ export const useShellWorkbenchView = (onReady: () => void) => {
   const sidebarWidth = computed(() =>
     WIDE_SIDEBAR_VIEWS.includes(activeSidebarView.value) ? 280 : 240,
   );
+
+  const resolveAdjacentDocumentId = (
+    currentDocumentId: string,
+    direction: 'back' | 'forward',
+  ): string | null => {
+    const currentIndex = workbench.editorStore.documents.findIndex(
+      (item) => item.id === currentDocumentId,
+    );
+    if (currentIndex < 0) {
+      return null;
+    }
+
+    const adjacentIndex = direction === 'back' ? currentIndex - 1 : currentIndex + 1;
+    const adjacentDocument = workbench.editorStore.documents[adjacentIndex];
+    return adjacentDocument?.id ?? null;
+  };
+
+  const canNavigateDocumentBack = computed(() => {
+    if (documentBackStack.value.length > 0) {
+      return true;
+    }
+
+    const currentDocumentId = workbench.editorStore.activeDocumentId;
+    return currentDocumentId
+      ? resolveAdjacentDocumentId(currentDocumentId, 'back') !== null
+      : false;
+  });
+
+  const canNavigateDocumentForward = computed(() => {
+    if (documentForwardStack.value.length > 0) {
+      return true;
+    }
+
+    const currentDocumentId = workbench.editorStore.activeDocumentId;
+    return currentDocumentId
+      ? resolveAdjacentDocumentId(currentDocumentId, 'forward') !== null
+      : false;
+  });
+
+  const hasDocumentInEditorStore = (documentId: string): boolean =>
+    Boolean(workbench.editorStore.getDocumentById(documentId));
+
+  const trimDocumentNavHistory = (stack: string[]): string[] =>
+    stack.slice(Math.max(0, stack.length - MAX_DOCUMENT_NAV_HISTORY));
+
+  const pickNextNavigableDocumentId = (
+    stackRef: typeof documentBackStack,
+    currentDocumentId: string,
+  ): string | null => {
+    while (stackRef.value.length > 0) {
+      const candidate = stackRef.value.pop();
+      if (!candidate || candidate === currentDocumentId) {
+        continue;
+      }
+
+      if (hasDocumentInEditorStore(candidate)) {
+        return candidate;
+      }
+    }
+
+    return null;
+  };
+
+  const navigateDocumentBack = (): void => {
+    const currentDocumentId = workbench.editorStore.activeDocumentId;
+    if (!currentDocumentId) {
+      return;
+    }
+
+    const targetDocumentId =
+      pickNextNavigableDocumentId(documentBackStack, currentDocumentId)
+      ?? resolveAdjacentDocumentId(currentDocumentId, 'back');
+    if (!targetDocumentId) {
+      return;
+    }
+
+    documentForwardStack.value = trimDocumentNavHistory([...documentForwardStack.value, currentDocumentId]);
+    isApplyingDocumentNavigation = true;
+    workbench.activateDocument(targetDocumentId);
+  };
+
+  const navigateDocumentForward = (): void => {
+    const currentDocumentId = workbench.editorStore.activeDocumentId;
+    if (!currentDocumentId) {
+      return;
+    }
+
+    const targetDocumentId =
+      pickNextNavigableDocumentId(documentForwardStack, currentDocumentId)
+      ?? resolveAdjacentDocumentId(currentDocumentId, 'forward');
+    if (!targetDocumentId) {
+      return;
+    }
+
+    documentBackStack.value = trimDocumentNavHistory([...documentBackStack.value, currentDocumentId]);
+    isApplyingDocumentNavigation = true;
+    workbench.activateDocument(targetDocumentId);
+  };
 
   const gitBranchName = computed(() => gitStore.status.headBranchName ?? null);
   const gitAddedCount = computed(
@@ -178,123 +240,16 @@ export const useShellWorkbenchView = (onReady: () => void) => {
   const isWorkbenchContentVisible = computed(() => activeSurfaceMode.value === 'workbench');
   const canToggleDiagnosticsPanel = computed(() => shouldRenderDiagnosticsPanel.value);
   const diagnosticIssueCount = computed(() => workbench.editorStore.activeDiagnostics.length);
-  const diagnosticsPanelMotionClass = computed(() =>
-    diagnosticsTransitionsEnabled.value
-      ? 'transition-[opacity,transform,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]'
-      : 'transition-none',
-  );
-  const diagnosticsPanelStyle = computed(() => {
-    const availableWidth = editorViewportWidth.value;
-    if (availableWidth <= 0) {
-      return undefined;
-    }
-
-    const resolvedWidth = resolveDiagnosticsPanelWidth(availableWidth);
-    return {
-      width: `${resolvedWidth}px`,
-      maxWidth: '100%',
-    };
-  });
-
-  const scheduleDiagnosticsTransitionRestore = (): void => {
-    if (diagnosticsResizeSettleTimerId !== null) {
-      window.clearTimeout(diagnosticsResizeSettleTimerId);
-    }
-
-    diagnosticsResizeSettleTimerId = window.setTimeout(() => {
-      diagnosticsTransitionsEnabled.value = true;
-      diagnosticsResizeSettleTimerId = null;
-    }, 140);
-  };
-
-  const handleEditorViewportResize = (width: number, height: number): void => {
-    const normalizedWidth = Math.round(width);
-    const normalizedHeight = Math.round(height);
-
-    if (normalizedWidth <= 0 || normalizedHeight <= 0) {
-      return;
-    }
-
-    if (editorViewportWidth.value !== normalizedWidth) {
-      editorViewportWidth.value = normalizedWidth;
-    }
-
-    if (
-      previousEditorViewportSize.width === normalizedWidth &&
-      previousEditorViewportSize.height === normalizedHeight
-    ) {
-      return;
-    }
-
-    previousEditorViewportSize = { width: normalizedWidth, height: normalizedHeight };
-    diagnosticsTransitionsEnabled.value = false;
-    scheduleDiagnosticsTransitionRestore();
-  };
-
-  const flushEditorViewportResize = (): void => {
-    editorViewportResizeFrameId = null;
-    if (!pendingEditorViewportSize) {
-      return;
-    }
-
-    const { width, height } = pendingEditorViewportSize;
-    pendingEditorViewportSize = null;
-    handleEditorViewportResize(width, height);
-  };
-
-  const queueEditorViewportResize = (width: number, height: number): void => {
-    pendingEditorViewportSize = {
-      width: Math.round(width),
-      height: Math.round(height),
-    };
-
-    if (isShellWindowResizing) {
-      return;
-    }
-
-    if (editorViewportResizeFrameId !== null) {
-      return;
-    }
-
-    editorViewportResizeFrameId = window.requestAnimationFrame(flushEditorViewportResize);
-  };
-
-  const handleShellWindowResizeStart = (): void => {
-    isShellWindowResizing = true;
-    diagnosticsTransitionsEnabled.value = false;
-
-    if (diagnosticsResizeSettleTimerId !== null) {
-      window.clearTimeout(diagnosticsResizeSettleTimerId);
-      diagnosticsResizeSettleTimerId = null;
-    }
-  };
-
-  const handleShellWindowResizeEnd = (): void => {
-    if (editorViewportRef.value) {
-      pendingEditorViewportSize = {
-        width: Math.round(editorViewportRef.value.clientWidth),
-        height: Math.round(editorViewportRef.value.clientHeight),
-      };
-    }
-  };
-
-  const handleShellWindowResizeSettled = (): void => {
-    isShellWindowResizing = false;
-
-    if (editorViewportResizeFrameId !== null) {
-      window.cancelAnimationFrame(editorViewportResizeFrameId);
-      editorViewportResizeFrameId = null;
-    }
-
-    if (editorViewportRef.value) {
-      pendingEditorViewportSize = {
-        width: Math.round(editorViewportRef.value.clientWidth),
-        height: Math.round(editorViewportRef.value.clientHeight),
-      };
-    }
-    flushEditorViewportResize();
-    scheduleDiagnosticsTransitionRestore();
-  };
+  const {
+    diagnosticsTransitionsEnabled,
+    diagnosticsPanelMotionClass,
+    diagnosticsPanelStyle,
+    handleShellWindowResizeStart,
+    handleShellWindowResizeEnd,
+    handleShellWindowResizeSettled,
+    mount: mountViewportState,
+    cleanup: cleanupViewportState,
+  } = useShellWorkbenchViewportState({ editorViewportRef });
 
   const handleInsertTemplate = (template: ICommandTemplate): void => {
     editorRef.value?.insertSnippet(template.snippet);
@@ -683,6 +638,32 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     workbench.handleIntegratedTerminalRunCompleted(payload);
   };
 
+  const openAiDiffPreview = (preview: IAiDiffEditorPreview): void => {
+    const { reusedExisting } = workbench.editorStore.openAiDiffDocument(preview);
+    workbench.editorStore.appendLog(
+      reusedExisting ? 'info' : 'success',
+      'AI Diff Preview',
+      reusedExisting ? `已切换到 ${preview.title}` : `已打开 ${preview.title}`,
+    );
+  };
+
+  const {
+    titlebarRef,
+    runPanelRef,
+    handleOpenCommandPalette,
+    handleAiCodeAction,
+    handleAiFixDiagnostic,
+    handleOpenShellCheck,
+    handleOpenAiCodePath,
+  } = useShellWorkbenchAiBridge({
+    editorRef,
+    getWorkspaceRootPath: () => workbench.editorStore.workspaceRootPath,
+    openDocumentByPath: workbench.openDocumentByPath,
+    openAiDiffPreview,
+    openTerminal,
+    handleSelectDiagnostic,
+  });
+
   watch(
     () => [workbench.editorStore.hasActiveDocument, workbench.editorStore.document.kind],
     () => {
@@ -693,31 +674,46 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     { immediate: true },
   );
 
+  watch(
+    () => workbench.editorStore.activeDocumentId,
+    (nextDocumentId, previousDocumentId) => {
+      if (!nextDocumentId || nextDocumentId === previousDocumentId) {
+        return;
+      }
+
+      if (isApplyingDocumentNavigation) {
+        isApplyingDocumentNavigation = false;
+        return;
+      }
+
+      if (previousDocumentId && hasDocumentInEditorStore(previousDocumentId)) {
+        documentBackStack.value = trimDocumentNavHistory([
+          ...documentBackStack.value,
+          previousDocumentId,
+        ]);
+      }
+
+      documentForwardStack.value = [];
+    },
+  );
+
+  watch(
+    () => workbench.editorStore.documents.map((item) => item.id),
+    (documentIds) => {
+      const documentIdSet = new Set(documentIds);
+      documentBackStack.value = documentBackStack.value.filter((documentId) => documentIdSet.has(documentId));
+      documentForwardStack.value = documentForwardStack.value.filter((documentId) => documentIdSet.has(documentId));
+    },
+    { immediate: true },
+  );
+
   onMounted(() => {
     isUnmounted = false;
     window.addEventListener(SHELL_WINDOW_RESIZE_START_EVENT, handleShellWindowResizeStart);
     window.addEventListener(SHELL_WINDOW_RESIZE_END_EVENT, handleShellWindowResizeEnd);
     window.addEventListener(SHELL_WINDOW_RESIZE_SETTLED_EVENT, handleShellWindowResizeSettled);
 
-    if (editorViewportRef.value) {
-      previousEditorViewportSize = {
-        width: editorViewportRef.value.clientWidth,
-        height: editorViewportRef.value.clientHeight,
-      };
-      editorViewportWidth.value = editorViewportRef.value.clientWidth;
-    }
-
-    if (typeof ResizeObserver !== 'undefined' && editorViewportRef.value) {
-      editorViewportResizeObserver = new ResizeObserver((entries) => {
-        const targetEntry = entries[0];
-        if (!targetEntry) {
-          return;
-        }
-
-        queueEditorViewportResize(targetEntry.contentRect.width, targetEntry.contentRect.height);
-      });
-      editorViewportResizeObserver.observe(editorViewportRef.value);
-    }
+    mountViewportState();
 
     bindGlobalKeydownCapture();
     void bindNativeWindowCloseRequest();
@@ -733,28 +729,20 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     globalKeydownCleanup?.();
     nativeCloseRequestedUnlisten?.();
     nativeCloseRequestedUnlisten = null;
-    editorViewportResizeObserver?.disconnect();
-    editorViewportResizeObserver = null;
-
-    if (editorViewportResizeFrameId !== null) {
-      window.cancelAnimationFrame(editorViewportResizeFrameId);
-      editorViewportResizeFrameId = null;
-    }
+    cleanupViewportState();
 
     if (editorLayoutAfterSidebarFrameId !== null) {
       window.cancelAnimationFrame(editorLayoutAfterSidebarFrameId);
       editorLayoutAfterSidebarFrameId = null;
     }
 
-    if (diagnosticsResizeSettleTimerId !== null) {
-      window.clearTimeout(diagnosticsResizeSettleTimerId);
-      diagnosticsResizeSettleTimerId = null;
-    }
   });
 
   return {
     ...workbench,
     gitStore,
+    titlebarRef,
+    runPanelRef,
     editorRef,
     editorViewportRef,
     settingsOverlayRef,
@@ -771,6 +759,10 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     sidebarWidth,
     diagnosticsTransitionsEnabled,
     startupWorkspaceRoot,
+    canNavigateDocumentBack,
+    canNavigateDocumentForward,
+    navigateDocumentBack,
+    navigateDocumentForward,
     gitBranchName,
     gitAddedCount,
     gitRemovedCount,
@@ -800,5 +792,10 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     clearTerminalLogs,
     handleRunScript,
     handleIntegratedTerminalRunCompleted,
+    handleOpenCommandPalette,
+    handleAiCodeAction,
+    handleAiFixDiagnostic,
+    handleOpenShellCheck,
+    handleOpenAiCodePath,
   };
 };
