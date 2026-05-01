@@ -2340,9 +2340,9 @@ fn relative_path(root: &Path, path: &Path) -> String {
 mod tests {
     use super::{
         build_tool_activity_label, build_tool_loop_messages_with_services,
-        build_tool_result_messages, build_tool_result_messages_with_services,
-        load_tool_output_ref, truncate_head_tail, validate_step_tools, AgentRunMessage,
-        AgentToolResultMessage, AgentToolRuntimeServices, AgentToolUseContext,
+        build_tool_result_messages, build_tool_result_messages_with_services, load_tool_output_ref,
+        truncate_head_tail, validate_step_tools, AgentRunMessage, AgentToolResultMessage,
+        AgentToolRuntimeServices, AgentToolUseContext,
     };
     use crate::commands::contracts::{
         AiAgentToolInputsPayload, AiApplyPatchRequest, AiContextReferencePayload,
@@ -2967,5 +2967,4 @@ mod tests {
         assert_eq!(metadata.agent_run_id.as_deref(), Some("run-1"));
         assert_eq!(metadata.agent_step_id.as_deref(), Some("step-1"));
     }
-
 }

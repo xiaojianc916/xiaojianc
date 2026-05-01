@@ -1,11 +1,14 @@
 import AiMarkdown from '@/components/business/ai/AiMarkdown.vue';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { nextTick } from 'vue';
 
 const flushRender = async (): Promise<void> => {
-  await nextTick();
-  await Promise.resolve();
+  for (let tickIndex = 0; tickIndex < 4; tickIndex += 1) {
+    await nextTick();
+    await Promise.resolve();
+  }
+  await flushPromises();
   await nextTick();
 };
 
@@ -48,5 +51,22 @@ describe('AiMarkdown markstream-vue rendering', () => {
 
     expect(wrapper.text()).toContain('后文');
     expect(wrapper.text()).toContain('done');
+  });
+
+  it('uses markstream-vue built-in code block actions', async () => {
+    const wrapper = mount(AiMarkdown, {
+      props: {
+        messageId: 'm-code-actions',
+        content: '```ts\nconst ready = true;\n```',
+        streamStatus: 'completed',
+      },
+    });
+
+    await flushRender();
+
+    expect(wrapper.find('.code-block-container').exists()).toBe(true);
+    expect(wrapper.find('.code-block-header').exists()).toBe(true);
+    expect(wrapper.find('.code-action-btn').exists()).toBe(true);
+    expect(wrapper.find('button[aria-label="复制"]').exists()).toBe(true);
   });
 });

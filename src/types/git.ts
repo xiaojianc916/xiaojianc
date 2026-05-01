@@ -7,6 +7,8 @@ export type TGitChangeKind =
   | 'untracked'
   | 'conflicted';
 
+export type TGitDiffMode = 'worktree' | 'staged';
+
 export interface IGitCommitSummaryPayload {
   id: string;
   shortId: string;
@@ -56,6 +58,24 @@ export interface IGitFileBaselinePayload {
   relativePath: string | null;
   isTracked: boolean;
   content: string | null;
+}
+
+export interface IGitDiffPreviewRequest {
+  repositoryRootPath: string;
+  path: string;
+  mode: TGitDiffMode;
+}
+
+export interface IGitDiffPreviewPayload {
+  id: string;
+  repositoryRootPath: string;
+  path: string;
+  relativePath: string;
+  title: string;
+  mode: TGitDiffMode;
+  originalContent: string;
+  modifiedContent: string;
+  isEmpty: boolean;
 }
 
 export interface IGitPathOperationRequest {

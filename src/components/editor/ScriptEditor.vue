@@ -34,9 +34,7 @@ import { useEditorStore } from '@/store/editor';
 import type { IAiCodeActionRequest, IAiCodeActionResult } from '@/types/ai';
 import type { TThemeMode } from '@/types/app';
 import type { IAnalyzeScriptPayload, IEditorSelectionSummary, TScriptDiagnosticSeverity } from '@/types/editor';
-import type { IGitFileBaselinePayload } from '@/types/git';
 import type { IEditorSettings } from '@/types/settings';
-import { computeGitLineChanges } from '@/utils/git-diff';
 import { applyMonacoTheme, monaco } from '@/utils/monaco';
 import {
   SHELL_WINDOW_RESIZE_END_EVENT,
@@ -68,7 +66,6 @@ const props = withDefaults(
     modelValue?: string;
     theme?: TThemeMode;
     analysis?: IAnalyzeScriptPayload;
-    gitBaseline?: IGitFileBaselinePayload | null;
     editorSettings: IEditorSettings;
     canRun?: boolean;
   }>(),
@@ -77,7 +74,6 @@ const props = withDefaults(
     modelValue: '',
     theme: 'dark',
     analysis: undefined,
-    gitBaseline: null,
     canRun: false,
   },
 );
@@ -294,7 +290,6 @@ let shellCompletionRegistrationPromise: Promise<void> | null = null;
 let aiInlineCompletionDisposable: monaco.IDisposable | null = null;
 let aiInlineCompletionRequestId = 0;
 let previousContainerSize = { width: 0, height: 0 };
-let gitDecorationsCollection: monaco.editor.IEditorDecorationsCollection | null = null;
 let viewStateSaveTimerId: number | null = null;
 let isShellWindowResizing = false;
 let pendingEditorLayoutAfterWindowResize = false;
@@ -374,79 +369,6 @@ const syncMarkers = (): void => {
     : [];
 
   monaco.editor.setModelMarkers(model, 'shellcheck', markers);
-};
-
-const buildGitDecorations = (): monaco.editor.IModelDeltaDecoration[] => {
-  const currentContent = props.modelValue ?? '';
-  const gitBaseline = props.gitBaseline;
-
-  const resolveDiffLineCount = (content: string): number => {
-    if (content.length === 0) {
-      return 0;
-    }
-
-    const lines = content.split('\n');
-    if (lines.length > 1 && lines[lines.length - 1] === '') {
-      lines.pop();
-    }
-
-    return lines.length;
-  };
-
-  if (!gitBaseline?.available || !gitBaseline.repositoryRootPath) {
-    return [];
-  }
-
-  const lineChanges = !gitBaseline.isTracked
-    ? (() => {
-      const lineCount = resolveDiffLineCount(currentContent);
-      return lineCount === 0
-        ? []
-        : [{ type: 'added', startLine: 1, endLine: lineCount }];
-    })()
-    : gitBaseline.content === null
-      ? []
-      : computeGitLineChanges(gitBaseline.content, currentContent);
-
-  return lineChanges.map((change) => {
-    const tone = change.type === 'deleted' ? 'deleted' : 'added';
-    const range = new monaco.Range(change.startLine, 1, change.endLine, 1);
-
-    return {
-      range,
-      options: {
-        isWholeLine: true,
-        className: `git-diff-line git-diff-line-${tone}`,
-        lineNumberClassName: `git-diff-line-number git-diff-line-number-${tone}`,
-        linesDecorationsClassName: `git-diff-gutter git-diff-gutter-${tone}`,
-        overviewRuler: {
-          color: tone === 'added' ? '#86efaccc' : '#fb7185cc',
-          position: monaco.editor.OverviewRulerLane.Left,
-        },
-      },
-    };
-  });
-};
-
-const getGitDecorationsCollection = (): monaco.editor.IEditorDecorationsCollection | null => {
-  if (!editorInstance) {
-    return null;
-  }
-
-  if (!gitDecorationsCollection) {
-    gitDecorationsCollection = editorInstance.createDecorationsCollection();
-  }
-
-  return gitDecorationsCollection;
-};
-
-const syncGitDecorations = (): void => {
-  const collection = getGitDecorationsCollection();
-  if (!collection) {
-    return;
-  }
-
-  collection.set(buildGitDecorations());
 };
 
 const layoutEditor = (): void => {
@@ -721,7 +643,6 @@ const createEditor = (): void => {
   }
 
   syncMarkers();
-  syncGitDecorations();
   restoreViewStateForPath(props.documentPath);
   scheduleShellCompletionRegistration();
   registerAiInlineCompletionProvider();
@@ -767,7 +688,6 @@ watch(
       suppressModelValueEmit = false;
     }
 
-    syncGitDecorations();
   },
 );
 
@@ -782,14 +702,6 @@ watch(
   () => props.analysis,
   () => {
     syncMarkers();
-  },
-  { deep: true },
-);
-
-watch(
-  () => props.gitBaseline,
-  () => {
-    syncGitDecorations();
   },
   { deep: true },
 );
@@ -848,9 +760,6 @@ onBeforeUnmount(() => {
   if (model) {
     monaco.editor.setModelMarkers(model, 'shellcheck', []);
   }
-
-  gitDecorationsCollection?.clear();
-  gitDecorationsCollection = null;
 
   resizeObserver?.disconnect();
   resizeObserver = null;

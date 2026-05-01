@@ -18,9 +18,9 @@ const createGlobalMountOptions = () => ({
 });
 
 const createConfig = (overrides: Partial<IAiConfigPayload> = {}): IAiConfigPayload => ({
-    providerType: 'openai',
-    selectedModel: 'gpt-5.5',
-    baseUrl: 'https://api.openai.com/v1',
+    providerType: 'litellm',
+    selectedModel: 'openai/gpt-5.5',
+    baseUrl: 'http://127.0.0.1:4000/v1',
     isBaseUrlConfigured: true,
     hasCredentials: true,
     isConfigured: true,
@@ -35,7 +35,7 @@ describe('AiProviderSettings', () => {
         vi.useRealTimers();
     });
 
-    it('switches provider and backfills model/baseUrl from the preset', async () => {
+    it('renders vendor platforms while keeping the LiteLLM provider underneath', async () => {
         const draft = createConfig();
 
         const wrapper = mount(AiProviderSettings, {
@@ -50,12 +50,46 @@ describe('AiProviderSettings', () => {
 
         await wrapper.get('[data-provider-id="deepseek"]').trigger('click');
 
-        expect(draft.providerType).toBe('deepseek');
-        expect(draft.baseUrl).toBe('https://api.deepseek.com');
-        expect(draft.selectedModel).toBe('deepseek-v4-pro');
+        expect(draft.providerType).toBe('litellm');
+        expect(draft.baseUrl).toBe('http://127.0.0.1:4000/v1');
+        expect(draft.selectedModel).toBe('deepseek/deepseek-v4-pro');
+        expect(wrapper.find('[data-provider-id="litellm"]').exists()).toBe(false);
     });
 
-    it('renders the latest preset model options for the selected provider', async () => {
+    it('switches model options by platform without rendering a custom model input', async () => {
+        const draft = createConfig();
+
+        const wrapper = mount(AiProviderSettings, {
+            props: {
+                open: true,
+                config: createConfig(),
+                draft,
+                apiKey: '',
+            },
+            ...createGlobalMountOptions(),
+        });
+
+        await wrapper.get('[data-provider-id="anthropic"]').trigger('click');
+
+        expect(draft.providerType).toBe('litellm');
+        expect(draft.baseUrl).toBe('http://127.0.0.1:4000/v1');
+        expect(draft.selectedModel).toBe('anthropic/claude-sonnet-4-6');
+        expect(wrapper.find('.model-alias-input').exists()).toBe(false);
+
+        await wrapper.get('[data-key="model"] .lr-select-trigger').trigger('click');
+        expect(wrapper.text()).toContain('anthropic/claude-opus-4-7');
+        expect(wrapper.text()).toContain('anthropic/claude-sonnet-4-6');
+        expect(wrapper.find('.lr-option-meta').exists()).toBe(false);
+
+        await wrapper
+            .findAll('[role="option"]')
+            .find((option) => option.text().includes('anthropic/claude-opus-4-7'))
+            ?.trigger('click');
+
+        expect(draft.selectedModel).toBe('anthropic/claude-opus-4-7');
+    });
+
+    it('renders latest DeepSeek V4 model options and excludes deprecated aliases', async () => {
         const wrapper = mount(AiProviderSettings, {
             props: {
                 open: true,
@@ -66,11 +100,14 @@ describe('AiProviderSettings', () => {
             ...createGlobalMountOptions(),
         });
 
+        await wrapper.get('[data-provider-id="deepseek"]').trigger('click');
         await wrapper.get('[data-key="model"] .lr-select-trigger').trigger('click');
 
         const text = wrapper.text();
-        expect(text).toContain('gpt-5.5-pro');
-        expect(text).toContain('gpt-5.4-nano');
+        expect(text).toContain('deepseek/deepseek-v4-pro');
+        expect(text).toContain('deepseek/deepseek-v4-flash');
+        expect(text).not.toContain('deepseek-chat');
+        expect(text).not.toContain('deepseek-reasoner');
     });
 
     it('renders inline feedback after the parent resolves the emitted callback', async () => {
@@ -95,7 +132,7 @@ describe('AiProviderSettings', () => {
         const emitted = wrapper.emitted('testProvider');
         expect(emitted).toHaveLength(1);
 
-        expect(emitted![0][0]).toMatchObject({ providerType: 'openai' });
+        expect(emitted![0][0]).toMatchObject({ providerType: 'litellm' });
         expect(emitted![0][1]).toBe('');
         const feedback = emitted![0][2] as IAiProviderSettingsActionFeedback;
         feedback.onSuccess('连接成功，Provider 已响应');

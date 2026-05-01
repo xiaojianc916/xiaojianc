@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import { useAiAutoApply } from '@/composables/useAiAutoApply';
-import { AI_PROVIDER_PRESETS, findAiProviderPreset } from '@/constants/ai-providers';
+import {
+    AI_SERVICE_PLATFORM_PRESETS,
+    DEFAULT_LITELLM_BASE_URL,
+    findAiProviderPreset,
+    findAiServicePlatformByModel,
+    findAiServicePlatformPreset,
+    isAiServicePlatformModel,
+} from '@/constants/ai-providers';
+import type { TAiServicePlatformId } from '@/constants/ai-providers';
 import type {
     IAiConfigPayload,
     IAiProviderSettingsActionFeedback,
-    TAiProviderType,
 } from '@/types/ai';
 import type { TAiEditAuthLevel } from '@/types/ai-edit';
 import { tryWriteClipboardText } from '@/utils/clipboard';
@@ -18,7 +25,12 @@ interface IAiAdvancedDraft {
     maxTokens: number;
 }
 
-interface ISelectOption {
+interface IPlatformSelectOption {
+    value: TAiServicePlatformId;
+    label: string;
+}
+
+interface IModelSelectOption {
     value: string;
     label: string;
 }
@@ -55,57 +67,51 @@ const isPlatformOpen = ref(false);
 const isModelOpen = ref(false);
 const streamEnabled = ref(true);
 const advancedDraft = ref<IAiAdvancedDraft>(createDefaultAdvancedDraft());
+const activeServicePlatformId = ref<TAiServicePlatformId>(
+    findAiServicePlatformByModel(nextConfig.value.selectedModel).id,
+);
 
 let statusTimer: number | null = null;
 
-const platformOptions = computed<ISelectOption[]>(() =>
-    AI_PROVIDER_PRESETS.map((preset) => ({
+const platformOptions = computed<IPlatformSelectOption[]>(() =>
+    AI_SERVICE_PLATFORM_PRESETS.map((preset) => ({
         value: preset.id,
         label: preset.label,
     })),
 );
 
 const activePreset = computed(() => findAiProviderPreset(nextConfig.value.providerType));
+const activeServicePlatform = computed(() =>
+    findAiServicePlatformPreset(activeServicePlatformId.value),
+);
 
-const modelOptions = computed<ISelectOption[]>(() => {
-    const models = new Set<string>();
-    const presetModels = activePreset.value.models.map((model) => model.trim()).filter(Boolean);
-    const selectedModel = nextConfig.value.selectedModel?.trim() ?? '';
-
-    for (const presetModel of presetModels) {
-        models.add(presetModel);
-    }
-    if (selectedModel) {
-        models.add(selectedModel);
-    }
-
-    if (!models.size) {
-        models.add('custom-model');
-    }
-
-    return Array.from(models).map((model) => ({ value: model, label: model }));
-});
+const modelOptions = computed<IModelSelectOption[]>(() =>
+    activeServicePlatform.value.models.map((model) => ({
+        value: model.id,
+        label: model.label,
+    })),
+);
 
 const selectedPlatformLabel = computed(() => {
-    const matched = platformOptions.value.find((item) => item.value === nextConfig.value.providerType);
+    const matched = platformOptions.value.find((item) => item.value === activeServicePlatformId.value);
     return matched?.label ?? '请选择';
 });
 
 const selectedModelLabel = computed(() => {
     const currentModel = nextConfig.value.selectedModel?.trim();
-    if (currentModel) {
-        return currentModel;
+    const matched = modelOptions.value.find((item) => item.value === currentModel);
+    if (matched) {
+        return matched.label;
     }
     return modelOptions.value[0]?.label ?? '选择模型';
 });
 
 const hasSavedCredentialsForProvider = computed(
-    () => nextConfig.value.providerType === 'mock'
-        || (props.config.providerType === nextConfig.value.providerType && props.config.hasCredentials),
+    () => props.config.providerType === nextConfig.value.providerType && props.config.hasCredentials,
 );
 
 const requiresApiKey = computed(
-    () => nextConfig.value.providerType !== 'mock' && !hasSavedCredentialsForProvider.value,
+    () => !hasSavedCredentialsForProvider.value,
 );
 
 const canTestProvider = computed(() => !isTesting.value);
@@ -175,14 +181,19 @@ const autoApplyToneClass = computed(() => {
     }
 });
 
-const syncDraftWithProviderPreset = (providerType: TAiProviderType): void => {
-    const preset = findAiProviderPreset(providerType);
-    nextConfig.value.baseUrl = preset.baseUrl;
-    nextConfig.value.selectedModel = preset.defaultModel;
-    if (!preset.isAvailable) {
-        nextConfig.value.inlineCompletionEnabled = false;
-        nextConfig.value.chatEnabled = false;
-        nextConfig.value.agentEnabled = false;
+const ensureLiteLlmConnectionDefaults = (): void => {
+    nextConfig.value.providerType = 'litellm';
+    if (!nextConfig.value.baseUrl?.trim()) {
+        nextConfig.value.baseUrl = DEFAULT_LITELLM_BASE_URL;
+    }
+};
+
+const syncDraftWithServicePlatform = (platformId: TAiServicePlatformId): void => {
+    const platform = findAiServicePlatformPreset(platformId);
+    activeServicePlatformId.value = platform.id;
+    ensureLiteLlmConnectionDefaults();
+    if (!isAiServicePlatformModel(platform.id, nextConfig.value.selectedModel)) {
+        nextConfig.value.selectedModel = platform.defaultModel;
     }
 };
 
@@ -255,14 +266,12 @@ const toggleStream = (): void => {
     streamEnabled.value = !streamEnabled.value;
 };
 
-const updateProvider = (providerType: string): void => {
-    const nextProvider = providerType as TAiProviderType;
-    if (nextConfig.value.providerType === nextProvider) {
+const updatePlatform = (platformId: TAiServicePlatformId): void => {
+    if (activeServicePlatformId.value === platformId) {
         closeDropdowns();
         return;
     }
-    nextConfig.value.providerType = nextProvider;
-    syncDraftWithProviderPreset(nextProvider);
+    syncDraftWithServicePlatform(platformId);
     closeDropdowns();
 };
 
@@ -360,13 +369,19 @@ const saveConfig = (): void => {
 
 watch(
     () => nextConfig.value.providerType,
-    (providerType) => {
-        const preset = findAiProviderPreset(providerType);
-        if (!nextConfig.value.baseUrl && preset.baseUrl) {
-            nextConfig.value.baseUrl = preset.baseUrl;
-        }
-        if (!nextConfig.value.selectedModel && preset.defaultModel) {
-            nextConfig.value.selectedModel = preset.defaultModel;
+    () => {
+        ensureLiteLlmConnectionDefaults();
+    },
+    { immediate: true },
+);
+
+watch(
+    () => nextConfig.value.selectedModel,
+    (selectedModel) => {
+        const platform = findAiServicePlatformByModel(selectedModel);
+        activeServicePlatformId.value = platform.id;
+        if (!isAiServicePlatformModel(platform.id, selectedModel)) {
+            nextConfig.value.selectedModel = platform.defaultModel;
         }
     },
     { immediate: true },
@@ -381,12 +396,7 @@ watch(
             return;
         }
         resetEphemeralState();
-        if (!nextConfig.value.baseUrl && activePreset.value.baseUrl) {
-            nextConfig.value.baseUrl = activePreset.value.baseUrl;
-        }
-        if (!nextConfig.value.selectedModel && activePreset.value.defaultModel) {
-            nextConfig.value.selectedModel = activePreset.value.defaultModel;
-        }
+        syncDraftWithServicePlatform(findAiServicePlatformByModel(nextConfig.value.selectedModel).id);
         void autoApply.loadAuthState().catch(() => undefined);
     },
     { immediate: true },
@@ -414,26 +424,52 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div class="modal-body">
-                    <div class="form-item">
-                        <label class="form-label">AI 服务平台</label>
-                        <div class="lr-select" :class="{ open: isPlatformOpen }" data-key="platform">
-                            <button
+                    <div class="form-row">
+                        <div class="form-item">
+                            <label class="form-label">AI 服务平台</label>
+                            <div class="lr-select" :class="{ open: isPlatformOpen }" data-key="platform">
+                                <button
 type="button" class="lr-select-trigger" aria-haspopup="listbox"
-                                @click.stop="isPlatformOpen = !isPlatformOpen; isModelOpen = false">
-                                <span class="lr-select-value">{{ selectedPlatformLabel }}</span>
-                                <svg
+                                    @click.stop="isPlatformOpen = !isPlatformOpen; isModelOpen = false">
+                                    <span class="lr-select-value">{{ selectedPlatformLabel }}</span>
+                                    <svg
 class="lr-select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="6 9 12 15 18 9" />
-                                </svg>
-                            </button>
-                            <div class="lr-select-menu" role="listbox" @click.stop>
-                                <div
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="6 9 12 15 18 9" />
+                                    </svg>
+                                </button>
+                                <div class="lr-select-menu" role="listbox" @click.stop>
+                                    <div
 v-for="option in platformOptions" :key="option.value"
-                                    :data-provider-id="option.value" class="lr-option"
-                                    :class="{ selected: option.value === nextConfig.providerType }" role="option"
-                                    @click="updateProvider(option.value)">
-                                    {{ option.label }}
+                                        :data-provider-id="option.value" class="lr-option"
+                                        :class="{ selected: option.value === activeServicePlatformId }" role="option"
+                                        @click="updatePlatform(option.value)">
+                                        <span class="lr-option-main">{{ option.label }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-item">
+                            <label class="form-label">模型名称</label>
+                            <div class="lr-select" :class="{ open: isModelOpen }" data-key="model">
+                                <button
+type="button" class="lr-select-trigger" aria-haspopup="listbox"
+                                    @click.stop="isModelOpen = !isModelOpen; isPlatformOpen = false">
+                                    <span class="lr-select-value">{{ selectedModelLabel }}</span>
+                                    <svg
+class="lr-select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="6 9 12 15 18 9" />
+                                    </svg>
+                                </button>
+                                <div class="lr-select-menu" role="listbox" @click.stop>
+                                    <div
+v-for="option in modelOptions" :key="option.value" class="lr-option"
+                                        :class="{ selected: option.value === nextConfig.selectedModel }" role="option"
+                                        @click="updateModel(option.value)">
+                                        <span class="lr-option-main">{{ option.label }}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -459,37 +495,12 @@ viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         <div class="tip">仅本地存储，不上传</div>
                     </div>
 
-                    <div class="form-row">
-                        <div class="form-item">
-                            <label class="form-label">API Base URL</label>
-                            <input
+                    <div class="form-item">
+                        <label class="form-label">API Base URL</label>
+                        <input
 v-model="nextConfig.baseUrl" class="form-input"
-                                :readonly="!activePreset.isEndpointEditable"
-                                :placeholder="activePreset.baseUrl ?? ''" />
-                        </div>
-                        <div class="form-item">
-                            <label class="form-label">模型</label>
-                            <div class="lr-select" :class="{ open: isModelOpen }" data-key="model">
-                                <button
-type="button" class="lr-select-trigger" aria-haspopup="listbox"
-                                    @click.stop="isModelOpen = !isModelOpen; isPlatformOpen = false">
-                                    <span class="lr-select-value">{{ selectedModelLabel }}</span>
-                                    <svg
-class="lr-select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <polyline points="6 9 12 15 18 9" />
-                                    </svg>
-                                </button>
-                                <div class="lr-select-menu" role="listbox" @click.stop>
-                                    <div
-v-for="option in modelOptions" :key="option.value" class="lr-option"
-                                        :class="{ selected: option.value === nextConfig.selectedModel }" role="option"
-                                        @click="updateModel(option.value)">
-                                        {{ option.label }}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                            :readonly="!activePreset.isEndpointEditable"
+                            :placeholder="activePreset.baseUrl ?? ''" />
                     </div>
 
                     <div class="form-row">
@@ -890,7 +901,7 @@ input[type='number'] {
 }
 
 .lr-option {
-    height: 28px;
+    min-height: 28px;
     padding: 0 10px 0 26px;
     display: flex;
     align-items: center;
@@ -903,6 +914,17 @@ input[type='number'] {
     transition: background 0.1s var(--ease), color 0.1s var(--ease);
     letter-spacing: -0.005em;
     user-select: none;
+}
+
+.lr-option-main {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lr-option-main {
+    color: inherit;
 }
 
 .lr-option:hover {

@@ -28,6 +28,10 @@
       <span v-if="hasActiveDocument && documentKind === 'image'" class="statusbar-segment statusbar-segment-passive">
         图片预览
       </span>
+
+      <span v-if="hasActiveDocument && documentKind === 'git-diff'" class="statusbar-segment statusbar-segment-passive">
+        Git Diff
+      </span>
     </div>
 
     <div class="flex h-full items-center gap-0.5">
@@ -115,6 +119,11 @@
       <template v-else-if="hasActiveDocument && documentKind === 'image'">
         <span class="statusbar-segment statusbar-segment-passive">只读</span>
       </template>
+
+      <template v-else-if="hasActiveDocument && documentKind === 'git-diff'">
+        <span class="statusbar-segment statusbar-segment-passive">Split Diff</span>
+        <span class="statusbar-segment statusbar-segment-passive">只读</span>
+      </template>
     </div>
   </footer>
 </template>
@@ -123,14 +132,19 @@
 import AiAutoApplyBadge from '@/components/business/ai/AiAutoApplyBadge.vue';
 import AppDropdownMenu from '@/components/common/AppDropdownMenu.vue';
 import { useIntegratedTerminalStatus } from '@/composables/useIntegratedTerminal';
-import type { IAnalyzeScriptPayload, TDocumentEncoding, TExecutorKind } from '@/types/editor';
+import type {
+  IAnalyzeScriptPayload,
+  TDocumentEncoding,
+  TDocumentKind,
+  TExecutorKind,
+} from '@/types/editor';
 import { resolveShellcheckStatusSummary } from '@/utils/shellcheck-status';
 import { ENCODING_OPTIONS, getExecutorLabel } from '@/utils/templates';
 import { computed } from 'vue';
 
 const props = defineProps<{
   hasActiveDocument: boolean;
-  documentKind: 'text' | 'image';
+  documentKind: TDocumentKind;
   statusMessage?: string | null;
   scriptAnalysis: IAnalyzeScriptPayload;
   encoding: TDocumentEncoding;

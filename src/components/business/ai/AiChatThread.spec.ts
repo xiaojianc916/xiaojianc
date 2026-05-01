@@ -25,8 +25,8 @@ describe('AiChatThread', () => {
           }),
         ],
         isTyping: true,
-        avatarUrl: null,
-        avatarAlt: 'AI',
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
       },
       global: {
         stubs: {
@@ -43,8 +43,8 @@ describe('AiChatThread', () => {
       props: {
         messages: [createMessage({ role: 'user', content: '浣犲ソ', stream: undefined })],
         isTyping: true,
-        avatarUrl: null,
-        avatarAlt: 'AI',
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
       },
       global: {
         stubs: {
@@ -66,8 +66,8 @@ describe('AiChatThread', () => {
           }],
         })],
         isTyping: false,
-        avatarUrl: null,
-        avatarAlt: 'AI',
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
       },
       global: {
         stubs: {
@@ -105,8 +105,8 @@ describe('AiChatThread', () => {
           }),
         ],
         isTyping: true,
-        avatarUrl: null,
-        avatarAlt: 'AI',
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
       },
       global: {
         stubs: {
@@ -115,7 +115,7 @@ describe('AiChatThread', () => {
       },
     });
 
-    expect(wrapper.text()).toContain('璇诲彇');
+    expect(wrapper.text()).toContain('读取');
     expect(wrapper.text()).toContain('test.sh');
     expect(wrapper.find('.ai-tool-running-dots').exists()).toBe(false);
     expect(wrapper.find('.ai-message-typing').exists()).toBe(false);
@@ -131,8 +131,31 @@ describe('AiChatThread', () => {
           }),
         ],
         isTyping: true,
-        avatarUrl: null,
-        avatarAlt: 'AI',
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
+      },
+      global: {
+        stubs: {
+          AiMessageItem: { template: '<div class="message-item-stub" />' },
+        },
+      },
+    });
+
+    expect(wrapper.find('.ai-message-typing').exists()).toBe(false);
+  });
+
+  it('hides the standalone typing bubble for a silent agent placeholder', () => {
+    const wrapper = mount(AiChatThread, {
+      props: {
+        messages: [
+          createMessage({
+            content: '',
+            stream: undefined,
+          }),
+        ],
+        isTyping: true,
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
       },
       global: {
         stubs: {

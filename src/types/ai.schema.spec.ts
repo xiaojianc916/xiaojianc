@@ -2,6 +2,7 @@ import {
   aiChatPayloadSchema,
   aiChatRequestSchema,
   aiConfigPayloadSchema,
+  aiProviderTypeSchema,
   aiToolDefinitionPayloadSchema,
 } from '@/types/ai.schema';
 import { describe, expect, it } from 'vitest';
@@ -27,10 +28,10 @@ const message = {
 describe('AI schema', () => {
   it('校验 AI 配置不包含密钥字段', () => {
     const parsed = aiConfigPayloadSchema.parse({
-      providerType: 'mock',
-      selectedModel: 'mock-ide-assistant',
-      baseUrl: null,
-      isBaseUrlConfigured: false,
+      providerType: 'litellm',
+      selectedModel: 'openai/gpt-5.5',
+      baseUrl: 'http://127.0.0.1:4000/v1',
+      isBaseUrlConfigured: true,
       hasCredentials: false,
       isConfigured: true,
       inlineCompletionEnabled: false,
@@ -38,7 +39,7 @@ describe('AI schema', () => {
       agentEnabled: false,
     });
 
-    expect(parsed.providerType).toBe('mock');
+    expect(parsed.providerType).toBe('litellm');
     expect('apiKey' in parsed).toBe(false);
   });
 
@@ -68,10 +69,14 @@ describe('AI schema', () => {
     ).toThrow();
   });
 
+  it('允许 LiteLLM Provider 类型', () => {
+    expect(aiProviderTypeSchema.parse('litellm')).toBe('litellm');
+  });
+
   it('校验 chat 响应消息', () => {
     const parsed = aiChatPayloadSchema.parse({
-      providerType: 'mock',
-      model: 'mock-ide-assistant',
+      providerType: 'litellm',
+      model: 'openai/gpt-5.5',
       message: {
         ...message,
         id: 'assistant-1',

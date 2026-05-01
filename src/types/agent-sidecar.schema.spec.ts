@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   agentSidecarChatRequestSchema,
+  agentSidecarExecuteRequestSchema,
   agentSidecarHealthPayloadSchema,
+  agentSidecarPlanRequestSchema,
   agentSidecarResponsePayloadSchema,
 } from '@/types/agent-sidecar.schema';
 
@@ -148,5 +150,50 @@ describe('agent sidecar event contract', () => {
       serverNames: ['filesystem'],
       errors: [],
     });
+  });
+
+  it('normalizes optional sidecar request fields before IPC', () => {
+    const parsed = agentSidecarChatRequestSchema.parse({
+      sessionId: null,
+      mode: ' ',
+      goal: ' ',
+      messages: [],
+      workspaceRootPath: null,
+      context: [],
+    });
+
+    expect(parsed.sessionId).toBeUndefined();
+    expect(parsed.mode).toBeUndefined();
+    expect(parsed.goal).toBeUndefined();
+    expect(parsed.workspaceRootPath).toBeNull();
+  });
+
+  it('accepts omitted optional sidecar request fields before IPC', () => {
+    const parsed = agentSidecarExecuteRequestSchema.parse({
+      goal: 'run',
+      messages: [],
+      context: [],
+    });
+
+    expect(parsed.sessionId).toBeUndefined();
+    expect(parsed.workspaceRootPath).toBeUndefined();
+    expect(parsed.goal).toBe('run');
+  });
+
+  it('keeps plan and execute goals non-empty after trimming', () => {
+    expect(() =>
+      agentSidecarPlanRequestSchema.parse({
+        goal: '',
+        messages: [],
+        context: [],
+      }),
+    ).toThrow();
+    expect(
+      agentSidecarExecuteRequestSchema.parse({
+        goal: ' run ',
+        messages: [],
+        context: [],
+      }).goal,
+    ).toBe('run');
   });
 });

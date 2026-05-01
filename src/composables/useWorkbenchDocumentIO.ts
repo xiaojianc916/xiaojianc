@@ -2,6 +2,7 @@ import type { useMessage } from '@/composables/useMessage';
 import { tauriService } from '@/services/tauri';
 import type { useEditorStore } from '@/store/editor';
 import type { IEditorDocument, IScriptFilePayload } from '@/types/editor';
+import type { IGitDiffPreviewPayload, IGitDiffPreviewRequest } from '@/types/git';
 import type { TSessionSnapshot, TSessionTabKind } from '@/types/session';
 import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import { getFileBaseName, isImageAssetPath } from '@/utils/file-assets';
@@ -81,6 +82,11 @@ const buildLogDetail = (title: string, detail: string): string =>
 const isRestoredSessionTab = (
   value: TRestoredSessionTab | null,
 ): value is TRestoredSessionTab => value !== null;
+
+const isSameGitDiffPreview = (
+  left: IGitDiffPreviewPayload,
+  right: IGitDiffPreviewPayload,
+): boolean => left.id === right.id;
 
 const resolveSessionTabKind = (
   tab: TRestorableSessionSnapshot['openTabs'][number],
@@ -346,11 +352,39 @@ export const useWorkbenchDocumentIO = ({
     }
   };
 
+  const openGitDiffPreview = async (request: IGitDiffPreviewRequest): Promise<void> => {
+    try {
+      const preview = await tauriService.getGitDiffPreview(request);
+      const existing = editorStore.documents.find(
+        (item) =>
+          item.kind === 'git-diff' &&
+          item.gitDiffPreview !== undefined &&
+          isSameGitDiffPreview(item.gitDiffPreview, preview),
+      );
+
+      if (!existing && !ensureCanOpenNewTab()) {
+        return;
+      }
+
+      const { reusedExisting } = editorStore.openGitDiffDocument(preview);
+      const detail = buildLogDetail(
+        reusedExisting ? '切换到 Git Diff' : '已打开 Git Diff',
+        `${preview.relativePath} · ${preview.mode}`,
+      );
+
+      editorStore.appendLog(preview.isEmpty ? 'info' : 'success', '查看 Git Diff', detail);
+      notifier.success(preview.isEmpty ? '没有可显示的 Diff' : `已打开 Diff ${preview.relativePath}`);
+    } catch (error) {
+      reportError('打开 Git Diff 失败', error, '打开 Git Diff 失败');
+    }
+  };
+
   return {
     createNewDocument,
     restoreSession,
     openDocument,
     openFolder,
     openDocumentByPath,
+    openGitDiffPreview,
   };
 };

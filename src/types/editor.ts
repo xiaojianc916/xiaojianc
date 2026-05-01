@@ -1,4 +1,5 @@
 import type { IAiDiffEditorPreview } from '@/types/ai-patch';
+import type { IGitDiffPreviewPayload } from '@/types/git';
 
 export type TDocumentEncoding =
   | 'utf-8'
@@ -8,7 +9,7 @@ export type TDocumentEncoding =
   | 'utf-16le'
   | 'utf-16be';
 
-export type TDocumentKind = 'text' | 'image' | 'ai-diff';
+export type TDocumentKind = 'text' | 'image' | 'ai-diff' | 'git-diff';
 export type TExecutorKind = 'wsl';
 export type TLogLevel = 'info' | 'success' | 'error';
 export type TRunLogScope = 'run' | 'workspace' | 'editor' | 'system';
@@ -28,6 +29,7 @@ export interface IEditorDocument {
   lineCount: number;
   charCount: number;
   aiDiffPreview?: IAiDiffEditorPreview;
+  gitDiffPreview?: IGitDiffPreviewPayload;
 }
 
 export interface ICommandTemplate {

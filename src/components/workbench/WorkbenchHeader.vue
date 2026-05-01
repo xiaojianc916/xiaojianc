@@ -58,7 +58,7 @@
     </div>
 
     <!-- Row 2: Breadcrumb -->
-    <div class="editor-breadcrumb flex items-center gap-1.5 overflow-hidden px-3.5">
+    <div v-if="showBreadcrumb" class="editor-breadcrumb flex items-center gap-1.5 overflow-hidden px-3.5">
       <span class="truncate text-[12px] text-(--text-tertiary)">{{ breadcrumbText }}</span>
     </div>
   </header>
@@ -70,13 +70,16 @@ import type { IEditorDocument } from '@/types/editor';
 import { normalizeFileSystemPath } from '@/utils/path';
 import { computed } from 'vue';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   documents: IEditorDocument[];
   activeDocumentId: string;
   filePath: string | null;
   canNavigateBack: boolean;
   canNavigateForward: boolean;
-}>();
+  showBreadcrumb?: boolean;
+}>(), {
+  showBreadcrumb: true,
+});
 
 defineEmits<{
   'select-tab': [documentId: string];

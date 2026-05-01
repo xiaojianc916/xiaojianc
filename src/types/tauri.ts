@@ -5,6 +5,7 @@ import type {
   IAgentSidecarHealthPayload,
   IAgentSidecarPlanRequest,
   IAgentSidecarResponsePayload,
+  IAgentSidecarStreamEventPayload,
 } from './agent-sidecar';
 import type {
   IAiAgentApprovePlanPayload,
@@ -90,6 +91,8 @@ import type {
 import type {
   IGitCommitRequest,
   IGitCommitResultPayload,
+  IGitDiffPreviewPayload,
+  IGitDiffPreviewRequest,
   IGitFileBaselinePayload,
   IGitPathOperationRequest,
   IGitRepositoryStatusPayload,
@@ -203,6 +206,9 @@ export interface ITauriService {
   agentSidecarResolveApproval(
     payload: IAgentSidecarApprovalResolveRequest,
   ): Promise<IAgentSidecarResponsePayload>;
+  onAgentSidecarStream(
+    handler: (payload: IAgentSidecarStreamEventPayload) => void,
+  ): Promise<() => void>;
   analyzeScript(payload: IAnalyzeScriptRequest): Promise<IAnalyzeScriptPayload>;
   formatScript(payload: IFormatScriptRequest): Promise<IFormatScriptPayload>;
   loadScript(path: string): Promise<IScriptFilePayload>;
@@ -217,6 +223,7 @@ export interface ITauriService {
   getGitRepositoryStatus(workspaceRootPath?: string | null): Promise<IGitRepositoryStatusPayload>;
   initGitRepository(workspaceRootPath?: string | null): Promise<IGitRepositoryStatusPayload>;
   getGitFileBaseline(path: string): Promise<IGitFileBaselinePayload>;
+  getGitDiffPreview(payload: IGitDiffPreviewRequest): Promise<IGitDiffPreviewPayload>;
   stageGitPaths(payload: IGitPathOperationRequest): Promise<IGitRepositoryStatusPayload>;
   unstageGitPaths(payload: IGitPathOperationRequest): Promise<IGitRepositoryStatusPayload>;
   discardGitPaths(payload: IGitPathOperationRequest): Promise<IGitRepositoryStatusPayload>;

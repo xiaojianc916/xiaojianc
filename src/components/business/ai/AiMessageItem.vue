@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import AiMarkdown from '@/components/business/ai/AiMarkdown.vue';
+import AiProviderIcon from '@/components/business/ai/AiProviderIcon.vue';
 import AiToolActivityInline from '@/components/business/ai/AiToolActivityInline.vue';
 import { useMessage } from '@/composables/useMessage';
+import type { TAiServicePlatformId } from '@/constants/ai-providers';
 import type { IAiChatMessage, TAiChatMessageActionId } from '@/types/ai';
 import { tryWriteClipboardText } from '@/utils/clipboard';
 import { LoaderCircle } from 'lucide-vue-next';
@@ -9,8 +11,8 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 
 const props = defineProps<{
   message: IAiChatMessage;
-  avatarUrl: string | null;
-  avatarAlt: string;
+  platformId: TAiServicePlatformId;
+  providerLabel: string;
 }>();
 
 const emit = defineEmits<{
@@ -44,6 +46,8 @@ const hasRenderableContent = computed(() =>
 );
 
 const hasToolCalls = computed(() => Boolean(props.message.toolCalls?.length));
+
+const hasMessageActions = computed(() => Boolean(props.message.actions?.length));
 
 const isToolProgressContent = computed(() => {
   if (props.message.role !== 'assistant' || !hasToolCalls.value) {
@@ -80,6 +84,14 @@ const shouldShowInlineLoader = computed(
     && !hasToolCalls.value,
 );
 
+const shouldRenderMessage = computed(
+  () => props.message.role === 'user'
+    || shouldShowMessageBubble.value
+    || hasToolCalls.value
+    || shouldShowInlineLoader.value
+    || hasMessageActions.value,
+);
+
 const copyMessageContent = async (): Promise<void> => {
   if (!canCopyContent.value) {
     notifier.warning('暂无可复制内容');
@@ -102,25 +114,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <article class="ai-message" :class="`is-${message.role}`">
-    <svg
-      v-if="message.role !== 'user' && !avatarUrl"
+  <article v-if="shouldRenderMessage" class="ai-message" :class="`is-${message.role}`">
+    <AiProviderIcon
+      v-if="message.role !== 'user'"
       class="ai-logo"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      aria-hidden="true"
-    >
-      <path d="M12 3l1.9 5.2L19 10l-5.1 1.8L12 17l-1.9-5.2L5 10l5.1-1.8L12 3z" />
-      <path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8L18 15z" />
-    </svg>
-    <img
-      v-else-if="message.role !== 'user'"
-      class="ai-logo"
-      :src="avatarUrl"
-      :alt="avatarAlt"
-      loading="lazy"
-      referrerpolicy="no-referrer"
+      :platform-id="platformId"
+      :title="providerLabel"
     />
     <div class="ai-message-main">
       <AiToolActivityInline v-if="message.toolCalls?.length" :tool-calls="message.toolCalls" />
@@ -135,7 +134,7 @@ onBeforeUnmount(() => {
           :stream-status="message.stream?.status"
         />
       </div>
-      <div v-if="message.actions?.length" class="ai-message-options" aria-label="AI 选项">
+      <div v-if="hasMessageActions" class="ai-message-options" aria-label="AI 选项">
         <button
           v-for="action in message.actions"
           :key="`${message.id}:${action.id}`"
@@ -185,12 +184,6 @@ onBeforeUnmount(() => {
   height: 22px;
   flex: 0 0 auto;
   margin-top: 1px;
-  border-radius: 5px;
-  color: var(--accent-strong);
-  object-fit: contain;
-  stroke-width: 1.75;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .ai-message-main {

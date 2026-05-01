@@ -333,7 +333,9 @@ import {
 } from '@/composables/useSourceControlContextMenu';
 import { useGitStore } from '@/store/git';
 import type {
+  IGitDiffPreviewRequest,
   IGitFileStatusPayload,
+  TGitDiffMode,
   TGitChangeKind,
 } from '@/types/git';
 import { openExternalUrl } from '@/utils/browser';
@@ -390,6 +392,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'open-file': [path: string];
+  'open-diff': [payload: IGitDiffPreviewRequest];
 }>();
 
 const gitStore = useGitStore();
@@ -886,6 +889,23 @@ const handleOpenFile = (path: string): void => {
   emit('open-file', path);
 };
 
+const resolveDiffMode = (sectionKey: TGitSectionKey): TGitDiffMode =>
+  sectionKey === 'staged' ? 'staged' : 'worktree';
+
+const handleOpenDiff = (sectionKey: TGitSectionKey, entry: IGitFileStatusPayload): void => {
+  const repositoryRootPath = status.value.repositoryRootPath;
+  if (!repositoryRootPath) {
+    message.warning('当前工作区未检测到 Git 仓库。');
+    return;
+  }
+
+  emit('open-diff', {
+    repositoryRootPath,
+    path: entry.path,
+    mode: resolveDiffMode(sectionKey),
+  });
+};
+
 const {
   handleRefresh,
   handleStageAll,
@@ -932,6 +952,7 @@ const {
   onUnstageAll: handleUnstageAll,
   onDiscardAll: handleDiscardAll,
   onCommit: handleCommit,
+  onOpenDiff: handleOpenDiff,
   onOpenFile: handleOpenFile,
   onCopyPath: async (path) => {
     await writeClipboardText(path);

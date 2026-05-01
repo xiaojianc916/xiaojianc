@@ -1299,6 +1299,7 @@
 <script setup lang="ts">
 import AiProviderSettings from '@/components/business/ai/AiProviderSettings.vue';
 import { useDialog } from '@/composables/useDialog';
+import { DEFAULT_LITELLM_BASE_URL, DEFAULT_LITELLM_MODEL_ID } from '@/constants/ai-providers';
 import { aiService } from '@/services/modules/ai';
 import { useAppStore } from '@/store/app';
 import type { IAiConfigPayload, IAiProviderSettingsActionFeedback } from '@/types/ai';
@@ -1590,12 +1591,12 @@ const gitTextFields = [
 const appStore = useAppStore();
 const { confirm } = useDialog();
 const aiConfig = ref<IAiConfigPayload>({
-  providerType: 'mock',
-  selectedModel: 'mock-ide-assistant',
-  baseUrl: null,
+  providerType: 'litellm',
+  selectedModel: DEFAULT_LITELLM_MODEL_ID,
+  baseUrl: DEFAULT_LITELLM_BASE_URL,
   isBaseUrlConfigured: true,
-  hasCredentials: true,
-  isConfigured: true,
+  hasCredentials: false,
+  isConfigured: false,
   inlineCompletionEnabled: false,
   chatEnabled: true,
   agentEnabled: false,

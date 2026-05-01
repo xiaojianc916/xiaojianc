@@ -2,22 +2,18 @@ use super::errors;
 
 const SERVICE_NAME: &str = "calamex.ai";
 
-const OPENAI_COMPATIBLE_USER: &str = "openai-compatible";
-const OPENAI_USER: &str = "openai";
-const DEEPSEEK_USER: &str = "deepseek";
-const MOONSHOT_USER: &str = "moonshot";
-const DASHSCOPE_USER: &str = "dashscope";
-const ZHIPU_USER: &str = "zhipu";
-const SILICONFLOW_USER: &str = "siliconflow";
+const LITELLM_USER: &str = "litellm";
 
-const PROVIDER_ACCOUNTS: &[(&str, &str)] = &[
-    ("openai-compatible", OPENAI_COMPATIBLE_USER),
-    ("openai", OPENAI_USER),
-    ("deepseek", DEEPSEEK_USER),
-    ("moonshot", MOONSHOT_USER),
-    ("dashscope", DASHSCOPE_USER),
-    ("zhipu", ZHIPU_USER),
-    ("siliconflow", SILICONFLOW_USER),
+const PROVIDER_ACCOUNTS: &[(&str, &str)] = &[("litellm", LITELLM_USER)];
+
+const LEGACY_PROVIDER_ACCOUNTS: &[&str] = &[
+    "openai-compatible",
+    "openai",
+    "deepseek",
+    "moonshot",
+    "dashscope",
+    "zhipu",
+    "siliconflow",
 ];
 
 pub struct CredentialStore;
@@ -81,6 +77,13 @@ impl CredentialStore {
             let _ = entry.delete_credential();
         }
 
+        for account in LEGACY_PROVIDER_ACCOUNTS {
+            let entry = keyring::Entry::new(SERVICE_NAME, account)
+                .map_err(|error| errors::error("AI_PROVIDER_UNAVAILABLE", error.to_string()))?;
+
+            let _ = entry.delete_credential();
+        }
+
         Ok(())
     }
 
@@ -107,32 +110,21 @@ fn provider_account(provider_type: &str) -> Result<&'static str, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        provider_account, DASHSCOPE_USER, DEEPSEEK_USER, MOONSHOT_USER, OPENAI_COMPATIBLE_USER,
-        OPENAI_USER, SILICONFLOW_USER, ZHIPU_USER,
-    };
+    use super::{provider_account, LITELLM_USER};
 
     #[test]
     fn provider_account_resolves_supported_providers() {
-        assert_eq!(
-            provider_account("openai-compatible").unwrap(),
-            OPENAI_COMPATIBLE_USER
-        );
-        assert_eq!(provider_account("openai").unwrap(), OPENAI_USER);
-        assert_eq!(provider_account("deepseek").unwrap(), DEEPSEEK_USER);
-        assert_eq!(provider_account("moonshot").unwrap(), MOONSHOT_USER);
-        assert_eq!(provider_account("dashscope").unwrap(), DASHSCOPE_USER);
-        assert_eq!(provider_account("zhipu").unwrap(), ZHIPU_USER);
-        assert_eq!(provider_account("siliconflow").unwrap(), SILICONFLOW_USER);
+        assert_eq!(provider_account("litellm").unwrap(), LITELLM_USER);
     }
 
     #[test]
     fn provider_account_trims_provider_type() {
-        assert_eq!(provider_account(" openai ").unwrap(), OPENAI_USER);
+        assert_eq!(provider_account(" litellm ").unwrap(), LITELLM_USER);
     }
 
     #[test]
-    fn provider_account_rejects_mock_provider() {
+    fn provider_account_rejects_legacy_providers() {
+        assert!(provider_account("openai").is_err());
         assert!(provider_account("mock").is_err());
     }
 

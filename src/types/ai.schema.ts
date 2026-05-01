@@ -65,17 +65,7 @@ import {
 } from '@/types/ai-agent.schema';
 
 export const aiProviderTypeSchema = z.enum([
-  'mock',
-  'openai',
-  'deepseek',
-  'moonshot',
-  'dashscope',
-  'zhipu',
-  'siliconflow',
-  'openai-compatible',
-  'claude-compatible',
-  'local',
-  'custom-gateway',
+  'litellm',
 ]);
 
 export const aiChatMessageActionSchema = z.object({

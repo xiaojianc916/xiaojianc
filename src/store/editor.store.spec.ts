@@ -45,4 +45,36 @@ describe('editor store session state', () => {
     store.setTerminalOutput('hello');
     expect(store.hasRunArtifacts).toBe(true);
   });
+
+  it('打开 Git Diff 预览会复用同一个只读标签且不写入会话标签', () => {
+    const store = useEditorStore();
+
+    store.openGitDiffDocument({
+      id: 'git-diff:worktree:/tmp/repo:src/app.sh',
+      repositoryRootPath: '/tmp/repo',
+      path: '/tmp/repo/src/app.sh',
+      relativePath: 'src/app.sh',
+      title: 'src/app.sh · 工作区 Diff',
+      mode: 'worktree',
+      originalContent: 'echo 0\n',
+      modifiedContent: 'echo 1\n',
+      isEmpty: false,
+    });
+    store.openGitDiffDocument({
+      id: 'git-diff:worktree:/tmp/repo:src/app.sh',
+      repositoryRootPath: '/tmp/repo',
+      path: '/tmp/repo/src/app.sh',
+      relativePath: 'src/app.sh',
+      title: 'src/app.sh · 工作区 Diff',
+      mode: 'worktree',
+      originalContent: 'echo 0\n',
+      modifiedContent: 'echo 2\n',
+      isEmpty: false,
+    });
+
+    expect(store.documents).toHaveLength(1);
+    expect(store.document.kind).toBe('git-diff');
+    expect(store.document.content).toContain('echo 2');
+    expect(store.sessionSnapshot.openTabs).toEqual([]);
+  });
 });

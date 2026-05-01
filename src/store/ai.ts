@@ -1,4 +1,5 @@
-﻿import { aiService } from '@/services/modules/ai';
+import { aiService } from '@/services/modules/ai';
+import { DEFAULT_LITELLM_BASE_URL, DEFAULT_LITELLM_MODEL_ID } from '@/constants/ai-providers';
 import type {
   IAiConfigPayload,
   IAiProviderConnectionPayload,
@@ -16,16 +17,15 @@ import { computed, ref } from 'vue';
 // Defaults
 // ---------------------------------------------------------------------------
 
-const DEFAULT_PROVIDER_TYPE: TAiProviderType = 'mock';
-const DEFAULT_MOCK_MODEL_ID = 'mock-ide-assistant';
+const DEFAULT_PROVIDER_TYPE: TAiProviderType = 'litellm';
 
 const createDefaultConfig = (): IAiConfigPayload => ({
   providerType: DEFAULT_PROVIDER_TYPE,
-  selectedModel: DEFAULT_MOCK_MODEL_ID,
-  baseUrl: null,
-  isBaseUrlConfigured: false,
+  selectedModel: DEFAULT_LITELLM_MODEL_ID,
+  baseUrl: DEFAULT_LITELLM_BASE_URL,
+  isBaseUrlConfigured: true,
   hasCredentials: false,
-  isConfigured: true,
+  isConfigured: false,
   inlineCompletionEnabled: false,
   chatEnabled: true,
   agentEnabled: false,

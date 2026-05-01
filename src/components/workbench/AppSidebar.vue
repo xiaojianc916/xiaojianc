@@ -7,7 +7,7 @@
   }">
     <SourceControlPanel v-if="isSourceControlView" class="h-full min-h-0 w-full flex-1"
       :is-desktop-runtime="isDesktopRuntime" :workspace-root-path="workspaceRootPath" :active-path="document.path"
-      @open-file="handleOpenFile" />
+      @open-file="handleOpenFile" @open-diff="handleOpenGitDiff" />
 
     <section v-else-if="isExplorerView" class="explorer-sidebar" aria-label="资源管理器">
       <header class="explorer-title-bar">
@@ -242,6 +242,7 @@ import type {
   IWorkspaceEntry,
   TExecutorKind,
 } from '@/types/editor';
+import type { IGitDiffPreviewRequest } from '@/types/git';
 import { writeClipboardText } from '@/utils/clipboard';
 import { toErrorMessage } from '@/utils/error';
 import {
@@ -268,6 +269,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'open-file': [path: string];
+  'open-git-diff': [payload: IGitDiffPreviewRequest];
   run: [];
   'create-document': [];
   'open-terminal': [];
@@ -666,6 +668,10 @@ const toggleDirectory = async (path: string): Promise<void> => {
 
 const handleOpenFile = (path: string): void => {
   emit('open-file', path);
+};
+
+const handleOpenGitDiff = (payload: IGitDiffPreviewRequest): void => {
+  emit('open-git-diff', payload);
 };
 
 const resolveCreationParentPath = (target: IExplorerContextTarget | null): string | null => {

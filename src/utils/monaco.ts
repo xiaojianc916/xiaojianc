@@ -11,7 +11,6 @@ import { Selection } from 'monaco-editor/esm/vs/editor/common/core/selection.js'
 import {
   EditorOption,
   MarkerSeverity,
-  OverviewRulerLane,
 } from 'monaco-editor/esm/vs/editor/common/standalone/standaloneEnums.js';
 import 'monaco-editor/esm/vs/editor/contrib/clipboard/browser/clipboard';
 import 'monaco-editor/esm/vs/editor/contrib/comment/browser/comment';
@@ -23,6 +22,8 @@ import 'monaco-editor/esm/vs/editor/standalone/browser/quickAccess/standaloneCom
 import 'monaco-editor/esm/vs/editor/standalone/browser/quickAccess/standaloneGotoLineQuickAccess';
 import {
   create as createStandaloneEditor,
+  createDiffEditor as createStandaloneDiffEditor,
+  createModel as createStandaloneModel,
   defineTheme as defineStandaloneTheme,
   setModelMarkers as setStandaloneModelMarkers,
   setTheme as setStandaloneTheme,
@@ -64,11 +65,12 @@ const languages = createMonacoLanguagesAPI();
 const monaco = {
   editor: {
     create: createStandaloneEditor,
+    createDiffEditor: createStandaloneDiffEditor,
+    createModel: createStandaloneModel,
     defineTheme: defineStandaloneTheme,
     setModelMarkers: setStandaloneModelMarkers,
     setTheme: setStandaloneTheme,
     EditorOption,
-    OverviewRulerLane,
   },
   languages,
   MarkerSeverity,

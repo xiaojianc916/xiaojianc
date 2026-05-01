@@ -1,17 +1,7 @@
 import type { IAiContextReference } from '@/types/ai-context';
 
 export type TAiProviderType =
-  | 'mock'
-  | 'openai'
-  | 'deepseek'
-  | 'moonshot'
-  | 'dashscope'
-  | 'zhipu'
-  | 'siliconflow'
-  | 'openai-compatible'
-  | 'claude-compatible'
-  | 'local'
-  | 'custom-gateway';
+  | 'litellm';
 export type TAiStatus = 'idle' | 'generating' | 'streaming' | 'error';
 export type TAiChatRole = 'user' | 'assistant' | 'system' | 'tool';
 export type {

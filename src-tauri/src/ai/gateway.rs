@@ -2,7 +2,7 @@ use super::audit::{self, AiAuditEventKind};
 use super::credential::CredentialStore;
 use super::errors;
 use super::openai_compatible;
-use super::provider::{AiProviderChatRequest, AiProviderMessage, AiProviderResponse, MockProvider};
+use super::provider::{AiProviderChatRequest, AiProviderMessage, AiProviderResponse};
 use super::redaction::redact_text;
 use super::stream_manager;
 use crate::ai_agent::planner::AgentPlanner;
@@ -27,12 +27,18 @@ const MAX_CONTEXT_REFERENCES: usize = 8;
 const MAX_CONTEXT_BLOCK_CHARS: usize = 12_000;
 const MAX_REFERENCE_PREVIEW_CHARS: usize = 4_000;
 
-const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
-const DEFAULT_OPENAI_MODEL: &str = "gpt-4.1-mini";
-const DEFAULT_MOCK_MODEL: &str = "mock-ide-assistant";
+const DEFAULT_LITELLM_BASE_URL: &str = "http://127.0.0.1:4000/v1";
+const DEFAULT_LITELLM_MODEL: &str = "openai/gpt-5.5";
 
 static CONFIG: OnceLock<Mutex<AiRuntimeConfig>> = OnceLock::new();
 static STREAM_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Debug, Clone)]
+struct AiUpstreamEndpoint {
+    provider_name: &'static str,
+    base_url: &'static str,
+    model: String,
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct AiRuntimeConfig {
@@ -47,9 +53,9 @@ struct AiRuntimeConfig {
 impl Default for AiRuntimeConfig {
     fn default() -> Self {
         Self {
-            provider_type: "mock".to_string(),
-            selected_model: Some(DEFAULT_MOCK_MODEL.to_string()),
-            base_url: None,
+            provider_type: "litellm".to_string(),
+            selected_model: Some(DEFAULT_LITELLM_MODEL.to_string()),
+            base_url: Some(DEFAULT_LITELLM_BASE_URL.to_string()),
             inline_completion_enabled: false,
             chat_enabled: true,
             agent_enabled: false,
@@ -137,13 +143,6 @@ pub fn save_config(
 pub fn save_credentials(provider_type: &str, api_key: &str) -> Result<AiConfigPayload, String> {
     validate_provider(provider_type)?;
 
-    if provider_type == "mock" {
-        return Err(errors::error(
-            "AI_PROVIDER_NOT_CONFIGURED",
-            "MockProvider 不需要 API Key。",
-        ));
-    }
-
     let trimmed = api_key.trim();
 
     if trimmed.is_empty() {
@@ -177,19 +176,6 @@ fn build_provider_connection_candidate(
         .filter(|value| !value.is_empty())
         .or_else(|| default_model(provider_type));
 
-    if provider_type == "mock" {
-        return Ok(AiProviderConnectionCandidate {
-            provider_type: provider_type.to_string(),
-            selected_model: model,
-            base_url: normalized_base_url,
-            api_key_for_test: None,
-            api_key_for_save: None,
-            inline_completion_enabled,
-            chat_enabled,
-            agent_enabled,
-        });
-    }
-
     let provided_api_key = api_key
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -216,13 +202,266 @@ fn build_provider_connection_candidate(
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{
+        build_identity_system_prompt, default_base_url, default_model,
+        resolve_direct_upstream_endpoint, should_try_direct_upstream_fallback, validate_provider,
+        with_identity_system_message, DEFAULT_LITELLM_BASE_URL,
+    };
+    use crate::ai::provider::AiProviderMessage;
+
+    #[test]
+    fn litellm_provider_uses_local_proxy_defaults() {
+        assert!(validate_provider("litellm").is_ok());
+        assert_eq!(default_model("litellm").as_deref(), Some("openai/gpt-5.5"));
+        assert_eq!(
+            default_base_url("litellm").as_deref(),
+            Some("http://127.0.0.1:4000/v1")
+        );
+        assert!(validate_provider("openai").is_err());
+    }
+
+    #[test]
+    fn deepseek_model_routes_to_direct_upstream_when_default_litellm_is_unavailable() {
+        let endpoint =
+            resolve_direct_upstream_endpoint(DEFAULT_LITELLM_BASE_URL, "deepseek/deepseek-v4-pro")
+                .expect("deepseek route should resolve");
+
+        assert_eq!(endpoint.provider_name, "DeepSeek");
+        assert_eq!(endpoint.base_url, "https://api.deepseek.com");
+        assert_eq!(endpoint.model, "deepseek-v4-pro");
+    }
+
+    #[test]
+    fn direct_upstream_fallback_only_handles_default_proxy_transport_errors() {
+        assert!(should_try_direct_upstream_fallback(
+            DEFAULT_LITELLM_BASE_URL,
+            "deepseek/deepseek-v4-pro",
+            "error sending request for url (http://127.0.0.1:4000/v1/chat/completions)",
+        ));
+        assert!(!should_try_direct_upstream_fallback(
+            "https://api.deepseek.com",
+            "deepseek/deepseek-v4-pro",
+            "error sending request for url (https://api.deepseek.com/chat/completions)",
+        ));
+        assert!(!should_try_direct_upstream_fallback(
+            DEFAULT_LITELLM_BASE_URL,
+            "anthropic/claude-sonnet-4-6",
+            "error sending request for url (http://127.0.0.1:4000/v1/chat/completions)",
+        ));
+    }
+
+    #[test]
+    fn deepseek_identity_prompt_is_model_aware_and_concise() {
+        let prompt = build_identity_system_prompt("deepseek/deepseek-v4-pro");
+
+        assert!(prompt.contains("DeepSeek"));
+        assert!(prompt.contains("当前模型：deepseek/deepseek-v4-pro"));
+        assert!(prompt.contains("不冒充其他模型或厂商"));
+        assert!(prompt.contains("deepseek/deepseek-v4-pro"));
+        assert!(!prompt.contains("不要自称"));
+    }
+
+    #[test]
+    fn anthropic_identity_prompt_keeps_claude_as_current_model() {
+        let prompt = build_identity_system_prompt("anthropic/claude-sonnet-4-6");
+
+        assert!(prompt.contains("Anthropic"));
+        assert!(prompt.contains("当前模型：anthropic/claude-sonnet-4-6"));
+        assert!(!prompt.contains("当前模型不是"));
+    }
+
+    #[test]
+    fn identity_message_is_prepended_before_user_messages() {
+        let messages = with_identity_system_message(
+            vec![AiProviderMessage::user("你是谁")],
+            "deepseek/deepseek-v4-pro",
+        );
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, "system");
+        assert!(messages[0].content.contains("身份："));
+        assert_eq!(messages[1].role, "user");
+    }
+}
+
+async fn test_with_litellm_fallback(
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+) -> Result<(), String> {
+    match openai_compatible::test(base_url, api_key, model).await {
+        Ok(()) => Ok(()),
+        Err(primary_error)
+            if should_try_direct_upstream_fallback(base_url, model, &primary_error) =>
+        {
+            let Some(endpoint) = resolve_direct_upstream_endpoint(base_url, model) else {
+                return Err(primary_error);
+            };
+
+            openai_compatible::test(endpoint.base_url, api_key, &endpoint.model)
+                .await
+                .map_err(|fallback_error| {
+                    direct_upstream_fallback_error(&primary_error, &endpoint, &fallback_error)
+                })
+        }
+        Err(error) => Err(error),
+    }
+}
+
+async fn chat_with_litellm_fallback(
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    request: AiProviderChatRequest,
+) -> Result<AiProviderResponse, String> {
+    match openai_compatible::chat(base_url, api_key, model, request.clone()).await {
+        Ok(response) => Ok(response),
+        Err(primary_error)
+            if should_try_direct_upstream_fallback(base_url, model, &primary_error) =>
+        {
+            let Some(endpoint) = resolve_direct_upstream_endpoint(base_url, model) else {
+                return Err(primary_error);
+            };
+
+            let mut response =
+                openai_compatible::chat(endpoint.base_url, api_key, &endpoint.model, request)
+                    .await
+                    .map_err(|fallback_error| {
+                        direct_upstream_fallback_error(&primary_error, &endpoint, &fallback_error)
+                    })?;
+            response.model = model.to_string();
+
+            Ok(response)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+async fn chat_stream_with_litellm_fallback<F, C>(
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    request: AiProviderChatRequest,
+    mut on_delta: F,
+    is_cancelled: C,
+) -> Result<(), String>
+where
+    F: FnMut(String) -> Result<(), String>,
+    C: Fn() -> bool,
+{
+    match openai_compatible::chat_stream(
+        base_url,
+        api_key,
+        model,
+        request.clone(),
+        |delta| on_delta(delta),
+        || is_cancelled(),
+    )
+    .await
+    {
+        Ok(()) => Ok(()),
+        Err(primary_error)
+            if should_try_direct_upstream_fallback(base_url, model, &primary_error) =>
+        {
+            let Some(endpoint) = resolve_direct_upstream_endpoint(base_url, model) else {
+                return Err(primary_error);
+            };
+
+            openai_compatible::chat_stream(
+                endpoint.base_url,
+                api_key,
+                &endpoint.model,
+                request,
+                |delta| on_delta(delta),
+                || is_cancelled(),
+            )
+            .await
+            .map_err(|fallback_error| {
+                direct_upstream_fallback_error(&primary_error, &endpoint, &fallback_error)
+            })
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn should_try_direct_upstream_fallback(base_url: &str, model: &str, error: &str) -> bool {
+    is_default_litellm_proxy_url(base_url)
+        && resolve_direct_upstream_endpoint(base_url, model).is_some()
+        && is_transport_connect_error(error)
+}
+
+fn is_transport_connect_error(error: &str) -> bool {
+    let normalized = error.to_ascii_lowercase();
+
+    normalized.contains("error sending request")
+        || normalized.contains("connection refused")
+        || normalized.contains("tcp connect error")
+        || normalized.contains("operation timed out")
+        || normalized.contains("deadline has elapsed")
+}
+
+fn resolve_direct_upstream_endpoint(base_url: &str, model: &str) -> Option<AiUpstreamEndpoint> {
+    if !is_default_litellm_proxy_url(base_url) {
+        return None;
+    }
+
+    let (provider, upstream_model) = model.trim().split_once('/')?;
+    let upstream_model = upstream_model.trim();
+    if upstream_model.is_empty() {
+        return None;
+    }
+
+    let (provider_name, base_url) = match provider.trim() {
+        "openai" => ("OpenAI", "https://api.openai.com/v1"),
+        "deepseek" => ("DeepSeek", "https://api.deepseek.com"),
+        "moonshot" => ("Moonshot Kimi", "https://api.moonshot.cn/v1"),
+        "dashscope" => (
+            "阿里云百炼",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        ),
+        "gemini" => (
+            "Google Gemini",
+            "https://generativelanguage.googleapis.com/v1beta/openai",
+        ),
+        "ollama" => ("Ollama", "http://127.0.0.1:11434/v1"),
+        _ => return None,
+    };
+
+    Some(AiUpstreamEndpoint {
+        provider_name,
+        base_url,
+        model: upstream_model.to_string(),
+    })
+}
+
+fn is_default_litellm_proxy_url(base_url: &str) -> bool {
+    let normalized = base_url.trim().trim_end_matches('/');
+
+    matches!(
+        normalized,
+        DEFAULT_LITELLM_BASE_URL | "http://localhost:4000/v1" | "http://[::1]:4000/v1"
+    )
+}
+
+fn direct_upstream_fallback_error(
+    primary_error: &str,
+    endpoint: &AiUpstreamEndpoint,
+    fallback_error: &str,
+) -> String {
+    errors::error(
+        "AI_PROVIDER_UNAVAILABLE",
+        format!(
+            "本地 LiteLLM Proxy 不可用，已自动尝试直连 {}，但直连也失败。LiteLLM 错误：{}；直连错误：{}",
+            endpoint.provider_name, primary_error, fallback_error
+        ),
+    )
+}
+
 async fn test_provider_connection_candidate(
     candidate: &AiProviderConnectionCandidate,
 ) -> Result<(), String> {
-    if candidate.provider_type == "mock" {
-        return Ok(());
-    }
-
     let base_url = candidate.base_url.as_deref().ok_or_else(|| {
         errors::error("AI_PROVIDER_NOT_CONFIGURED", "请先配置 Provider API 地址。")
     })?;
@@ -235,26 +474,22 @@ async fn test_provider_connection_candidate(
     let model = candidate
         .selected_model
         .as_deref()
-        .unwrap_or(DEFAULT_OPENAI_MODEL);
+        .unwrap_or(DEFAULT_LITELLM_MODEL);
 
-    openai_compatible::test(base_url, api_key, model).await
+    test_with_litellm_fallback(base_url, api_key, model).await
 }
 
 pub async fn test_provider() -> Result<(), String> {
     let config = current_config()?;
-
-    if config.provider_type == "mock" {
-        return Ok(());
-    }
 
     let base_url = resolve_base_url(&config)?;
     let api_key = CredentialStore::get(&config.provider_type)?;
     let model = config
         .selected_model
         .as_deref()
-        .unwrap_or(DEFAULT_OPENAI_MODEL);
+        .unwrap_or(DEFAULT_LITELLM_MODEL);
 
-    openai_compatible::test(base_url, &api_key, model).await
+    test_with_litellm_fallback(base_url, &api_key, model).await
 }
 
 pub async fn test_provider_config(
@@ -322,22 +557,21 @@ pub async fn chat(payload: AiChatRequest) -> Result<AiProviderResponse, String> 
 
         ensure_chat_enabled(&config)?;
 
-        let _thread_id = payload.thread_id.as_deref();
-        let messages = collect_messages(payload.messages, payload.references)?;
-        let request = AiProviderChatRequest::new(messages);
-
-        if config.provider_type == "mock" {
-            return Ok(MockProvider::chat(request));
-        }
-
-        let base_url = resolve_base_url(&config)?;
-        let api_key = CredentialStore::get(&config.provider_type)?;
         let model = config
             .selected_model
             .as_deref()
-            .unwrap_or(DEFAULT_OPENAI_MODEL);
+            .unwrap_or(DEFAULT_LITELLM_MODEL);
+        let _thread_id = payload.thread_id.as_deref();
+        let messages = with_identity_system_message(
+            collect_messages(payload.messages, payload.references)?,
+            model,
+        );
+        let request = AiProviderChatRequest::new(messages);
 
-        openai_compatible::chat(base_url, &api_key, model, request).await
+        let base_url = resolve_base_url(&config)?;
+        let api_key = CredentialStore::get(&config.provider_type)?;
+
+        chat_with_litellm_fallback(base_url, &api_key, model, request).await
     }
     .await;
 
@@ -362,20 +596,21 @@ pub async fn chat_stream(
     let config = current_config()?;
     ensure_chat_enabled(&config)?;
 
-    let messages = collect_messages(payload.messages, payload.references)?;
-    let request = AiProviderChatRequest::new(messages);
-
     let stream_id = next_runtime_id("ai-stream");
     let assistant_message_id = next_runtime_id("assistant");
-    let provider_type = config.provider_type.clone();
-    let response_provider_type = provider_type.clone();
+    let response_provider_type = config.provider_type.clone();
     let task_config = config.clone();
 
     let model = config
         .selected_model
         .clone()
         .or_else(|| default_model(&config.provider_type))
-        .unwrap_or_else(|| DEFAULT_OPENAI_MODEL.to_string());
+        .unwrap_or_else(|| DEFAULT_LITELLM_MODEL.to_string());
+    let messages = with_identity_system_message(
+        collect_messages(payload.messages, payload.references)?,
+        &model,
+    );
+    let request = AiProviderChatRequest::new(messages);
 
     stream_manager::register(&stream_id);
 
@@ -396,47 +631,35 @@ pub async fn chat_stream(
             },
         );
 
-        let result = if provider_type == "mock" {
-            stream_mock_response(
-                &app,
-                &task_stream_id,
-                &task_assistant_message_id,
+        let result = async {
+            let base_url = resolve_base_url(&task_config)?.to_string();
+            let api_key = CredentialStore::get(&task_config.provider_type)?;
+
+            chat_stream_with_litellm_fallback(
+                &base_url,
+                &api_key,
                 &task_model,
                 request,
+                |delta| {
+                    emit_stream_event(
+                        &app,
+                        AiChatStreamEventPayload {
+                            stream_id: task_stream_id.clone(),
+                            assistant_message_id: task_assistant_message_id.clone(),
+                            kind: "delta".to_string(),
+                            delta: Some(delta),
+                            message: None,
+                            model: Some(task_model.clone()),
+                        },
+                    );
+
+                    Ok(())
+                },
+                || stream_manager::is_cancelled(&task_stream_id),
             )
             .await
-        } else {
-            let run = async {
-                let base_url = resolve_base_url(&task_config)?.to_string();
-                let api_key = CredentialStore::get(&task_config.provider_type)?;
-
-                openai_compatible::chat_stream(
-                    &base_url,
-                    &api_key,
-                    &task_model,
-                    request,
-                    |delta| {
-                        emit_stream_event(
-                            &app,
-                            AiChatStreamEventPayload {
-                                stream_id: task_stream_id.clone(),
-                                assistant_message_id: task_assistant_message_id.clone(),
-                                kind: "delta".to_string(),
-                                delta: Some(delta),
-                                message: None,
-                                model: Some(task_model.clone()),
-                            },
-                        );
-
-                        Ok(())
-                    },
-                    || stream_manager::is_cancelled(&task_stream_id),
-                )
-                .await
-            };
-
-            run.await
-        };
+        }
+        .await;
 
         match result {
             Ok(()) => {
@@ -502,40 +725,6 @@ pub async fn chat_stream(
     })
 }
 
-async fn stream_mock_response(
-    app: &AppHandle,
-    stream_id: &str,
-    assistant_message_id: &str,
-    model: &str,
-    request: AiProviderChatRequest,
-) -> Result<(), String> {
-    let response = MockProvider::chat(request).content;
-
-    for chunk in response.as_bytes().chunks(16) {
-        if stream_manager::is_cancelled(stream_id) {
-            return Err(errors::error("AI_REQUEST_CANCELLED", "AI 请求已取消。"));
-        }
-
-        let delta = String::from_utf8_lossy(chunk).to_string();
-
-        emit_stream_event(
-            app,
-            AiChatStreamEventPayload {
-                stream_id: stream_id.to_string(),
-                assistant_message_id: assistant_message_id.to_string(),
-                kind: "delta".to_string(),
-                delta: Some(delta),
-                message: None,
-                model: Some(model.to_string()),
-            },
-        );
-
-        tokio::time::sleep(std::time::Duration::from_millis(24)).await;
-    }
-
-    Ok(())
-}
-
 fn emit_stream_event(app: &AppHandle, payload: AiChatStreamEventPayload) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.emit("ai:chat-stream", payload);
@@ -547,8 +736,8 @@ pub async fn inline_complete(
 ) -> Result<AiInlineCompletionResult, String> {
     let config = current_config()?;
 
-    if config.provider_type == "mock" || !config.inline_completion_enabled {
-        return Ok(mock_inline_complete(payload));
+    if !config.inline_completion_enabled {
+        return Ok(disabled_inline_complete(payload));
     }
 
     let prompt = build_inline_prompt(&payload);
@@ -562,9 +751,9 @@ pub async fn inline_complete(
     let model = config
         .selected_model
         .as_deref()
-        .unwrap_or(DEFAULT_OPENAI_MODEL);
+        .unwrap_or(DEFAULT_LITELLM_MODEL);
 
-    let response = openai_compatible::chat(base_url, &api_key, model, request).await?;
+    let response = chat_with_litellm_fallback(base_url, &api_key, model, request).await?;
 
     Ok(AiInlineCompletionResult {
         insert_text: response.content,
@@ -601,18 +790,14 @@ pub async fn code_action(payload: AiCodeActionRequest) -> Result<AiCodeActionPay
         content: redacted_prompt.text,
     }]);
 
-    let response = if config.provider_type == "mock" {
-        MockProvider::chat(request)
-    } else {
-        let base_url = resolve_base_url(&config)?;
-        let api_key = CredentialStore::get(&config.provider_type)?;
-        let model = config
-            .selected_model
-            .as_deref()
-            .unwrap_or(DEFAULT_OPENAI_MODEL);
+    let base_url = resolve_base_url(&config)?;
+    let api_key = CredentialStore::get(&config.provider_type)?;
+    let model = config
+        .selected_model
+        .as_deref()
+        .unwrap_or(DEFAULT_LITELLM_MODEL);
 
-        openai_compatible::chat(base_url, &api_key, model, request).await?
-    };
+    let response = chat_with_litellm_fallback(base_url, &api_key, model, request).await?;
 
     Ok(AiCodeActionPayload {
         explanation: response.content,
@@ -711,6 +896,64 @@ pub(crate) fn collect_messages(
     Ok(result)
 }
 
+fn with_identity_system_message(
+    mut messages: Vec<AiProviderMessage>,
+    model: &str,
+) -> Vec<AiProviderMessage> {
+    let mut result = Vec::with_capacity(messages.len() + 1);
+    result.push(build_identity_system_message(model));
+    result.append(&mut messages);
+    result
+}
+
+fn build_identity_system_message(model: &str) -> AiProviderMessage {
+    AiProviderMessage::system(build_identity_system_prompt(model))
+}
+
+fn build_identity_system_prompt(model: &str) -> String {
+    let trimmed_model = match model.trim() {
+        "" => "未指定",
+        value => value,
+    };
+    let provider_label = infer_model_provider_label(trimmed_model);
+
+    format!(
+        "身份：你是小建C桌面应用中的 AI 编程助手。当前模型：{trimmed_model}，平台：{provider_label}。用户询问身份时按当前真实模型回答，不冒充其他模型或厂商。"
+    )
+}
+
+fn infer_model_provider_label(model: &str) -> &'static str {
+    let normalized = model.trim().to_ascii_lowercase();
+
+    if normalized.starts_with("deepseek/") || normalized.contains("deepseek") {
+        return "DeepSeek";
+    }
+
+    if is_anthropic_model(model) {
+        return "Anthropic";
+    }
+
+    if normalized.starts_with("openai/") || normalized.starts_with("gpt-") {
+        return "OpenAI";
+    }
+
+    if normalized.starts_with("google/") || normalized.contains("gemini") {
+        return "Google";
+    }
+
+    if normalized.starts_with("qwen/") || normalized.contains("qwen") {
+        return "通义千问";
+    }
+
+    "当前配置的 AI 服务平台"
+}
+
+fn is_anthropic_model(model: &str) -> bool {
+    let normalized = model.trim().to_ascii_lowercase();
+
+    normalized.starts_with("anthropic/") || normalized.contains("claude")
+}
+
 fn build_context_block(references: &[AiContextReferencePayload]) -> String {
     if references.is_empty() {
         return String::new();
@@ -756,26 +999,15 @@ fn build_context_block(references: &[AiContextReferencePayload]) -> String {
     block
 }
 
-fn mock_inline_complete(payload: AiInlineCompletionRequest) -> AiInlineCompletionResult {
-    let _request_shape = (
-        &payload.file_path,
-        &payload.language,
-        &payload.suffix,
-        payload
-            .recent_edits
-            .as_ref()
-            .map(Vec::len)
-            .unwrap_or_default(),
-    );
-
-    let insert_text = if payload.prefix.trim_end().ends_with('{') {
-        "\n  // TODO: 在这里补充实现\n}".to_string()
-    } else {
-        String::new()
-    };
+fn disabled_inline_complete(payload: AiInlineCompletionRequest) -> AiInlineCompletionResult {
+    let _recent_edits_count = payload
+        .recent_edits
+        .as_ref()
+        .map(Vec::len)
+        .unwrap_or_default();
 
     AiInlineCompletionResult {
-        insert_text,
+        insert_text: String::new(),
         range: AiInlineCompletionRangePayload {
             start_offset: payload.cursor_offset,
             end_offset: payload.cursor_offset,
@@ -833,17 +1065,13 @@ fn ensure_chat_enabled(config: &AiRuntimeConfig) -> Result<(), String> {
 }
 
 fn to_payload(config: AiRuntimeConfig) -> AiConfigPayload {
-    let has_credentials = if config.provider_type == "mock" {
-        true
-    } else {
-        CredentialStore::has_provider_secret(&config.provider_type)
-    };
+    let has_credentials = CredentialStore::has_provider_secret(&config.provider_type);
 
     let is_base_url_configured = config
         .base_url
         .as_ref()
         .map(|value| !value.trim().is_empty())
-        .unwrap_or(config.provider_type == "mock");
+        .unwrap_or(false);
 
     AiConfigPayload {
         provider_type: config.provider_type.clone(),
@@ -860,11 +1088,10 @@ fn to_payload(config: AiRuntimeConfig) -> AiConfigPayload {
 
 fn validate_provider(provider_type: &str) -> Result<(), String> {
     match provider_type {
-        "mock" | "openai" | "deepseek" | "moonshot" | "dashscope" | "zhipu" | "siliconflow"
-        | "openai-compatible" => Ok(()),
+        "litellm" => Ok(()),
         _ => Err(errors::error(
             "AI_PROVIDER_NOT_CONFIGURED",
-            "当前版本只支持 MockProvider 与 OpenAI-compatible Provider。",
+            "当前版本只支持 LiteLLM Proxy Provider。",
         )),
     }
 }
@@ -873,15 +1100,11 @@ fn normalize_base_url(
     provider_type: &str,
     base_url: Option<String>,
 ) -> Result<Option<String>, String> {
-    if provider_type == "mock" {
-        return Ok(None);
-    }
-
     let value = base_url
         .map(|item| item.trim().trim_end_matches('/').to_string())
         .filter(|item| !item.is_empty())
         .or_else(|| default_base_url(provider_type))
-        .unwrap_or_else(|| DEFAULT_OPENAI_BASE_URL.to_string());
+        .unwrap_or_else(|| DEFAULT_LITELLM_BASE_URL.to_string());
 
     if !is_allowed_base_url(&value) {
         return Err(errors::error(
@@ -902,25 +1125,14 @@ fn is_allowed_base_url(value: &str) -> bool {
 
 fn default_model(provider_type: &str) -> Option<String> {
     match provider_type {
-        "mock" => Some(DEFAULT_MOCK_MODEL.to_string()),
-        "openai" | "openai-compatible" => Some(DEFAULT_OPENAI_MODEL.to_string()),
-        "deepseek" => Some("deepseek-v4-pro".to_string()),
-        "moonshot" => Some("moonshot-v1-8k".to_string()),
-        "dashscope" => Some("qwen-plus".to_string()),
-        "zhipu" => Some("glm-4-plus".to_string()),
-        "siliconflow" => Some("Qwen/Qwen2.5-Coder-32B-Instruct".to_string()),
+        "litellm" => Some(DEFAULT_LITELLM_MODEL.to_string()),
         _ => None,
     }
 }
 
 fn default_base_url(provider_type: &str) -> Option<String> {
     match provider_type {
-        "openai" => Some(DEFAULT_OPENAI_BASE_URL.to_string()),
-        "deepseek" => Some("https://api.deepseek.com".to_string()),
-        "moonshot" => Some("https://api.moonshot.cn/v1".to_string()),
-        "dashscope" => Some("https://dashscope.aliyuncs.com/compatible-mode/v1".to_string()),
-        "zhipu" => Some("https://open.bigmodel.cn/api/paas/v4".to_string()),
-        "siliconflow" => Some("https://api.siliconflow.cn/v1".to_string()),
+        "litellm" => Some(DEFAULT_LITELLM_BASE_URL.to_string()),
         _ => None,
     }
 }
@@ -959,7 +1171,31 @@ fn load_config_from_disk() -> Option<AiRuntimeConfig> {
     let path = config_file_path()?;
     let content = fs::read_to_string(path).ok()?;
 
-    serde_json::from_str::<AiRuntimeConfig>(&content).ok()
+    serde_json::from_str::<AiRuntimeConfig>(&content)
+        .ok()
+        .map(normalize_runtime_config)
+}
+
+fn normalize_runtime_config(mut config: AiRuntimeConfig) -> AiRuntimeConfig {
+    if validate_provider(&config.provider_type).is_err() {
+        return AiRuntimeConfig::default();
+    }
+
+    let selected_model = config
+        .selected_model
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .or_else(|| default_model(&config.provider_type));
+    let base_url = config
+        .base_url
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .or_else(|| default_base_url(&config.provider_type));
+
+    config.selected_model = selected_model;
+    config.base_url = base_url;
+
+    config
 }
 
 fn persist_config(config: &AiRuntimeConfig) -> Result<(), String> {

@@ -10,6 +10,7 @@ import type {
     IAgentSidecarExecuteRequest,
     IAgentSidecarPlanRequest,
     IAgentSidecarResponsePayload,
+    IAgentSidecarStreamEventPayload,
 } from '@/types/agent-sidecar';
 import type { IAiAgentRun, IAiChatStreamEventPayload, IAiTaskPlanStep } from '@/types/ai';
 import type { IAnalyzeScriptPayload, IEditorDocument } from '@/types/editor';
@@ -30,8 +31,10 @@ const WORKSPACE_ROOT = 'd:/com.xiaojianc/my_desktop_app' as const;
 
 const aiServiceMock = vi.hoisted(() => {
     type StreamHandler = (payload: IAiChatStreamEventPayload) => void;
+    type SidecarStreamHandler = (payload: IAgentSidecarStreamEventPayload) => void;
 
     let streamHandler: StreamHandler | null = null;
+    let sidecarStreamHandler: SidecarStreamHandler | null = null;
     let streamSequence = 0;
     const queuedStreamResponses: Array<{
         streamId: string;
@@ -253,6 +256,12 @@ const aiServiceMock = vi.hoisted(() => {
         ],
         result: '审批结果已交给 sidecar。',
     }));
+    const onSidecarStream = vi.fn(async (handler: SidecarStreamHandler) => {
+        sidecarStreamHandler = handler;
+        return vi.fn(() => {
+            sidecarStreamHandler = null;
+        });
+    });
 
     const approvePlan = vi.fn(async () => ({
         approvedAt: '2026-04-29T00:00:00.000Z',
@@ -272,6 +281,7 @@ const aiServiceMock = vi.hoisted(() => {
         sidecarPlan,
         sidecarExecute,
         sidecarResolveApproval,
+        onSidecarStream,
         approvePlan,
         queueStreamResponse(content: string, terminalKind: 'done' | 'error' = 'done', terminalMessage: string | null = null): void {
             streamSequence += 1;
@@ -286,6 +296,9 @@ const aiServiceMock = vi.hoisted(() => {
         emit(event: IAiChatStreamEventPayload): void {
             streamHandler?.(event);
         },
+        emitSidecar(event: IAgentSidecarStreamEventPayload): void {
+            sidecarStreamHandler?.(event);
+        },
         emitDelta(delta: string): void {
             streamHandler?.({
                 streamId: STREAM_ID,
@@ -298,6 +311,7 @@ const aiServiceMock = vi.hoisted(() => {
         },
         reset(): void {
             streamHandler = null;
+            sidecarStreamHandler = null;
             streamSequence = 0;
             queuedStreamResponses.length = 0;
             onChatStream.mockClear();
@@ -312,6 +326,7 @@ const aiServiceMock = vi.hoisted(() => {
             sidecarPlan.mockClear();
             sidecarExecute.mockClear();
             sidecarResolveApproval.mockClear();
+            onSidecarStream.mockClear();
             approvePlan.mockClear();
         },
     };
@@ -331,7 +346,32 @@ vi.mock('@/services/modules/ai', () => ({
         sidecarPlan: aiServiceMock.sidecarPlan,
         sidecarExecute: aiServiceMock.sidecarExecute,
         sidecarResolveApproval: aiServiceMock.sidecarResolveApproval,
+        onSidecarStream: aiServiceMock.onSidecarStream,
         approvePlan: aiServiceMock.approvePlan,
+    },
+}));
+
+const tauriServiceMock = vi.hoisted(() => {
+    const loadScript = vi.fn(async (path: string) => ({
+        path,
+        name: path.split(/[\\/]/u).pop() || 'script.sh',
+        content: 'echo refreshed',
+        encoding: 'utf-8' as const,
+        lineCount: 1,
+        charCount: 14,
+    }));
+
+    return {
+        loadScript,
+        reset(): void {
+            loadScript.mockClear();
+        },
+    };
+});
+
+vi.mock('@/services/tauri', () => ({
+    tauriService: {
+        loadScript: tauriServiceMock.loadScript,
     },
 }));
 
@@ -342,6 +382,31 @@ vi.mock('@/services/modules/ai', () => ({
 const flushMicrotasks = async (): Promise<void> => {
     await Promise.resolve();
     await Promise.resolve();
+};
+
+const createDeferred = <T>() => {
+    let resolveValue: ((value: T) => void) | undefined;
+    let rejectValue: ((reason?: unknown) => void) | undefined;
+    const promise = new Promise<T>((resolve, reject) => {
+        resolveValue = resolve;
+        rejectValue = reject;
+    });
+
+    return {
+        promise,
+        resolve(value: T): void {
+            if (!resolveValue) {
+                throw new Error('deferred resolve is not ready');
+            }
+            resolveValue(value);
+        },
+        reject(reason?: unknown): void {
+            if (!rejectValue) {
+                throw new Error('deferred reject is not ready');
+            }
+            rejectValue(reason);
+        },
+    };
 };
 
 const waitForStartedStream = async (
@@ -413,7 +478,7 @@ const createPlanStep = (
     goal: title,
     kind: status === 'done' ? 'verify' : 'inspect',
     status,
-    expectedOutput: `${title}鐨勮緭鍑篳,
+    expectedOutput: title + ' 的输出',
     tools: ['get_diagnostics'],
     requiresUserApproval: false,
     riskLevel: 'low',
@@ -454,6 +519,13 @@ const createAssistantHarnessContext = (
         workspaceRootPath: ref(WORKSPACE_ROOT),
     });
 
+    assistant.config.value = {
+        ...assistant.config.value,
+        hasCredentials: true,
+        isConfigured: true,
+        agentEnabled: true,
+    };
+
     return {
         assistant,
         document,
@@ -468,6 +540,7 @@ describe('useAiAssistant streaming integration', () => {
     beforeEach(() => {
         setActivePinia(createPinia());
         aiServiceMock.reset();
+        tauriServiceMock.reset();
         vi.stubGlobal(
             'requestAnimationFrame',
             (callback: FrameRequestCallback): number => {
@@ -491,13 +564,19 @@ describe('useAiAssistant streaming integration', () => {
 
         await waitForStartedStream(() => assistant.messages.value.at(-1)?.id);
 
-        aiServiceMock.emitDelta('鍓嶆枃 **markdown**\n\n```ts\nconst pending = true;');
+        const fence = String.fromCharCode(96).repeat(3);
+        const partialFence = [
+            '鍓嶆枃 **markdown**',
+            '',
+            fence + 'ts',
+            'const pending = true;',
+        ].join(String.fromCharCode(10));
+
+        aiServiceMock.emitDelta(partialFence);
         await flushMicrotasks();
 
         const assistantMessage = assistant.messages.value.at(-1);
-        expect(assistantMessage?.content).toBe(
-            '鍓嶆枃 **markdown**\n\n```ts\nconst pending = true;',
-        );
+        expect(assistantMessage?.content).toBe(partialFence);
         expect(assistantMessage?.stream?.status).toBe('streaming');
 
         assistant.stopCurrentRequest();
@@ -513,7 +592,14 @@ describe('useAiAssistant streaming integration', () => {
 
         await waitForStartedStream(() => assistant.messages.value.at(-1)?.id);
 
-        aiServiceMock.emitDelta('```ts\nconst pending = true;\n');
+        const fence = String.fromCharCode(96).repeat(3);
+        const openFence = [
+            fence + 'ts',
+            'const pending = true;',
+            '',
+        ].join(String.fromCharCode(10));
+
+        aiServiceMock.emitDelta(openFence);
         await flushMicrotasks();
 
         assistant.stopCurrentRequest();
@@ -521,12 +607,12 @@ describe('useAiAssistant streaming integration', () => {
         const cancelledMessage = assistant.messages.value.at(-1);
         expect(aiServiceMock.cancel).toHaveBeenCalledWith({ streamId: STREAM_ID });
         expect(cancelledMessage?.stream?.status).toBe('cancelled');
-        expect(cancelledMessage?.content).toBe('```ts\nconst pending = true;\n');
+        expect(cancelledMessage?.content).toBe(openFence);
 
         const contentBeforeLateDelta = cancelledMessage?.content;
 
         // Late delta arriving after cancel must not mutate the message.
-        aiServiceMock.emitDelta('```\n不应该进入消息');
+        aiServiceMock.emitDelta([fence, '不应该进入消息'].join(String.fromCharCode(10)));
         await flushMicrotasks();
 
         expect(assistant.messages.value.at(-1)?.content).toBe(contentBeforeLateDelta);
@@ -548,7 +634,7 @@ describe('useAiAssistant streaming integration', () => {
 
         expect(assistant.attachedFiles.value).toHaveLength(1);
         expect(assistant.attachedFiles.value[0]?.kind).toBe('image');
-        expect(assistant.attachedFiles.value[0]?.detailLabel).toBe('640 脳 480');
+        expect(assistant.attachedFiles.value[0]?.detailLabel).toBe('640 × 480');
         expect(assistant.attachedFiles.value[0]?.reference.kind).toBe('image-attachment');
         expect(assistant.attachedFiles.value[0]?.reference.content).toBeUndefined();
 
@@ -563,13 +649,59 @@ describe('useAiAssistant streaming integration', () => {
             expect.arrayContaining([
                 expect.objectContaining({
                     kind: 'image-attachment',
-                    label: '鍥剧墖闄勪欢 路 pasted-image.png',
+                    label: '图片附件 · pasted-image.png',
                 }),
             ]),
         );
 
         assistant.stopCurrentRequest();
         await sendPromise;
+    });
+
+    it('clears the draft and shows the user message before context lookup finishes', async () => {
+        const { assistant } = createAssistantHarnessContext();
+        const userQuestion = '@project 查一下发送流程';
+        const queryDeferred = createDeferred<Awaited<ReturnType<typeof aiServiceMock.queryIndex>>>();
+
+        aiServiceMock.queryIndex.mockReturnValueOnce(queryDeferred.promise);
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = userQuestion;
+
+        const sendPromise = assistant.sendMessage();
+
+        expect(assistant.draft.value).toBe('');
+        expect(assistant.isSending.value).toBe(true);
+        expect(assistant.messages.value[0]).toMatchObject({
+            role: 'user',
+            content: userQuestion,
+            references: [],
+        });
+        expect(aiServiceMock.sidecarExecute).toHaveBeenCalledTimes(0);
+
+        queryDeferred.resolve({
+            rootPath: WORKSPACE_ROOT,
+            results: [],
+        });
+        await sendPromise;
+    });
+
+    it('does not restore the draft when the chat stream errors after sending', async () => {
+        const assistant = createAssistantHarness();
+        const userQuestion = '解释当前脚本';
+
+        aiServiceMock.queueStreamResponse('', 'error', '网络突然断开');
+        assistant.activeMode.value = 'chat';
+        assistant.draft.value = userQuestion;
+
+        await assistant.sendMessage();
+
+        expect(assistant.errorMessage.value).toBe('网络突然断开');
+        expect(assistant.draft.value).toBe('');
+        expect(assistant.messages.value[0]).toMatchObject({
+            role: 'user',
+            content: userQuestion,
+        });
     });
 
     it('starts a new conversation by clearing draft and transient state', () => {
@@ -780,13 +912,13 @@ describe('useAiAssistant streaming integration', () => {
     it('璁″垝鐢熸垚澶辫触鏃舵竻鎺夋棫姝ラ鍜屾棫 run锛岄伩鍏嶅崱鍦ㄦ墽琛屼腑', async () => {
         const { assistant } = createAssistantHarnessContext();
         const staleSteps = [
-            createPlanStep('plan-step-1', '鏃ц鍒掔涓€姝?, 'running'),
-            createPlanStep('plan-step-2', '鏃ц鍒掔浜屾'),
+            createPlanStep('plan-step-1', '旧计划第一步', 'running'),
+            createPlanStep('plan-step-2', '旧计划第二步'),
         ];
         const planStore = assistant.agentPlan.store;
         const userQuestion = '@current-file 淇敼瀹屽杽杩欎釜鏂囦欢';
 
-        planStore.setPlan('鏃ц鍒?, staleSteps);
+        planStore.setPlan('旧计划', staleSteps);
         planStore.approvedAt = '2026-04-29T00:00:00.000Z';
         planStore.upsertRun(createAgentRun(staleSteps));
         assistant.agentSteps.value = staleSteps.map((step) => ({
@@ -811,9 +943,9 @@ describe('useAiAssistant streaming integration', () => {
         expect(planStore.steps).toHaveLength(0);
         expect(planStore.activeRunId).toBeNull();
         expect(planStore.approvedAt).toBeNull();
-        expect(planStore.errorMessage).toContain('IPC 璇锋眰鍙傛暟鏃犳晥');
+        expect(planStore.errorMessage).toContain('IPC 请求参数无效');
         expect(assistant.agentSteps.value).toHaveLength(0);
-        expect(assistant.draft.value).toBe(userQuestion);
+        expect(assistant.draft.value).toBe('');
     });
 
     it('uses Strands sidecar execute directly in agent mode without generating a plan', async () => {
@@ -836,6 +968,238 @@ describe('useAiAssistant streaming integration', () => {
             status: 'succeeded',
             summary: expect.stringContaining('src/app.ts'),
         });
+    });
+
+    it('streams sidecar tool activity into the assistant message before the final response resolves', async () => {
+        const { assistant } = createAssistantHarnessContext();
+        let releaseSidecar: (() => void) | null = null;
+        const sidecarGate = new Promise<void>((resolve) => {
+            releaseSidecar = resolve;
+        });
+
+        aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
+            const sessionId = payload.sessionId ?? 'sidecar-live-session';
+
+            aiServiceMock.emitSidecar({
+                sessionId,
+                seq: 0,
+                event: {
+                    type: 'tool_start',
+                    toolName: 'search_project_files',
+                    input: { query: '实时工具' },
+                },
+            });
+            aiServiceMock.emitSidecar({
+                sessionId,
+                seq: 1,
+                event: {
+                    type: 'message_delta',
+                    text: '第一段实时回答',
+                },
+            });
+            aiServiceMock.emitSidecar({
+                sessionId,
+                seq: 2,
+                event: {
+                    type: 'message_delta',
+                    text: '第一段实时回答，第二段继续到达',
+                },
+            });
+
+            await sidecarGate;
+
+            return {
+                sessionId,
+                events: [
+                    {
+                        type: 'tool_start',
+                        toolName: 'search_project_files',
+                        input: { query: '实时工具' },
+                    },
+                    {
+                        type: 'tool_result',
+                        toolName: 'search_project_files',
+                        output: { query: '实时工具', summary: '搜索完成' },
+                    },
+                    {
+                        type: 'done',
+                        result: '实时工具完成',
+                    },
+                ],
+                result: '实时工具完成',
+            };
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '搜索实时工具';
+
+        const sendPromise = assistant.sendMessage();
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+            if (assistant.messages.value[1]?.toolCalls?.[0]) {
+                break;
+            }
+            await Promise.resolve();
+        }
+
+        expect(assistant.messages.value[1]?.toolCalls?.[0]).toMatchObject({
+            name: 'search_project_files',
+            status: 'running',
+            summary: expect.stringContaining('实时工具'),
+        });
+        expect(assistant.messages.value[1]?.content).toContain('第二段继续到达');
+        expect(assistant.messages.value[1]?.stream?.status).toBe('streaming');
+
+        releaseSidecar?.();
+        await sendPromise;
+
+        expect(assistant.messages.value[1]?.content).toContain('实时工具完成');
+        expect(assistant.messages.value[1]?.toolCalls?.[0]?.status).toBe('succeeded');
+        expect(assistant.messages.value[1]?.stream?.status).toBe('completed');
+    });
+
+    it('shows a silent streaming placeholder while sidecar agent is starting', async () => {
+        const { assistant } = createAssistantHarnessContext();
+        let releaseSidecar: (() => void) | null = null;
+        const sidecarGate = new Promise<void>((resolve) => {
+            releaseSidecar = resolve;
+        });
+
+        aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
+            await sidecarGate;
+
+            return {
+                sessionId: payload.sessionId ?? 'sidecar-loading-session',
+                events: [
+                    {
+                        type: 'done',
+                        result: `已通过 Strands Agent 处理：${payload.goal}`,
+                    },
+                ],
+                result: `已通过 Strands Agent 处理：${payload.goal}`,
+            };
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '保持加载态可见';
+
+        const sendPromise = assistant.sendMessage();
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+            if (assistant.messages.value[1]) {
+                break;
+            }
+            await Promise.resolve();
+        }
+
+        expect(assistant.messages.value[1]).toMatchObject({
+            role: 'assistant',
+            content: '',
+            stream: {
+                status: 'streaming',
+            },
+        });
+
+        releaseSidecar?.();
+        await sendPromise;
+
+        expect(assistant.messages.value[1]?.content).toContain('已通过 Strands Agent 处理');
+        expect(assistant.messages.value[1]?.stream?.status).toBe('completed');
+    });
+
+    it('refreshes the current open document after sidecar file mutation tools write to disk', async () => {
+        const { assistant, document } = createAssistantHarnessContext();
+
+        document.value.path = 'D:/test/test.sh';
+        document.value.name = 'test.sh';
+        document.value.content = 'echo 111';
+        document.value.savedContent = 'echo 111';
+        document.value.isDirty = false;
+        document.value.lineCount = 1;
+        document.value.charCount = 8;
+
+        aiServiceMock.sidecarExecute.mockResolvedValueOnce({
+            sessionId: 'sidecar-write-session',
+            events: [
+                {
+                    type: 'tool_start',
+                    toolName: 'write_file',
+                    input: { path: 'D:/test/test.sh' },
+                },
+                {
+                    type: 'tool_result',
+                    toolName: 'write_file',
+                    output: {
+                        path: 'D:/test/test.sh',
+                        summary: 'updated',
+                    },
+                },
+                {
+                    type: 'done',
+                    result: '文件已修改成功。',
+                },
+            ],
+            result: '文件已修改成功。',
+        });
+        tauriServiceMock.loadScript.mockResolvedValueOnce({
+            path: 'D:/test/test.sh',
+            name: 'test.sh',
+            content: 'echo 111\necho done',
+            encoding: 'utf-8',
+            lineCount: 2,
+            charCount: 18,
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '在这个文件随便写一些代码进去';
+
+        await assistant.sendMessage();
+
+        expect(tauriServiceMock.loadScript).toHaveBeenCalledWith('D:/test/test.sh');
+        expect(document.value.content).toBe('echo 111\necho done');
+        expect(document.value.savedContent).toBe('echo 111\necho done');
+        expect(document.value.isDirty).toBe(false);
+    });
+
+    it('does not overwrite dirty document content when sidecar writes the same path', async () => {
+        const { assistant, document } = createAssistantHarnessContext();
+
+        document.value.path = 'D:/test/test.sh';
+        document.value.name = 'test.sh';
+        document.value.content = 'echo local edit';
+        document.value.savedContent = 'echo 111';
+        document.value.isDirty = true;
+
+        aiServiceMock.sidecarExecute.mockResolvedValueOnce({
+            sessionId: 'sidecar-write-session',
+            events: [
+                {
+                    type: 'tool_start',
+                    toolName: 'edit_file',
+                    input: { path: 'D:/test/test.sh' },
+                },
+                {
+                    type: 'tool_result',
+                    toolName: 'edit_file',
+                    output: {
+                        path: 'D:/test/test.sh',
+                        summary: 'updated',
+                    },
+                },
+                {
+                    type: 'done',
+                    result: '文件已修改成功。',
+                },
+            ],
+            result: '文件已修改成功。',
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '修改当前文件';
+
+        await assistant.sendMessage();
+
+        expect(tauriServiceMock.loadScript).not.toHaveBeenCalled();
+        expect(document.value.content).toBe('echo local edit');
+        expect(assistant.errorMessage.value).toContain('未保存改动');
     });
 
     it('passes UI context to Strands sidecar agent mode as system context', async () => {
@@ -903,11 +1267,12 @@ describe('useAiAssistant streaming integration', () => {
         await assistant.resolveSidecarToolConfirmation('allow-once');
 
         expect(aiServiceMock.sidecarResolveApproval).toHaveBeenCalledWith({
+            sessionId: 'sidecar-confirmation-session',
             requestId: 'approval-run-command',
             decision: 'allow-once',
         });
         expect(agentStore.pendingToolConfirmation).toBeNull();
-        expect(assistant.messages.value[1]?.content).toContain('瀹℃壒缁撴灉宸蹭氦缁?sidecar');
+        expect(assistant.messages.value[1]?.content).toContain('审批结果已交给 sidecar');
     });
 
     it('applies patch by normalizing the returned path and syncing the current document', async () => {
@@ -941,7 +1306,7 @@ describe('useAiAssistant streaming integration', () => {
         aiServiceMock.applyPatch.mockResolvedValueOnce({
             appliedFiles: [
                 {
-                    path: String.raw`\\?\D:\test\xiaojianc.sh`,
+                    path: '\\\\?\\D:\\test\\xiaojianc.sh',
                     byteSize: 8,
                 },
             ],
@@ -955,7 +1320,7 @@ describe('useAiAssistant streaming integration', () => {
         expect(document.value.isDirty).toBe(false);
         expect(document.value.lineCount).toBe(1);
         expect(document.value.charCount).toBe(8);
-        expect(assistant.messages.value.at(-1)?.content).toBe('Patch 宸插簲鐢細D:/test/xiaojianc.sh');
+        expect(assistant.messages.value.at(-1)?.content).toBe('Patch 已应用：D:/test/xiaojianc.sh');
         expect(assistant.proposedPatch.value).toBeNull();
     });
 

@@ -16,6 +16,44 @@ export const jsonValueSchema: z.ZodType<TJsonValue> = z.lazy(() =>
 
 export const agentSidecarModeSchema = z.enum(AGENT_SIDECAR_MODES);
 
+const optionalNonEmptyStringSchema = z.preprocess((value) => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === 'string' && value.trim().length === 0) {
+    return undefined;
+  }
+
+  return value;
+}, z.string().trim().min(1).optional()).optional();
+
+const requiredNonEmptyStringSchema = z.string().trim().min(1);
+
+const optionalAgentModeSchema = z.preprocess((value) => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === 'string' && value.trim().length === 0) {
+    return undefined;
+  }
+
+  return value;
+}, agentSidecarModeSchema.optional()).optional();
+
+const optionalWorkspaceRootPathSchema = z.preprocess((value) => {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim().length === 0) {
+    return undefined;
+  }
+
+  return value;
+}, z.string().trim().min(1).nullable().optional()).optional();
+
 export const agentSidecarMessageSchema = z.object({
   role: z.enum(['user', 'assistant', 'system', 'tool']),
   content: z.string(),
@@ -100,6 +138,7 @@ export const agentSidecarHealthPayloadSchema = z.object({
   status: z.string().min(1),
   engine: z.string().min(1),
   version: z.string().min(1).nullable(),
+  protocolVersion: z.string().min(1).nullable().optional(),
   mcp: z.object({
     configuredServers: z.number().int().nonnegative(),
     serverNames: z.array(z.string()),
@@ -108,26 +147,27 @@ export const agentSidecarHealthPayloadSchema = z.object({
 });
 
 const agentSidecarBaseRequestSchema = z.object({
-  sessionId: z.string().min(1).optional(),
-  goal: z.string().min(1).optional(),
+  sessionId: optionalNonEmptyStringSchema,
+  goal: optionalNonEmptyStringSchema,
   messages: z.array(agentSidecarMessageSchema),
-  workspaceRootPath: z.string().min(1).nullable().optional(),
+  workspaceRootPath: optionalWorkspaceRootPathSchema,
   context: z.array(aiContextReferenceSchema).default([]),
 });
 
 export const agentSidecarChatRequestSchema = agentSidecarBaseRequestSchema.extend({
-  mode: agentSidecarModeSchema.optional(),
+  mode: optionalAgentModeSchema,
 });
 
 export const agentSidecarPlanRequestSchema = agentSidecarBaseRequestSchema.extend({
-  goal: z.string().min(1),
+  goal: requiredNonEmptyStringSchema,
 });
 
 export const agentSidecarExecuteRequestSchema = agentSidecarBaseRequestSchema.extend({
-  goal: z.string().min(1),
+  goal: requiredNonEmptyStringSchema,
 });
 
 export const agentSidecarApprovalResolveRequestSchema = z.object({
+  sessionId: optionalNonEmptyStringSchema,
   requestId: z.string().min(1),
   decision: z.string().min(1),
 });
@@ -136,4 +176,10 @@ export const agentSidecarResponsePayloadSchema = z.object({
   sessionId: z.string().min(1),
   events: z.array(agentUiEventSchema),
   result: z.string().nullable(),
+});
+
+export const agentSidecarStreamEventPayloadSchema = z.object({
+  sessionId: z.string().min(1),
+  seq: z.number().int().nonnegative(),
+  event: agentUiEventSchema,
 });

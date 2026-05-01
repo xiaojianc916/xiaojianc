@@ -129,7 +129,7 @@ import LinearContextMenuIcon from '@/components/common/LinearContextMenuIcon.vue
 import type { TLinearContextMenuIcon } from '@/components/common/linear-context-menu.types';
 import { useMessage } from '@/composables/useMessage';
 import type { TThemeMode, TWorkbenchSidebarView } from '@/types/app';
-import type { ICommandTemplate } from '@/types/editor';
+import type { ICommandTemplate, TDocumentKind } from '@/types/editor';
 import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -174,7 +174,7 @@ const props = defineProps<{
   documentName: string;
   hasActiveDocument: boolean;
   isDirty: boolean;
-  documentKind: 'text' | 'image';
+  documentKind: TDocumentKind;
   theme: TThemeMode;
   isRunning: boolean;
   canRun: boolean;

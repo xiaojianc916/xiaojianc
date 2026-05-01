@@ -1,142 +1,170 @@
 import assert from 'node:assert/strict';
-import { after, beforeEach, describe, it } from 'node:test';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { describe, it } from 'node:test';
+import { dirname, join, resolve } from 'node:path';
 
-import { getMcpRuntimeStatus, loadMcpServerConfigsFromEnv } from './mcp.js';
+import { createMcpClientBundle, getMcpRuntimeStatus, loadMcpServerConfigs } from './mcp.js';
 
-const MCP_ENV_KEY = 'AGENT_MCP_SERVERS_JSON';
-const originalMcpEnv = process.env[MCP_ENV_KEY];
+const WORKSPACE_ROOT = resolve('D:/com.xiaojianc/my_desktop_app');
+const MEMORY_FILE_PATH = join(WORKSPACE_ROOT, 'tmp', 'mcp-memory-test.jsonl');
+const UVX_FIXTURE_PATH = join(tmpdir(), 'xiaojianc-mcp-fixtures', 'uvx.exe');
+const GIT_FIXTURE_PATH = join(tmpdir(), 'xiaojianc-mcp-fixtures', 'git.exe');
 
-const restoreOriginalEnv = (): void => {
-  if (originalMcpEnv === undefined) {
-    delete process.env[MCP_ENV_KEY];
-    return;
-  }
+mkdirSync(dirname(UVX_FIXTURE_PATH), { recursive: true });
+writeFileSync(UVX_FIXTURE_PATH, '', 'utf8');
+writeFileSync(GIT_FIXTURE_PATH, '', 'utf8');
 
-  process.env[MCP_ENV_KEY] = originalMcpEnv;
-};
-
-const setMcpEnv = (value: unknown): void => {
-  process.env[MCP_ENV_KEY] = JSON.stringify(value);
+const defaultEnv = {
+  AGENT_MCP_MEMORY_FILE_PATH: MEMORY_FILE_PATH,
+  AGENT_MCP_UVX_PATH: UVX_FIXTURE_PATH,
+  AGENT_MCP_GIT_EXECUTABLE_PATH: GIT_FIXTURE_PATH,
+  TAVILY_API_KEY: 'tvly-test-key',
 };
 
 describe('MCP sidecar config', () => {
-  beforeEach(() => {
-    delete process.env[MCP_ENV_KEY];
-  });
-
-  after(() => {
-    restoreOriginalEnv();
-  });
-
-  it('returns an empty config when no MCP servers are configured', () => {
-    assert.deepEqual(loadMcpServerConfigsFromEnv(), {
-      configs: [],
-      errors: [],
+  it('loads the built-in Anthropic and Tavily MCP servers', () => {
+    const loaded = loadMcpServerConfigs({
+      workspaceRootPath: WORKSPACE_ROOT,
+      env: defaultEnv,
+      platform: 'win32',
     });
-  });
 
-  it('loads array-form stdio server configs from AGENT_MCP_SERVERS_JSON', () => {
-    setMcpEnv([
-      {
-        name: 'workspace-files',
-        command: 'node',
-        args: ['D:/mcp/filesystem-server.js'],
-        env: {
-          WORKSPACE_ROOT: 'D:/com.xiaojianc/my_desktop_app',
-        },
-        cwd: 'D:/com.xiaojianc/my_desktop_app',
-      },
+    assert.deepEqual(loaded.errors, []);
+    assert.deepEqual(loaded.configs.map((config) => config.name), [
+      'filesystem',
+      'git',
+      'memory',
+      'sequential-thinking',
+      'time',
+      'tavily-mcp',
     ]);
-
-    assert.deepEqual(loadMcpServerConfigsFromEnv(), {
-      configs: [
-        {
-          name: 'workspace-files',
-          command: 'node',
-          args: ['D:/mcp/filesystem-server.js'],
-          env: {
-            WORKSPACE_ROOT: 'D:/com.xiaojianc/my_desktop_app',
-          },
-          cwd: 'D:/com.xiaojianc/my_desktop_app',
-        },
-      ],
-      errors: [],
-    });
   });
 
-  it('loads Cursor-style mcpServers configs and skips disabled servers', () => {
-    setMcpEnv({
-      mcpServers: {
-        filesystem: {
-          command: 'node',
-          args: ['D:/mcp/filesystem-server.js'],
-          cwd: 'D:/com.xiaojianc/my_desktop_app',
-        },
-        search: {
-          command: 'node',
-          args: ['D:/mcp/web-search.js'],
-          disabled: true,
-        },
-        customName: {
-          name: 'renamed-server',
-          command: 'npx',
-          args: ['@modelcontextprotocol/server-example'],
-          env: {
-            SAMPLE_FLAG: '1',
-          },
-        },
+  it('wires workspace, memory, time and Tavily settings into server configs', () => {
+    const loaded = loadMcpServerConfigs({
+      workspaceRootPath: WORKSPACE_ROOT,
+      env: {
+        ...defaultEnv,
+        AGENT_MCP_LOCAL_TIMEZONE: 'Asia/Shanghai',
       },
+      platform: 'win32',
     });
+    const filesystem = loaded.configs.find((config) => config.name === 'filesystem');
+    const git = loaded.configs.find((config) => config.name === 'git');
+    const memory = loaded.configs.find((config) => config.name === 'memory');
+    const time = loaded.configs.find((config) => config.name === 'time');
+    const tavily = loaded.configs.find((config) => config.name === 'tavily-mcp');
 
-    const loaded = loadMcpServerConfigsFromEnv();
-
-    assert.deepEqual(loaded, {
-      configs: [
-        {
-          name: 'filesystem',
-          command: 'node',
-          args: ['D:/mcp/filesystem-server.js'],
-          env: {},
-          cwd: 'D:/com.xiaojianc/my_desktop_app',
-        },
-        {
-          name: 'renamed-server',
-          command: 'npx',
-          args: ['@modelcontextprotocol/server-example'],
-          env: {
-            SAMPLE_FLAG: '1',
-          },
-          cwd: null,
-        },
-      ],
-      errors: [],
-    });
+    assert.equal(filesystem?.args[0], WORKSPACE_ROOT);
+    assert.equal(git?.command, UVX_FIXTURE_PATH);
+    assert.deepEqual(git?.args, ['mcp-server-git==2026.1.14', '--repository', WORKSPACE_ROOT]);
+    assert.equal(git?.env.GIT_PYTHON_GIT_EXECUTABLE, GIT_FIXTURE_PATH);
+    assert.equal(memory?.env.MEMORY_FILE_PATH, MEMORY_FILE_PATH);
+    assert.equal(time?.command, UVX_FIXTURE_PATH);
+    assert.deepEqual(time?.args, ['mcp-server-time==2026.1.26', '--local-timezone=Asia/Shanghai']);
+    assert.equal(tavily?.env.TAVILY_API_KEY, 'tvly-test-key');
   });
 
-  it('reports invalid JSON without creating fake configs', () => {
-    process.env[MCP_ENV_KEY] = '{not-json';
+  it('skips Tavily when its API key is missing', () => {
+    const loaded = loadMcpServerConfigs({
+      workspaceRootPath: WORKSPACE_ROOT,
+      env: {
+        AGENT_MCP_MEMORY_FILE_PATH: MEMORY_FILE_PATH,
+        AGENT_MCP_UVX_PATH: UVX_FIXTURE_PATH,
+        AGENT_MCP_GIT_EXECUTABLE_PATH: GIT_FIXTURE_PATH,
+      },
+      platform: 'win32',
+    });
 
-    const loaded = loadMcpServerConfigsFromEnv();
-
-    assert.deepEqual(loaded.configs, []);
+    assert.equal(loaded.configs.some((config) => config.name === 'tavily-mcp'), false);
     assert.equal(loaded.errors.length, 1);
-    assert.match(loaded.errors[0] ?? '', /JSON|Expected|position/u);
+    assert.match(loaded.errors[0] ?? '', /TAVILY_API_KEY/u);
+  });
+
+  it('ignores legacy arbitrary MCP JSON so old tools are not loaded', () => {
+    const loaded = loadMcpServerConfigs({
+      workspaceRootPath: WORKSPACE_ROOT,
+      env: {
+        ...defaultEnv,
+        AGENT_MCP_SERVERS_JSON: JSON.stringify({
+          mcpServers: {
+            oldSearch: {
+              command: 'node',
+              args: ['D:/old/search.js'],
+            },
+          },
+        }),
+      },
+      platform: 'win32',
+    });
+
+    assert.equal(loaded.configs.some((config) => config.name === 'oldSearch'), false);
+    assert.deepEqual(loaded.configs.map((config) => config.name), [
+      'filesystem',
+      'git',
+      'memory',
+      'sequential-thinking',
+      'time',
+      'tavily-mcp',
+    ]);
+  });
+
+  it('skips Git MCP when Windows git.exe cannot be resolved', () => {
+    const loaded = loadMcpServerConfigs({
+      workspaceRootPath: WORKSPACE_ROOT,
+      env: {
+        ...defaultEnv,
+        AGENT_MCP_GIT_EXECUTABLE_PATH: 'D:/missing/git.exe',
+        ProgramFiles: join(tmpdir(), 'xiaojianc-missing-program-files'),
+        'ProgramFiles(x86)': join(tmpdir(), 'xiaojianc-missing-program-files-x86'),
+        LOCALAPPDATA: join(tmpdir(), 'xiaojianc-missing-local-app-data'),
+      },
+      platform: 'win32',
+    });
+
+    assert.equal(loaded.configs.some((config) => config.name === 'git'), false);
+    assert.equal(
+      loaded.errors.some((error) => error.includes('AGENT_MCP_GIT_EXECUTABLE_PATH')),
+      true,
+    );
   });
 
   it('exposes MCP health status for the Tauri health contract', () => {
-    setMcpEnv({
-      mcpServers: {
-        filesystem: {
-          command: 'node',
-          args: ['D:/mcp/filesystem-server.js'],
-        },
-      },
-    });
-
-    assert.deepEqual(getMcpRuntimeStatus(), {
-      configuredServers: 1,
-      serverNames: ['filesystem'],
+    assert.deepEqual(getMcpRuntimeStatus({
+      workspaceRootPath: WORKSPACE_ROOT,
+      env: defaultEnv,
+      platform: 'win32',
+    }), {
+      configuredServers: 6,
+      serverNames: [
+        'filesystem',
+        'git',
+        'memory',
+        'sequential-thinking',
+        'time',
+        'tavily-mcp',
+      ],
       errors: [],
     });
+  });
+
+  it('keeps healthy MCP tools when one configured server closes', async () => {
+    const bundle = await createMcpClientBundle({
+      workspaceRootPath: WORKSPACE_ROOT,
+      env: defaultEnv,
+      platform: 'win32',
+    });
+
+    try {
+      assert.equal(bundle.tools.some((tool) => tool.name === 'read_file'), true);
+      assert.equal(bundle.tools.some((tool) => tool.name === 'sequentialthinking'), true);
+      assert.equal(
+        bundle.errors.some((error) => error.includes('git') || error.includes('time')),
+        true,
+      );
+    } finally {
+      await bundle.disconnectAll();
+    }
   });
 });

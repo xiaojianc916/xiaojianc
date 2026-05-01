@@ -7,12 +7,52 @@ import { z } from 'zod';
 import { StrandsEngine } from './engines/strands-engine.js';
 import type { IStrandsEngineInput, TAgentMode } from './engines/strands-engine.js';
 import { agentSidecarResponseSchema } from './schemas/events.js';
+import type { TAgentSidecarResponse, TAgentUiEvent } from './schemas/events.js';
 import { getMcpRuntimeStatus } from './tools/mcp.js';
 
 const DEFAULT_PORT = 39871;
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
+export const SIDECAR_PROTOCOL_VERSION = '3';
 
 const agentModeSchema = z.enum(['ask', 'plan', 'agent', 'patch', 'review']);
+
+const optionalNonEmptyStringSchema = z.preprocess((value) => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === 'string' && value.trim().length === 0) {
+    return undefined;
+  }
+
+  return value;
+}, z.string().trim().min(1).optional()).optional();
+
+const requiredNonEmptyStringSchema = z.string().trim().min(1);
+
+const optionalAgentModeSchema = z.preprocess((value) => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === 'string' && value.trim().length === 0) {
+    return undefined;
+  }
+
+  return value;
+}, agentModeSchema.optional()).optional();
+
+const optionalWorkspaceRootPathSchema = z.preprocess((value) => {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim().length === 0) {
+    return undefined;
+  }
+
+  return value;
+}, z.string().trim().min(1).nullable().optional()).optional();
 
 const agentMessageInputSchema = z.object({
   role: z.enum(['user', 'assistant', 'system', 'tool']),
@@ -32,16 +72,27 @@ const agentContextReferenceSchema = z.object({
   redacted: z.boolean(),
 });
 
-const baseAgentRequestSchema = z.object({
-  sessionId: z.string().min(1).optional(),
-  mode: agentModeSchema.optional(),
-  goal: z.string().min(1).optional(),
+export const baseAgentRequestSchema = z.object({
+  sessionId: optionalNonEmptyStringSchema,
+  mode: optionalAgentModeSchema,
+  goal: optionalNonEmptyStringSchema,
   messages: z.array(agentMessageInputSchema).default([]),
-  workspaceRootPath: z.string().min(1).nullable().optional(),
+  workspaceRootPath: optionalWorkspaceRootPathSchema,
   context: z.array(agentContextReferenceSchema).default([]),
 });
 
+export const agentSidecarChatRequestSchema = baseAgentRequestSchema;
+
+export const agentSidecarPlanRequestSchema = baseAgentRequestSchema.extend({
+  goal: requiredNonEmptyStringSchema,
+});
+
+export const agentSidecarExecuteRequestSchema = baseAgentRequestSchema.extend({
+  goal: requiredNonEmptyStringSchema,
+});
+
 const approvalResolutionSchema = z.object({
+  sessionId: optionalNonEmptyStringSchema,
   requestId: z.string().min(1),
   decision: z.string().min(1),
 });
@@ -126,6 +177,55 @@ const handlePost = async (
   }
 };
 
+const writeNdjsonFrame = (response: ServerResponse, payload: unknown): void => {
+  response.write(`${JSON.stringify(payload)}\n`);
+};
+
+const writeStreamHeaders = (response: ServerResponse): void => {
+  response.writeHead(200, {
+    'content-type': 'application/x-ndjson; charset=utf-8',
+    'cache-control': 'no-cache, no-transform',
+    connection: 'keep-alive',
+    'x-accel-buffering': 'no',
+  });
+};
+
+const handlePostStream = async (
+  request: IncomingMessage,
+  response: ServerResponse,
+  handler: (body: unknown, onEvent: (event: TAgentUiEvent) => void) => Promise<TAgentSidecarResponse>,
+): Promise<void> => {
+  try {
+    const body = await readBody(request);
+    writeStreamHeaders(response);
+    const payload = await handler(body, (event) => {
+      writeNdjsonFrame(response, {
+        type: 'event',
+        event,
+      });
+    });
+
+    writeNdjsonFrame(response, {
+      type: 'response',
+      response: agentSidecarResponseSchema.parse(payload),
+    });
+    response.end();
+  } catch (error) {
+    if (!response.headersSent) {
+      writeJson(response, 400, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+
+    writeNdjsonFrame(response, {
+      type: 'error',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    response.end();
+  }
+};
+
 export const createAgentSidecarServer = () =>
   createServer((request, response) => {
     const url = request.url ?? '/';
@@ -136,6 +236,7 @@ export const createAgentSidecarServer = () =>
         status: 'ready',
         engine: 'strands',
         version: '0.1.0',
+        protocolVersion: SIDECAR_PROTOCOL_VERSION,
         mcp: getMcpRuntimeStatus(),
       });
       return;
@@ -143,24 +244,48 @@ export const createAgentSidecarServer = () =>
 
     if (request.method === 'POST' && url === '/agent/chat') {
       void handlePost(request, response, async (body) => {
-        const payload = baseAgentRequestSchema.parse(body);
+        const payload = agentSidecarChatRequestSchema.parse(body);
         return agentSidecarResponseSchema.parse(await engine.chat(toAgentInput(payload, 'ask')));
+      });
+      return;
+    }
+
+    if (request.method === 'POST' && url === '/agent/chat/stream') {
+      void handlePostStream(request, response, async (body, onEvent) => {
+        const payload = agentSidecarChatRequestSchema.parse(body);
+        return engine.chat(toAgentInput(payload, 'ask'), { onEvent });
       });
       return;
     }
 
     if (request.method === 'POST' && url === '/agent/plan') {
       void handlePost(request, response, async (body) => {
-        const payload = baseAgentRequestSchema.parse(body);
+        const payload = agentSidecarPlanRequestSchema.parse(body);
         return agentSidecarResponseSchema.parse(await engine.plan(toAgentInput(payload, 'plan')));
+      });
+      return;
+    }
+
+    if (request.method === 'POST' && url === '/agent/plan/stream') {
+      void handlePostStream(request, response, async (body, onEvent) => {
+        const payload = agentSidecarPlanRequestSchema.parse(body);
+        return engine.plan(toAgentInput(payload, 'plan'), { onEvent });
       });
       return;
     }
 
     if (request.method === 'POST' && url === '/agent/execute') {
       void handlePost(request, response, async (body) => {
-        const payload = baseAgentRequestSchema.parse(body);
+        const payload = agentSidecarExecuteRequestSchema.parse(body);
         return agentSidecarResponseSchema.parse(await engine.execute(toAgentInput(payload, 'agent')));
+      });
+      return;
+    }
+
+    if (request.method === 'POST' && url === '/agent/execute/stream') {
+      void handlePostStream(request, response, async (body, onEvent) => {
+        const payload = agentSidecarExecuteRequestSchema.parse(body);
+        return engine.execute(toAgentInput(payload, 'agent'), { onEvent });
       });
       return;
     }
@@ -169,6 +294,14 @@ export const createAgentSidecarServer = () =>
       void handlePost(request, response, async (body) => {
         const payload = approvalResolutionSchema.parse(body);
         return agentSidecarResponseSchema.parse(await engine.resolveApproval(payload));
+      });
+      return;
+    }
+
+    if (request.method === 'POST' && url === '/approval/resolve/stream') {
+      void handlePostStream(request, response, async (body, onEvent) => {
+        const payload = approvalResolutionSchema.parse(body);
+        return engine.resolveApproval(payload, { onEvent });
       });
       return;
     }

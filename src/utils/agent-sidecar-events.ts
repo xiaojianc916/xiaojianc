@@ -1,4 +1,5 @@
 import { AI_AGENT_TOOL_NAMES, type TAiAgentToolName } from '@/types/ai-tools';
+import { normalizeFileSystemPath } from '@/utils/path';
 
 import type {
   IAgentPlan,
@@ -28,19 +29,83 @@ export interface IAgentSidecarExecuteProjection {
   assistantContent: string;
   errorMessage: string | null;
   pendingConfirmation: IAiToolConfirmationRequest | null;
+  changedFilePaths: string[];
+  hasFileMutations: boolean;
 }
 
 const AI_AGENT_TOOL_NAME_SET = new Set<string>(AI_AGENT_TOOL_NAMES);
 
+const SIDECAR_FILE_MUTATION_TOOL_NAMES = new Set<string>([
+  'write_file',
+  'edit_file',
+  'create_directory',
+  'move_file',
+  'delete_file',
+]);
+
+const SIDECAR_FILE_PATH_KEYS = new Set<string>([
+  'path',
+  'file',
+  'filePath',
+  'relativePath',
+  'targetPath',
+  'sourcePath',
+  'destinationPath',
+  'newPath',
+]);
+
 const SIDECAR_TOOL_TO_AI_TOOL: Readonly<Record<string, TAiAgentToolName>> = {
+  read_text_file: 'read_file',
+  read_media_file: 'read_file',
+  read_multiple_files: 'read_file',
+  list_directory: 'get_project_tree',
+  list_directory_with_sizes: 'get_project_tree',
+  directory_tree: 'get_project_tree',
+  search_files: 'search_text',
+  get_file_info: 'read_file',
+  list_allowed_directories: 'get_project_tree',
   list_project_files: 'get_project_tree',
   read_project_file: 'read_file',
   search_project_files: 'search_text',
   write_file: 'auto_apply_patch',
+  edit_file: 'auto_apply_patch',
+  create_directory: 'auto_apply_patch',
+  move_file: 'auto_apply_patch',
   delete_file: 'run_command',
   run_shell_command: 'run_command',
   install_package: 'run_command',
+  git_status: 'get_git_diff',
+  git_diff_unstaged: 'get_git_diff',
+  git_diff_staged: 'get_git_diff',
+  git_log: 'get_git_diff',
+  git_show: 'get_git_diff',
+  git_add: 'stage_file',
+  git_reset: 'run_command',
+  git_create_branch: 'run_command',
+  git_checkout: 'run_command',
+  git_init: 'run_command',
   git_commit: 'create_commit',
+  'tavily-search': 'web_search',
+  'tavily-extract': 'web_fetch',
+  'tavily-map': 'web_search',
+  'tavily-crawl': 'web_fetch',
+  tavily_search: 'web_search',
+  tavily_extract: 'web_fetch',
+  tavily_map: 'web_search',
+  tavily_crawl: 'web_fetch',
+  tavily_research: 'web_search',
+  create_entities: 'get_project_tree',
+  create_relations: 'get_project_tree',
+  add_observations: 'get_project_tree',
+  delete_entities: 'run_command',
+  delete_observations: 'run_command',
+  delete_relations: 'run_command',
+  read_graph: 'get_project_tree',
+  search_nodes: 'search_text',
+  open_nodes: 'read_file',
+  sequentialthinking: 'get_diagnostics',
+  get_current_time: 'get_diagnostics',
+  convert_time: 'get_diagnostics',
 };
 
 const isAiAgentToolName = (value: string): value is TAiAgentToolName =>
@@ -61,13 +126,22 @@ const inferStepKind = (tools: readonly string[]): TAiAgentPlanStepKind => {
     tool === 'search_project_files' ||
     tool === 'search_files' ||
     tool === 'search_text' ||
-    tool === 'search_symbols'
+    tool === 'search_symbols' ||
+    tool === 'tavily-search' ||
+    tool === 'tavily-map' ||
+    tool === 'tavily_search' ||
+    tool === 'tavily_map' ||
+    tool === 'tavily_research' ||
+    tool === 'search_nodes'
   )) {
     return 'search';
   }
 
   if (tools.some((tool) =>
     tool === 'write_file' ||
+    tool === 'edit_file' ||
+    tool === 'create_directory' ||
+    tool === 'move_file' ||
     tool === 'delete_file' ||
     tool === 'propose_patch' ||
     tool === 'auto_apply_patch'
@@ -86,6 +160,11 @@ const inferStepKind = (tools: readonly string[]): TAiAgentPlanStepKind => {
 
   if (tools.some((tool) =>
     tool === 'git_commit' ||
+    tool === 'git_status' ||
+    tool === 'git_log' ||
+    tool === 'git_show' ||
+    tool === 'git_diff_unstaged' ||
+    tool === 'git_diff_staged' ||
     tool === 'create_commit' ||
     tool === 'stage_file'
   )) {
@@ -145,6 +224,66 @@ const getStringField = (value: TJsonValue, keys: readonly string[]): string | nu
   }
 
   return null;
+};
+
+const collectPathCandidates = (value: TJsonValue, paths: string[]): void => {
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectPathCandidates(item, paths);
+    }
+    return;
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    if (SIDECAR_FILE_PATH_KEYS.has(key) && typeof item === 'string' && item.trim()) {
+      paths.push(item.trim());
+      continue;
+    }
+
+    collectPathCandidates(item, paths);
+  }
+};
+
+const isSidecarFileMutationEvent = (
+  event: TAgentUiEvent,
+): event is Extract<TAgentUiEvent, { type: 'tool_start' | 'tool_result' }> =>
+  (event.type === 'tool_start' || event.type === 'tool_result') &&
+  SIDECAR_FILE_MUTATION_TOOL_NAMES.has(event.toolName);
+
+export const hasSidecarFileMutationEvent = (events: readonly TAgentUiEvent[]): boolean =>
+  events.some(isSidecarFileMutationEvent);
+
+export const extractSidecarChangedFilePaths = (
+  events: readonly TAgentUiEvent[],
+): string[] => {
+  const paths: string[] = [];
+  const seen = new Set<string>();
+
+  for (const event of events) {
+    if (!isSidecarFileMutationEvent(event)) {
+      continue;
+    }
+
+    collectPathCandidates(event.type === 'tool_start' ? event.input : event.output, paths);
+  }
+
+  return paths.filter((path) => {
+    const normalized = normalizeFileSystemPath(path, {
+      collapseDuplicateSeparators: true,
+      trimTrailingSeparator: true,
+    });
+
+    if (!normalized || seen.has(normalized)) {
+      return false;
+    }
+
+    seen.add(normalized);
+    return true;
+  });
 };
 
 const summarizeJsonValue = (value: TJsonValue): string => {
@@ -361,6 +500,8 @@ export const projectSidecarExecuteResponse = (
   const errorMessage = extractErrorMessage(response.events);
   const doneResult = extractDoneResult(response.events);
   const latestDelta = extractLatestMessageDelta(response.events);
+  const changedFilePaths = extractSidecarChangedFilePaths(response.events);
+  const hasFileMutations = hasSidecarFileMutationEvent(response.events);
   const assistantContent = errorMessage
     ? `Agent 执行失败：${errorMessage}`
     : doneResult ?? response.result?.trim() ?? latestDelta ?? 'Agent 已完成。';
@@ -370,5 +511,7 @@ export const projectSidecarExecuteResponse = (
     assistantContent,
     errorMessage,
     pendingConfirmation: extractPendingConfirmation(response),
+    changedFilePaths,
+    hasFileMutations,
   };
 };

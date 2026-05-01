@@ -86,6 +86,8 @@ const gitChangeKindSchema = z.enum([
   'conflicted',
 ]);
 
+const gitDiffModeSchema = z.enum(['worktree', 'staged']);
+
 const workspaceEntrySchema = z.object({
   path: z.string(),
   name: z.string(),
@@ -433,6 +435,24 @@ export const tauriContracts = {
       content: z.string().nullable(),
     }),
   },
+  getGitDiffPreview: {
+      inSchema: z.object({
+        repositoryRootPath: z.string().min(1),
+        path: z.string().min(1),
+        mode: gitDiffModeSchema,
+      }),
+    outSchema: z.object({
+      id: z.string().min(1),
+      repositoryRootPath: z.string().min(1),
+      path: z.string().min(1),
+        relativePath: z.string().min(1),
+        title: z.string().min(1),
+        mode: gitDiffModeSchema,
+        originalContent: z.string(),
+        modifiedContent: z.string(),
+        isEmpty: z.boolean(),
+      }),
+    },
   stageGitPaths: {
     inSchema: z.object({
       repositoryRootPath: z.string(),

@@ -4,9 +4,9 @@ import {
   type AgentStreamEvent,
   type MessageData,
 } from '@strands-agents/sdk';
-import { OpenAIModel } from '@strands-agents/sdk/models/openai';
 
 import { createDeepSeekModelConfigFromEnv } from '../models/deepseek-model.js';
+import { OpenAiChatCompatModel } from '../models/openai-chat-compat-model.js';
 import type { TAgentSidecarResponse, TAgentUiEvent, TJsonValue } from '../schemas/events.js';
 import { agentPlanSchema, type TAgentPlan } from '../schemas/plan.js';
 import { createMcpClientBundle } from '../tools/mcp.js';
@@ -43,6 +43,11 @@ export interface IStrandsEngineInput {
 export interface IApprovalResolutionInput {
   requestId: string;
   decision: string;
+  sessionId?: string | undefined;
+}
+
+export interface IStrandsEngineRunOptions {
+  onEvent?: (event: TAgentUiEvent) => void;
 }
 
 const createSessionId = (prefix: string): string =>
@@ -106,6 +111,39 @@ const findLastUserMessageIndex = (messages: IAgentMessageInput[]): number => {
   return -1;
 };
 
+const inferModelProviderLabel = (modelId: string): string => {
+  const normalized = modelId.trim().toLowerCase();
+
+  if (normalized.includes('deepseek')) {
+    return 'DeepSeek';
+  }
+
+  if (normalized.startsWith('anthropic/') || normalized.includes('claude')) {
+    return 'Anthropic';
+  }
+
+  if (normalized.startsWith('openai/') || normalized.startsWith('gpt-')) {
+    return 'OpenAI';
+  }
+
+  if (normalized.startsWith('google/') || normalized.includes('gemini')) {
+    return 'Google';
+  }
+
+  if (normalized.startsWith('qwen/') || normalized.includes('qwen')) {
+    return '通义千问';
+  }
+
+  return '当前配置的 AI 服务平台';
+};
+
+const buildIdentityInstruction = (modelId: string): string => {
+  const currentModel = modelId.trim() || '未指定';
+  const provider = inferModelProviderLabel(currentModel);
+
+  return `身份：你是Calamex桌面应用中的 AI 编程助手。当前模型：${currentModel}，平台：${provider}`;
+};
+
 const buildModeInstruction = (mode: TAgentMode): string => (mode === 'plan'
   ? [
     'Plan 模式要求：使用 Strands structured output 返回 AgentPlan，不要输出 Markdown 或额外解释。',
@@ -140,7 +178,10 @@ const buildContextInstruction = (context: IAgentContextReferenceInput[] = []): s
   ].join('\n\n');
 };
 
-const buildSystemPrompt = (input: IStrandsEngineInput): string => {
+export const buildSystemPrompt = (
+  input: IStrandsEngineInput,
+  modelId = '未指定',
+): string => {
   const systemMessages = input.messages
     .filter((message) => message.role === 'system')
     .map((message) => message.content.trim())
@@ -150,6 +191,7 @@ const buildSystemPrompt = (input: IStrandsEngineInput): string => {
     : '';
 
   return [
+    buildIdentityInstruction(modelId),
     buildModeInstruction(input.mode),
     workspace,
     buildContextInstruction(input.context),
@@ -201,38 +243,86 @@ const buildUserPrompt = (input: IStrandsEngineInput): string => {
 const createErrorResponse = (
   sessionId: string,
   message: string,
-  prelude: TAgentUiEvent[] = [],
-): TAgentSidecarResponse => ({
-  sessionId,
-  events: [
-    ...prelude,
-    {
-      type: 'error',
-      message,
-    },
-  ],
-  result: null,
-});
+  events: TAgentUiEvent[] = [],
+  options: IStrandsEngineRunOptions = {},
+): TAgentSidecarResponse => {
+  const errorEvent: TAgentUiEvent = {
+    type: 'error',
+    message,
+  };
+
+  options.onEvent?.(errorEvent);
+
+  return {
+    sessionId,
+    events: [
+      ...events,
+      errorEvent,
+    ],
+    result: null,
+  };
+};
+
+const pushUiEvent = (
+  events: TAgentUiEvent[],
+  event: TAgentUiEvent,
+  options: IStrandsEngineRunOptions = {},
+): void => {
+  events.push(event);
+  options.onEvent?.(event);
+};
+
+const emitUiEvent = (
+  event: TAgentUiEvent,
+  options: IStrandsEngineRunOptions = {},
+): void => {
+  options.onEvent?.(event);
+};
+
+interface IAgentStreamCapture {
+  visibleText: string;
+}
 
 const appendSdkTimelineEvent = (
   event: AgentStreamEvent,
   events: TAgentUiEvent[],
+  capture: IAgentStreamCapture,
+  options: IStrandsEngineRunOptions = {},
 ): void => {
+  if (event.type === 'modelStreamUpdateEvent') {
+    const modelEvent = event.event;
+    if (modelEvent.type !== 'modelContentBlockDeltaEvent') {
+      return;
+    }
+
+    const delta = modelEvent.delta;
+    if (delta.type !== 'textDelta' || delta.text.length === 0) {
+      return;
+    }
+
+    capture.visibleText += delta.text;
+    emitUiEvent({
+      type: 'message_delta',
+      text: capture.visibleText,
+    }, options);
+    return;
+  }
+
   if (event.type === 'beforeToolCallEvent') {
-    events.push({
+    pushUiEvent(events, {
       type: 'tool_start',
       toolName: event.toolUse.name,
       input: event.toolUse.input,
-    });
+    }, options);
     return;
   }
 
   if (event.type === 'afterToolCallEvent') {
-    events.push({
+    pushUiEvent(events, {
       type: 'tool_result',
       toolName: event.toolUse.name,
       output: toJsonValue(event.result.toJSON()),
-    });
+    }, options);
   }
 };
 
@@ -241,10 +331,14 @@ const runAgentStream = async (
   prompt: string,
   events: TAgentUiEvent[],
   mode: TAgentMode,
+  options: IStrandsEngineRunOptions = {},
 ): Promise<AgentResult> => {
   const stream = mode === 'plan'
     ? agent.stream(prompt, { structuredOutputSchema: agentPlanSchema })
     : agent.stream(prompt);
+  const capture: IAgentStreamCapture = {
+    visibleText: '',
+  };
 
   while (true) {
     const next = await stream.next();
@@ -252,7 +346,7 @@ const runAgentStream = async (
       return next.value;
     }
 
-    appendSdkTimelineEvent(next.value, events);
+    appendSdkTimelineEvent(next.value, events, capture, options);
   }
 };
 
@@ -261,91 +355,105 @@ const parsePlanFromStructuredOutput = (result: AgentResult): TAgentPlan | null =
   return parsed.success ? parsed.data : null;
 };
 
+export const extractVisibleAgentResultText = (result: AgentResult): string => {
+  const textParts: string[] = [];
+
+  for (const block of result.lastMessage.content) {
+    if (block.type === 'textBlock') {
+      const text = block.text.trim();
+      if (text.length > 0) {
+        textParts.push(text);
+      }
+    }
+  }
+
+  return textParts.join('\n').trim();
+};
+
 export class StrandsEngine {
-  async chat(input: IStrandsEngineInput): Promise<TAgentSidecarResponse> {
-    return this.runWithStrands(input, 'ask');
+  async chat(
+    input: IStrandsEngineInput,
+    options: IStrandsEngineRunOptions = {},
+  ): Promise<TAgentSidecarResponse> {
+    return this.runWithStrands(input, 'ask', options);
   }
 
-  async plan(input: IStrandsEngineInput): Promise<TAgentSidecarResponse> {
-    return this.runWithStrands(input, 'plan');
+  async plan(
+    input: IStrandsEngineInput,
+    options: IStrandsEngineRunOptions = {},
+  ): Promise<TAgentSidecarResponse> {
+    return this.runWithStrands(input, 'plan', options);
   }
 
-  async execute(input: IStrandsEngineInput): Promise<TAgentSidecarResponse> {
-    return this.runWithStrands(input, 'agent');
+  async execute(
+    input: IStrandsEngineInput,
+    options: IStrandsEngineRunOptions = {},
+  ): Promise<TAgentSidecarResponse> {
+    return this.runWithStrands(input, 'agent', options);
   }
 
-  async resolveApproval(input: IApprovalResolutionInput): Promise<TAgentSidecarResponse> {
-    const sessionId = createSessionId('approval');
+  async resolveApproval(
+    input: IApprovalResolutionInput,
+    options: IStrandsEngineRunOptions = {},
+  ): Promise<TAgentSidecarResponse> {
+    const sessionId = input.sessionId ?? createSessionId('approval');
+    const result = '审批结果已记录，等待下一次 Agent 执行继续消费。';
+    const events: TAgentUiEvent[] = [];
+
+    pushUiEvent(events, {
+      type: 'tool_result',
+      toolName: 'approval',
+      output: {
+        requestId: input.requestId,
+        decision: input.decision,
+      },
+    }, options);
+    pushUiEvent(events, {
+      type: 'done',
+      result,
+    }, options);
 
     return {
       sessionId,
-      events: [
-        {
-          type: 'tool_result',
-          toolName: 'approval',
-          output: {
-            requestId: input.requestId,
-            decision: input.decision,
-          },
-        },
-        {
-          type: 'done',
-          result: '审批结果已记录，等待下一次 Agent 执行继续消费。',
-        },
-      ],
-      result: '审批结果已记录，等待下一次 Agent 执行继续消费。',
+      events,
+      result,
     };
   }
 
   private async runWithStrands(
     input: IStrandsEngineInput,
     fallbackMode: TAgentMode,
+    options: IStrandsEngineRunOptions = {},
   ): Promise<TAgentSidecarResponse> {
     const sessionId = input.sessionId ?? createSessionId('agent');
     const mode = input.mode || fallbackMode;
-    const prelude: TAgentUiEvent[] = [
-      {
-        type: 'message_delta',
-        text: mode === 'plan'
-          ? '正在交给 Strands 生成计划...'
-          : '正在交给 Strands Agent 执行...',
-      },
-    ];
+    const events: TAgentUiEvent[] = [];
     const modelConfig = createDeepSeekModelConfigFromEnv();
 
     if (!modelConfig) {
       return createErrorResponse(
         sessionId,
         'DeepSeek 未配置：请在 Node sidecar 环境设置 DEEPSEEK_API_KEY。',
-        prelude,
+        events,
+        options,
       );
     }
 
-    const mcpBundle = createMcpClientBundle();
+    const mcpBundle = await createMcpClientBundle(input.workspaceRootPath
+      ? { workspaceRootPath: input.workspaceRootPath }
+      : {});
 
     try {
-      const events = [...prelude];
-
-      for (const error of mcpBundle.errors) {
-        events.push({
-          type: 'message_delta',
-          text: `MCP 配置无效，已跳过：${error}`,
-        });
-      }
-
-      const model = new OpenAIModel({
-        api: 'chat',
+      const model = new OpenAiChatCompatModel({
         modelId: modelConfig.model,
         apiKey: modelConfig.apiKey,
-        clientConfig: {
-          baseURL: modelConfig.baseUrl,
-        },
+        baseUrl: modelConfig.baseUrl,
       });
       const agent = new Agent({
         model,
         messages: buildHistoryMessages({ ...input, mode }),
-        systemPrompt: buildSystemPrompt({ ...input, mode }),
-        tools: mcpBundle.clients,
+        systemPrompt: buildSystemPrompt({ ...input, mode }, modelConfig.model),
+        tools: mcpBundle.tools,
         printer: false,
         toolExecutor: 'sequential',
       });
@@ -355,8 +463,9 @@ export class StrandsEngine {
         buildUserPrompt({ ...input, mode }),
         events,
         mode,
+        options,
       );
-      const result = agentResult.toString();
+      const result = extractVisibleAgentResultText(agentResult) || 'Agent 已完成。';
 
       if (mode === 'plan') {
         const plan = parsePlanFromStructuredOutput(agentResult);
@@ -366,10 +475,20 @@ export class StrandsEngine {
             sessionId,
             'Strands structured output 没有返回有效 AgentPlan，计划未生成。',
             events,
+            options,
           );
         }
 
         const doneResult = `已生成计划：${plan.steps.length} 个待办事项。`;
+
+        options.onEvent?.({
+          type: 'plan_ready',
+          plan,
+        });
+        options.onEvent?.({
+          type: 'done',
+          result: doneResult,
+        });
 
         return {
           sessionId,
@@ -387,6 +506,15 @@ export class StrandsEngine {
           result: doneResult,
         };
       }
+
+      options.onEvent?.({
+        type: 'message_delta',
+        text: result,
+      });
+      options.onEvent?.({
+        type: 'done',
+        result,
+      });
 
       return {
         sessionId,
@@ -408,7 +536,8 @@ export class StrandsEngine {
       return createErrorResponse(
         sessionId,
         `Strands Agent 执行失败：${message}`,
-        prelude,
+        events,
+        options,
       );
     } finally {
       await mcpBundle.disconnectAll();

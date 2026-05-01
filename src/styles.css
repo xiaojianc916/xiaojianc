@@ -3271,57 +3271,6 @@ button:disabled,
   }
 }
 
-.monaco-editor .git-diff-line {
-  background: transparent;
-}
-
-.monaco-editor .git-diff-line-added {
-  background: transparent;
-}
-
-.monaco-editor .git-diff-line-deleted {
-  background: transparent;
-}
-
-.monaco-editor .margin .git-diff-line-number {
-  box-sizing: border-box;
-  width: 100%;
-}
-
-.monaco-editor .margin .git-diff-line-number-added {
-  background: transparent;
-  color: rgba(134, 239, 172, 0.75) !important;
-}
-
-.monaco-editor .margin .git-diff-line-number-deleted {
-  background: transparent;
-  color: rgba(251, 113, 133, 0.75) !important;
-}
-
-.monaco-editor .margin .git-diff-gutter {
-  position: relative;
-}
-
-.monaco-editor .margin .git-diff-gutter::before {
-  content: '';
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  right: 20px;
-  width: 3px;
-  border-radius: 2px;
-}
-
-.monaco-editor .margin .git-diff-gutter-added::before {
-  background: #86efac;
-  box-shadow: 0 0 8px rgba(134, 239, 172, 0.25);
-}
-
-.monaco-editor .margin .git-diff-gutter-deleted::before {
-  background: #fb7185;
-  box-shadow: 0 0 8px rgba(251, 113, 133, 0.25);
-}
-
 /* ============================================================
  * 13. Terminal
  * ============================================================ */

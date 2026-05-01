@@ -48,8 +48,8 @@ describe('AiMessageItem', () => {
             status: 'streaming',
           },
         }),
-        avatarUrl: null,
-        avatarAlt: 'AI',
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
       },
       global: {
         stubs: {
@@ -63,6 +63,25 @@ describe('AiMessageItem', () => {
     expect(wrapper.find('.markdown-stub').exists()).toBe(false);
   });
 
+  it('does not render a blank non-streaming assistant placeholder', () => {
+    const wrapper = mount(AiMessageItem, {
+      props: {
+        message: createMessage({}),
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
+      },
+      global: {
+        stubs: {
+          AiMarkdown: { template: '<div class="markdown-stub" />' },
+        },
+      },
+    });
+
+    expect(wrapper.find('.ai-message').exists()).toBe(false);
+    expect(wrapper.find('.ai-message-status-line').exists()).toBe(false);
+    expect(wrapper.find('.ai-message-bubble').exists()).toBe(false);
+  });
+
   it('reuses the same bubble when streamed content arrives', async () => {
     const wrapper = mount(AiMessageItem, {
       props: {
@@ -71,8 +90,8 @@ describe('AiMessageItem', () => {
             status: 'streaming',
           },
         }),
-        avatarUrl: null,
-        avatarAlt: 'AI',
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
       },
       global: {
         stubs: {
@@ -100,8 +119,8 @@ describe('AiMessageItem', () => {
         message: createMessage({
           content: '请解释这段脚本',
         }),
-        avatarUrl: null,
-        avatarAlt: 'AI',
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
       },
       global: {
         stubs: {
@@ -127,8 +146,8 @@ describe('AiMessageItem', () => {
             status: 'streaming',
           },
         }),
-        avatarUrl: null,
-        avatarAlt: 'AI',
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
       },
       global: {
         stubs: {
@@ -152,8 +171,8 @@ describe('AiMessageItem', () => {
             label: '允许执行',
           }],
         }),
-        avatarUrl: null,
-        avatarAlt: 'AI',
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
       },
       global: {
         stubs: {
@@ -189,8 +208,8 @@ describe('AiMessageItem', () => {
             },
           ],
         }),
-        avatarUrl: null,
-        avatarAlt: 'AI',
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
       },
       global: {
         stubs: {
@@ -225,8 +244,8 @@ describe('AiMessageItem', () => {
             status: 'streaming',
           },
         }),
-        avatarUrl: null,
-        avatarAlt: 'AI',
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
       },
       global: {
         stubs: {

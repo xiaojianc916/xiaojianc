@@ -1,5 +1,4 @@
 import type {
-  IAiDiffEditorPreview,
   IActiveRunSummary,
   IAnalyzeScriptPayload,
   IEditorDocument,
@@ -14,6 +13,8 @@ import type {
   TLogLevel,
   TRunLogScope,
 } from '@/types/editor';
+import type { IAiDiffEditorPreview } from '@/types/ai-patch';
+import type { IGitDiffPreviewPayload } from '@/types/git';
 import type { TSessionSnapshot } from '@/types/session';
 import { tauriSessionStorage } from '@/store/plugins/tauriSessionStorage';
 import { normalizeFileSystemPath } from '@/utils/path';
@@ -154,6 +155,8 @@ const createDocument = (
     isDirty: false,
     lineCount: 1,
     charCount: 0,
+    aiDiffPreview: overrides.aiDiffPreview,
+    gitDiffPreview: overrides.gitDiffPreview,
   });
 };
 
@@ -214,7 +217,7 @@ export const useEditorStore = defineStore('editor', () => {
   const syncSessionOpenTabs = (): void => {
     sessionSnapshot.value.openTabs = documents.value
       .filter((item) => Boolean(item.path))
-      .filter((item) => item.kind !== 'ai-diff')
+      .filter((item) => item.kind !== 'ai-diff' && item.kind !== 'git-diff')
       .slice(0, MAX_OPEN_TABS)
       .map((item, index) => ({
         path: item.path as string,
@@ -498,6 +501,39 @@ export const useEditorStore = defineStore('editor', () => {
     return { document: nextDocument, reusedExisting: false };
   };
 
+  const openGitDiffDocument = (
+    preview: IGitDiffPreviewPayload,
+  ): { document: IEditorDocument; reusedExisting: boolean } => {
+    const existingDocument = documents.value.find(
+      (item) => item.kind === 'git-diff' && item.gitDiffPreview?.id === preview.id,
+    );
+      if (existingDocument) {
+        existingDocument.gitDiffPreview = preview;
+        existingDocument.name = preview.title;
+        existingDocument.content = preview.modifiedContent;
+        existingDocument.savedContent = preview.modifiedContent;
+        syncDocumentState(existingDocument);
+        setActiveDocument(existingDocument.id);
+        touchSessionSnapshot();
+      return { document: existingDocument, reusedExisting: true };
+    }
+
+    const nextDocument = createDocument(documents.value, {
+      id: preview.id,
+        path: `git-diff://${encodeURIComponent(preview.id)}`,
+        name: preview.title,
+        kind: 'git-diff',
+        content: preview.modifiedContent,
+        savedContent: preview.modifiedContent,
+        gitDiffPreview: preview,
+      });
+    documents.value.push(nextDocument);
+    setActiveDocument(nextDocument.id);
+    syncSessionOpenTabs();
+    touchSessionSnapshot();
+    return { document: nextDocument, reusedExisting: false };
+  };
+
   const applyDocumentPayload = (
     documentId: string,
     payload: IScriptFilePayload,
@@ -748,6 +784,7 @@ export const useEditorStore = defineStore('editor', () => {
     openDocumentTab,
     openImageDocument,
     openAiDiffDocument,
+    openGitDiffDocument,
     applyDocumentPayload,
     updateDocumentContent,
     updateActiveDocumentContent,

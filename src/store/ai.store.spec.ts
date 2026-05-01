@@ -37,8 +37,8 @@ describe('AI service and store', () => {
 
   it('service 通过统一 tauriService 调用 chat', async () => {
     const payload = {
-      providerType: 'mock',
-      model: 'mock-ide-assistant',
+      providerType: 'litellm',
+      model: 'openai/gpt-5.5',
       message: {
         id: 'assistant-1',
         role: 'assistant',
@@ -55,10 +55,10 @@ describe('AI service and store', () => {
 
   it('store 只保存非敏感配置', async () => {
     tauriServiceMock.aiGetConfig.mockResolvedValueOnce({
-      providerType: 'mock',
-      selectedModel: 'mock-ide-assistant',
-      baseUrl: null,
-      isBaseUrlConfigured: false,
+      providerType: 'litellm',
+      selectedModel: 'openai/gpt-5.5',
+      baseUrl: 'http://127.0.0.1:4000/v1',
+      isBaseUrlConfigured: true,
       hasCredentials: false,
       isConfigured: true,
       inlineCompletionEnabled: false,
@@ -69,16 +69,16 @@ describe('AI service and store', () => {
     const store = useAiStore();
     await store.loadConfig();
 
-    expect(store.config.providerType).toBe('mock');
+    expect(store.config.providerType).toBe('litellm');
     expect('apiKey' in store.config).toBe(false);
   });
 
   it('connectProvider 成功后只落非敏感 config，不把 apiKey 放进 store', async () => {
     tauriServiceMock.aiConnectProvider.mockResolvedValueOnce({
       config: {
-        providerType: 'openai',
-        selectedModel: 'gpt-5.5',
-        baseUrl: 'https://api.openai.com/v1',
+        providerType: 'litellm',
+        selectedModel: 'openai/gpt-5.5',
+        baseUrl: 'http://127.0.0.1:4000/v1',
         isBaseUrlConfigured: true,
         hasCredentials: true,
         isConfigured: true,
@@ -95,16 +95,16 @@ describe('AI service and store', () => {
 
     const store = useAiStore();
     await store.connectProvider({
-      providerType: 'openai',
-      selectedModel: 'gpt-5.5',
-      baseUrl: 'https://api.openai.com/v1',
+      providerType: 'litellm',
+      selectedModel: 'openai/gpt-5.5',
+      baseUrl: 'http://127.0.0.1:4000/v1',
       inlineCompletionEnabled: true,
       chatEnabled: true,
       agentEnabled: false,
       apiKey: 'sk-test-secret-value',
     });
 
-    expect(store.config.providerType).toBe('openai');
+    expect(store.config.providerType).toBe('litellm');
     expect(store.config.hasCredentials).toBe(true);
     expect('apiKey' in store.config).toBe(false);
   });

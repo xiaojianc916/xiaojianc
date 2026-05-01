@@ -1,5 +1,6 @@
 import { aiChatStreamEventPayloadSchema } from '@/types/ai.schema';
 import { aiAgentStreamEventSchema } from '@/types/ai-stream.schema';
+import { agentSidecarStreamEventPayloadSchema } from '@/types/agent-sidecar.schema';
 import { AppError, isAppError } from '@/types/app-error';
 import type { ITauriService } from '@/types/tauri';
 import { assertDesktopRuntime } from '@/utils/desktop-runtime';
@@ -677,6 +678,13 @@ const getGitFileBaselineIpc = defineContractIpc(
   { idempotent: true },
 );
 
+const getGitDiffPreviewIpc = definePayloadIpc(
+  'get_git_diff_preview',
+  '读取 Git Diff 预览',
+  tauriContracts.getGitDiffPreview,
+  { idempotent: true, timeoutMs: 20_000 },
+);
+
 const stageGitPathsIpc = definePayloadIpc(
   'stage_git_paths',
   '暂存 Git 变更',
@@ -1195,6 +1203,8 @@ export const tauriService: ITauriService & {
     return getGitFileBaselineIpc({ path });
   },
 
+  getGitDiffPreview: getGitDiffPreviewIpc,
+
   stageGitPaths: stageGitPathsIpc,
 
   unstageGitPaths: unstageGitPathsIpc,
@@ -1270,6 +1280,18 @@ export const tauriService: ITauriService & {
     const { listen } = await loadTauriEvent();
     return listen('ai:agent-stream', (event) => {
       const parsed = aiAgentStreamEventSchema.safeParse(event.payload);
+      if (!parsed.success) {
+        return;
+      }
+      handler(parsed.data);
+    });
+  },
+
+  async onAgentSidecarStream(handler) {
+    await assertDesktopRuntime('监听 Agent sidecar 流式事件');
+    const { listen } = await loadTauriEvent();
+    return listen('ai:sidecar-stream', (event) => {
+      const parsed = agentSidecarStreamEventPayloadSchema.safeParse(event.payload);
       if (!parsed.success) {
         return;
       }

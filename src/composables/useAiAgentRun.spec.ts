@@ -14,6 +14,7 @@ const aiServiceMock = vi.hoisted(() => {
   const resolveToolConfirmation = vi.fn();
   const sidecarExecute = vi.fn();
   const sidecarResolveApproval = vi.fn();
+  const onSidecarStream = vi.fn(async () => vi.fn());
   const getRun = vi.fn();
   const listRuns = vi.fn();
 
@@ -26,6 +27,7 @@ const aiServiceMock = vi.hoisted(() => {
     resolveToolConfirmation,
     sidecarExecute,
     sidecarResolveApproval,
+    onSidecarStream,
     getRun,
     listRuns,
     reset(): void {
@@ -37,6 +39,8 @@ const aiServiceMock = vi.hoisted(() => {
       resolveToolConfirmation.mockReset();
       sidecarExecute.mockReset();
       sidecarResolveApproval.mockReset();
+      onSidecarStream.mockReset();
+      onSidecarStream.mockResolvedValue(vi.fn());
       getRun.mockReset();
       listRuns.mockReset();
     },
@@ -53,6 +57,7 @@ vi.mock('@/services/modules/ai', () => ({
     resolveToolConfirmation: aiServiceMock.resolveToolConfirmation,
     sidecarExecute: aiServiceMock.sidecarExecute,
     sidecarResolveApproval: aiServiceMock.sidecarResolveApproval,
+    onSidecarStream: aiServiceMock.onSidecarStream,
     getRun: aiServiceMock.getRun,
     listRuns: aiServiceMock.listRuns,
   },
@@ -255,10 +260,11 @@ describe('useAiAgentRun', () => {
 
     await agentRun.resolveSidecarStepToolConfirmation(confirmationId ?? '', 'allow-once');
 
-    expect(aiServiceMock.sidecarResolveApproval).toHaveBeenCalledWith({
+    expect(aiServiceMock.sidecarResolveApproval).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'sidecar-step-session-confirm',
       requestId: 'call-run-test',
       decision: 'allow-once',
-    });
+    }));
     expect(store.pendingToolConfirmation).toBeNull();
     expect(store.activeRun?.steps[0]?.status).toBe('done');
     expect(store.getStepFinalAnswers('agent-run-1')[0]?.content).toBe('验证完成。');

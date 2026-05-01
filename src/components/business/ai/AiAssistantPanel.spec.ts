@@ -49,10 +49,10 @@ const createAssistantMock = (
         : [],
 ) => {
     const config = ref<IAiConfigPayload>({
-        providerType: 'mock',
-        selectedModel: 'mock-ide-assistant',
-        baseUrl: null,
-        isBaseUrlConfigured: false,
+        providerType: 'litellm',
+        selectedModel: 'openai/gpt-5.5',
+        baseUrl: 'http://127.0.0.1:4000/v1',
+        isBaseUrlConfigured: true,
         hasCredentials: false,
         isConfigured: true,
         inlineCompletionEnabled: false,
@@ -248,6 +248,40 @@ const createGitStatus = (): IGitRepositoryStatusPayload => ({
 describe('AiAssistantPanel', () => {
     beforeEach(() => {
         setActivePinia(createPinia());
+    });
+
+    it('顶部使用当前模型平台图标，不再直接显示模型 id', () => {
+        const assistantMock = createAssistantMock([]);
+        assistantMock.config.value.selectedModel = 'deepseek/deepseek-v4-pro';
+        useAiAssistantMock.mockReturnValue(assistantMock);
+
+        const wrapper = mount(AiAssistantPanel, {
+            props: {
+                document: createDocument(),
+                activeRun: null as IActiveRunSummary | null,
+                analysis: createAnalysis(),
+                selection: null as IEditorSelectionSummary | null,
+                gitStatus: createGitStatus(),
+                workspaceRootPath: 'd:/com.xiaojianc/my_desktop_app',
+            },
+            global: {
+                stubs: {
+                    AiChatThread: { template: '<div />' },
+                    AiContextChips: { template: '<div />' },
+                    AiPatchPreview: { template: '<div />' },
+                    AiPromptInput: { template: '<div />' },
+                    AiProviderSettings: { template: '<div />' },
+                    AiPlanModePanel: { template: '<div />' },
+                    teleport: true,
+                },
+            },
+        });
+
+        const modelButton = wrapper.get('.ai-model-button');
+
+        expect(modelButton.find('.ai-provider-icon').exists()).toBe(true);
+        expect(modelButton.text()).not.toContain('deepseek/deepseek-v4-pro');
+        expect(modelButton.attributes('title')).toContain('DeepSeek');
     });
 
     it('shows plan panel only in plan mode when a plan exists', () => {

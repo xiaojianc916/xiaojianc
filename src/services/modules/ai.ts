@@ -6,6 +6,7 @@ import type {
   IAgentSidecarHealthPayload,
   IAgentSidecarPlanRequest,
   IAgentSidecarResponsePayload,
+  IAgentSidecarStreamEventPayload,
 } from '@/types/agent-sidecar';
 import type {
   IAiEditGetDiffPayload,
@@ -73,6 +74,11 @@ export const aiService = {
     payload: IAgentSidecarApprovalResolveRequest,
   ): Promise<IAgentSidecarResponsePayload> {
     return tauriService.agentSidecarResolveApproval(payload);
+  },
+  onSidecarStream(
+    handler: (payload: IAgentSidecarStreamEventPayload) => void,
+  ): Promise<() => void> {
+    return tauriService.onAgentSidecarStream(handler);
   },
   getConfig(): Promise<IAiConfigPayload> {
     return tauriService.aiGetConfig();

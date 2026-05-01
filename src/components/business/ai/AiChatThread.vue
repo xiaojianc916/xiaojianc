@@ -1,14 +1,16 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import type { IAiChatMessage, TAiChatMessageActionId } from '@/types/ai';
+import type { TAiServicePlatformId } from '@/constants/ai-providers';
 import { LoaderCircle } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import AiMessageItem from './AiMessageItem.vue';
+import AiProviderIcon from './AiProviderIcon.vue';
 
 const props = defineProps<{
   messages: IAiChatMessage[];
   isTyping: boolean;
-  avatarUrl: string | null;
-  avatarAlt: string;
+  platformId: TAiServicePlatformId;
+  providerLabel: string;
 }>();
 
 const listRef = ref<HTMLElement | null>(null);
@@ -30,8 +32,14 @@ const hasInlineProgressMessage = computed(() => {
     return false;
   }
 
+  const isEmptyAssistantPlaceholder =
+    !lastMessage.content.trim()
+    && !lastMessage.toolCalls?.length
+    && !lastMessage.actions?.length;
+
   return lastMessage.stream?.status === 'streaming'
     || Boolean(lastMessage.toolCalls?.length)
+    || isEmptyAssistantPlaceholder
     || TOOL_PROGRESS_PREFIXES.some((prefix) => lastMessage.content.trim().startsWith(prefix));
 });
 
@@ -71,17 +79,13 @@ onMounted(() => {
       v-for="message in messages"
       :key="message.id"
       :message="message"
-      :avatar-url="avatarUrl"
-      :avatar-alt="avatarAlt"
+      :platform-id="platformId"
+      :provider-label="providerLabel"
       @message-action="handleMessageAction"
     />
     <slot name="after-messages"></slot>
     <article v-if="shouldRenderStandaloneTyping" class="ai-message-typing" aria-label="AI 正在准备回复">
-      <svg v-if="!avatarUrl" class="ai-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-        <path d="M12 3l1.9 5.2L19 10l-5.1 1.8L12 17l-1.9-5.2L5 10l5.1-1.8L12 3z" />
-        <path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8L18 15z" />
-      </svg>
-      <img v-else class="ai-logo" :src="avatarUrl" :alt="avatarAlt" loading="lazy" referrerpolicy="no-referrer" />
+      <AiProviderIcon class="ai-logo" :platform-id="platformId" :title="providerLabel" />
       <div class="typing-status" role="status" aria-live="polite">
         <LoaderCircle class="typing-status-icon" aria-hidden="true" />
         <span>AI 正在准备回复</span>
@@ -125,12 +129,6 @@ onMounted(() => {
   height: 22px;
   flex: 0 0 auto;
   margin-top: 1px;
-  border-radius: 5px;
-  color: var(--accent-strong);
-  object-fit: contain;
-  stroke-width: 1.75;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .typing-status {

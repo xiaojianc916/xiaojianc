@@ -43,8 +43,8 @@ pub use contracts::{
     WorkspacePathRenamePayload, WorkspacePathRenameRequest,
 };
 pub use git::{
-    commit_git_index, discard_git_paths, get_git_file_baseline, get_git_repository_status,
-    init_git_repository, stage_git_paths, unstage_git_paths,
+    commit_git_index, discard_git_paths, get_git_diff_preview, get_git_file_baseline,
+    get_git_repository_status, init_git_repository, stage_git_paths, unstage_git_paths,
 };
 pub use script_run::detect_execution_environment;
 pub(crate) use script_run::{create_temp_script, find_command_path, line_count};

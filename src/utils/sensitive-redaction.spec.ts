@@ -5,7 +5,7 @@ import { redactForLog, redactSensitiveText } from './sensitive-redaction';
 describe('sensitive-redaction', () => {
   it('redacts apiKey fields recursively without dropping shape', () => {
     const redacted = redactForLog({
-      providerType: 'openai',
+      providerType: 'litellm',
       nested: {
         api_key: 'sk-test-secret-value',
       },
@@ -14,7 +14,7 @@ describe('sensitive-redaction', () => {
 
     const serialized = JSON.stringify(redacted);
 
-    expect(serialized).toContain('"providerType":"openai"');
+    expect(serialized).toContain('"providerType":"litellm"');
     expect(serialized).toContain('"redacted":true');
     expect(serialized).not.toContain('sk-test-secret-value');
     expect(serialized).not.toContain('token-value-1234567890');

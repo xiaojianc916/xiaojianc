@@ -12,6 +12,7 @@ export type TSourceControlMenuAction =
     | 'unstage-all'
     | 'discard-all'
     | 'commit'
+    | 'open-diff'
     | 'open-file'
     | 'copy-path'
     | 'stage-entry'
@@ -37,6 +38,7 @@ interface IUseSourceControlContextMenuOptions {
     onUnstageAll: () => Promise<void>;
     onDiscardAll: () => Promise<void>;
     onCommit: () => Promise<void>;
+    onOpenDiff: (sectionKey: TGitSectionKey, entry: IGitFileStatusPayload) => void;
     onOpenFile: (path: string) => void;
     onCopyPath: (path: string) => Promise<void>;
     onStageEntry: (sectionKey: TGitSectionKey, entry: IGitFileStatusPayload) => Promise<void>;
@@ -156,6 +158,14 @@ export const useSourceControlContextMenu = (options: IUseSourceControlContextMen
                 title: 'File',
                 items: [
                     createMenuItem({
+                        key: 'open-diff',
+                        label: '查看 Diff',
+                        icon: 'goto',
+                        action: 'open-diff',
+                        sectionKey,
+                        entry,
+                    }),
+                    createMenuItem({
                         key: 'open-file',
                         label: '打开文件',
                         icon: 'goto',
@@ -203,6 +213,11 @@ export const useSourceControlContextMenu = (options: IUseSourceControlContextMen
                 return;
             case 'commit':
                 await options.onCommit();
+                return;
+            case 'open-diff':
+                if (actionItem.entry && actionItem.sectionKey) {
+                    options.onOpenDiff(actionItem.sectionKey, actionItem.entry);
+                }
                 return;
             case 'open-file':
                 if (actionItem.entry) {

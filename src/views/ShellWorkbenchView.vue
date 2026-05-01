@@ -31,6 +31,7 @@
         :has-run-artifacts="editorStore.hasRunArtifacts" :active-run="editorStore.activeRunSummary"
         :run-history="editorStore.runHistory" :command-templates="commandTemplates"
         :executor="editorStore.selectedExecutor" @open-file="openDocumentByPath" @run="handleRunScript"
+        @open-git-diff="openGitDiffPreview"
         @create-document="createNewDocument" @open-terminal="openTerminal" @insert-template="handleInsertTemplate"
         @clear-run-history="clearTerminalLogs" />
     </template>
@@ -39,6 +40,7 @@
       <WorkbenchHeader v-show="isWorkbenchContentVisible" :documents="editorStore.documents"
         :active-document-id="editorStore.activeDocumentId"
         :file-path="editorStore.hasActiveDocument ? editorStore.document.path : null"
+        :show-breadcrumb="editorStore.document.kind !== 'git-diff'"
         :can-navigate-back="canNavigateDocumentBack" :can-navigate-forward="canNavigateDocumentForward"
         @select-tab="activateDocument" @close-tab="requestCloseDocument" @navigate-back="navigateDocumentBack"
         @navigate-forward="navigateDocumentForward" />
@@ -63,6 +65,13 @@
         <AiDiffPreviewEditor
           v-else-if="editorStore.document.kind === 'ai-diff' && editorStore.document.aiDiffPreview"
           :preview="editorStore.document.aiDiffPreview"
+        />
+
+        <GitDiffViewer
+          v-else-if="editorStore.document.kind === 'git-diff' && editorStore.document.gitDiffPreview"
+          :preview="editorStore.document.gitDiffPreview"
+          :theme="appStore.theme"
+          :editor-settings="appStore.settings.editor"
         />
 
         <ImageAssetPreview v-else-if="editorStore.document.path" :path="editorStore.document.path"
@@ -116,6 +125,7 @@ import AiAssistantPanel from '@/components/business/ai/AiAssistantPanel.vue';
 import WindowTitleBar from '@/components/common/WindowTitleBar.vue';
 import AiDiffPreviewEditor from '@/components/editor/AiDiffPreviewEditor.vue';
 import EmptyEditorState from '@/components/editor/EmptyEditorState.vue';
+import GitDiffViewer from '@/components/editor/GitDiffViewer.vue';
 import ImageAssetPreview from '@/components/editor/ImageAssetPreview.vue';
 import SmartScriptEditor from '@/components/editor/SmartScriptEditor.vue';
 import ActivityRail from '@/components/workbench/ActivityRail.vue';
@@ -146,6 +156,7 @@ const {
   openDocument,
   openFolder,
   openDocumentByPath,
+  openGitDiffPreview,
   saveDocument,
   saveDocumentAs,
   requestCloseDocument,
@@ -203,4 +214,5 @@ const {
   handleAiFixDiagnostic,
   handleOpenShellCheck,
 } = useShellWorkbenchView(() => emit('ready'));
+
 </script>

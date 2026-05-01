@@ -2,6 +2,8 @@ import { computed, ref, type Ref } from 'vue';
 
 import { useAiAgentPlan } from '@/composables/useAiAgentPlan';
 import { useAiStream } from '@/composables/useAiStream';
+import { useSidecarChangedDocumentRefresh } from '@/composables/useSidecarChangedDocumentRefresh';
+import { DEFAULT_LITELLM_BASE_URL, DEFAULT_LITELLM_MODEL_ID } from '@/constants/ai-providers';
 import { aiService } from '@/services/modules/ai';
 import {
   buildActiveRunReference,
@@ -11,9 +13,12 @@ import {
   buildSelectionReference,
 } from '@/services/modules/ai-context';
 import { useAiConversationStore } from '@/store/aiConversation';
-import { projectSidecarExecuteResponse } from '@/utils/agent-sidecar-events';
+import {
+  mapSidecarEventsToToolCalls,
+  projectSidecarExecuteResponse,
+} from '@/utils/agent-sidecar-events';
 
-import type { IAgentSidecarMessage } from '@/types/agent-sidecar';
+import type { IAgentSidecarMessage, TAgentUiEvent } from '@/types/agent-sidecar';
 import type {
   IAiApplyPatchMetadata,
   IAiChatMessage,
@@ -334,12 +339,12 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const conversationStore = useAiConversationStore();
 
   const config = ref<IAiConfigPayload>({
-    providerType: 'mock',
-    selectedModel: 'mock-ide-assistant',
-    baseUrl: null,
-    isBaseUrlConfigured: false,
+    providerType: 'litellm',
+    selectedModel: DEFAULT_LITELLM_MODEL_ID,
+    baseUrl: DEFAULT_LITELLM_BASE_URL,
+    isBaseUrlConfigured: true,
     hasCredentials: false,
-    isConfigured: true,
+    isConfigured: false,
     inlineCompletionEnabled: false,
     chatEnabled: true,
     agentEnabled: false,
@@ -377,6 +382,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
   const aiStream = useAiStream();
   const agentPlan = useAiAgentPlan();
+  const { refreshSidecarChangedDocuments } = useSidecarChangedDocumentRefresh();
 
   const resolveActiveAgentPatchTarget = (): IActiveAgentPatchTarget | null => {
     const activeRun = agentPlan.store.activeRun;
@@ -468,12 +474,39 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     messageId: string,
     content: string,
     toolCalls: IAiChatMessage['toolCalls'] = [],
+    streamStatus?: NonNullable<IAiChatMessage['stream']>['status'],
   ): void => {
     replaceMessageById(messageId, (message) => ({
       ...message,
       content,
       toolCalls,
+      stream: streamStatus
+        ? {
+          status: streamStatus,
+        }
+        : message.stream,
     }));
+  };
+
+  const refreshChangedDocumentsAfterSidecarRun = async (
+    changedFilePaths: readonly string[],
+    hasFileMutations: boolean,
+  ): Promise<void> => {
+    const refreshResult = await refreshSidecarChangedDocuments({
+      changedFilePaths,
+      hasFileMutations,
+      workspaceRootPath: options.workspaceRootPath.value,
+      currentDocument: options.document.value,
+    });
+
+    if (refreshResult.skippedDirtyNames.length > 0) {
+      errorMessage.value = `Agent 已修改文件，但 ${refreshResult.skippedDirtyNames.join('、')} 有未保存改动，已跳过自动刷新。`;
+      return;
+    }
+
+    if (refreshResult.failedNames.length > 0) {
+      errorMessage.value = `Agent 已修改文件，但刷新 ${refreshResult.failedNames.join('、')} 失败，请手动重新打开。`;
+    }
   };
 
   const mapSidecarToolCallStatusToStepStatus = (
@@ -492,6 +525,43 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       default:
         return 'running';
     }
+  };
+
+  const applySidecarLiveEventsToAgentMessage = (
+    assistantMessageId: string,
+    fallbackContent: string,
+    events: readonly TAgentUiEvent[],
+  ): void => {
+    const toolCalls = mapSidecarEventsToToolCalls(events);
+    const errorEvent = [...events]
+      .reverse()
+      .find((event): event is Extract<TAgentUiEvent, { type: 'error' }> =>
+        event.type === 'error'
+      );
+    const doneEvent = [...events]
+      .reverse()
+      .find((event): event is Extract<TAgentUiEvent, { type: 'done' }> =>
+        event.type === 'done'
+      );
+    const messageEvent = [...events]
+      .reverse()
+      .find((event): event is Extract<TAgentUiEvent, { type: 'message_delta' }> =>
+        event.type === 'message_delta'
+      );
+    const content = errorEvent
+      ? `Agent 执行失败：${errorEvent.message}`
+      : doneEvent?.result.trim() || messageEvent?.text.trim() || fallbackContent;
+    const streamStatus = errorEvent || doneEvent ? 'completed' : 'streaming';
+
+    for (const toolCall of toolCalls) {
+      updateAgentStep(
+        toolCall.id,
+        toolCall.summary,
+        mapSidecarToolCallStatusToStepStatus(toolCall.status),
+      );
+    }
+
+    updateAgentExecutionMessage(assistantMessageId, content, toolCalls, streamStatus);
   };
 
   const buildSidecarContextMessage = (
@@ -548,18 +618,37 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     const placeholderMessage: IAiChatMessage = {
       id: assistantMessageId,
       role: 'assistant',
-      content: 'Agent 正在交给 Strands 执行任务',
+      content: '',
       createdAt: new Date().toISOString(),
       references: [],
       toolCalls: [],
+      stream: {
+        status: 'streaming',
+      },
     };
 
     messages.value = [...visibleMessages, placeholderMessage];
     activeAgentMessageId.value = assistantMessageId;
     activeAbortController.value = new AbortController();
+    const sidecarSessionId = `sidecar:${assistantMessageId}`;
+    const liveEvents: TAgentUiEvent[] = [];
+    let unlistenSidecarStream: (() => void) | null = null;
 
     try {
+      unlistenSidecarStream = await aiService.onSidecarStream((payload) => {
+        if (payload.sessionId !== sidecarSessionId) {
+          return;
+        }
+
+        liveEvents.push(payload.event);
+        applySidecarLiveEventsToAgentMessage(
+          assistantMessageId,
+          '',
+          liveEvents,
+        );
+      });
       const payload = await aiService.sidecarExecute({
+        sessionId: sidecarSessionId,
         goal: messageContent,
         messages: toSidecarMessages(visibleMessages, references),
         workspaceRootPath: options.workspaceRootPath.value,
@@ -579,6 +668,12 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         assistantMessageId,
         projection.assistantContent,
         projection.toolCalls,
+        'completed',
+      );
+
+      await refreshChangedDocumentsAfterSidecarRun(
+        projection.changedFilePaths,
+        projection.hasFileMutations,
       );
 
       if (projection.pendingConfirmation) {
@@ -599,18 +694,22 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
       if (projection.errorMessage) {
         errorMessage.value = projection.errorMessage;
-        draft.value = messageContent;
       }
     } catch (error) {
       const wasAborted = activeAbortController.value?.signal.aborted;
 
       if (!wasAborted) {
         const message = toErrorMessage(error, MSG_CALL_FAILED);
-        updateAgentExecutionMessage(assistantMessageId, `Agent 执行失败：${message}`);
+        updateAgentExecutionMessage(
+          assistantMessageId,
+          `Agent 执行失败：${message}`,
+          [],
+          'completed',
+        );
         errorMessage.value = message;
-        draft.value = messageContent;
       }
     } finally {
+      unlistenSidecarStream?.();
       activeAbortController.value = null;
       activeAgentMessageId.value = null;
       isSending.value = false;
@@ -635,15 +734,32 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       updateAgentExecutionMessage(
         session.assistantMessageId,
         decision === 'stop' ? 'Agent 工具调用已停止。' : 'Agent 工具调用已跳过。',
+        [],
+        'completed',
       );
       return;
     }
 
     isSending.value = true;
     activeAgentMessageId.value = session.assistantMessageId;
+    const liveEvents: TAgentUiEvent[] = [];
+    let unlistenSidecarStream: (() => void) | null = null;
 
     try {
+      unlistenSidecarStream = await aiService.onSidecarStream((payload) => {
+        if (payload.sessionId !== session.sessionId) {
+          return;
+        }
+
+        liveEvents.push(payload.event);
+        applySidecarLiveEventsToAgentMessage(
+          session.assistantMessageId,
+          '',
+          liveEvents,
+        );
+      });
       const payload = await aiService.sidecarResolveApproval({
+        sessionId: session.sessionId,
         requestId: confirmation.id,
         decision,
       });
@@ -653,6 +769,12 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         session.assistantMessageId,
         projection.assistantContent,
         projection.toolCalls,
+        'completed',
+      );
+
+      await refreshChangedDocumentsAfterSidecarRun(
+        projection.changedFilePaths,
+        projection.hasFileMutations,
       );
 
       if (projection.pendingConfirmation) {
@@ -668,14 +790,18 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
       if (projection.errorMessage) {
         errorMessage.value = projection.errorMessage;
-        draft.value = session.messageContent;
       }
     } catch (error) {
       const message = toErrorMessage(error, '处理 Agent 工具确认失败。');
-      updateAgentExecutionMessage(session.assistantMessageId, `Agent 执行失败：${message}`);
+      updateAgentExecutionMessage(
+        session.assistantMessageId,
+        `Agent 执行失败：${message}`,
+        [],
+        'completed',
+      );
       errorMessage.value = message;
-      draft.value = session.messageContent;
     } finally {
+      unlistenSidecarStream?.();
       activeAgentMessageId.value = null;
       isSending.value = false;
     }
@@ -686,7 +812,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
   const providerLabel = computed(() =>
     config.value.chatEnabled
-      ? `${config.value.providerType} · ${config.value.selectedModel ?? 'mock-ide-assistant'}`
+      ? `${config.value.providerType} · ${config.value.selectedModel ?? DEFAULT_LITELLM_MODEL_ID}`
       : '未启用 Chat',
   );
 
@@ -1192,7 +1318,6 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         aiStream.stop();
         syncAssistantMessage();
         errorMessage.value = event.message ?? MSG_STREAM_ERROR;
-        draft.value = messageContent;
         settle();
       }
     };
@@ -1311,23 +1436,54 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     }
 
     const messageContent = content || '请分析我添加的附件内容。';
-    const references = await buildReferences(messageContent);
-
-    currentReferences.value = references;
-
     const userMessage: IAiChatMessage = {
       id: createMessageId('user'),
       role: 'user',
       content: messageContent,
       createdAt: new Date().toISOString(),
-      references,
+      references: [],
     };
 
-    const nextMessages = [...messages.value, userMessage];
+    const visibleMessages = [...messages.value, userMessage];
 
-    messages.value = nextMessages;
+    messages.value = visibleMessages;
     draft.value = '';
     errorMessage.value = '';
+    isSending.value = true;
+
+    let references: IAiContextReference[];
+
+    try {
+      references = await buildReferences(messageContent);
+    } catch (error) {
+      const message = toErrorMessage(error, MSG_CALL_FAILED);
+      errorMessage.value = message;
+      messages.value = [
+        ...visibleMessages,
+        {
+          id: createMessageId('assistant'),
+          role: 'assistant',
+          content: `AI 上下文收集失败：${message}`,
+          createdAt: new Date().toISOString(),
+          references: [],
+        },
+      ];
+      isSending.value = false;
+      return;
+    }
+
+    currentReferences.value = references;
+
+    const nextMessages = visibleMessages.map((message) =>
+      message.id === userMessage.id
+        ? {
+            ...message,
+            references,
+          }
+        : message,
+    );
+
+    messages.value = nextMessages;
 
     if (activeMode.value === 'agent') {
       await executeSidecarAgentRequest(
@@ -1367,6 +1523,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
           },
         ];
 
+        isSending.value = false;
         return;
       } catch (error) {
         const message = toErrorMessage(error, '生成计划失败。');
@@ -1382,7 +1539,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
             references: [],
           },
         ];
-        draft.value = messageContent;
+        isSending.value = false;
         return;
       }
     }
@@ -1396,7 +1553,6 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       );
     } catch (error) {
       errorMessage.value = toErrorMessage(error, MSG_CALL_FAILED);
-      draft.value = messageContent;
     }
   };
 
@@ -1537,6 +1693,8 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       updateAgentExecutionMessage(
         activeAgentMessageId.value,
         'Agent 执行已取消。',
+        [],
+        'cancelled',
       );
       activeAgentMessageId.value = null;
     }

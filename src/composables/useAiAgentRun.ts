@@ -1,12 +1,15 @@
+import { useSidecarChangedDocumentRefresh } from '@/composables/useSidecarChangedDocumentRefresh';
 import { aiService } from '@/services/modules/ai';
 import { useAiAgentStore } from '@/store/aiAgent';
 import {
+  mapSidecarEventsToToolCalls,
   mapSidecarToolNameToAiToolName,
   projectSidecarExecuteResponse,
 } from '@/utils/agent-sidecar-events';
 import { toErrorMessage } from '@/utils/error';
 
 import type { IAgentSidecarMessage } from '@/types/agent-sidecar';
+import type { TAgentUiEvent } from '@/types/agent-sidecar';
 import type {
   IAiAgentRun,
   IAiAgentStepFinalAnswer,
@@ -35,6 +38,9 @@ interface ISidecarStepLoopSession {
 }
 
 const SIDECAR_STEP_CONFIRMATION_PREFIX = 'sidecar-step-tool-confirmation:';
+
+const createSidecarStepSessionId = (runId: string, stepId: string): string =>
+  `sidecar-step:${runId}:${stepId}:${Date.now()}`;
 
 const findRunningStep = (run: IAiAgentRun | null): IAiTaskPlanStep | null =>
   run?.steps.find((step) => step.status === 'running') ?? null;
@@ -130,6 +136,7 @@ const toStepFinalAnswer = (
 
 export const useAiAgentRun = () => {
   const store = useAiAgentStore();
+  const { refreshSidecarChangedDocuments } = useSidecarChangedDocumentRefresh();
   const sidecarStepLoopSessions = new Map<string, ISidecarStepLoopSession>();
 
   const applyRunPayload = (run: IAiAgentRun): IAiAgentRun => {
@@ -160,6 +167,44 @@ export const useAiAgentRun = () => {
         targetPreview: toolCall.targetPreview,
         startedAt: new Date().toISOString(),
       });
+    }
+  };
+
+  const appendSidecarLiveToolActivities = (
+    runId: string,
+    stepId: string,
+    events: readonly TAgentUiEvent[],
+  ): void => {
+    for (const toolCall of mapSidecarEventsToToolCalls(events)) {
+      store.appendToolActivity(runId, {
+        id: `${toolCall.id}:activity`,
+        stepId,
+        toolName: mapSidecarToolNameToAiToolName(toolCall.name),
+        state: mapToolCallStatusToActivityState(toolCall.status),
+        label: toolCall.summary,
+        targetPreview: toolCall.targetPreview,
+        startedAt: new Date().toISOString(),
+      });
+    }
+  };
+
+  const refreshChangedDocumentsAfterSidecarRun = async (
+    projection: ReturnType<typeof projectSidecarExecuteResponse>,
+    workspaceRootPath: string | null | undefined,
+  ): Promise<void> => {
+    const refreshResult = await refreshSidecarChangedDocuments({
+      changedFilePaths: projection.changedFilePaths,
+      hasFileMutations: projection.hasFileMutations,
+      workspaceRootPath: workspaceRootPath ?? null,
+    });
+
+    if (refreshResult.skippedDirtyNames.length > 0) {
+      store.errorMessage = `Agent 已修改文件，但 ${refreshResult.skippedDirtyNames.join('、')} 有未保存改动，已跳过自动刷新。`;
+      return;
+    }
+
+    if (refreshResult.failedNames.length > 0) {
+      store.errorMessage = `Agent 已修改文件，但刷新 ${refreshResult.failedNames.join('、')} 失败，请手动重新打开。`;
     }
   };
 
@@ -206,16 +251,33 @@ export const useAiAgentRun = () => {
   const executeSidecarStepLoop = async (
     session: ISidecarStepLoopSession,
   ): Promise<IAiAgentRun> => {
-    const payload = await aiService.sidecarExecute({
-      ...(session.sessionId ? { sessionId: session.sessionId } : {}),
-      goal: session.goal,
-      messages: session.messages,
-      context: session.context,
-      workspaceRootPath: session.workspaceRootPath ?? null,
+    const sidecarSessionId = session.sessionId ?? createSidecarStepSessionId(session.runId, session.stepId);
+    const liveEvents: TAgentUiEvent[] = [];
+    const unlistenSidecarStream = await aiService.onSidecarStream((payload) => {
+      if (payload.sessionId !== sidecarSessionId) {
+        return;
+      }
+
+      liveEvents.push(payload.event);
+      appendSidecarLiveToolActivities(session.runId, session.stepId, liveEvents);
     });
+    let payload: Awaited<ReturnType<typeof aiService.sidecarExecute>>;
+
+    try {
+      payload = await aiService.sidecarExecute({
+        sessionId: sidecarSessionId,
+        goal: session.goal,
+        messages: session.messages,
+        context: session.context,
+        workspaceRootPath: session.workspaceRootPath ?? null,
+      });
+    } finally {
+      unlistenSidecarStream();
+    }
     const projection = projectSidecarExecuteResponse(payload);
 
     appendSidecarToolState(session.runId, session.stepId, projection.toolCalls);
+    await refreshChangedDocumentsAfterSidecarRun(projection, session.workspaceRootPath);
 
     if (projection.pendingConfirmation) {
       const confirmationId = createSidecarStepConfirmationId(
@@ -322,13 +384,31 @@ export const useAiAgentRun = () => {
       return cancelRun(session.runId);
     }
 
-    const payload = await aiService.sidecarResolveApproval({
-      requestId: session.pendingRequestId ?? confirmationId,
-      decision,
+    const sidecarSessionId = session.sessionId ?? createSidecarStepSessionId(session.runId, session.stepId);
+    const liveEvents: TAgentUiEvent[] = [];
+    const unlistenSidecarStream = await aiService.onSidecarStream((payload) => {
+      if (payload.sessionId !== sidecarSessionId) {
+        return;
+      }
+
+      liveEvents.push(payload.event);
+      appendSidecarLiveToolActivities(session.runId, session.stepId, liveEvents);
     });
+    let payload: Awaited<ReturnType<typeof aiService.sidecarResolveApproval>>;
+
+    try {
+      payload = await aiService.sidecarResolveApproval({
+        sessionId: sidecarSessionId,
+        requestId: session.pendingRequestId ?? confirmationId,
+        decision,
+      });
+    } finally {
+      unlistenSidecarStream();
+    }
     const projection = projectSidecarExecuteResponse(payload);
 
     appendSidecarToolState(session.runId, session.stepId, projection.toolCalls);
+    await refreshChangedDocumentsAfterSidecarRun(projection, session.workspaceRootPath);
 
     const finalContent = projection.assistantContent.trim();
     if (finalContent) {

@@ -27,6 +27,7 @@ import {
     SHELL_WINDOW_RESIZE_START_EVENT,
     SHELL_WINDOW_RESIZE_SETTLED_EVENT,
 } from '@/utils/window-resize-events';
+import { resolveTerminalFontFamily } from '@/constants/terminal';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -66,9 +67,6 @@ const ANSI_ALT_SCREEN_SWITCH_PATTERN = new RegExp(
     `${ANSI_ESCAPE}\\[\\?(?:47|1047|1049)([hl])`,
     'gu',
 );
-const DEFAULT_TERMINAL_FONT_FAMILY =
-    "Berkeley Mono, JetBrains Mono, 'SFMono-Regular', Consolas, 'Courier New', monospace";
-
 type TTerminalBellStyle = 'none' | 'sound' | 'visual';
 type TTerminalLayoutSyncOptions = { settle?: boolean };
 
@@ -107,13 +105,6 @@ const resolveTerminalBellStyle = (bellMode: ITerminalSettings['bellMode']): TTer
         default:
             return 'none';
     }
-};
-
-const resolveTerminalFontFamily = (fontFamily: string): string => {
-    const normalized = fontFamily.trim();
-    return normalized.length > 0
-        ? `${normalized}, ${DEFAULT_TERMINAL_FONT_FAMILY}`
-        : DEFAULT_TERMINAL_FONT_FAMILY;
 };
 
 const buildTerminalOptions = (s: ITerminalSettings) => ({

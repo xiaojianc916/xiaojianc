@@ -1,10 +1,31 @@
-﻿import type { TAiProviderType } from '@/types/ai';
+import type { TAiProviderType } from '@/types/ai';
+
+export type TAiServicePlatformId =
+  | 'openai'
+  | 'anthropic'
+  | 'deepseek'
+  | 'gemini'
+  | 'moonshot'
+  | 'dashscope'
+  | 'ollama';
+
+export interface IAiServicePlatformModel {
+  id: string;
+  label: string;
+}
+
+export interface IAiServicePlatformPreset {
+  id: TAiServicePlatformId;
+  label: string;
+  defaultModel: string;
+  models: readonly IAiServicePlatformModel[];
+}
 
 export interface IAiProviderPreset {
   id: TAiProviderType;
   label: string;
   description: string;
-  baseUrl: string | null;
+  baseUrl: string;
   defaultModel: string;
   models: readonly string[];
   apiKeyHint: string;
@@ -13,140 +34,253 @@ export interface IAiProviderPreset {
   isAvailable: boolean;
 }
 
-const LOBE_ICONS_BASE_URL =
-  'https://unpkg.com/@lobehub/icons-static-svg@latest/icons' as const;
+export const DEFAULT_AI_SERVICE_PLATFORM_ID: TAiServicePlatformId = 'openai';
+export const DEFAULT_LITELLM_MODEL_ID = 'openai/gpt-5.5';
+export const DEFAULT_LITELLM_BASE_URL = 'http://127.0.0.1:4000/v1';
 
-/**
- * 本地 mock provider，同时也是 `findAiProviderPreset` 在未命中时的安全兜底。
- * 抽到 `AI_PROVIDER_PRESETS` 之外是为了让 fallback 语义显式、且不依赖数组下标。
- */
-const MOCK_PROVIDER_PRESET = {
-  id: 'mock',
-  label: 'MockProvider',
-  description: '本地测试 Provider，不需要 API Key。',
-  baseUrl: null,
-  defaultModel: 'mock-ide-assistant',
-  models: ['mock-ide-assistant'],
-  apiKeyHint: '无需配置',
-  iconUrl: null,
-  isEndpointEditable: false,
-  isAvailable: true,
-} as const satisfies IAiProviderPreset;
-
-export const AI_PROVIDER_PRESETS = [
+export const AI_SERVICE_PLATFORM_PRESETS = [
   {
     id: 'openai',
     label: 'OpenAI',
-    description: 'OpenAI 官方 API，兼容 /v1/chat/completions。',
-    baseUrl: 'https://api.openai.com/v1',
-    defaultModel: 'gpt-5.5',
+    defaultModel: 'openai/gpt-5.5',
     models: [
-      'gpt-5.5',
-      'gpt-5.5-pro',
-      'gpt-5.4',
-      'gpt-5.4-pro',
-      'gpt-5.4-mini',
-      'gpt-5.4-nano',
+      {
+        id: 'openai/gpt-5.5',
+        label: 'GPT5.5',
+      },
+      {
+        id: 'openai/gpt-5.4',
+        label: 'GPT5.4',
+      },
+      {
+        id: 'openai/gpt-5.4-pro',
+        label: 'GPT5.4 Pro',
+      },
+      {
+        id: 'openai/gpt-5.4-mini',
+        label: 'GPT5.4 Mini',
+      },
+      {
+        id: 'openai/gpt-5.4-nano',
+        label: 'GPT5.4 Nano',
+      },
     ],
-    apiKeyHint: 'sk-xxxxxxxxxxxxx',
-    iconUrl: `${LOBE_ICONS_BASE_URL}/openai.svg`,
-    isEndpointEditable: false,
-    isAvailable: true,
+  },
+  {
+    id: 'anthropic',
+    label: 'Anthropic',
+    defaultModel: 'anthropic/claude-opus-4-6',
+    models: [
+      {
+        id: 'anthropic/claude-opus-4-7',
+        label: 'Claude Opus 4.7',
+      },
+      {
+        id: 'anthropic/claude-sonnet-4-6',
+        label: 'Claude Sonnet 4.6',
+      },
+      {
+        id: 'anthropic/claude-opus-4-6',
+        label: 'Claude Opus 4.6',
+      },
+      {
+        id: 'anthropic/claude-opus-4-5-20251101',
+        label: 'Claude Opus 4.5',
+      },
+      {
+        id: 'anthropic/claude-sonnet-4-5-20250929',
+        label: 'Claude Sonnet 4.5',
+      },
+      {
+        id: 'anthropic/claude-haiku-4-5-20251001',
+        label: 'Claude Haiku 4.5',
+      },
+    ],
   },
   {
     id: 'deepseek',
     label: 'DeepSeek',
-    description: 'DeepSeek 官方 OpenAI-compatible API。',
-    baseUrl: 'https://api.deepseek.com',
-    defaultModel: 'deepseek-v4-pro',
-    models: ['deepseek-v4-pro', 'deepseek-v4-flash'],
-    apiKeyHint: 'sk-xxxxxxxxxxxxx',
-    iconUrl: `${LOBE_ICONS_BASE_URL}/deepseek-color.svg`,
-    isEndpointEditable: false,
-    isAvailable: true,
+    defaultModel: 'deepseek/deepseek-v4-pro',
+    models: [
+      {
+        id: 'deepseek/deepseek-v4-pro',
+        label: 'DeepSeek-v4-pro',
+      },
+      {
+        id: 'deepseek/deepseek-v4-flash',
+        label: 'DeepSeek-v4-flash',
+      },
+    ],
+  },
+  {
+    id: 'gemini',
+    label: 'Google Gemini',
+    defaultModel: 'gemini/gemini-3.1-pro-preview',
+    models: [
+      {
+        id: 'gemini/gemini-3.1-pro-preview',
+        label: 'gemini-3.1-pro-preview',
+      },
+      {
+        id: 'gemini/gemini-3-flash-preview',
+        label: 'gemini-3-flash-preview',
+      },
+      {
+        id: 'gemini/gemini-3.1-flash-lite-preview',
+        label: 'gemini-3.1-flash-lite-preview',
+      },
+      {
+        id: 'gemini/gemini-2.5-pro',
+        label: 'gemini-2.5-pro',
+      },
+      {
+        id: 'gemini/gemini-2.5-flash',
+        label: 'gemini-2.5-flash',
+      },
+    ],
   },
   {
     id: 'moonshot',
     label: 'Moonshot Kimi',
-    description: 'Moonshot AI OpenAI-compatible API。',
-    baseUrl: 'https://api.moonshot.cn/v1',
-    defaultModel: 'kimi-k2.6',
-    models: ['kimi-k2.6'],
-    apiKeyHint: 'sk-xxxxxxxxxxxxx',
-    iconUrl: `${LOBE_ICONS_BASE_URL}/moonshot.svg`,
-    isEndpointEditable: false,
-    isAvailable: true,
+    defaultModel: 'moonshot/kimi-k2.6',
+    models: [
+      {
+        id: 'moonshot/kimi-k2.6',
+        label: 'Kimi-k2.6',
+      },
+      {
+        id: 'moonshot/kimi-k2.5',
+        label: 'Kimi-k2.5',
+      },
+      {
+        id: 'moonshot/kimi-k2',
+        label: 'Kimi-k2',
+      },
+      {
+        id: 'moonshot/kimi-k2-thinking',
+        label: 'Kimi-k2-thinking',
+      },
+      {
+        id: 'moonshot/kimi-k2-thinking-turbo',
+        label: 'Kimi-k2-thinking-turbo',
+      },
+      {
+        id: 'moonshot/kimi-k2-turbo-preview',
+        label: 'Kimi-k2-turbo-preview',
+      },
+    ],
   },
   {
     id: 'dashscope',
-    label: '阿里云百炼 / DashScope',
-    description: 'DashScope 兼容 OpenAI 模式。',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    defaultModel: 'qwen3-max',
+    label: '阿里云百炼',
+    defaultModel: 'dashscope/qwen3.6-plus',
     models: [
-      'qwen3-max',
-      'qwen3.5-plus',
-      'qwen3.5-flash',
-      'qwen3-coder-plus',
-      'qwen3-coder-next',
+      {
+        id: 'dashscope/qwen3.6-plus',
+        label: 'Qwen3.6-plus',
+      },
+      {
+        id: 'dashscope/qwen3.6-plus-2026-04-02',
+        label: 'Qwen3.6-plus',
+      },
+      {
+        id: 'dashscope/qwen3.6-max-preview',
+        label: 'Qwen3.6-max-preview',
+      },
+      {
+        id: 'dashscope/qwen3.6-flash',
+        label: 'Qwen3.6-flash',
+      },
     ],
-    apiKeyHint: 'sk-xxxxxxxxxxxxx',
-    iconUrl: `${LOBE_ICONS_BASE_URL}/qwen-color.svg`,
-    isEndpointEditable: false,
-    isAvailable: true,
   },
   {
-    id: 'zhipu',
-    label: '智谱 GLM',
-    description: '智谱 OpenAI-compatible API。',
-    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    defaultModel: 'glm-5',
-    models: ['glm-5', 'glm-5.1', 'glm-4.6v'],
-    apiKeyHint: '填写智谱 API Key',
-    iconUrl: `${LOBE_ICONS_BASE_URL}/zhipu-color.svg`,
-    isEndpointEditable: false,
-    isAvailable: true,
-  },
-  {
-    id: 'siliconflow',
-    label: 'SiliconFlow',
-    description: 'SiliconFlow OpenAI-compatible API。',
-    baseUrl: 'https://api.siliconflow.cn/v1',
-    defaultModel: 'deepseek-ai/DeepSeek-V4-Pro',
+    id: 'ollama',
+    label: 'Ollama',
+    defaultModel: 'ollama/qwen3-coder-next',
     models: [
-      'deepseek-ai/DeepSeek-V4-Pro',
-      'deepseek-ai/DeepSeek-V4-Flash',
-      'Pro/moonshotai/Kimi-K2.6',
-      'Pro/zai-org/GLM-5.1',
-      'Pro/MiniMaxAI/MiniMax-M2.5',
-      'tencent/Hy3-preview',
+      {
+        id: 'ollama/qwen3-coder-next',
+        label: 'Qwen3-coder-next',
+      },
+      {
+        id: 'ollama/qwen3-coder',
+        label: 'Qwen3-coder',
+      },
+      {
+        id: 'ollama/qwen3',
+        label: 'Qwen3',
+      },
+      {
+        id: 'ollama/qwen3-vl',
+        label: 'Qwen3-vl',
+      },
     ],
-    apiKeyHint: 'sk-xxxxxxxxxxxxx',
-    iconUrl: `${LOBE_ICONS_BASE_URL}/siliconcloud-color.svg`,
-    isEndpointEditable: false,
-    isAvailable: true,
   },
-  {
-    id: 'claude-compatible',
-    label: 'Claude',
-    description: '规划中：需单独 Provider adapter，不伪装为已接入。',
-    baseUrl: null,
-    defaultModel: 'claude-3-5-sonnet-latest',
-    models: ['claude-3-5-sonnet-latest'],
-    apiKeyHint: '暂不支持保存',
-    iconUrl: `${LOBE_ICONS_BASE_URL}/claude-color.svg`,
-    isEndpointEditable: false,
-    isAvailable: false,
-  },
-  MOCK_PROVIDER_PRESET,
+] as const satisfies readonly IAiServicePlatformPreset[];
+
+export const LITELLM_PROVIDER_PRESET = {
+  id: 'litellm',
+  label: 'LiteLLM Proxy',
+  description: 'LiteLLM Proxy / LLM Gateway，统一通过 OpenAI-compatible API 调用和切换模型。',
+  baseUrl: DEFAULT_LITELLM_BASE_URL,
+  defaultModel: DEFAULT_LITELLM_MODEL_ID,
+  models: AI_SERVICE_PLATFORM_PRESETS.flatMap((platform) =>
+    platform.models.map((model) => model.id),
+  ),
+  apiKeyHint: 'sk-xxxxxxxxxxxx',
+  iconUrl: null,
+  isEndpointEditable: true,
+  isAvailable: true,
+} as const satisfies IAiProviderPreset;
+
+export const AI_PROVIDER_PRESETS = [
+  LITELLM_PROVIDER_PRESET,
 ] as const satisfies readonly IAiProviderPreset[];
 
-/**
- * 通过 provider 类型查找预设。未命中时回退到 mock preset，
- * 以便调用点不必对 `undefined` 做防御处理。
- */
 export const findAiProviderPreset = (
   providerType: TAiProviderType,
-): IAiProviderPreset =>
-  AI_PROVIDER_PRESETS.find((preset) => preset.id === providerType) ??
-  MOCK_PROVIDER_PRESET;
+): IAiProviderPreset => {
+  void providerType;
+  return LITELLM_PROVIDER_PRESET;
+};
+
+export const findAiServicePlatformPreset = (
+  platformId: TAiServicePlatformId,
+): IAiServicePlatformPreset =>
+  AI_SERVICE_PLATFORM_PRESETS.find((platform) => platform.id === platformId)
+  ?? AI_SERVICE_PLATFORM_PRESETS[0];
+
+export const findAiServicePlatformByModel = (
+  modelId: string | null | undefined,
+): IAiServicePlatformPreset => {
+  const normalizedModelId = modelId?.trim() ?? '';
+  if (!normalizedModelId) {
+    return findAiServicePlatformPreset(DEFAULT_AI_SERVICE_PLATFORM_ID);
+  }
+
+  const matchedByExactModel = AI_SERVICE_PLATFORM_PRESETS.find((platform) =>
+    platform.models.some((model) => model.id === normalizedModelId),
+  );
+  if (matchedByExactModel) {
+    return matchedByExactModel;
+  }
+
+  const matchedByPrefix = AI_SERVICE_PLATFORM_PRESETS.find((platform) =>
+    normalizedModelId.startsWith(`${platform.id}/`),
+  );
+  return matchedByPrefix ?? findAiServicePlatformPreset(DEFAULT_AI_SERVICE_PLATFORM_ID);
+};
+
+export const isAiServicePlatformModel = (
+  platformId: TAiServicePlatformId,
+  modelId: string | null | undefined,
+): boolean => {
+  const normalizedModelId = modelId?.trim() ?? '';
+  if (!normalizedModelId) {
+    return false;
+  }
+
+  return findAiServicePlatformPreset(platformId).models.some(
+    (model) => model.id === normalizedModelId,
+  );
+};

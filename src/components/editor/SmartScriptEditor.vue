@@ -1,7 +1,7 @@
 <template>
   <ScriptEditor
 ref="innerEditorRef" :document-path="documentPath" :model-value="modelValue" :theme="theme" :can-run="canRun"
-    :analysis="analysisState" :editor-settings="editorSettings" :git-baseline="gitBaseline"
+    :analysis="analysisState" :editor-settings="editorSettings"
     @update:model-value="handleModelValueChange" @cursor-position-change="handleCursorPositionChange"
     @selection-change="emit('selection-change', $event)"
     @format-request="emit('format-request')" @command-palette-request="emit('command-palette-request')"
@@ -11,10 +11,8 @@ ref="innerEditorRef" :document-path="documentPath" :model-value="modelValue" :th
 <script setup lang="ts">
 import ScriptEditor from '@/components/editor/ScriptEditor.vue';
 import { tauriService } from '@/services/tauri';
-import { useGitStore } from '@/store/git';
 import type { TThemeMode } from '@/types/app';
 import type { IAnalyzeScriptPayload, IEditorSelectionSummary } from '@/types/editor';
-import type { IGitFileBaselinePayload } from '@/types/git';
 import type { IAiCodeActionRequest } from '@/types/ai';
 import type { IEditorSettings } from '@/types/settings';
 import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
@@ -69,15 +67,11 @@ const analysisState = ref<IAnalyzeScriptPayload>({
   dialect: 'bash',
   diagnostics: [],
 });
-const gitBaseline = ref<IGitFileBaselinePayload | null>(null);
-const gitStore = useGitStore();
-
 let pendingAnalysisTimerId: number | null = null;
 let latestAnalysisRequestId = 0;
 let lastCompletedAnalysisRequestId = 0;
 let isAnalysisInFlight = false;
 let isUnmounted = false;
-let latestGitBaselineRequestId = 0;
 
 type TAnalysisSnapshot = {
   path: string | null;
@@ -111,57 +105,6 @@ const captureAnalysisSnapshot = (): TAnalysisSnapshot => ({
   name: props.documentName ?? null,
   content: props.modelValue ?? '',
 });
-
-const clearGitBaseline = (): void => {
-  gitBaseline.value = null;
-};
-
-const isCurrentGitBaselineRequest = (requestId: number): boolean =>
-  !isUnmounted && requestId === latestGitBaselineRequestId;
-
-const loadGitBaseline = async (requestId: number): Promise<void> => {
-  const documentPath = props.documentPath;
-  if (!documentPath) {
-    if (isCurrentGitBaselineRequest(requestId)) {
-      clearGitBaseline();
-    }
-    return;
-  }
-
-  const runtimeReady = await waitForDesktopRuntime(120);
-  if (!isCurrentGitBaselineRequest(requestId)) {
-    return;
-  }
-
-  if (!runtimeReady) {
-    clearGitBaseline();
-    return;
-  }
-
-  try {
-    const payload = await gitStore.getFileBaseline(documentPath);
-    if (!isCurrentGitBaselineRequest(requestId)) {
-      return;
-    }
-
-    gitBaseline.value = payload;
-  } catch (error) {
-    if (!isCurrentGitBaselineRequest(requestId)) {
-      return;
-    }
-
-    console.warn('加载 Git 基线失败，已回退为空基线', {
-      error,
-      documentPath,
-    });
-    clearGitBaseline();
-  }
-};
-
-const scheduleGitBaselineLoad = (): void => {
-  latestGitBaselineRequestId += 1;
-  void loadGitBaseline(latestGitBaselineRequestId);
-};
 
 const runAnalysis = async (requestId: number): Promise<void> => {
   const snapshot = captureAnalysisSnapshot();
@@ -264,20 +207,10 @@ watch(
   },
 );
 
-watch(
-  () => [props.documentPath, gitStore.baselineEpoch],
-  () => {
-    scheduleGitBaselineLoad();
-  },
-  { immediate: true },
-);
-
 onBeforeUnmount(() => {
   isUnmounted = true;
   latestAnalysisRequestId += 1;
-  latestGitBaselineRequestId += 1;
   clearPendingAnalysisTimer();
-  clearGitBaseline();
 });
 
 const focusEditor = (): void => {

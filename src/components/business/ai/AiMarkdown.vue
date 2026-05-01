@@ -1,7 +1,61 @@
 <script setup lang="ts">
 import type { IAiChatStreamRenderState } from '@/types/ai';
-import MarkdownRender from 'markstream-vue';
-import { computed } from 'vue';
+import type { CodeBlockNodeProps, CustomComponents } from 'markstream-vue';
+import MarkdownRender, {
+  MarkdownCodeBlockNode,
+  removeCustomComponents,
+  setCustomComponents,
+  setDefaultI18nMap,
+} from 'markstream-vue';
+import { computed, onBeforeUnmount, watch } from 'vue';
+
+type TI18nMap = Parameters<typeof setDefaultI18nMap>[0];
+
+const AI_MARKDOWN_I18N_MAP = {
+  'common.copy': '复制',
+  'common.copied': '已复制',
+  'common.decrease': '减小字号',
+  'common.reset': '重置字号',
+  'common.increase': '增大字号',
+  'common.expand': '展开',
+  'common.collapse': '收起',
+  'common.preview': '预览',
+  'common.source': '源码',
+  'common.export': '导出',
+  'common.open': '打开',
+  'common.minimize': '最小化',
+  'common.zoomIn': '放大',
+  'common.zoomOut': '缩小',
+  'common.resetZoom': '重置缩放',
+  'common.more': '更多',
+  'common.fontSmaller': '减小字号',
+  'common.fontReset': '重置字号',
+  'common.fontLarger': '增大字号',
+  'artifacts.htmlPreviewTitle': 'HTML 预览',
+  'artifacts.svgPreviewTitle': 'SVG 预览',
+  'image.loadError': '图片加载失败',
+  'image.loading': '图片加载中...',
+} satisfies TI18nMap;
+
+const AI_MARKDOWN_COMPONENTS = {
+  code_block: MarkdownCodeBlockNode,
+} satisfies Partial<CustomComponents>;
+
+const AI_MARKDOWN_CODE_BLOCK_PROPS = {
+  darkTheme: 'vitesse-dark',
+  lightTheme: 'vitesse-light',
+  showHeader: true,
+  showCopyButton: true,
+  showExpandButton: true,
+  showPreviewButton: true,
+  showCollapseButton: true,
+  showFontSizeButtons: true,
+  showTooltips: true,
+  minWidth: '100%',
+  maxWidth: '100%',
+} satisfies Partial<Omit<CodeBlockNodeProps, 'node'>>;
+
+setDefaultI18nMap(AI_MARKDOWN_I18N_MAP);
 
 const props = defineProps<{
   messageId: string;
@@ -11,6 +65,23 @@ const props = defineProps<{
 
 const isFinal = computed(() => props.streamStatus !== 'streaming');
 const rendererId = computed(() => `ai-message-${props.messageId}`);
+
+const stopCodeBlockMapping = watch(
+  rendererId,
+  (customId, previousCustomId) => {
+    if (previousCustomId) {
+      removeCustomComponents(previousCustomId);
+    }
+
+    setCustomComponents(customId, AI_MARKDOWN_COMPONENTS);
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  stopCodeBlockMapping();
+  removeCustomComponents(rendererId.value);
+});
 </script>
 
 <template>
@@ -19,11 +90,12 @@ const rendererId = computed(() => `ai-message-${props.messageId}`);
       :content="content"
       :custom-id="rendererId"
       :final="isFinal"
+      :code-block-props="AI_MARKDOWN_CODE_BLOCK_PROPS"
+      :defer-nodes-until-visible="false"
       :max-live-nodes="0"
       :render-batch-size="16"
       :render-batch-delay="8"
-      :render-code-blocks-as-pre="true"
-      :show-tooltips="false"
+      :show-tooltips="true"
       :typewriter="false"
     />
   </div>
@@ -54,7 +126,10 @@ const rendererId = computed(() => `ai-message-${props.messageId}`);
   --blockquote-fg: var(--text-tertiary);
   --hr-border: var(--shell-divider);
   --focus-ring: color-mix(in srgb, var(--accent-strong) 60%, transparent);
+  --ms-flow-codeblock-y: var(--ms-space-3);
   --markstream-code-font-family: var(--font-mono);
+  --markstream-code-padding-x: var(--ms-space-3);
+  --markstream-code-padding-y: var(--ms-space-2);
   --vscode-editor-font-size: 0.923em;
   --vscode-editor-line-height: 1.55;
   color: inherit;
@@ -65,6 +140,8 @@ const rendererId = computed(() => `ai-message-${props.messageId}`);
 
 .ai-markdown :deep(.markdown-renderer) {
   min-width: 0;
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .ai-markdown :deep(.paragraph-node:first-child),
@@ -85,11 +162,23 @@ const rendererId = computed(() => `ai-message-${props.messageId}`);
 
 .ai-markdown :deep(.paragraph-node) {
   color: inherit;
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .ai-markdown :deep(.heading-node) {
   color: var(--text-primary);
+  font-size: 1em;
+  line-height: inherit;
   letter-spacing: 0;
+}
+
+.ai-markdown :deep(.list-node),
+.ai-markdown :deep(.list-node li),
+.ai-markdown :deep(.blockquote),
+.ai-markdown :deep(.table-node) {
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .ai-markdown :deep(.inline-code) {
@@ -108,27 +197,6 @@ const rendererId = computed(() => `ai-message-${props.messageId}`);
 
 .ai-markdown :deep(.blockquote) {
   color: var(--blockquote-fg);
-}
-
-.ai-markdown :deep(.code-block-container) {
-  overflow: hidden;
-  border: 1px solid var(--code-border);
-  border-radius: var(--ms-radius);
-  box-shadow: none;
-}
-
-.ai-markdown :deep(pre.code-pre-fallback),
-.ai-markdown :deep(pre[class^='language-']),
-.ai-markdown :deep(pre[class*=' language-']) {
-  max-width: 100%;
-  overflow: auto;
-  background: transparent;
-  color: var(--code-fg);
-  font-family: var(--font-mono);
-  font-size: var(--vscode-editor-font-size);
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .ai-markdown :deep(.table-node-wrapper) {

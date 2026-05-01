@@ -93,6 +93,7 @@ export interface IAgentSidecarExecuteRequest extends Omit<IAgentSidecarBaseReque
 }
 
 export interface IAgentSidecarApprovalResolveRequest {
+  sessionId?: string;
   requestId: string;
   decision: string;
 }
@@ -102,6 +103,7 @@ export interface IAgentSidecarHealthPayload {
   status: string;
   engine: string;
   version: string | null;
+  protocolVersion?: string | null;
   mcp: {
     configuredServers: number;
     serverNames: string[];
@@ -113,4 +115,10 @@ export interface IAgentSidecarResponsePayload {
   sessionId: string;
   events: TAgentUiEvent[];
   result: string | null;
+}
+
+export interface IAgentSidecarStreamEventPayload {
+  sessionId: string;
+  seq: number;
+  event: TAgentUiEvent;
 }

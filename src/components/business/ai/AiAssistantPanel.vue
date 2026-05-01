@@ -4,6 +4,7 @@ import AiContextChips from '@/components/business/ai/AiContextChips.vue';
 import AiPatchPreview from '@/components/business/ai/AiPatchPreview.vue';
 import AiPlanModePanel from '@/components/business/ai/AiPlanModePanel.vue';
 import AiPromptInput from '@/components/business/ai/AiPromptInput.vue';
+import AiProviderIcon from '@/components/business/ai/AiProviderIcon.vue';
 import AiProviderSettings from '@/components/business/ai/AiProviderSettings.vue';
 import AiToolConfirmationCard from '@/components/business/ai/AiToolConfirmationCard.vue';
 import AiWebSourcesPanel from '@/components/business/ai/AiWebSourcesPanel.vue';
@@ -12,7 +13,7 @@ import { useAiAgentRun } from '@/composables/useAiAgentRun';
 import { useAiAgentStream } from '@/composables/useAiAgentStream';
 import { useAiAssistant } from '@/composables/useAiAssistant';
 import { useAiWebSources } from '@/composables/useAiWebSources';
-import { findAiProviderPreset } from '@/constants/ai-providers';
+import { findAiServicePlatformByModel } from '@/constants/ai-providers';
 import type {
   IAiChatMessage,
   IAiConfigPayload,
@@ -75,13 +76,17 @@ const isModeMenuOpen = ref(false);
 const isNetworkMenuOpen = ref(false);
 const isNetworkPermissionPending = ref(false);
 const isHistoryOpen = ref(false);
-const currentProviderPreset = computed(() =>
-  findAiProviderPreset(assistant.config.value.providerType),
+const currentServicePlatform = computed(() =>
+  findAiServicePlatformByModel(assistant.config.value.selectedModel),
 );
-const aiAvatarUrl = computed(() =>
-  assistant.config.value.isConfigured ? currentProviderPreset.value.iconUrl : null,
+const aiIconPlatformId = computed(() => currentServicePlatform.value.id);
+const aiIconTitle = computed(() => currentServicePlatform.value.label);
+const aiCurrentModelLabel = computed(() =>
+  assistant.config.value.selectedModel?.trim() || 'AI Assistant',
 );
-const aiAvatarAlt = computed(() => currentProviderPreset.value.label);
+const aiModelButtonLabel = computed(() =>
+  `${aiIconTitle.value} · ${aiCurrentModelLabel.value}`,
+);
 const historyThreads = computed(() => assistant.historyThreads.value.slice(-MAX_HISTORY_MESSAGES).reverse());
 const historyCountLabel = computed(() => `最近 ${historyThreads.value.length} 组`);
 const networkPermissionLabel = computed(() => {
@@ -676,13 +681,18 @@ onMounted(() => {
 <template>
   <section class="ai-assistant-panel" aria-label="AI 助手面板">
     <header class="ai-panel-header">
-      <img v-if="aiAvatarUrl" class="ai-provider-avatar" :src="aiAvatarUrl" :alt="aiAvatarAlt" loading="lazy"
-        referrerpolicy="no-referrer" />
-      <span v-else class="ai-status-dot" aria-hidden="true"></span>
+      <span class="ai-status-dot" aria-hidden="true"></span>
       <div class="ai-model-switch">
-        <button type="button" class="ai-model-button" :aria-expanded="isModeMenuOpen" aria-haspopup="menu"
-          aria-label="切换 AI 模式" @click="isModeMenuOpen = !isModeMenuOpen">
-          <span>{{ assistant.config.value.selectedModel ?? 'AI Assistant' }}</span>
+        <button
+          type="button"
+          class="ai-model-button"
+          :aria-expanded="isModeMenuOpen"
+          aria-haspopup="menu"
+          :title="aiModelButtonLabel"
+          aria-label="切换 AI 模式"
+          @click="isModeMenuOpen = !isModeMenuOpen"
+        >
+          <AiProviderIcon class="ai-model-icon" :platform-id="aiIconPlatformId" :title="aiIconTitle" decorative />
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
             <path d="m6 9 6 6 6-6" />
           </svg>
@@ -802,8 +812,8 @@ onMounted(() => {
     </header>
 
     <AiContextChips :references="assistant.currentReferences.value" />
-    <AiChatThread :messages="threadMessages" :is-typing="assistant.isSending.value" :avatar-url="aiAvatarUrl"
-      :avatar-alt="aiAvatarAlt" @message-action="handleMessageAction">
+    <AiChatThread :messages="threadMessages" :is-typing="assistant.isSending.value" :platform-id="aiIconPlatformId"
+      :provider-label="aiIconTitle" @message-action="handleMessageAction">
     </AiChatThread>
     <div v-if="assistant.canPreviewPatch.value" class="ai-patch-entry">
       <button type="button" class="ai-quick-action" @click="assistant.previewPatchFromLastAnswer">
@@ -929,46 +939,36 @@ onMounted(() => {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 12%, transparent);
 }
 
-.ai-provider-avatar {
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-  border-radius: 5px;
-  object-fit: contain;
-}
-
 .ai-model-switch {
   position: relative;
   min-width: 0;
-  flex: 1;
+  flex: 0 0 auto;
 }
 
 .ai-model-button {
   display: inline-flex;
-  max-width: 100%;
   height: 26px;
-  min-width: 0;
+  min-width: 42px;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   border-radius: 6px;
   color: var(--text-primary);
   font-size: 12px;
   font-weight: 500;
-  padding: 0 5px 0 0;
+  padding: 0 6px;
 }
 
 .ai-model-button:hover {
+  background: var(--surface-soft);
   color: var(--text-primary);
 }
 
-.ai-model-button span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.ai-model-icon {
+  width: 18px;
+  height: 18px;
 }
 
-.ai-model-button svg {
+.ai-model-button > svg:not(.ai-model-icon) {
   width: 13px;
   height: 13px;
   flex: 0 0 auto;

@@ -135,6 +135,7 @@ describe('SourceControlPanel', () => {
 
   afterEach(() => {
     window.removeEventListener(APP_DIALOG_EVENT, confirmDialog);
+    document.body.innerHTML = '';
   });
 
   it('未初始化时点击初始化按钮会调用 init_git_repository 并进入仓库视图', async () => {
@@ -185,10 +186,51 @@ describe('SourceControlPanel', () => {
     });
   });
 
+  it('点击变更文件会按原交互打开文件', async () => {
+    const wrapper = await mountPanel();
+
+    await wrapper.find('.source-control-file-main').trigger('click');
+
+    expect(wrapper.emitted('open-file')).toEqual([['D:/repo/src/app.sh']]);
+    expect(wrapper.emitted('open-diff')).toBeUndefined();
+  });
+
+  it('右键菜单的查看 Diff 会打开独立 Git Diff 预览', async () => {
+    const wrapper = await mountPanel();
+
+    await wrapper.find('.source-control-file').trigger('contextmenu', {
+      clientX: 160,
+      clientY: 180,
+    });
+    await flushPromises();
+
+    const diffMenuItem = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.cmx-i'))
+      .find((button) => button.textContent?.includes('查看 Diff'));
+    expect(diffMenuItem).toBeDefined();
+
+    diffMenuItem?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(wrapper.emitted('open-diff')).toEqual([
+      [
+        {
+          repositoryRootPath: 'D:/repo',
+          path: 'D:/repo/src/app.sh',
+          mode: 'worktree',
+        },
+      ],
+    ]);
+  });
+
   it('单文件放弃更改会二次确认并调用 discard_git_paths', async () => {
     const wrapper = await mountPanel();
 
-    await wrapper.findAll('.source-control-icon-btn')[0]?.trigger('click');
+    const discardButton = wrapper
+      .findAll('.source-control-icon-btn')
+      .find((button) => button.attributes('aria-label') === '放弃更改 app.sh');
+    expect(discardButton).toBeDefined();
+
+    await discardButton?.trigger('click');
     await flushPromises();
 
     expect(tauriServiceMock.discardGitPaths).toHaveBeenCalledWith({

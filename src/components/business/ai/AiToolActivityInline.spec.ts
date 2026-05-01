@@ -24,6 +24,7 @@ describe('AiToolActivityInline', () => {
     ]);
 
     expect(wrapper.get('.ai-tool-activity-inline').attributes('aria-label')).toBe('工具调用时间线');
+    expect(wrapper.get('.ai-tool-run-details').attributes('open')).toBeUndefined();
     expect(wrapper.text()).toContain('读取');
     expect(wrapper.text()).toContain('test.sh');
     expect(wrapper.text()).not.toContain('正在读取 test.sh…');
@@ -56,7 +57,7 @@ describe('AiToolActivityInline', () => {
       },
     ]);
 
-    expect(wrapper.get('.ai-tool-activity-item').classes()).toContain('is-failed');
+    expect(wrapper.get('.ai-tool-run-item').classes()).toContain('is-failed');
     expect(wrapper.text()).toContain('验证');
     expect(wrapper.text()).toContain('pnpm exec vitest run AiToolActivityInline.spec.ts');
   });
