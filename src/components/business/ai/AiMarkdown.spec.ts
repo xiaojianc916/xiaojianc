@@ -53,7 +53,7 @@ describe('AiMarkdown rendering', () => {
     expect(wrapper.text()).toContain('done');
   });
 
-  it('uses vue-markdown-design to highlight custom code blocks', async () => {
+  it('renders custom code blocks with copy actions and code content', async () => {
     const wrapper = mount(AiMarkdown, {
       props: {
         messageId: 'm-code-actions',
@@ -68,6 +68,39 @@ describe('AiMarkdown rendering', () => {
     expect(wrapper.find('.code-block-header').exists()).toBe(true);
     expect(wrapper.find('.code-action-btn').exists()).toBe(true);
     expect(wrapper.find('button[aria-label="复制"]').exists()).toBe(true);
-    expect(wrapper.find('.hljs').exists()).toBe(true);
+    expect(wrapper.find('.ai-markdown-design-body pre').exists()).toBe(true);
+    expect(wrapper.text()).toContain('const ready = true;');
+  });
+
+  it('renders LaTeX formulas through markstream-vue katex support', async () => {
+    const wrapper = mount(AiMarkdown, {
+      props: {
+        messageId: 'm-math',
+        content: '行内公式 $E = mc^2$\n\n$$\n\\int_0^1 x^2 \\, dx = \\frac{1}{3}\n$$',
+        streamStatus: 'completed',
+      },
+    });
+
+    await flushRender();
+
+    expect(wrapper.find('.katex').exists()).toBe(true);
+    expect(wrapper.find('.katex-display').exists()).toBe(true);
+  });
+
+  it('unwraps boxed KaTeX formulas inside AI messages', async () => {
+    const wrapper = mount(AiMarkdown, {
+      props: {
+        messageId: 'm-boxed',
+        content: '$$\\boxed{\\zeta(s)=2^s\\pi^{s-1}\\sin\\left(\\frac{\\pi s}{2}\\right)\\Gamma(1-s)\\zeta(1-s)}$$',
+        streamStatus: 'completed',
+      },
+    });
+
+    await flushRender();
+
+    expect(wrapper.find('.stretchy.fbox').exists()).toBe(false);
+    expect(wrapper.find('.boxpad').exists()).toBe(false);
+    expect(wrapper.find('.katex-display').exists()).toBe(true);
+    expect(wrapper.text()).toContain('ζ');
   });
 });

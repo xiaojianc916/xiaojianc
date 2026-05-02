@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import type { IAiChatStreamRenderState } from '@/types/ai';
+import 'katex/dist/katex.min.css';
+
 import AiMarkdownCodeBlock from '@/components/business/ai/AiMarkdownCodeBlock.vue';
+import type { IAiChatStreamRenderState } from '@/types/ai';
+import { normalizeAiMath } from '@/utils/normalize-ai-math';
 import type { CustomComponents } from 'markstream-vue';
 import MarkdownRender, {
-  removeCustomComponents,
-  setCustomComponents,
-  setDefaultI18nMap,
+    enableKatex,
+    isKatexEnabled,
+    removeCustomComponents,
+    setCustomComponents,
+    setDefaultI18nMap,
 } from 'markstream-vue';
 import { computed, onBeforeUnmount, watch } from 'vue';
 
@@ -41,6 +46,10 @@ const AI_MARKDOWN_COMPONENTS = {
   code_block: AiMarkdownCodeBlock,
 } satisfies Partial<CustomComponents>;
 
+if (!isKatexEnabled()) {
+  enableKatex();
+}
+
 setDefaultI18nMap(AI_MARKDOWN_I18N_MAP);
 
 const props = defineProps<{
@@ -49,6 +58,7 @@ const props = defineProps<{
   streamStatus?: IAiChatStreamRenderState['status'];
 }>();
 
+const renderContent = computed(() => normalizeAiMath(props.content));
 const isFinal = computed(() => props.streamStatus !== 'streaming');
 const rendererId = computed(() => `ai-message-${props.messageId}`);
 
@@ -73,7 +83,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="ai-markdown">
     <MarkdownRender
-      :content="content"
+      :content="renderContent"
       :custom-id="rendererId"
       :final="isFinal"
       :defer-nodes-until-visible="false"
@@ -203,5 +213,16 @@ onBeforeUnmount(() => {
     animation: none;
     transition-duration: 0ms;
   }
+}
+</style>
+
+<style>
+.ai-markdown .stretchy.fbox,
+.ai-markdown .stretchy.fcolorbox {
+  display: none;
+}
+
+.ai-markdown .boxpad {
+  padding: 0;
 }
 </style>

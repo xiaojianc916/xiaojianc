@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { CodeBlockNodeProps } from 'markstream-vue';
-import { VmdRender } from 'vue-markdown-design';
 import { computed, onBeforeUnmount, ref } from 'vue';
+
+import { VmdRender } from '@/lib/vueMarkdownDesign';
 
 const COPY_RESET_DELAY_MS = 1600;
 const BACKTICK_RUN_PATTERN = /`+/g;
