@@ -283,6 +283,11 @@ interface IAgentStreamCapture {
   visibleText: string;
 }
 
+interface ICompletedAgentStream {
+  agentResult: AgentResult;
+  visibleText: string;
+}
+
 const appendSdkTimelineEvent = (
   event: AgentStreamEvent,
   events: TAgentUiEvent[],
@@ -332,7 +337,7 @@ const runAgentStream = async (
   events: TAgentUiEvent[],
   mode: TAgentMode,
   options: IStrandsEngineRunOptions = {},
-): Promise<AgentResult> => {
+): Promise<ICompletedAgentStream> => {
   const stream = mode === 'plan'
     ? agent.stream(prompt, { structuredOutputSchema: agentPlanSchema })
     : agent.stream(prompt);
@@ -343,7 +348,10 @@ const runAgentStream = async (
   while (true) {
     const next = await stream.next();
     if (next.done) {
-      return next.value;
+      return {
+        agentResult: next.value,
+        visibleText: capture.visibleText,
+      };
     }
 
     appendSdkTimelineEvent(next.value, events, capture, options);
@@ -360,14 +368,13 @@ export const extractVisibleAgentResultText = (result: AgentResult): string => {
 
   for (const block of result.lastMessage.content) {
     if (block.type === 'textBlock') {
-      const text = block.text.trim();
-      if (text.length > 0) {
-        textParts.push(text);
+      if (block.text.trim().length > 0) {
+        textParts.push(block.text);
       }
     }
   }
 
-  return textParts.join('\n').trim();
+  return textParts.join('').trim();
 };
 
 export class StrandsEngine {
@@ -458,14 +465,16 @@ export class StrandsEngine {
         toolExecutor: 'sequential',
       });
 
-      const agentResult = await runAgentStream(
+      const { agentResult, visibleText } = await runAgentStream(
         agent,
         buildUserPrompt({ ...input, mode }),
         events,
         mode,
         options,
       );
-      const result = extractVisibleAgentResultText(agentResult) || 'Agent 已完成。';
+      const result = visibleText.trim().length > 0
+        ? visibleText
+        : extractVisibleAgentResultText(agentResult) || 'Agent 已完成。';
 
       if (mode === 'plan') {
         const plan = parsePlanFromStructuredOutput(agentResult);
@@ -508,10 +517,6 @@ export class StrandsEngine {
       }
 
       options.onEvent?.({
-        type: 'message_delta',
-        text: result,
-      });
-      options.onEvent?.({
         type: 'done',
         result,
       });
@@ -520,10 +525,6 @@ export class StrandsEngine {
         sessionId,
         events: [
           ...events,
-          {
-            type: 'message_delta',
-            text: result,
-          },
           {
             type: 'done',
             result,

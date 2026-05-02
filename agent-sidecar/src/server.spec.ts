@@ -145,4 +145,25 @@ describe('Agent sidecar visible result', () => {
     assert.equal(visibleText, '这是用户应该看到的回答。');
     assert.doesNotMatch(visibleText, /Reasoning|内部推理/u);
   });
+
+  it('preserves fenced code formatting when visible text is split across multiple text blocks', () => {
+    const result = new AgentResult({
+      stopReason: 'endTurn',
+      lastMessage: new Message({
+        role: 'assistant',
+        content: [
+          new TextBlock('不过我可以帮你把它的内容清空（已经是空的），或者建议你手动执行：\n\n```bash\n'),
+          new TextBlock('Remove-Item .\\666.sh\n```\n'),
+        ],
+      }),
+      invocationState: {},
+    });
+
+    const visibleText = extractVisibleAgentResultText(result);
+
+    assert.equal(
+      visibleText,
+      '不过我可以帮你把它的内容清空（已经是空的），或者建议你手动执行：\n\n```bash\nRemove-Item .\\666.sh\n```',
+    );
+  });
 });

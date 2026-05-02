@@ -1084,6 +1084,79 @@ describe('useAiAssistant streaming integration', () => {
         expect(assistant.messages.value[1]?.stream?.status).toBe('completed');
     });
 
+    it('preserves cumulative sidecar markdown exactly while a code fence is still streaming', async () => {
+        const { assistant } = createAssistantHarnessContext();
+        let releaseSidecar: (() => void) | null = null;
+        const sidecarGate = new Promise<void>((resolve) => {
+            releaseSidecar = resolve;
+        });
+
+        aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
+            const sessionId = payload.sessionId ?? 'sidecar-code-fence-session';
+            const fence = String.fromCharCode(96).repeat(3);
+            const firstChunk = ['不过我可以帮你把它的内容清空（已经是空的），或者建议你手动执行：', '', `${fence}bash`, ''].join('\n');
+            const secondChunk = ['不过我可以帮你把它的内容清空（已经是空的），或者建议你手动执行：', '', `${fence}bash`, 'Remove-Item .\\666.sh', ''].join('\n');
+
+            aiServiceMock.emitSidecar({
+                sessionId,
+                seq: 0,
+                event: {
+                    type: 'message_delta',
+                    text: firstChunk,
+                },
+            });
+            aiServiceMock.emitSidecar({
+                sessionId,
+                seq: 1,
+                event: {
+                    type: 'message_delta',
+                    text: secondChunk,
+                },
+            });
+
+            await sidecarGate;
+
+            return {
+                sessionId,
+                events: [
+                    {
+                        type: 'done',
+                        result: secondChunk,
+                    },
+                ],
+                result: secondChunk,
+            };
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '删除空文件';
+
+        const sendPromise = assistant.sendMessage();
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+            if (assistant.messages.value[1]?.content.length) {
+                break;
+            }
+            await Promise.resolve();
+        }
+
+        const expectedStreamingContent = [
+            '不过我可以帮你把它的内容清空（已经是空的），或者建议你手动执行：',
+            '',
+            '```bash',
+            'Remove-Item .\\666.sh',
+            '',
+        ].join('\n');
+
+        expect(assistant.messages.value[1]?.content).toBe(expectedStreamingContent);
+        expect(assistant.messages.value[1]?.stream?.status).toBe('streaming');
+
+        releaseSidecar?.();
+        await sendPromise;
+
+        expect(assistant.messages.value[1]?.content).toBe(expectedStreamingContent);
+        expect(assistant.messages.value[1]?.stream?.status).toBe('completed');
+    });
+
     it('shows a silent streaming placeholder while sidecar agent is starting', async () => {
         const { assistant } = createAssistantHarnessContext();
         let releaseSidecar: (() => void) | null = null;

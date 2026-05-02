@@ -402,11 +402,14 @@ const extractErrorMessage = (events: readonly TAgentUiEvent[]): string | null =>
     event.type === 'error'
   )?.message ?? null;
 
+const hasMeaningfulText = (value: string | null | undefined): value is string =>
+  typeof value === 'string' && value.trim().length > 0;
+
 const extractDoneResult = (events: readonly TAgentUiEvent[]): string | null => {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (event?.type === 'done') {
-      return event.result.trim() || null;
+      return hasMeaningfulText(event.result) ? event.result : null;
     }
   }
 
@@ -417,7 +420,7 @@ const extractLatestMessageDelta = (events: readonly TAgentUiEvent[]): string | n
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (event?.type === 'message_delta') {
-      return event.text.trim() || null;
+      return hasMeaningfulText(event.text) ? event.text : null;
     }
   }
 
@@ -502,9 +505,10 @@ export const projectSidecarExecuteResponse = (
   const latestDelta = extractLatestMessageDelta(response.events);
   const changedFilePaths = extractSidecarChangedFilePaths(response.events);
   const hasFileMutations = hasSidecarFileMutationEvent(response.events);
+  const responseResult = hasMeaningfulText(response.result) ? response.result : null;
   const assistantContent = errorMessage
     ? `Agent 执行失败：${errorMessage}`
-    : doneResult ?? response.result?.trim() ?? latestDelta ?? 'Agent 已完成。';
+    : doneResult ?? responseResult ?? latestDelta ?? 'Agent 已完成。';
 
   return {
     toolCalls: mapSidecarEventsToToolCalls(response.events),

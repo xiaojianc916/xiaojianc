@@ -324,6 +324,9 @@ const mapStreamStatus = (
   return 'streaming';
 };
 
+const hasMeaningfulAssistantText = (value: string | null | undefined): value is string =>
+  typeof value === 'string' && value.trim().length > 0;
+
 // ---------------------------------------------------------------------------
 // Public quick actions
 // ---------------------------------------------------------------------------
@@ -589,9 +592,11 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       .find((event): event is Extract<TAgentUiEvent, { type: 'message_delta' }> =>
         event.type === 'message_delta'
       );
+    const doneResult = hasMeaningfulAssistantText(doneEvent?.result) ? doneEvent.result : null;
+    const latestDelta = hasMeaningfulAssistantText(messageEvent?.text) ? messageEvent.text : null;
     const content = errorEvent
       ? `Agent 执行失败：${errorEvent.message}`
-      : doneEvent?.result.trim() || messageEvent?.text.trim() || fallbackContent;
+      : doneResult ?? latestDelta ?? fallbackContent;
     const streamStatus = errorEvent || doneEvent ? 'completed' : 'streaming';
 
     for (const toolCall of toolCalls) {
@@ -1258,7 +1263,6 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
   const createStreamPipeline = (
     assistantMessage: IAiChatMessage,
-    messageContent: string,
     settle: () => void,
   ): IStreamPipeline => {
     let pendingDelta = '';
@@ -1388,7 +1392,6 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const executeAiRequest = async (
     requestMessages: IAiChatMessage[],
     visibleMessages: IAiChatMessage[],
-    messageContent: string,
     references: IAiContextReference[],
   ): Promise<void> => {
     errorMessage.value = '';
@@ -1419,7 +1422,6 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
     const pipeline = createStreamPipeline(
       assistantMessage,
-      messageContent,
       settle,
     );
 
@@ -1610,7 +1612,6 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       await executeAiRequest(
         nextMessages,
         nextMessages,
-        messageContent,
         references,
       );
       if (!errorMessage.value) {

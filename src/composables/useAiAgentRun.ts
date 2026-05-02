@@ -313,8 +313,8 @@ export const useAiAgentRun = () => {
       return activeRun;
     }
 
-    const finalContent = projection.assistantContent.trim();
-    if (finalContent) {
+    const finalContent = projection.assistantContent;
+    if (finalContent.trim()) {
       const createdAt = new Date().toISOString();
       store.appendStepFinalAnswer(
         toStepFinalAnswer(
@@ -410,8 +410,8 @@ export const useAiAgentRun = () => {
     appendSidecarToolState(session.runId, session.stepId, projection.toolCalls);
     await refreshChangedDocumentsAfterSidecarRun(projection, session.workspaceRootPath);
 
-    const finalContent = projection.assistantContent.trim();
-    if (finalContent) {
+    const finalContent = projection.assistantContent;
+    if (finalContent.trim()) {
       const createdAt = new Date().toISOString();
       store.appendStepFinalAnswer(
         toStepFinalAnswer(
