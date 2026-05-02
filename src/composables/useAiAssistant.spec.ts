@@ -1129,6 +1129,56 @@ describe('useAiAssistant streaming integration', () => {
         });
     });
 
+    it('sidecar 首个事件到达前就显示上下文相关的运行状态', async () => {
+        const { assistant } = createAssistantHarnessContext();
+        let releaseSidecar: (() => void) | null = null;
+        const sidecarGate = new Promise<void>((resolve) => {
+            releaseSidecar = resolve;
+        });
+
+        aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
+            await sidecarGate;
+
+            return {
+                sessionId: payload.sessionId ?? 'sidecar-news-session',
+                events: [
+                    {
+                        type: 'done',
+                        result: '已整理今日热点新闻。',
+                    },
+                ],
+                result: '已整理今日热点新闻。',
+            };
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '今天有什么新闻';
+
+        const sendPromise = assistant.sendMessage();
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+            if (assistant.messages.value[1]) {
+                break;
+            }
+            await Promise.resolve();
+        }
+
+        expect(assistant.messages.value[1]).toMatchObject({
+            role: 'assistant',
+            content: '',
+            stream: {
+                status: 'streaming',
+                activityText: '今天有什么新闻',
+            },
+        });
+
+        releaseSidecar?.();
+        await sendPromise;
+
+        expect(assistant.messages.value[1]?.content).toBe('已整理今日热点新闻。');
+        expect(assistant.messages.value[1]?.stream?.status).toBe('completed');
+        expect(assistant.messages.value[1]?.stream?.activityText).toBe('今天有什么新闻');
+    });
+
     it('streams sidecar tool activity into the assistant message before the final response resolves', async () => {
         const { assistant } = createAssistantHarnessContext();
         let releaseSidecar: (() => void) | null = null;
@@ -1229,6 +1279,12 @@ describe('useAiAssistant streaming integration', () => {
         });
         expect(assistant.messages.value[1]?.content).toContain('第二段继续到达');
         expect(assistant.messages.value[1]?.stream?.status).toBe('streaming');
+        expect(assistant.messages.value[1]?.stream?.activityTrail).toEqual(expect.arrayContaining([
+            '第一段实时回答，第二段继续到达',
+        ]));
+        expect(assistant.messages.value[1]?.stream?.activityTrail).not.toEqual(expect.arrayContaining([
+            '在 工作区 搜索「实时工具」',
+        ]));
         expect(assistant.runtimeTimelineEvents.value).toHaveLength(1);
         expect(assistant.runtimeTimelineEvents.value[0]).toMatchObject({
             type: 'agent.tool.started',
@@ -1241,6 +1297,93 @@ describe('useAiAssistant streaming integration', () => {
         expect(assistant.messages.value[1]?.content).toContain('实时工具完成');
         expect(assistant.messages.value[1]?.toolCalls?.[0]?.status).toBe('succeeded');
         expect(assistant.messages.value[1]?.stream?.status).toBe('completed');
+        expect(assistant.messages.value[1]?.stream?.activityText).toBe('在 工作区 搜索「实时工具」');
+        expect(assistant.messages.value[1]?.stream?.activityTrail).toBeUndefined();
+    });
+
+    it('按 Streaming Events 的字段语义裁剪公开进度，不把 raw JSON 直接塞进活动轨迹', async () => {
+        const { assistant } = createAssistantHarnessContext();
+        let releaseSidecar: (() => void) | null = null;
+        const sidecarGate = new Promise<void>((resolve) => {
+            releaseSidecar = resolve;
+        });
+
+        aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
+            const sessionId = payload.sessionId ?? 'sidecar-runtime-preview-session';
+
+            aiServiceMock.emitSidecar({
+                sessionId,
+                seq: 0,
+                event: {
+                    type: 'agent_event',
+                    event: {
+                        id: 'runtime-preview-started',
+                        type: 'agent.run.started',
+                        runId: 'run-preview-1',
+                        sessionId,
+                        agentId: 'agent-preview-1',
+                        timestamp: '2026-05-02T10:00:00.000Z',
+                        seq: 0,
+                        schemaVersion: 1,
+                        redacted: true,
+                        visibility: 'user',
+                        level: 'info',
+                        inputPreview: '{"query":"淘宝网 最新商品 2026","site":"taobao.com","path":"D:/repo/src/搜索🙂.vue"}',
+                    },
+                },
+            });
+
+            await sidecarGate;
+
+            return {
+                sessionId,
+                events: [
+                    {
+                        type: 'agent_event',
+                        event: {
+                            id: 'runtime-preview-started',
+                            type: 'agent.run.started',
+                            runId: 'run-preview-1',
+                            sessionId,
+                            agentId: 'agent-preview-1',
+                            timestamp: '2026-05-02T10:00:00.000Z',
+                            seq: 0,
+                            schemaVersion: 1,
+                            redacted: true,
+                            visibility: 'user',
+                            level: 'info',
+                            inputPreview: '{"query":"淘宝网 最新商品 2026","site":"taobao.com","path":"D:/repo/src/搜索🙂.vue"}',
+                        },
+                    },
+                    {
+                        type: 'done',
+                        result: '已完成搜索。',
+                    },
+                ],
+                result: '已完成搜索。',
+            };
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '搜索淘宝网最新商品';
+
+        const sendPromise = assistant.sendMessage();
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+            if (assistant.messages.value[1]?.stream?.activityTrail?.length) {
+                break;
+            }
+            await Promise.resolve();
+        }
+
+        const activityTrail = assistant.messages.value[1]?.stream?.activityTrail ?? [];
+
+        expect(activityTrail).toEqual(expect.arrayContaining([
+            '查询：淘宝网 最新商品 2026 · 站点：taobao.com · 路径：D:/repo/src/搜索🙂.vue',
+        ]));
+        expect(activityTrail.join('\n')).not.toContain('{"query"');
+
+        releaseSidecar?.();
+        await sendPromise;
     });
 
     it('preserves cumulative sidecar markdown exactly while a code fence is still streaming', async () => {

@@ -19,8 +19,10 @@ import {
   mapSidecarEventsToToolCalls,
   projectSidecarExecuteResponse,
 } from '@/utils/agent-sidecar-events';
+import { buildAgentActivitiesFromSidecarState } from '@/utils/agent-activity';
 
 import type { IAgentSidecarMessage, TAgentRuntimeEvent, TAgentUiEvent } from '@/types/agent-sidecar';
+import type { IAgentActivity, TAgentActivityStatus } from '@/types/agent-activity';
 import type {
   IAiApplyPatchMetadata,
   IAiChatMessage,
@@ -47,6 +49,12 @@ import type { IGitRepositoryStatusPayload } from '@/types/git';
 import { toErrorMessage } from '@/utils/error';
 import { logger } from '@/utils/logger';
 import { areFileSystemPathsEqual, normalizeFileSystemPath } from '@/utils/path';
+import {
+  clipTextPreview,
+  formatPrioritizedFieldPreview,
+  normalizePreviewText,
+  type IPrioritizedPreviewField,
+} from '@/utils/text-preview';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -132,6 +140,8 @@ const MAX_TEXT_ATTACHMENT_BYTES = 128 * 1024;
 const MAX_IMAGE_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const AI_EDIT_ROLLBACK_TIMELINE_LIMIT = 24;
 const AGENT_RUNTIME_TIMELINE_LIMIT = 32;
+const AGENT_ACTIVITY_TRAIL_LIMIT = 6;
+const AGENT_ACTIVITY_PREVIEW_CHARS = 96;
 
 const TEXT_ATTACHMENT_PATTERN =
   /^(application\/(json|xml|x-sh|x-shellscript|javascript|typescript)|text\/)/i;
@@ -151,6 +161,24 @@ const CODE_BLOCK_PATTERN = /```[a-zA-Z0-9_-]*\n([\s\S]*?)```/;
 
 const PROJECT_SEARCH_TOKENS = ['project', 'folder', 'search', 'symbol'] as const;
 
+const ACTIVITY_JSON_FIELD_RULES = [
+  { key: 'query', label: '查询', priority: 100, minGraphemes: 16, maxGraphemes: 48 },
+  { key: 'pattern', label: '搜索', priority: 96, minGraphemes: 14, maxGraphemes: 44 },
+  { key: 'site', label: '站点', priority: 86, minGraphemes: 8, maxGraphemes: 28 },
+  { key: 'domain', label: '站点', priority: 84, minGraphemes: 8, maxGraphemes: 28 },
+  { key: 'url', label: '网址', priority: 78, minGraphemes: 12, maxGraphemes: 42 },
+  { key: 'path', label: '路径', priority: 70, minGraphemes: 14, maxGraphemes: 44 },
+  { key: 'file', label: '文件', priority: 70, minGraphemes: 14, maxGraphemes: 44 },
+  { key: 'filePath', label: '文件', priority: 70, minGraphemes: 14, maxGraphemes: 44 },
+  { key: 'summary', label: '摘要', priority: 36, minGraphemes: 12, maxGraphemes: 40 },
+  { key: 'message', label: '信息', priority: 32, minGraphemes: 12, maxGraphemes: 40 },
+  { key: 'title', label: '标题', priority: 28, minGraphemes: 12, maxGraphemes: 36 },
+] as const;
+
+type TActivityJsonFieldRule = (typeof ACTIVITY_JSON_FIELD_RULES)[number];
+
+type TActivityJsonRecord = Record<string, unknown>;
+
 const MSG_STREAM_ERROR = 'AI 响应出错';
 const MSG_CALL_FAILED = 'AI 调用失败';
 
@@ -160,6 +188,309 @@ const MSG_CALL_FAILED = 'AI 调用失败';
 
 const createMessageId = (role: IAiChatMessage['role']): string =>
   `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const isActivityRecord = (value: unknown): value is TActivityJsonRecord =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const clipActivityText = (value: string): string =>
+  clipTextPreview(value, { maxGraphemes: AGENT_ACTIVITY_PREVIEW_CHARS });
+
+const parseActivityJson = (value: string): unknown | null => {
+  const trimmed = value.trim();
+
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return null;
+  }
+};
+
+const createActivityPreviewField = (
+  rule: TActivityJsonFieldRule | undefined,
+  value: string,
+): IPrioritizedPreviewField => ({
+  value,
+  priority: rule?.priority ?? 1,
+  ...(rule ? { label: rule.label } : {}),
+  ...(rule?.minGraphemes !== undefined ? { minGraphemes: rule.minGraphemes } : {}),
+  ...(rule?.maxGraphemes !== undefined ? { maxGraphemes: rule.maxGraphemes } : {}),
+});
+
+const collectActivityPreviewFields = (
+  value: unknown,
+  fields: IPrioritizedPreviewField[],
+  sourceRule?: TActivityJsonFieldRule,
+  depth = 0,
+): void => {
+  if (depth > 3 || fields.length >= 8 || value === null || value === undefined) {
+    return;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    fields.push(createActivityPreviewField(sourceRule, value.trim()));
+    return;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    fields.push(createActivityPreviewField(sourceRule, String(value)));
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectActivityPreviewFields(item, fields, sourceRule, depth + 1);
+      if (fields.length >= 8) {
+        return;
+      }
+    }
+    return;
+  }
+
+  if (!isActivityRecord(value)) {
+    return;
+  }
+
+  for (const rule of ACTIVITY_JSON_FIELD_RULES) {
+    if (Object.hasOwn(value, rule.key)) {
+      collectActivityPreviewFields(value[rule.key], fields, rule, depth + 1);
+    }
+  }
+};
+
+const normalizeRuntimePreviewText = (value: string | undefined): string | null => {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  const parsed = parseActivityJson(value);
+  if (parsed !== null) {
+    const fields: IPrioritizedPreviewField[] = [];
+    collectActivityPreviewFields(parsed, fields);
+    const preview = formatPrioritizedFieldPreview(fields, {
+      maxFields: 3,
+      maxGraphemes: AGENT_ACTIVITY_PREVIEW_CHARS,
+    });
+
+    return preview || null;
+  }
+
+  return clipActivityText(value);
+};
+
+const buildInitialAgentActivityText = (goal: string): string =>
+  clipActivityText(goal) || '请求处理中';
+
+const WEB_TOOL_NAME_PATTERN = /(?:web|tavily)/iu;
+const FILE_SEARCH_TOOL_NAME_PATTERN = /(?:search_(?:project_)?files|search_text|search_symbols)/iu;
+const DIRECTORY_TOOL_NAME_PATTERN = /(?:list_directory|directory_tree|get_project_tree|list_project_files)/iu;
+const FILE_READ_TOOL_NAME_PATTERN = /(?:read_|get_file_info|open_nodes)/iu;
+
+const getToolDetailValue = (
+  toolCall: IAiChatMessage['toolCalls'][number],
+  label: string,
+): string | null => {
+  const prefix = `${label}：`;
+  const item = toolCall.detailItems?.find((detail) => detail.startsWith(prefix));
+
+  return item ? item.slice(prefix.length).trim() || null : null;
+};
+
+const buildToolActivityText = (toolCall: IAiChatMessage['toolCalls'][number]): string => {
+  const target = toolCall.targetPreview?.trim() || toolCall.summary.trim();
+  const query = getToolDetailValue(toolCall, '查询') ?? getToolDetailValue(toolCall, '搜索');
+  const scope = getToolDetailValue(toolCall, '范围');
+  const file = getToolDetailValue(toolCall, '文件');
+  const directory = getToolDetailValue(toolCall, '目录');
+  const site = getToolDetailValue(toolCall, '站点');
+  const url = getToolDetailValue(toolCall, '网址');
+
+  if (WEB_TOOL_NAME_PATTERN.test(toolCall.name)) {
+    const searchTarget = query ?? url ?? site ?? target;
+    const isFetch = url && !query;
+    const verb = isFetch ? '读取网页' : '联网搜索';
+    const siteHint = site && query ? `，站点 ${site}` : '';
+
+    return searchTarget ? `${verb}「${searchTarget}」${siteHint}` : verb;
+  }
+
+  if (FILE_SEARCH_TOOL_NAME_PATTERN.test(toolCall.name)) {
+    const searchTarget = query ?? target;
+    const scopeHint = scope ?? '工作区';
+
+    return searchTarget ? `在 ${scopeHint} 搜索「${searchTarget}」` : `搜索 ${scopeHint}`;
+  }
+
+  if (DIRECTORY_TOOL_NAME_PATTERN.test(toolCall.name)) {
+    return `查看目录 ${directory ?? target}`;
+  }
+
+  if (FILE_READ_TOOL_NAME_PATTERN.test(toolCall.name)) {
+    return `查看文件 ${file ?? target}`;
+  }
+
+  return target ? `处理 ${target}` : '处理任务';
+};
+
+const buildSidecarLiveActivityText = (
+  toolCalls: ReadonlyArray<NonNullable<IAiChatMessage['toolCalls']>[number]>,
+  fallback: string,
+): string => {
+  const activeToolCall = [...toolCalls]
+    .reverse()
+    .find((toolCall) => toolCall.status === 'running' || toolCall.status === 'pending');
+
+  if (activeToolCall) {
+    return buildToolActivityText(activeToolCall);
+  }
+
+  const completedToolCall = [...toolCalls]
+    .reverse()
+    .find((toolCall) => toolCall.status === 'succeeded');
+
+  if (completedToolCall) {
+    return buildToolActivityText(completedToolCall);
+  }
+
+  return fallback || '请求处理中';
+};
+
+const buildCompletedSidecarActivityText = (
+  toolCalls: ReadonlyArray<NonNullable<IAiChatMessage['toolCalls']>[number]>,
+  fallback: string,
+): string => {
+  const lastToolCall = [...toolCalls]
+    .reverse()
+    .find((toolCall) =>
+      toolCall.status === 'succeeded' ||
+      toolCall.status === 'failed' ||
+      toolCall.status === 'denied' ||
+      toolCall.status === 'pending' ||
+      toolCall.status === 'running'
+    );
+
+  return lastToolCall ? buildToolActivityText(lastToolCall) : fallback || '请求处理中';
+};
+
+const appendActivityTrail = (
+  currentTrail: readonly string[] | undefined,
+  nextText: string | undefined,
+): string[] | undefined => {
+  const normalized = nextText ? normalizePreviewText(nextText) : '';
+
+  if (!normalized) {
+    return currentTrail?.length ? [...currentTrail] : undefined;
+  }
+
+  const nextTrail = [...(currentTrail ?? []), normalized];
+  const seen = new Set<string>();
+  const uniqueTrail: string[] = [];
+
+  for (const item of nextTrail) {
+    if (seen.has(item)) {
+      continue;
+    }
+
+    seen.add(item);
+    uniqueTrail.push(item);
+  }
+
+  return uniqueTrail.slice(-AGENT_ACTIVITY_TRAIL_LIMIT);
+};
+
+const getRuntimeActivityText = (event: TAgentRuntimeEvent): string | null => {
+  if (event.visibility !== 'user') {
+    return null;
+  }
+
+  switch (event.type) {
+    case 'agent.run.started':
+      return normalizeRuntimePreviewText(event.inputPreview);
+    case 'agent.text.delta':
+      return normalizeRuntimePreviewText(event.text);
+    case 'rollback.restore.completed':
+      return normalizeRuntimePreviewText(event.message);
+    case 'side_effect.warning':
+      return normalizeRuntimePreviewText(event.message);
+    case 'agent.run.completed':
+      return normalizeRuntimePreviewText(event.outputPreview);
+    case 'agent.run.error':
+      return normalizeRuntimePreviewText(event.errorMessage);
+    default:
+      return null;
+  }
+};
+
+const buildSidecarActivityTrail = (events: readonly TAgentUiEvent[]): string[] => {
+  let trail: string[] = [];
+  let latestPublicDelta: string | null = null;
+  let hasActivityContext = false;
+
+  for (const event of events) {
+    if (event.type === 'tool_start' || event.type === 'tool_result') {
+      hasActivityContext = true;
+      continue;
+    }
+
+    if (event.type === 'message_delta') {
+      latestPublicDelta = normalizeRuntimePreviewText(event.text);
+      continue;
+    }
+
+    if (event.type === 'agent_event') {
+      const activityText = getRuntimeActivityText(event.event);
+      if (activityText) {
+        hasActivityContext = true;
+        trail = appendActivityTrail(trail, activityText) ?? trail;
+      }
+    }
+  }
+
+  if (hasActivityContext && latestPublicDelta) {
+    trail = appendActivityTrail(trail, latestPublicDelta) ?? trail;
+  }
+
+  return trail;
+};
+
+const mapStreamStatusToActivityStatus = (
+  status: NonNullable<IAiChatMessage['stream']>['status'],
+  hasError: boolean,
+): TAgentActivityStatus => {
+  if (hasError) {
+    return 'error';
+  }
+
+  if (status === 'cancelled') {
+    return 'cancelled';
+  }
+
+  return status === 'streaming' ? 'running' : 'success';
+};
+
+const buildSidecarActivities = (params: {
+  assistantMessageId: string;
+  activityText: string;
+  toolCalls: ReadonlyArray<NonNullable<IAiChatMessage['toolCalls']>[number]>;
+  activityTrail: readonly string[];
+  streamStatus: NonNullable<IAiChatMessage['stream']>['status'];
+  hasError?: boolean;
+}): IAgentActivity[] => {
+  if (!params.toolCalls.length && !params.activityTrail.length) {
+    return [];
+  }
+
+  return buildAgentActivitiesFromSidecarState({
+    runId: params.assistantMessageId,
+    rootTitle: params.activityText,
+    status: mapStreamStatusToActivityStatus(params.streamStatus, params.hasError ?? false),
+    toolCalls: params.toolCalls,
+    activityTrail: params.activityTrail,
+  });
+};
 
 const normalizePatchDisplayPath = (path: string): string => {
   const normalized = normalizeFileSystemPath(path, {
@@ -546,17 +877,39 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     content: string,
     toolCalls: IAiChatMessage['toolCalls'] = [],
     streamStatus?: NonNullable<IAiChatMessage['stream']>['status'],
+    activityText?: string,
+    activityTrail?: string[],
+    activities?: IAgentActivity[],
   ): void => {
-    replaceMessageById(messageId, (message) => ({
-      ...message,
-      content,
-      toolCalls,
-      stream: streamStatus
-        ? {
-          status: streamStatus,
-        }
-        : message.stream,
-    }));
+    replaceMessageById(messageId, (message) => {
+      const nextActivityText = activityText ?? message.stream?.activityText;
+      const nextActivityTrail = activityTrail ?? appendActivityTrail(
+        message.stream?.activityTrail,
+        nextActivityText,
+      );
+      const nextActivities = activities ?? message.stream?.activities;
+      const stream = streamStatus
+        ? nextActivityText
+          ? {
+            status: streamStatus,
+            activityText: nextActivityText,
+            ...(nextActivityTrail?.length ? { activityTrail: nextActivityTrail } : {}),
+            ...(nextActivities?.length ? { activities: nextActivities } : {}),
+          }
+          : {
+            status: streamStatus,
+            ...(nextActivityTrail?.length ? { activityTrail: nextActivityTrail } : {}),
+            ...(nextActivities?.length ? { activities: nextActivities } : {}),
+          }
+        : message.stream;
+
+      return {
+        ...message,
+        content,
+        toolCalls,
+        stream,
+      };
+    });
   };
 
   const refreshChangedDocumentsAfterSidecarRun = async (
@@ -691,6 +1044,18 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       ? `Agent 执行失败：${errorEvent.message}`
       : doneResult ?? latestDelta ?? fallbackContent;
     const streamStatus = errorEvent || doneEvent ? 'completed' : 'streaming';
+    const activityText = streamStatus === 'streaming'
+      ? buildSidecarLiveActivityText(toolCalls, fallbackContent)
+      : buildCompletedSidecarActivityText(toolCalls, fallbackContent);
+    const activityTrail = buildSidecarActivityTrail(events);
+    const activities = buildSidecarActivities({
+      assistantMessageId,
+      activityText,
+      toolCalls,
+      activityTrail,
+      streamStatus,
+      hasError: Boolean(errorEvent),
+    });
 
     for (const toolCall of toolCalls) {
       updateAgentStep(
@@ -700,7 +1065,15 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       );
     }
 
-    updateAgentExecutionMessage(assistantMessageId, content, toolCalls, streamStatus);
+    updateAgentExecutionMessage(
+      assistantMessageId,
+      content,
+      toolCalls,
+      streamStatus,
+      activityText,
+      activityTrail,
+      activities,
+    );
   };
 
   const appendRuntimeTimelineEvents = (
@@ -779,6 +1152,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     activeSidecarAgentSession.value = null;
 
     const assistantMessageId = createMessageId('assistant');
+    const initialActivityText = buildInitialAgentActivityText(messageContent);
     const placeholderMessage: IAiChatMessage = {
       id: assistantMessageId,
       role: 'assistant',
@@ -788,6 +1162,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       toolCalls: [],
       stream: {
         status: 'streaming',
+        activityText: initialActivityText,
       },
     };
 
@@ -830,11 +1205,28 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         );
       }
 
+      const completedActivityText = buildCompletedSidecarActivityText(
+        projection.toolCalls,
+        initialActivityText,
+      );
+      const completedActivityTrail = buildSidecarActivityTrail(payload.events);
+      const completedActivities = buildSidecarActivities({
+        assistantMessageId,
+        activityText: completedActivityText,
+        toolCalls: projection.toolCalls,
+        activityTrail: completedActivityTrail,
+        streamStatus: 'completed',
+        hasError: Boolean(projection.errorMessage),
+      });
+
       updateAgentExecutionMessage(
         assistantMessageId,
         projection.assistantContent,
         projection.toolCalls,
         'completed',
+        completedActivityText,
+        completedActivityTrail,
+        completedActivities,
       );
 
       await refreshChangedDocumentsAfterSidecarRun(
@@ -936,12 +1328,28 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       });
       appendRuntimeTimelineEvents(payload.events);
       const projection = projectSidecarExecuteResponse(payload);
+      const completedActivityText = buildCompletedSidecarActivityText(
+        projection.toolCalls,
+        session.messageContent,
+      );
+      const completedActivityTrail = buildSidecarActivityTrail(payload.events);
+      const completedActivities = buildSidecarActivities({
+        assistantMessageId: session.assistantMessageId,
+        activityText: completedActivityText,
+        toolCalls: projection.toolCalls,
+        activityTrail: completedActivityTrail,
+        streamStatus: 'completed',
+        hasError: Boolean(projection.errorMessage),
+      });
 
       updateAgentExecutionMessage(
         session.assistantMessageId,
         projection.assistantContent,
         projection.toolCalls,
         'completed',
+        completedActivityText,
+        completedActivityTrail,
+        completedActivities,
       );
 
       await refreshChangedDocumentsAfterSidecarRun(

@@ -1,5 +1,6 @@
 import { AI_AGENT_TOOL_NAMES, type TAiAgentToolName } from '@/types/ai-tools';
 import { normalizeFileSystemPath } from '@/utils/path';
+import { clipTextPreview } from '@/utils/text-preview';
 
 import type {
   IAgentPlan,
@@ -54,6 +55,122 @@ const SIDECAR_FILE_PATH_KEYS = new Set<string>([
   'destinationPath',
   'newPath',
 ]);
+
+const SIDECAR_QUERY_KEYS = new Set<string>([
+  'query',
+  'q',
+  'pattern',
+  'keyword',
+  'keywords',
+  'search',
+  'searchTerm',
+  'search_term',
+]);
+
+const SIDECAR_COMMAND_KEYS = new Set<string>([
+  'command',
+  'cmd',
+  'script',
+]);
+
+const SIDECAR_URL_KEYS = new Set<string>([
+  'url',
+  'uri',
+  'href',
+]);
+
+const SIDECAR_DOMAIN_KEYS = new Set<string>([
+  'domain',
+  'domains',
+  'site',
+  'sites',
+  'includeDomains',
+  'include_domains',
+  'includeDomain',
+  'include_domain',
+]);
+
+const SIDECAR_PATH_SCOPE_KEYS = new Set<string>([
+  ...SIDECAR_FILE_PATH_KEYS,
+  'path',
+  'paths',
+  'root',
+  'directory',
+  'dir',
+  'folder',
+  'cwd',
+  'basePath',
+  'base_path',
+]);
+
+const WEB_SEARCH_TOOL_NAMES = new Set<string>([
+  'web_search',
+  'tavily-search',
+  'tavily-map',
+  'tavily_search',
+  'tavily_map',
+  'tavily_research',
+]);
+
+const WEB_FETCH_TOOL_NAMES = new Set<string>([
+  'web_fetch',
+  'tavily-extract',
+  'tavily-crawl',
+  'tavily_extract',
+  'tavily_crawl',
+]);
+
+const FILE_SEARCH_TOOL_NAMES = new Set<string>([
+  'search_files',
+  'search_text',
+  'search_symbols',
+  'search_project_files',
+  'search_nodes',
+]);
+
+const FILE_READ_TOOL_NAMES = new Set<string>([
+  'read_text_file',
+  'read_media_file',
+  'read_multiple_files',
+  'read_current_file',
+  'read_selected_text',
+  'read_file',
+  'read_project_file',
+  'get_file_info',
+  'open_nodes',
+]);
+
+const DIRECTORY_TOOL_NAMES = new Set<string>([
+  'list_directory',
+  'list_directory_with_sizes',
+  'directory_tree',
+  'list_allowed_directories',
+  'list_project_files',
+  'get_project_tree',
+]);
+
+const GIT_TOOL_NAMES = new Set<string>([
+  'git_status',
+  'git_diff_unstaged',
+  'git_diff_staged',
+  'git_log',
+  'git_show',
+  'get_git_diff',
+]);
+
+const TOOL_PLATFORM_BY_NAME: Readonly<Record<string, string>> = {
+  'tavily-search': 'Tavily',
+  'tavily-extract': 'Tavily',
+  'tavily-map': 'Tavily',
+  'tavily-crawl': 'Tavily',
+  tavily_search: 'Tavily',
+  tavily_extract: 'Tavily',
+  tavily_map: 'Tavily',
+  tavily_crawl: 'Tavily',
+  tavily_research: 'Tavily',
+  web_search: '联网搜索',
+  web_fetch: '网页读取',
+};
 
 const SIDECAR_TOOL_TO_AI_TOOL: Readonly<Record<string, TAiAgentToolName>> = {
   read_text_file: 'read_file',
@@ -194,15 +311,47 @@ export const mapSidecarPlanToTaskSteps = (plan: IAgentPlan): IAiTaskPlanStep[] =
 
 const stringifyJsonValue = (value: TJsonValue): string => JSON.stringify(value);
 
-const clipSummary = (value: string, limit = 96): string => {
-  const normalized = value.replace(/\s+/gu, ' ').trim();
-  const characters = Array.from(normalized);
-
-  if (characters.length <= limit) {
-    return normalized;
+const toJsonValueOrNull = (value: unknown): TJsonValue | null => {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
   }
 
-  return `${characters.slice(0, limit).join('')}...`;
+  if (Array.isArray(value)) {
+    return value.map(toJsonValueOrNull).map((item) => item ?? null);
+  }
+
+  if (typeof value !== 'object') {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return Object.fromEntries(
+    Object.entries(record).map(([key, item]) => [key, toJsonValueOrNull(item)]),
+  );
+};
+
+const parseJsonString = (value: string): TJsonValue | null => {
+  const trimmed = value.trim();
+
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    return null;
+  }
+
+  try {
+    return toJsonValueOrNull(JSON.parse(trimmed));
+  } catch {
+    return null;
+  }
+};
+
+const clipSummary = (value: string, limit = 96): string => {
+  return clipTextPreview(value, { maxGraphemes: limit });
 };
 
 const getRecordValue = (
@@ -225,6 +374,352 @@ const getStringField = (value: TJsonValue, keys: readonly string[]): string | nu
   }
 
   return null;
+};
+
+const collectStringValuesForKeys = (
+  value: TJsonValue,
+  keys: ReadonlySet<string>,
+  values: string[],
+  depth = 0,
+): void => {
+  if (depth > 4 || value === null) {
+    return;
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectStringValuesForKeys(item, keys, values, depth + 1);
+    }
+    return;
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    if (keys.has(key)) {
+      if (typeof item === 'string' && item.trim()) {
+        values.push(item.trim());
+        continue;
+      }
+
+      if (Array.isArray(item)) {
+        for (const candidate of item) {
+          if (typeof candidate === 'string' && candidate.trim()) {
+            values.push(candidate.trim());
+          }
+        }
+        continue;
+      }
+    }
+
+    collectStringValuesForKeys(item, keys, values, depth + 1);
+  }
+};
+
+const uniqueNonEmptyStrings = (values: readonly string[]): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const value of values) {
+    const normalized = value.replace(/\s+/gu, ' ').trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    result.push(normalized);
+  }
+
+  return result;
+};
+
+const formatStringList = (values: readonly string[], limit = 2): string | null => {
+  const normalized = uniqueNonEmptyStrings(values);
+  if (!normalized.length) {
+    return null;
+  }
+
+  const visible = normalized.slice(0, limit).map((value) => clipSummary(value, 42));
+  const restCount = normalized.length - visible.length;
+
+  return restCount > 0 ? `${visible.join('、')} 等 ${normalized.length} 项` : visible.join('、');
+};
+
+const collectFirstString = (
+  value: TJsonValue,
+  keys: ReadonlySet<string>,
+): string | null => {
+  const values: string[] = [];
+  collectStringValuesForKeys(value, keys, values);
+
+  return formatStringList(values, 1);
+};
+
+const collectStringList = (
+  value: TJsonValue,
+  keys: ReadonlySet<string>,
+  limit = 2,
+): string | null => {
+  const values: string[] = [];
+  collectStringValuesForKeys(value, keys, values);
+
+  return formatStringList(values, limit);
+};
+
+const extractUrlHost = (value: string): string | null => {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.replace(/^www\./iu, '').trim();
+
+    return host || null;
+  } catch {
+    const match = value.match(/^(?:https?:\/\/)?([^/\s?#]+)(?:[/?#]|$)/iu);
+    const host = match?.[1]?.replace(/^www\./iu, '').trim();
+
+    return host || null;
+  }
+};
+
+const collectUrlDomains = (
+  value: TJsonValue,
+  limit = 2,
+): string | null => {
+  const urls: string[] = [];
+  collectStringValuesForKeys(value, SIDECAR_URL_KEYS, urls);
+
+  return formatStringList(urls.map(extractUrlHost).filter((host): host is string => Boolean(host)), limit);
+};
+
+const getToolPlatform = (toolName: string): string | null =>
+  TOOL_PLATFORM_BY_NAME[toolName] ?? null;
+
+const createDetailItem = (label: string, value: string | null): string | null =>
+  value ? `${label}：${value}` : null;
+
+const compactDetailItems = (items: readonly (string | null)[]): string[] =>
+  uniqueNonEmptyStrings(items.filter((item): item is string => Boolean(item)));
+
+interface IToolPayloadDescriptor {
+  targetPreview: string;
+  summary: string;
+  detailItems: string[];
+}
+
+const joinTargetParts = (
+  parts: readonly (string | null)[],
+  fallback: string,
+): string => {
+  const normalized = uniqueNonEmptyStrings(parts.filter((part): part is string => Boolean(part)));
+
+  return normalized.length ? normalized.map((part) => clipSummary(part, 52)).join(' · ') : fallback;
+};
+
+const describeToolPayload = (
+  toolName: string,
+  value: TJsonValue,
+): IToolPayloadDescriptor => {
+  const platform = getToolPlatform(toolName);
+  const query = collectFirstString(value, SIDECAR_QUERY_KEYS);
+  const scope = collectStringList(value, SIDECAR_PATH_SCOPE_KEYS, 2);
+  const url = collectFirstString(value, SIDECAR_URL_KEYS);
+  const domains = collectStringList(value, SIDECAR_DOMAIN_KEYS, 2) ?? collectUrlDomains(value, 2);
+  const command = collectFirstString(value, SIDECAR_COMMAND_KEYS);
+
+  if (WEB_SEARCH_TOOL_NAMES.has(toolName)) {
+    const targetPreview = joinTargetParts([
+      query,
+      domains,
+    ], '联网搜索');
+
+    return {
+      targetPreview,
+      summary: targetPreview,
+      detailItems: compactDetailItems([
+        createDetailItem('平台', platform),
+        createDetailItem('查询', query),
+        createDetailItem('站点', domains),
+      ]),
+    };
+  }
+
+  if (WEB_FETCH_TOOL_NAMES.has(toolName)) {
+    const targetPreview = joinTargetParts([url ?? domains ?? query], '网页');
+
+    return {
+      targetPreview,
+      summary: targetPreview,
+      detailItems: compactDetailItems([
+        createDetailItem('平台', platform),
+        createDetailItem('网址', url),
+        createDetailItem('站点', domains),
+      ]),
+    };
+  }
+
+  if (FILE_SEARCH_TOOL_NAMES.has(toolName)) {
+    const targetPreview = joinTargetParts([query, scope ?? '工作区'], '工作区');
+
+    return {
+      targetPreview,
+      summary: targetPreview,
+      detailItems: compactDetailItems([
+        createDetailItem('搜索', query),
+        createDetailItem('范围', scope ?? '工作区'),
+      ]),
+    };
+  }
+
+  if (FILE_READ_TOOL_NAMES.has(toolName)) {
+    const targetPreview = joinTargetParts([scope], '文件');
+
+    return {
+      targetPreview,
+      summary: targetPreview,
+      detailItems: compactDetailItems([
+        createDetailItem('文件', scope),
+      ]),
+    };
+  }
+
+  if (DIRECTORY_TOOL_NAMES.has(toolName)) {
+    const targetPreview = joinTargetParts([scope], '项目结构');
+
+    return {
+      targetPreview,
+      summary: targetPreview,
+      detailItems: compactDetailItems([
+        createDetailItem('目录', scope ?? '项目结构'),
+      ]),
+    };
+  }
+
+  if (GIT_TOOL_NAMES.has(toolName)) {
+    const targetPreview = joinTargetParts([scope], 'Git 变更');
+
+    return {
+      targetPreview,
+      summary: targetPreview,
+      detailItems: compactDetailItems([
+        createDetailItem('范围', scope ?? '当前仓库'),
+      ]),
+    };
+  }
+
+  if (command) {
+    return {
+      targetPreview: command,
+      summary: command,
+      detailItems: compactDetailItems([
+        createDetailItem('命令', command),
+      ]),
+    };
+  }
+
+  const fallback = summarizeJsonValue(value);
+
+  return {
+    targetPreview: fallback,
+    summary: fallback,
+    detailItems: [],
+  };
+};
+
+const TOOL_RESULT_TEXT_KEYS = new Set([
+  'text',
+  'content',
+  'summary',
+  'message',
+  'title',
+  'description',
+]);
+
+const TOOL_RESULT_CONTAINER_KEYS = new Set([
+  'toolResult',
+  'result',
+  'output',
+  'data',
+  'response',
+  'artifact',
+]);
+
+const RESULT_HEADING_PATTERN =
+  /^(?:Detailed Results?|Results?|Tool Result|Output)\s*:?\s*$/iu;
+
+const RESULT_FIELD_LABEL_PATTERN =
+  /^(?:Title|Summary|Content|Result|Answer|Description)\s*:\s*/iu;
+
+const URL_FIELD_LABEL_PATTERN = /^URL\s*:\s*/iu;
+
+const cleanReadableToolText = (value: string): string | null => {
+  const lines = value
+    .replace(/\r\n?/gu, '\n')
+    .split('\n')
+    .map((line) => line.replace(/\s+/gu, ' ').trim())
+    .filter((line) => line && !RESULT_HEADING_PATTERN.test(line));
+
+  const contentLine = lines.find((line) =>
+    RESULT_FIELD_LABEL_PATTERN.test(line) && !URL_FIELD_LABEL_PATTERN.test(line)
+  ) ?? lines.find((line) => !URL_FIELD_LABEL_PATTERN.test(line));
+
+  if (!contentLine) {
+    return null;
+  }
+
+  const normalized = contentLine.replace(RESULT_FIELD_LABEL_PATTERN, '').trim();
+
+  return normalized ? clipSummary(normalized) : null;
+};
+
+const collectReadableToolTexts = (
+  value: TJsonValue,
+  texts: string[],
+  depth = 0,
+): void => {
+  if (depth > 5 || texts.length >= 4 || value === null) {
+    return;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = parseJsonString(value);
+    if (parsed) {
+      collectReadableToolTexts(parsed, texts, depth + 1);
+      return;
+    }
+
+    const cleaned = cleanReadableToolText(value);
+    if (cleaned) {
+      texts.push(cleaned);
+    }
+    return;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectReadableToolTexts(item, texts, depth + 1);
+      if (texts.length >= 4) {
+        return;
+      }
+    }
+    return;
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    if (TOOL_RESULT_TEXT_KEYS.has(key)) {
+      collectReadableToolTexts(item, texts, depth + 1);
+    }
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    if (TOOL_RESULT_CONTAINER_KEYS.has(key)) {
+      collectReadableToolTexts(item, texts, depth + 1);
+    }
+  }
 };
 
 const collectPathCandidates = (value: TJsonValue, paths: string[]): void => {
@@ -255,8 +750,23 @@ const isSidecarFileMutationEvent = (
   (event.type === 'tool_start' || event.type === 'tool_result') &&
   SIDECAR_FILE_MUTATION_TOOL_NAMES.has(event.toolName);
 
+const isAgentRuntimeToolEvent = (
+  event: TAgentRuntimeEvent,
+): event is Extract<
+  TAgentRuntimeEvent,
+  { type: 'agent.tool.started' | 'agent.tool.completed' }
+> =>
+  event.type === 'agent.tool.started' || event.type === 'agent.tool.completed';
+
+const isRuntimeFileMutationEvent = (
+  event: TAgentUiEvent,
+): event is Extract<TAgentUiEvent, { type: 'agent_event' }> =>
+  event.type === 'agent_event' &&
+  isAgentRuntimeToolEvent(event.event) &&
+  SIDECAR_FILE_MUTATION_TOOL_NAMES.has(event.event.toolName);
+
 export const hasSidecarFileMutationEvent = (events: readonly TAgentUiEvent[]): boolean =>
-  events.some(isSidecarFileMutationEvent);
+  events.some((event) => isSidecarFileMutationEvent(event) || isRuntimeFileMutationEvent(event));
 
 export const extractVisibleAgentRuntimeEvents = (
   events: readonly TAgentUiEvent[],
@@ -274,11 +784,22 @@ export const extractSidecarChangedFilePaths = (
   const seen = new Set<string>();
 
   for (const event of events) {
-    if (!isSidecarFileMutationEvent(event)) {
+    if (isSidecarFileMutationEvent(event)) {
+      collectPathCandidates(event.type === 'tool_start' ? event.input : event.output, paths);
       continue;
     }
 
-    collectPathCandidates(event.type === 'tool_start' ? event.input : event.output, paths);
+    if (isRuntimeFileMutationEvent(event)) {
+      const runtimeEvent = event.event;
+      const preview = runtimeEvent.type === 'agent.tool.started'
+        ? runtimeEvent.inputPreview
+        : runtimeEvent.resultPreview;
+      const parsedPreview = preview ? parseJsonString(preview) ?? preview : null;
+
+      if (parsedPreview !== null) {
+        collectPathCandidates(parsedPreview, paths);
+      }
+    }
   }
 
   return paths.filter((path) => {
@@ -298,7 +819,12 @@ export const extractSidecarChangedFilePaths = (
 
 const summarizeJsonValue = (value: TJsonValue): string => {
   if (typeof value === 'string') {
-    return clipSummary(value);
+    const parsed = parseJsonString(value);
+    if (parsed) {
+      return summarizeJsonValue(parsed);
+    }
+
+    return cleanReadableToolText(value) ?? clipSummary(value);
   }
 
   if (value === null || typeof value === 'number' || typeof value === 'boolean') {
@@ -306,8 +832,14 @@ const summarizeJsonValue = (value: TJsonValue): string => {
   }
 
   if (Array.isArray(value)) {
+    const readableTexts: string[] = [];
+    collectReadableToolTexts(value, readableTexts);
+    if (readableTexts[0]) {
+      return readableTexts[0];
+    }
+
     const firstText = value.find((item): item is string => typeof item === 'string' && item.trim().length > 0);
-    return firstText ? clipSummary(firstText) : clipSummary(stringifyJsonValue(value));
+    return firstText ? summarizeJsonValue(firstText) : clipSummary(stringifyJsonValue(value));
   }
 
   const priority = getStringField(value, [
@@ -324,7 +856,37 @@ const summarizeJsonValue = (value: TJsonValue): string => {
     'root',
   ]);
 
-  return priority ?? clipSummary(stringifyJsonValue(value));
+  if (priority) {
+    return priority;
+  }
+
+  const readableTexts: string[] = [];
+  collectReadableToolTexts(value, readableTexts);
+
+  return readableTexts[0] ?? clipSummary(stringifyJsonValue(value));
+};
+
+const getRuntimePreviewValue = (preview: string | undefined): TJsonValue => {
+  const normalized = preview?.trim();
+
+  if (!normalized) {
+    return '';
+  }
+
+  return parseJsonString(normalized) ?? normalized;
+};
+
+const describeRuntimeToolPreview = (
+  toolName: string,
+  preview: string | undefined,
+): IToolPayloadDescriptor => {
+  const descriptor = describeToolPayload(toolName, getRuntimePreviewValue(preview));
+
+  return {
+    targetPreview: descriptor.targetPreview || '任务',
+    summary: descriptor.summary || '正在执行',
+    detailItems: descriptor.detailItems,
+  };
 };
 
 const createToolCallId = (event: TAgentUiEvent, index: number): string => {
@@ -339,17 +901,118 @@ const createToolCallId = (event: TAgentUiEvent, index: number): string => {
   return `sidecar-event:${index}:${event.type}`;
 };
 
+const createRuntimeToolCallId = (
+  event: Extract<TAgentRuntimeEvent, { type: 'agent.tool.started' | 'agent.tool.completed' }>,
+): string => event.toolUseId ? `runtime-tool:${event.toolUseId}` : `runtime-tool:${event.id}`;
+
+const findRuntimeToolCallIndex = (
+  toolCalls: readonly IAiToolCall[],
+  event: Extract<TAgentRuntimeEvent, { type: 'agent.tool.started' | 'agent.tool.completed' }>,
+): number => {
+  const runtimeId = createRuntimeToolCallId(event);
+  const idIndex = toolCalls.findIndex((toolCall) => toolCall.id === runtimeId);
+
+  if (idIndex >= 0) {
+    return idIndex;
+  }
+
+  for (let index = toolCalls.length - 1; index >= 0; index -= 1) {
+    const toolCall = toolCalls[index];
+    if (toolCall?.name === event.toolName && toolCall.status === 'running') {
+      return index;
+    }
+  }
+
+  return -1;
+};
+
+const appendRuntimeToolStarted = (
+  toolCalls: IAiToolCall[],
+  event: Extract<TAgentRuntimeEvent, { type: 'agent.tool.started' }>,
+): void => {
+  if (findRuntimeToolCallIndex(toolCalls, event) >= 0) {
+    return;
+  }
+
+  const descriptor = describeRuntimeToolPreview(event.toolName, event.inputPreview);
+
+  toolCalls.push({
+    id: createRuntimeToolCallId(event),
+    name: event.toolName,
+    status: 'running',
+    summary: descriptor.summary,
+    targetPreview: descriptor.targetPreview,
+    ...(descriptor.detailItems.length ? { detailItems: descriptor.detailItems } : {}),
+  });
+};
+
+const appendRuntimeToolCompleted = (
+  toolCalls: IAiToolCall[],
+  event: Extract<TAgentRuntimeEvent, { type: 'agent.tool.completed' }>,
+): void => {
+  const descriptor = describeRuntimeToolPreview(event.toolName, event.resultPreview);
+  const summary = event.ok
+    ? summarizeJsonValue(getRuntimePreviewValue(event.resultPreview)) || descriptor.summary
+    : event.errorMessage ?? '工具执行失败';
+  const existingIndex = findRuntimeToolCallIndex(toolCalls, event);
+
+  if (existingIndex >= 0) {
+    const existing = toolCalls[existingIndex];
+    if (!existing) {
+      return;
+    }
+
+    toolCalls[existingIndex] = {
+      ...existing,
+      status: event.ok ? 'succeeded' : 'failed',
+      summary,
+      ...(existing.targetPreview ? { targetPreview: existing.targetPreview } : { targetPreview: descriptor.targetPreview }),
+      ...(existing.detailItems?.length
+        ? { detailItems: existing.detailItems }
+        : descriptor.detailItems.length
+          ? { detailItems: descriptor.detailItems }
+          : {}),
+    };
+    return;
+  }
+
+  toolCalls.push({
+    id: createRuntimeToolCallId(event),
+    name: event.toolName,
+    status: event.ok ? 'succeeded' : 'failed',
+    summary,
+    targetPreview: descriptor.targetPreview,
+    ...(descriptor.detailItems.length ? { detailItems: descriptor.detailItems } : {}),
+  });
+};
+
+const applyRuntimeToolEventToToolCalls = (
+  toolCalls: IAiToolCall[],
+  event: TAgentRuntimeEvent,
+): void => {
+  if (event.type === 'agent.tool.started') {
+    appendRuntimeToolStarted(toolCalls, event);
+    return;
+  }
+
+  if (event.type === 'agent.tool.completed') {
+    appendRuntimeToolCompleted(toolCalls, event);
+  }
+};
+
 export const mapSidecarEventsToToolCalls = (events: readonly TAgentUiEvent[]): IAiToolCall[] => {
   const toolCalls: IAiToolCall[] = [];
 
   for (const [index, event] of events.entries()) {
     if (event.type === 'tool_start') {
+      const descriptor = describeToolPayload(event.toolName, event.input);
       toolCalls.push({
         id: createToolCallId(event, index),
         name: event.toolName,
         status: 'running',
-        summary: summarizeJsonValue(event.input),
-        targetPreview: summarizeJsonValue(event.input),
+        summary: descriptor.summary,
+        targetPreview: descriptor.targetPreview,
+        detailItems: descriptor.detailItems,
       });
       continue;
     }
@@ -372,18 +1035,23 @@ export const mapSidecarEventsToToolCalls = (events: readonly TAgentUiEvent[]): I
             ...existing,
             status: 'succeeded',
             summary,
-            targetPreview: existing.targetPreview ?? summary,
+            ...(existing.targetPreview ? { targetPreview: existing.targetPreview } : {}),
+            ...(existing.detailItems?.length ? { detailItems: existing.detailItems } : {}),
           };
         }
         continue;
       }
 
+      const descriptor = describeToolPayload(event.toolName, event.output);
       toolCalls.push({
         id: createToolCallId(event, index),
         name: event.toolName,
         status: 'succeeded',
         summary,
-        targetPreview: summary,
+        ...(descriptor.detailItems.length ? {
+          targetPreview: descriptor.targetPreview,
+          detailItems: descriptor.detailItems,
+        } : {}),
       });
       continue;
     }
@@ -396,6 +1064,10 @@ export const mapSidecarEventsToToolCalls = (events: readonly TAgentUiEvent[]): I
         summary: `等待审批：${event.request.summary}`,
         targetPreview: event.request.summary,
       });
+    }
+
+    if (event.type === 'agent_event') {
+      applyRuntimeToolEventToToolCalls(toolCalls, event.event);
     }
   }
 

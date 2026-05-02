@@ -18,15 +18,20 @@ import {
 import { computed } from 'vue';
 import type { Component } from 'vue';
 
+import type { IAgentActivity, IAgentActivityDetail, TAgentActivityStatus } from '@/types/agent-activity';
 import type { IAiToolCall } from '@/types/ai';
 
 const props = defineProps<{
   toolCalls: IAiToolCall[];
+  activityText?: string;
+  activityTrail?: string[];
+  activities?: IAgentActivity[];
 }>();
 
 type TToolActionKind =
   | 'read'
-  | 'search'
+  | 'fileSearch'
+  | 'symbolSearch'
   | 'diagnose'
   | 'patch'
   | 'applyPatch'
@@ -34,12 +39,12 @@ type TToolActionKind =
   | 'verify'
   | 'git'
   | 'web'
+  | 'webFetch'
   | 'tree'
   | 'unknown';
 
 interface IToolActionMeta {
   verb: string;
-  completedVerb: string;
   fallbackTarget: string;
   icon: Component;
 }
@@ -51,39 +56,71 @@ interface IToolStatusMeta {
 }
 
 interface IToolTimelineItem extends IAiToolCall {
+  actionLabel: string;
   headline: string;
   statusLabel: string;
-  detailRows: string[];
-  chips: string[];
+  target: string;
+  preview: string | null;
+  leafItems: string[];
   lineRange: string | null;
   toolIcon: Component;
+}
+
+interface IToolActivityRow {
+  id: string;
+  title: string;
+  status: IAiToolCall['status'];
   statusIcon: Component;
   isSpinning: boolean;
-  isOpen: boolean;
 }
 
 const TOOL_ACTION_BY_NAME: Record<string, TToolActionKind> = {
+  read_text_file: 'read',
+  read_media_file: 'read',
+  read_multiple_files: 'read',
   read_current_file: 'read',
   read_selected_text: 'read',
   read_file: 'read',
   read_project_file: 'read',
+  get_file_info: 'read',
   list_open_files: 'read',
   list_project_files: 'tree',
+  list_allowed_directories: 'tree',
+  list_directory: 'tree',
+  list_directory_with_sizes: 'tree',
+  directory_tree: 'tree',
   get_package_scripts: 'read',
   get_test_targets: 'read',
   get_terminal_log: 'read',
-  search_files: 'search',
-  search_text: 'search',
-  search_symbols: 'search',
-  search_project_files: 'search',
+  search_files: 'fileSearch',
+  search_text: 'fileSearch',
+  search_symbols: 'symbolSearch',
+  search_project_files: 'fileSearch',
   get_diagnostics: 'diagnose',
   get_git_diff: 'git',
+  git_status: 'git',
+  git_diff_unstaged: 'git',
+  git_diff_staged: 'git',
+  git_log: 'git',
+  git_show: 'git',
   get_project_tree: 'tree',
   web_search: 'web',
-  web_fetch: 'web',
+  web_fetch: 'webFetch',
+  'tavily-search': 'web',
+  'tavily-extract': 'webFetch',
+  'tavily-map': 'web',
+  'tavily-crawl': 'webFetch',
+  tavily_search: 'web',
+  tavily_extract: 'webFetch',
+  tavily_map: 'web',
+  tavily_crawl: 'webFetch',
+  tavily_research: 'web',
   propose_patch: 'patch',
   auto_apply_patch: 'applyPatch',
   write_file: 'applyPatch',
+  edit_file: 'applyPatch',
+  create_directory: 'applyPatch',
+  move_file: 'applyPatch',
   delete_file: 'execute',
   run_test: 'verify',
   run_command: 'execute',
@@ -94,70 +131,100 @@ const TOOL_ACTION_BY_NAME: Record<string, TToolActionKind> = {
   git_commit: 'git',
 };
 
+const TOOL_DISPLAY_BY_NAME: Readonly<Record<string, string>> = {
+  read_text_file: '查看文本文件',
+  read_media_file: '查看媒体文件',
+  read_multiple_files: '查看多个文件',
+  read_current_file: '查看当前文件',
+  read_selected_text: '查看选区',
+  read_file: '查看文件',
+  read_project_file: '查看项目文件',
+  get_file_info: '查看文件信息',
+  list_directory: '查看目录',
+  list_directory_with_sizes: '查看目录大小',
+  directory_tree: '查看目录树',
+  list_allowed_directories: '查看可访问目录',
+  list_project_files: '查看项目文件',
+  search_files: '文件搜索',
+  search_text: '全文搜索',
+  search_project_files: '项目搜索',
+  search_symbols: '符号搜索',
+  web_search: '联网搜索',
+  web_fetch: '读取网页',
+  'tavily-search': '联网搜索',
+  'tavily-extract': '读取网页',
+  'tavily-map': '查看站点地图',
+  'tavily-crawl': '抓取站点',
+  tavily_search: '联网搜索',
+  tavily_extract: '读取网页',
+  tavily_map: '查看站点地图',
+  tavily_crawl: '抓取站点',
+  tavily_research: '联网调研',
+};
+
 const TOOL_ACTION_META: Record<TToolActionKind, IToolActionMeta> = {
   read: {
-    verb: '读取',
-    completedVerb: '读取完成',
+    verb: '查看文件',
     fallbackTarget: '文件',
     icon: FileText,
   },
-  search: {
-    verb: '搜索',
-    completedVerb: '搜索完成',
+  fileSearch: {
+    verb: '搜索文件',
+    fallbackTarget: '项目',
+    icon: Search,
+  },
+  symbolSearch: {
+    verb: '搜索符号',
     fallbackTarget: '项目',
     icon: Search,
   },
   diagnose: {
     verb: '检查',
-    completedVerb: '检查完成',
     fallbackTarget: '工作区',
     icon: Activity,
   },
   patch: {
     verb: '生成 Patch',
-    completedVerb: 'Patch 已生成',
     fallbackTarget: '变更',
     icon: Pencil,
   },
   applyPatch: {
     verb: '应用 Patch',
-    completedVerb: 'Patch 已应用',
     fallbackTarget: '变更',
     icon: Pencil,
   },
   execute: {
     verb: '执行',
-    completedVerb: '执行完成',
     fallbackTarget: '命令',
     icon: Terminal,
   },
   verify: {
     verb: '验证',
-    completedVerb: '验证完成',
     fallbackTarget: '测试',
     icon: Terminal,
   },
   git: {
-    verb: '查看 Git',
-    completedVerb: 'Git 操作完成',
+    verb: 'Git',
     fallbackTarget: '变更',
     icon: GitBranch,
   },
   web: {
-    verb: '获取网页',
-    completedVerb: '网页获取完成',
+    verb: '检索',
     fallbackTarget: '资源',
     icon: Globe,
   },
+  webFetch: {
+    verb: '查看网页',
+    fallbackTarget: '网页',
+    icon: Globe,
+  },
   tree: {
-    verb: '读取目录',
-    completedVerb: '目录读取完成',
+    verb: '查看目录',
     fallbackTarget: '项目结构',
     icon: FolderTree,
   },
   unknown: {
-    verb: '调用工具',
-    completedVerb: '工具调用完成',
+    verb: '调用',
     fallbackTarget: '任务',
     icon: Activity,
   },
@@ -166,29 +233,49 @@ const TOOL_ACTION_META: Record<TToolActionKind, IToolActionMeta> = {
 const TOOL_STATUS_META: Record<IAiToolCall['status'], IToolStatusMeta> = {
   pending: {
     label: '等待中',
-    detail: '等待工具确认',
+    detail: '等待确认',
     icon: Clock3,
   },
   running: {
     label: '运行中',
-    detail: '工具正在执行',
+    detail: '正在执行',
     icon: LoaderCircle,
   },
   succeeded: {
     label: '已完成',
-    detail: '工具返回成功结果',
+    detail: '结果已返回',
     icon: CheckCircle2,
   },
   failed: {
     label: '失败',
-    detail: '工具执行失败',
+    detail: '执行失败',
     icon: CircleAlert,
   },
   denied: {
     label: '已停止',
-    detail: '工具调用已停止',
+    detail: '已停止',
     icon: XCircle,
   },
+};
+
+const ACTIVITY_STATUS_TO_TOOL_STATUS: Record<TAgentActivityStatus, IAiToolCall['status']> = {
+  pending: 'pending',
+  running: 'running',
+  success: 'succeeded',
+  error: 'failed',
+  cancelled: 'denied',
+};
+
+const ACTIVITY_KIND_ICON: Record<IAgentActivity['kind'], Component> = {
+  run: Activity,
+  search: Search,
+  read_file: FileText,
+  edit_file: Pencil,
+  tool_call: Activity,
+  command: Terminal,
+  reasoning_summary: Activity,
+  llm: Activity,
+  error: CircleAlert,
 };
 
 const STATUS_PREFIX_PATTERN =
@@ -196,6 +283,19 @@ const STATUS_PREFIX_PATTERN =
 
 const GENERIC_TARGET_PREFIX_PATTERN =
   /^(?:当前文件|当前选区|项目内容|文件名|符号|诊断|Git\s*变更|终端日志|网页|Patch|测试|命令|Git\s*暂存|Git\s*提交|文件|打开文件|package scripts|测试目标|工作区)\s*[:：]?\s*/iu;
+
+const GENERIC_TARGET_VALUES = new Set([
+  '文件',
+  '项目',
+  '项目结构',
+  '工作区',
+  '资源',
+  '网页',
+  '任务',
+  '命令',
+  '测试',
+  '变更',
+]);
 
 const getActionKind = (toolName: string): TToolActionKind =>
   TOOL_ACTION_BY_NAME[toolName] ?? 'unknown';
@@ -253,8 +353,92 @@ const parseTarget = (value: string): { target: string; lineRange: string | null 
   };
 };
 
-const getPreviewSource = (toolCall: IAiToolCall, fallbackTarget: string): string =>
-  toolCall.targetPreview?.trim() || toolCall.summary.trim() || fallbackTarget;
+const MACHINE_PREVIEW_PATTERN =
+  /(?:^\s*(?:\{|\[|\[object\s+Object\])|"?toolResult"?\s*:|"?content"?\s*:\s*\[|"?result"?\s*:\s*(?:\{|\[))/iu;
+
+const isMachinePreview = (value: string): boolean =>
+  MACHINE_PREVIEW_PATTERN.test(normalizeText(value));
+
+const getTargetSource = (toolCall: IAiToolCall, fallbackTarget: string): string => {
+  const targetPreview = toolCall.targetPreview?.trim();
+
+  if (targetPreview && !isMachinePreview(targetPreview)) {
+    return targetPreview;
+  }
+
+  const summaryTarget = stripTargetNoise(toolCall.summary);
+  if (
+    summaryTarget &&
+    !isMachinePreview(summaryTarget) &&
+    (isFileLikeTarget(summaryTarget) || isUrlLike(summaryTarget))
+  ) {
+    return summaryTarget;
+  }
+
+  return fallbackTarget;
+};
+
+const getDetailPreview = (
+  summary: string,
+  target: string,
+  statusDetail: string,
+): string | null => {
+  const preview = normalizeText(summary);
+  const strippedPreview = stripTargetNoise(preview);
+  const normalizedTarget = normalizeText(target);
+
+  if (
+    !preview ||
+    strippedPreview === normalizedTarget ||
+    preview === statusDetail ||
+    isMachinePreview(preview)
+  ) {
+    return null;
+  }
+
+  return strippedPreview || preview;
+};
+
+const getActionLabel = (toolName: string, actionMeta: IToolActionMeta): string =>
+  TOOL_DISPLAY_BY_NAME[toolName] ?? actionMeta.verb;
+
+const isGenericTarget = (target: string, fallbackTarget: string): boolean =>
+  target === fallbackTarget || GENERIC_TARGET_VALUES.has(target);
+
+const hasLeafLabel = (items: readonly string[], label: string): boolean =>
+  items.some((item) => item.startsWith(`${label}：`));
+
+const getTargetLeafLabel = (
+  actionKind: TToolActionKind,
+  target: string,
+  fallbackTarget: string,
+  existingDetails: readonly string[],
+): string | null => {
+  if (!target || isGenericTarget(target, fallbackTarget) || isMachinePreview(target)) {
+    return null;
+  }
+
+  if (actionKind === 'read' && !hasLeafLabel(existingDetails, '文件')) {
+    return `文件：${target}`;
+  }
+
+  if (actionKind === 'tree' && !hasLeafLabel(existingDetails, '目录')) {
+    return `目录：${target}`;
+  }
+
+  if (
+    (actionKind === 'fileSearch' || actionKind === 'symbolSearch') &&
+    !hasLeafLabel(existingDetails, '范围')
+  ) {
+    return `范围：${target}`;
+  }
+
+  if ((actionKind === 'web' || actionKind === 'webFetch') && !hasLeafLabel(existingDetails, '查询')) {
+    return `目标：${target}`;
+  }
+
+  return `目标：${target}`;
+};
 
 const formatElapsed = (elapsedMs: number | undefined): string | null => {
   if (elapsedMs === undefined) {
@@ -282,85 +466,269 @@ const uniqueStrings = (values: readonly string[]): string[] => {
 };
 
 const buildTimelineItem = (toolCall: IAiToolCall): IToolTimelineItem => {
-  const actionMeta = TOOL_ACTION_META[getActionKind(toolCall.name)];
+  const actionKind = getActionKind(toolCall.name);
+  const actionMeta = TOOL_ACTION_META[actionKind];
   const statusMeta = TOOL_STATUS_META[toolCall.status];
-  const parsedTarget = parseTarget(stripTargetNoise(getPreviewSource(toolCall, actionMeta.fallbackTarget)));
+  const parsedTarget = parseTarget(stripTargetNoise(getTargetSource(toolCall, actionMeta.fallbackTarget)));
   const target = parsedTarget.target || actionMeta.fallbackTarget;
   const elapsed = formatElapsed(toolCall.elapsedMs);
-  const headline = `${toolCall.status === 'succeeded' ? actionMeta.completedVerb : actionMeta.verb} ${target}`;
-  const detailRows = uniqueStrings([
-    elapsed ? `${statusMeta.detail}，耗时 ${elapsed}` : statusMeta.detail,
-    normalizeText(toolCall.summary),
+  const actionLabel = getActionLabel(toolCall.name, actionMeta);
+  const headline = `${actionLabel} · ${target}`;
+  const preview = getDetailPreview(toolCall.summary, target, statusMeta.detail);
+  const detailItems = uniqueStrings(toolCall.detailItems ?? [])
+    .filter((item) => !isMachinePreview(item))
+    .slice(0, 4);
+  const lineRange = parsedTarget.lineRange;
+  const metaItems = uniqueStrings([
+    getTargetLeafLabel(actionKind, target, actionMeta.fallbackTarget, detailItems) ?? '',
+    lineRange ? `位置：${lineRange}` : '',
+    elapsed ? `耗时：${elapsed}` : '',
+    preview ? `结果：${preview}` : '',
+    detailItems.length || preview ? '' : `状态：${statusMeta.detail}`,
   ]);
-  const chips = uniqueStrings([
-    target,
-    parsedTarget.lineRange ?? '',
-  ]);
+  const leafItems = uniqueStrings([
+    ...detailItems,
+    ...metaItems,
+  ]).slice(0, 7);
 
   return {
     ...toolCall,
+    actionLabel,
     headline,
     statusLabel: statusMeta.label,
-    detailRows,
-    chips,
-    lineRange: parsedTarget.lineRange,
+    target,
+    preview,
+    leafItems,
+    lineRange,
     toolIcon: actionMeta.icon,
-    statusIcon: statusMeta.icon,
-    isSpinning: toolCall.status === 'running',
-    isOpen: false,
   };
 };
 
-const items = computed(() => props.toolCalls.map(buildTimelineItem));
+const formatActivityDetail = (detail: IAgentActivityDetail): string =>
+  `${detail.label}：${detail.value}`;
+
+const buildActivityLeafItems = (activity: IAgentActivity): string[] => {
+  const detailItems = (activity.details ?? [])
+    .map(formatActivityDetail)
+    .filter((item) => !isMachinePreview(item));
+  const output = activity.outputSummary && !isMachinePreview(activity.outputSummary)
+    ? `结果：${activity.outputSummary}`
+    : '';
+  const error = activity.error?.message ? `错误：${activity.error.message}` : '';
+  const duration = formatElapsed(activity.durationMs);
+
+  return uniqueStrings([
+    ...detailItems,
+    output,
+    error,
+    duration ? `耗时：${duration}` : '',
+    detailItems.length || output || error ? '' : `状态：${TOOL_STATUS_META[
+      ACTIVITY_STATUS_TO_TOOL_STATUS[activity.status]
+    ].detail}`,
+  ]).slice(0, 7);
+};
+
+const buildTimelineItemFromActivity = (activity: IAgentActivity): IToolTimelineItem => {
+  const status = ACTIVITY_STATUS_TO_TOOL_STATUS[activity.status];
+  const target = normalizeText(
+    activity.description ?? activity.inputSummary ?? activity.outputSummary ?? '',
+  );
+  const fallbackTarget = activity.kind === 'search' ? '检索' : '任务';
+  const displayTarget = target || fallbackTarget;
+  const preview = activity.outputSummary ?? activity.error?.message ?? null;
+
+  return {
+    id: activity.id,
+    name: activity.tool?.name ?? activity.kind,
+    status,
+    summary: activity.outputSummary ?? activity.description ?? activity.title,
+    targetPreview: displayTarget,
+    elapsedMs: activity.durationMs,
+    actionLabel: activity.title,
+    headline: target ? `${activity.title} · ${target}` : activity.title,
+    statusLabel: TOOL_STATUS_META[status].label,
+    target: displayTarget,
+    preview,
+    leafItems: buildActivityLeafItems(activity),
+    lineRange: null,
+    toolIcon: ACTIVITY_KIND_ICON[activity.kind],
+  };
+};
+
+const activityRoot = computed(() =>
+  props.activities?.find((activity) => !activity.parentId) ?? null,
+);
+
+const activityChildren = computed(() => {
+  const root = activityRoot.value;
+
+  if (!root) {
+    return [];
+  }
+
+  return (props.activities ?? []).filter((activity) => activity.parentId === root.id);
+});
+
+const items = computed(() => {
+  if (activityRoot.value) {
+    return activityChildren.value
+      .filter((activity) => activity.kind !== 'reasoning_summary' && activity.kind !== 'llm')
+      .map(buildTimelineItemFromActivity);
+  }
+
+  return props.toolCalls.map(buildTimelineItem);
+});
+
+const processItems = computed(() => {
+  if (activityRoot.value) {
+    return uniqueStrings(
+      activityChildren.value
+        .filter((activity) => activity.kind === 'reasoning_summary' || activity.kind === 'llm')
+        .map((activity) => activity.description ?? activity.title),
+    ).slice(-3);
+  }
+
+  const activityTitle = normalizeText(props.activityText ?? '');
+
+  return uniqueStrings(props.activityTrail ?? [])
+    .filter((item) => !isMachinePreview(item))
+    .filter((item) => normalizeText(item) !== activityTitle)
+    .slice(-2);
+});
+
+const getPrimaryItem = (timelineItems: readonly IToolTimelineItem[]): IToolTimelineItem | null => {
+  const running = timelineItems.find((item) => item.status === 'running');
+  if (running) {
+    return running;
+  }
+
+  const failed = timelineItems.find((item) => item.status === 'failed');
+  if (failed) {
+    return failed;
+  }
+
+  return timelineItems[timelineItems.length - 1] ?? null;
+};
+
+const getGroupStatus = (timelineItems: readonly IToolTimelineItem[]): IAiToolCall['status'] => {
+  if (timelineItems.some((item) => item.status === 'failed')) {
+    return 'failed';
+  }
+
+  if (timelineItems.some((item) => item.status === 'running')) {
+    return 'running';
+  }
+
+  if (timelineItems.some((item) => item.status === 'pending')) {
+    return 'pending';
+  }
+
+  if (timelineItems.some((item) => item.status === 'denied')) {
+    return 'denied';
+  }
+
+  return 'succeeded';
+};
+
+const activityRow = computed<IToolActivityRow | null>(() => {
+  const root = activityRoot.value;
+  if (root) {
+    const status = ACTIVITY_STATUS_TO_TOOL_STATUS[root.status];
+    const statusMeta = TOOL_STATUS_META[status];
+
+    return {
+      id: root.id,
+      title: root.title,
+      status,
+      statusIcon: statusMeta.icon,
+      isSpinning: status === 'running',
+    };
+  }
+
+  const trimmedActivity = props.activityText?.trim();
+  if (!trimmedActivity && !items.value.length) {
+    return null;
+  }
+
+  const primaryItem = getPrimaryItem(items.value);
+  const status = getGroupStatus(items.value);
+  const statusMeta = TOOL_STATUS_META[status];
+
+  return {
+    id: 'current-activity',
+    title: trimmedActivity || primaryItem?.headline || statusMeta.detail,
+    status,
+    statusIcon: statusMeta.icon,
+    isSpinning: status === 'running',
+  };
+});
 </script>
 
 <template>
   <section
-    v-if="items.length"
+    v-if="activityRow"
     class="ai-tool-activity-inline ai-tool-run-timeline"
-    aria-label="工具调用时间线"
+    :class="`is-${activityRow.status}`"
+    aria-label="工具调用树"
   >
-    <ol class="ai-tool-run-list">
+    <ol class="ai-tool-tree">
       <li
-        v-for="item in items"
-        :key="item.id"
-        class="ai-tool-run-item"
-        :class="`is-${item.status}`"
+        class="ai-tool-tree-node ai-tool-run-item ai-tool-run-current"
+        :class="`is-${activityRow.status}`"
+        aria-live="polite"
       >
-        <span class="ai-tool-run-rail" aria-hidden="true">
-          <component
-            :is="item.statusIcon"
-            class="ai-tool-status-icon"
-            :class="{ 'is-spinning': item.isSpinning }"
-          />
-        </span>
-        <details class="ai-tool-run-details" :open="item.isOpen">
-          <summary class="ai-tool-run-summary">
-            <component :is="item.toolIcon" class="ai-tool-kind-icon" aria-hidden="true" />
-            <span class="ai-tool-run-title" :title="item.headline">{{ item.headline }}</span>
-            <span class="ai-tool-run-status">{{ item.statusLabel }}</span>
+        <details class="ai-tool-node-details ai-tool-root-details" open>
+          <summary class="ai-tool-tree-row ai-tool-tree-root-row">
+            <span class="ai-tool-run-status-node">
+              <component
+                :is="activityRow.statusIcon"
+                class="ai-tool-status-icon"
+                :class="{ 'is-spinning': activityRow.isSpinning }"
+              />
+            </span>
+            <span class="ai-tool-run-title" :title="activityRow.title">{{ activityRow.title }}</span>
             <ChevronRight class="ai-tool-run-chevron" aria-hidden="true" />
           </summary>
-          <div class="ai-tool-run-children">
-            <div
-              v-for="row in item.detailRows"
-              :key="`${item.id}:${row}`"
-              class="ai-tool-run-substep"
+
+          <ol v-if="processItems.length || items.length" class="ai-tool-subtree ai-tool-tool-list">
+            <li
+              v-for="process in processItems"
+              :key="`process:${process}`"
+              class="ai-tool-tree-node ai-tool-detail-node ai-tool-process-node"
             >
-              <span class="ai-tool-run-dot" aria-hidden="true" />
-              <span>{{ row }}</span>
-            </div>
-            <div v-if="item.chips.length" class="ai-tool-run-chips">
-              <span
-                v-for="chip in item.chips"
-                :key="`${item.id}:${chip}`"
-                class="ai-tool-run-chip"
-                :title="chip"
-              >
-                {{ chip }}
-              </span>
-            </div>
-          </div>
+              <span class="ai-tool-leaf-dot" aria-hidden="true" />
+              <span class="ai-tool-run-fact" :title="process">{{ process }}</span>
+            </li>
+            <li
+              v-for="item in items"
+              :key="item.id"
+              class="ai-tool-tree-node ai-tool-run-item"
+              :class="`is-${item.status}`"
+            >
+              <details class="ai-tool-node-details">
+                <summary class="ai-tool-tree-row ai-tool-run-summary">
+                  <span class="ai-tool-run-dot" aria-hidden="true" />
+                  <span class="ai-tool-run-main">
+                    <component :is="item.toolIcon" class="ai-tool-kind-icon" aria-hidden="true" />
+                  <span class="ai-tool-run-action">{{ item.actionLabel }}</span>
+                  <span class="ai-tool-run-target" :title="item.target">{{ item.target }}</span>
+                </span>
+                  <span class="ai-tool-run-status">{{ item.statusLabel }}</span>
+                  <ChevronRight class="ai-tool-run-chevron" aria-hidden="true" />
+                </summary>
+                <ol class="ai-tool-subtree ai-tool-detail-list">
+                  <li
+                    v-for="leaf in item.leafItems"
+                    :key="`${item.id}:leaf:${leaf}`"
+                    class="ai-tool-tree-node ai-tool-detail-node"
+                  >
+                    <span class="ai-tool-leaf-dot" aria-hidden="true" />
+                    <span class="ai-tool-run-fact" :title="leaf">{{ leaf }}</span>
+                  </li>
+                </ol>
+              </details>
+            </li>
+          </ol>
         </details>
       </li>
     </ol>
@@ -369,64 +737,26 @@ const items = computed(() => props.toolCalls.map(buildTimelineItem));
 
 <style scoped>
 .ai-tool-run-timeline {
+  width: min(100%, 640px);
   color: var(--text-tertiary);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13px;
+  line-height: 20px;
 }
 
-.ai-tool-run-list {
-  display: grid;
-  gap: 1px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.ai-tool-run-item {
-  position: relative;
-  display: grid;
-  min-width: 0;
-  grid-template-columns: 18px minmax(0, 1fr);
-  column-gap: 7px;
-}
-
-.ai-tool-run-item::before {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 8px;
-  width: 1px;
-  background: color-mix(in srgb, var(--shell-divider) 72%, transparent);
-  content: '';
-}
-
-.ai-tool-run-item:first-child::before {
-  top: 15px;
-}
-
-.ai-tool-run-item:last-child::before {
-  bottom: calc(100% - 15px);
-}
-
-.ai-tool-run-item:only-child::before {
-  display: none;
-}
-
-.ai-tool-run-rail {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  min-height: 31px;
-  align-items: flex-start;
+.ai-tool-run-status-node {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
   justify-content: center;
-  padding-top: 9px;
+  border-radius: 999px;
+  background: var(--surface-panel);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--shell-divider) 78%, transparent);
 }
 
 .ai-tool-status-icon {
   width: 13px;
   height: 13px;
-  border-radius: 999px;
-  background: var(--surface-base);
   color: var(--text-quaternary);
   stroke-width: 2;
 }
@@ -436,29 +766,119 @@ const items = computed(() => props.toolCalls.map(buildTimelineItem));
   color: var(--text-secondary);
 }
 
-.ai-tool-run-details {
+.ai-tool-run-title {
   min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 520;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  unicode-bidi: plaintext;
+  white-space: nowrap;
+}
+
+.ai-tool-tree,
+.ai-tool-subtree {
+  display: grid;
+  min-width: 0;
+  list-style: none;
+}
+
+.ai-tool-tree {
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+}
+
+.ai-tool-subtree {
+  gap: 3px;
+  margin: 5px 0 0 10px;
+  border-left: 1px solid color-mix(in srgb, var(--shell-divider) 72%, transparent);
+  padding: 3px 0 5px 16px;
+}
+
+.ai-tool-tree-node {
+  position: relative;
+  min-width: 0;
+}
+
+.ai-tool-run-item {
+  padding: 6px 0;
+  animation: ai-tool-row-enter 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.ai-tool-subtree > .ai-tool-tree-node::before {
+  position: absolute;
+  top: 16px;
+  left: -16px;
+  width: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--shell-divider) 72%, transparent);
+  content: '';
+}
+
+.ai-tool-run-current {
+  padding-top: 0;
+}
+
+.ai-tool-tree-row {
+  display: grid;
+  min-width: 0;
+  align-items: center;
+  column-gap: 7px;
+}
+
+.ai-tool-tree-root-row {
+  grid-template-columns: 20px minmax(0, 1fr) 14px;
+  min-height: 30px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  list-style: none;
+  transition:
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ai-tool-tree-root-row::-webkit-details-marker,
+.ai-tool-run-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ai-tool-run-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--text-quaternary);
+}
+
+.ai-tool-leaf-dot {
+  width: 3px;
+  height: 3px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-quaternary) 72%, transparent);
 }
 
 .ai-tool-run-summary {
-  display: grid;
-  min-width: 0;
-  min-height: 31px;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 6px;
+  grid-template-columns: 9px minmax(0, 1fr) auto 14px;
+  min-height: 28px;
+  gap: 7px;
   border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  cursor: default;
+  cursor: pointer;
   list-style: none;
-  padding: 4px 6px;
+  padding: 1px 2px 1px 0;
   transition:
-    background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 150ms cubic-bezier(0.23, 1, 0.32, 1);
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.ai-tool-run-summary::-webkit-details-marker {
-  display: none;
+.ai-tool-run-main {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
 }
 
 .ai-tool-kind-icon {
@@ -468,11 +888,16 @@ const items = computed(() => props.toolCalls.map(buildTimelineItem));
   stroke-width: 1.9;
 }
 
-.ai-tool-run-title {
+.ai-tool-run-action {
+  color: var(--text-secondary);
+  font-weight: 520;
+  white-space: nowrap;
+}
+
+.ai-tool-run-target {
   min-width: 0;
   overflow: hidden;
-  color: inherit;
-  font-weight: 500;
+  color: var(--text-tertiary);
   text-overflow: ellipsis;
   unicode-bidi: plaintext;
   white-space: nowrap;
@@ -480,97 +905,100 @@ const items = computed(() => props.toolCalls.map(buildTimelineItem));
 
 .ai-tool-run-status {
   color: var(--text-quaternary);
-  font-size: 11px;
-  line-height: 16px;
+  font-size: 12px;
+  line-height: 18px;
   white-space: nowrap;
 }
 
-.ai-tool-run-chevron {
-  width: 12px;
-  height: 12px;
-  color: var(--text-quaternary);
-  stroke-width: 2;
-  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.ai-tool-run-details[open] .ai-tool-run-chevron {
-  transform: rotate(90deg);
-}
-
-.ai-tool-run-children {
-  display: grid;
-  gap: 5px;
-  padding: 1px 6px 8px 12px;
-}
-
-.ai-tool-run-substep {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: 7px minmax(0, 1fr);
-  align-items: baseline;
-  column-gap: 8px;
-  color: var(--text-tertiary);
-}
-
-.ai-tool-run-dot {
-  width: 3px;
-  height: 3px;
-  border-radius: 999px;
-  background: var(--text-quaternary);
-}
-
-.ai-tool-run-chips {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding-left: 15px;
-}
-
-.ai-tool-run-chip {
+.ai-tool-run-fact {
   max-width: 100%;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--shell-divider) 74%, transparent);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--surface-soft) 76%, transparent);
-  color: var(--text-secondary);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: 11px;
-  line-height: 16px;
-  padding: 1px 6px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 19px;
   text-overflow: ellipsis;
   unicode-bidi: plaintext;
   white-space: nowrap;
 }
 
-.ai-tool-run-item.is-running .ai-tool-run-summary {
-  background: color-mix(in srgb, var(--surface-soft) 62%, transparent);
+.ai-tool-detail-list {
+  margin-top: 4px;
+}
+
+.ai-tool-detail-node {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 7px minmax(0, 1fr);
+  column-gap: 8px;
+  padding: 2px 0;
+}
+
+.ai-tool-run-timeline.is-running .ai-tool-tree-root-row {
   color: var(--text-primary);
 }
 
-.ai-tool-run-item.is-succeeded .ai-tool-status-icon {
+.ai-tool-run-timeline.is-succeeded .ai-tool-status-icon,
+.ai-tool-run-current.is-succeeded .ai-tool-status-icon {
   color: var(--success);
 }
 
-.ai-tool-run-item.is-failed .ai-tool-status-icon,
+.ai-tool-run-item.is-succeeded .ai-tool-run-dot {
+  background: var(--success);
+}
+
+.ai-tool-run-timeline.is-failed .ai-tool-status-icon,
+.ai-tool-run-current.is-failed .ai-tool-status-icon {
+  color: var(--danger);
+}
+
+.ai-tool-run-item.is-failed .ai-tool-run-dot {
+  background: var(--danger);
+}
+
 .ai-tool-run-item.is-failed .ai-tool-run-status {
   color: var(--danger);
 }
 
-.ai-tool-run-item.is-denied,
-.ai-tool-run-item.is-pending {
+.ai-tool-run-item.is-running .ai-tool-run-dot {
+  background: var(--text-secondary);
+}
+
+.ai-tool-run-current.is-running .ai-tool-run-status-node {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--shell-divider) 78%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--accent-strong) 8%, transparent);
+}
+
+.ai-tool-run-current.is-denied .ai-tool-status-icon,
+.ai-tool-run-current.is-pending .ai-tool-status-icon {
   color: var(--text-quaternary);
 }
 
-.ai-tool-run-item.is-denied .ai-tool-status-icon {
+.ai-tool-run-chevron {
+  width: 13px;
+  height: 13px;
   color: var(--text-quaternary);
+  stroke-width: 2;
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ai-tool-node-details[open] > .ai-tool-tree-row .ai-tool-run-chevron {
+  transform: rotate(90deg);
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .ai-tool-tree-root-row:hover,
   .ai-tool-run-summary:hover {
-    background: color-mix(in srgb, var(--surface-hover) 74%, transparent);
+    background: color-mix(in srgb, var(--surface-hover) 48%, transparent);
     color: var(--text-primary);
   }
+}
+
+.ai-tool-tree-root-row:focus-visible,
+.ai-tool-run-summary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-strong) 46%, transparent);
+  outline-offset: 2px;
 }
 
 @keyframes ai-tool-status-spin {
@@ -579,8 +1007,21 @@ const items = computed(() => props.toolCalls.map(buildTimelineItem));
   }
 }
 
+@keyframes ai-tool-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ai-tool-status-icon.is-spinning,
+  .ai-tool-run-item,
   .ai-tool-run-chevron {
     animation: none;
     transition: none;

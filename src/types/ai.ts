@@ -1,4 +1,5 @@
 import type { IAiContextReference } from '@/types/ai-context';
+import type { IAgentActivity } from '@/types/agent-activity';
 
 export type TAiProviderType =
   | 'litellm';
@@ -85,6 +86,9 @@ export type {
 
 export interface IAiChatStreamRenderState {
   status: 'streaming' | 'completed' | 'cancelled';
+  activityText?: string;
+  activityTrail?: string[];
+  activities?: IAgentActivity[];
 }
 
 export type TAiChatMessageActionId = 'allow-agent-execution';
@@ -119,6 +123,7 @@ export interface IAiToolCall {
   status: 'pending' | 'running' | 'succeeded' | 'failed' | 'denied';
   summary: string;
   targetPreview?: string;
+  detailItems?: string[];
   elapsedMs?: number;
 }
 

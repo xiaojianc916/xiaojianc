@@ -47,7 +47,46 @@ const hasRenderableContent = computed(() =>
 
 const hasToolCalls = computed(() => Boolean(props.message.toolCalls?.length));
 
+const hasActivityTrail = computed(() => Boolean(props.message.stream?.activityTrail?.length));
+
+const hasActivities = computed(() => Boolean(props.message.stream?.activities?.length));
+
+const shouldShowActivityTimeline = computed(
+  () => props.message.role === 'assistant'
+    && (hasToolCalls.value || hasActivityTrail.value || hasActivities.value),
+);
+
 const hasMessageActions = computed(() => Boolean(props.message.actions?.length));
+
+const normalizeMessageDisplayText = (value: string | undefined): string =>
+  value?.normalize('NFC').replace(/\s+/gu, ' ').trim() ?? '';
+
+const activityOnlyTexts = computed(() => {
+  const stream = props.message.stream;
+  const values: string[] = [];
+
+  if (!stream) {
+    return new Set<string>();
+  }
+
+  values.push(stream.activityText ?? '');
+  values.push(...(stream.activityTrail ?? []));
+
+  for (const activity of stream.activities ?? []) {
+    if (activity.kind !== 'reasoning_summary' && activity.kind !== 'llm') {
+      continue;
+    }
+
+    values.push(activity.title);
+    values.push(activity.description ?? '');
+  }
+
+  return new Set(
+    values
+      .map(normalizeMessageDisplayText)
+      .filter((value) => value.length > 0),
+  );
+});
 
 const isToolProgressContent = computed(() => {
   if (props.message.role !== 'assistant' || !hasToolCalls.value) {
@@ -63,12 +102,21 @@ const isToolProgressContent = computed(() => {
   ].some((prefix) => content.startsWith(prefix));
 });
 
+const isActivityOnlyContent = computed(
+  () => props.message.role === 'assistant'
+    && props.message.stream?.status === 'streaming'
+    && shouldShowActivityTimeline.value
+    && activityOnlyTexts.value.has(normalizeMessageDisplayText(props.message.content)),
+);
+
 const shouldShowMessageBubble = computed(
-  () => hasRenderableContent.value && !isToolProgressContent.value,
+  () => hasRenderableContent.value
+    && !isToolProgressContent.value
+    && !isActivityOnlyContent.value,
 );
 
 const copyableContent = computed(() => {
-  if (isToolProgressContent.value) {
+  if (isToolProgressContent.value || !shouldShowMessageBubble.value) {
     return '';
   }
 
@@ -77,17 +125,22 @@ const copyableContent = computed(() => {
 
 const canCopyContent = computed(() => copyableContent.value.trim().length > 0);
 
+const inlineLoaderLabel = computed(() =>
+  props.message.stream?.activityText?.trim() || 'AI 正在生成回答',
+);
+
 const shouldShowInlineLoader = computed(
   () => props.message.role === 'assistant'
     && props.message.stream?.status === 'streaming'
-    && !hasRenderableContent.value
-    && !hasToolCalls.value,
+    && (!hasRenderableContent.value || isToolProgressContent.value)
+    && !hasToolCalls.value
+    && !shouldShowActivityTimeline.value
 );
 
 const shouldRenderMessage = computed(
   () => props.message.role === 'user'
     || shouldShowMessageBubble.value
-    || hasToolCalls.value
+    || shouldShowActivityTimeline.value
     || shouldShowInlineLoader.value
     || hasMessageActions.value,
 );
@@ -143,11 +196,17 @@ onBeforeUnmount(() => {
     :class="[`is-${message.role}`, { 'is-inline-loading': shouldShowInlineLoader }]">
     <AiProviderIcon v-if="message.role !== 'user'" class="ai-logo" :platform-id="platformId" :title="providerLabel" />
     <div class="ai-message-main">
-      <AiToolActivityInline v-if="message.toolCalls?.length" :tool-calls="message.toolCalls" />
       <div v-if="shouldShowInlineLoader" class="ai-message-status-line" role="status" aria-live="polite">
         <LoaderCircle class="ai-message-status-icon" aria-hidden="true" />
-        <span>AI 正在生成回答</span>
+        <span>{{ inlineLoaderLabel }}</span>
       </div>
+      <AiToolActivityInline
+        v-if="shouldShowActivityTimeline"
+        :tool-calls="message.toolCalls ?? []"
+        :activity-text="message.stream?.activityText"
+        :activity-trail="message.stream?.activityTrail"
+        :activities="message.stream?.activities"
+      />
       <div v-if="userAttachmentReferences.length" class="ai-message-attachments" aria-label="已发送附件">
         <span v-for="reference in userAttachmentReferences" :key="reference.id" class="ai-message-attachment-chip">
           <svg v-if="reference.kind === 'image-attachment'" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -222,7 +281,7 @@ onBeforeUnmount(() => {
 }
 
 .ai-message-main>.ai-tool-activity-inline+.ai-message-bubble,
-.ai-message-main>.ai-tool-activity-inline+.ai-message-status-line {
+.ai-message-main>.ai-message-status-line+.ai-message-bubble {
   margin-top: 6px;
 }
 

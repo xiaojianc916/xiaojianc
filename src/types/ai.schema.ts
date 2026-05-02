@@ -5,6 +5,7 @@ import {
   aiContextRangeSchema,
   aiContextReferenceSchema,
 } from '@/types/ai-context.schema';
+import { agentActivitySchema } from '@/types/agent-activity.schema';
 import {
   aiWebFetchInputSchema,
   aiWebFetchPayloadSchema,
@@ -91,11 +92,17 @@ export const aiChatMessageSchema = z.object({
     name: z.string().min(1),
     status: z.enum(['pending', 'running', 'succeeded', 'failed', 'denied']),
     summary: z.string(),
+    targetPreview: z.string().min(1).optional(),
+    detailItems: z.array(z.string().min(1)).optional(),
+    elapsedMs: z.number().nonnegative().optional(),
   })).optional(),
   actions: z.array(aiChatMessageActionSchema).optional(),
   agentConfirmation: aiAgentConfirmationStateSchema.optional(),
   stream: z.object({
     status: z.enum(['streaming', 'completed', 'cancelled']),
+    activityText: z.string().min(1).optional(),
+    activityTrail: z.array(z.string().min(1)).optional(),
+    activities: z.array(agentActivitySchema).optional(),
   }).optional(),
 });
 
