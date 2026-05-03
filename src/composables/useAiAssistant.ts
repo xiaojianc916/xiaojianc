@@ -1189,6 +1189,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     fallbackContent: string,
     events: readonly TAgentUiEvent[],
   ): void => {
+    const currentMessage = messages.value.find((message) => message.id === assistantMessageId);
     const errorEvent = [...events]
       .reverse()
       .find((event): event is Extract<TAgentUiEvent, { type: 'error' }> =>
@@ -1206,11 +1207,13 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       );
     const doneResult = hasMeaningfulAssistantText(doneEvent?.result) ? doneEvent.result : null;
     const latestDelta = hasMeaningfulAssistantText(messageEvent?.text) ? messageEvent.text : null;
+    const currentVisibleContent = hasMeaningfulAssistantText(currentMessage?.content)
+      ? currentMessage?.content
+      : null;
     const content = errorEvent
       ? `Agent 执行失败：${errorEvent.message}`
-      : doneResult ?? latestDelta ?? fallbackContent;
+      : doneResult ?? latestDelta ?? currentVisibleContent ?? fallbackContent;
     const streamStatus = errorEvent || doneEvent ? 'completed' : 'streaming';
-    const currentMessage = messages.value.find((message) => message.id === assistantMessageId);
     const currentActivityEvents = currentMessage?.stream?.activityEvents;
     const activityProjection = projectSidecarEventsToActivityState({
       assistantMessageId,

@@ -74,6 +74,43 @@ describe('AiAgentRuntimeTimeline', () => {
         expect(wrapper.text()).toContain('开始调用 read_file');
     });
 
+    it('会合并连续 reasoning delta，避免一词一行', () => {
+        const wrapper = mount(AiAgentRuntimeTimeline, {
+            props: {
+                events: [
+                    createEvent({
+                        id: 'reasoning-word-1',
+                        type: 'agent.reasoning.delta',
+                        text: 'Given ',
+                    }),
+                    createEvent({
+                        id: 'reasoning-word-2',
+                        type: 'agent.reasoning.delta',
+                        text: 'the ',
+                    }),
+                    createEvent({
+                        id: 'reasoning-word-3',
+                        type: 'agent.reasoning.delta',
+                        text: 'file ',
+                    }),
+                    createEvent({
+                        id: 'reasoning-word-4',
+                        type: 'agent.reasoning.delta',
+                        text: 'extension ',
+                    }),
+                    createEvent({
+                        id: 'reasoning-word-5',
+                        type: 'agent.reasoning.delta',
+                        text: 'is .sh',
+                    }),
+                ],
+            },
+        });
+
+        expect(wrapper.findAll('.agent-line')).toHaveLength(1);
+        expect(wrapper.text()).toContain('Given the file extension is .sh');
+    });
+
     it('超长 reasoning 默认展开，并支持收起与再次展开', async () => {
         const longReasoning = Array.from({ length: 980 }, () => '思').join('');
         const wrapper = mount(AiAgentRuntimeTimeline, {

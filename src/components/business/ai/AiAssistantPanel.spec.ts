@@ -363,7 +363,9 @@ describe('AiAssistantPanel', () => {
             },
             global: {
                 stubs: {
-                    AiChatThread: { template: '<div data-testid="chat-thread" />' },
+                    AiChatThread: {
+                        template: '<div data-testid="chat-thread"><slot name="before-messages" /><slot /></div>',
+                    },
                     AiContextChips: { template: '<div />' },
                     AiPatchPreview: { template: '<div class="patch-preview-stub" />' },
                     AiPromptInput: { template: '<div />' },
@@ -448,7 +450,9 @@ describe('AiAssistantPanel', () => {
             },
             global: {
                 stubs: {
-                    AiChatThread: { template: '<div data-testid="chat-thread" />' },
+                    AiChatThread: {
+                        template: '<div data-testid="chat-thread"><slot name="before-messages" /><slot name="before-last-assistant" /><slot /></div>',
+                    },
                     AiContextChips: { template: '<div />' },
                     AiPatchPreview: { template: '<div class="patch-preview-stub" />' },
                     AiPromptInput: { template: '<div />' },

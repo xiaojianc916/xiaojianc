@@ -829,8 +829,10 @@ onBeforeUnmount(() => {
 
     <AiChatThread :messages="threadMessages" :is-typing="assistant.isSending.value" :platform-id="aiIconPlatformId"
       :provider-label="aiIconTitle" @message-action="handleMessageAction">
+      <template #before-last-assistant>
+        <AiAgentRuntimeTimeline :events="assistant.runtimeTimelineEvents.value" />
+      </template>
     </AiChatThread>
-    <AiAgentRuntimeTimeline :events="assistant.runtimeTimelineEvents.value" />
     <div v-if="fileRollbackPrompt" class="ai-file-rollback-entry" :class="`is-${fileRollbackPrompt.status}`">
       <span class="ai-file-rollback-entry__line" aria-hidden="true"></span>
       <button type="button" class="ai-file-rollback-entry__button" :disabled="isFileRollbackDisabled"

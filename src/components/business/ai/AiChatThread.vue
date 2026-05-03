@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { IAiChatMessage, TAiChatMessageActionId } from '@/types/ai';
 import type { TAiServicePlatformId } from '@/constants/ai-providers';
+import type { IAiChatMessage, TAiChatMessageActionId } from '@/types/ai';
 import { LoaderCircle } from 'lucide-vue-next';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import AiMessageItem from './AiMessageItem.vue';
@@ -47,6 +47,18 @@ const shouldRenderStandaloneTyping = computed(
   () => props.isTyping && !hasInlineProgressMessage.value,
 );
 
+const lastAssistantMessageId = computed(() => {
+  for (let index = props.messages.length - 1; index >= 0; index -= 1) {
+    const message = props.messages[index];
+
+    if (message?.role === 'assistant') {
+      return message.id;
+    }
+  }
+
+  return null;
+});
+
 const handleMessageAction = (
   messageId: string,
   actionId: TAiChatMessageActionId,
@@ -75,14 +87,12 @@ onMounted(() => {
 
 <template>
   <div ref="listRef" class="ai-chat-list" aria-label="AI 对话记录">
-    <AiMessageItem
-      v-for="message in messages"
-      :key="message.id"
-      :message="message"
-      :platform-id="platformId"
-      :provider-label="providerLabel"
-      @message-action="handleMessageAction"
-    />
+    <slot name="before-messages"></slot>
+    <template v-for="message in messages" :key="message.id">
+      <slot v-if="message.id === lastAssistantMessageId" name="before-last-assistant" :message="message"></slot>
+      <AiMessageItem :message="message" :platform-id="platformId" :provider-label="providerLabel"
+        @message-action="handleMessageAction" />
+    </template>
     <slot name="after-messages"></slot>
     <article v-if="shouldRenderStandaloneTyping" class="ai-message-typing" aria-label="AI 正在准备回复">
       <AiProviderIcon class="ai-logo" :platform-id="platformId" :title="providerLabel" />
