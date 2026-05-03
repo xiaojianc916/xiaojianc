@@ -30,6 +30,7 @@ pub use ai::{
     ai_inline_complete, ai_list_provider_profiles, ai_list_tools, ai_plan_task, ai_propose_patch,
     ai_query_index, ai_save_config, ai_save_credentials, ai_switch_provider_profile,
     ai_test_provider, ai_test_provider_config, ai_web_fetch, ai_web_search,
+    ai_narrate_activity, ai_narrate_activity_stream,
 };
 pub use contracts::{
     AnalyzeScriptPayload, AnalyzeScriptRequest, ExecutionEnvironment, ExecutionOption,

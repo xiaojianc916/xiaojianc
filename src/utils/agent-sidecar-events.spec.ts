@@ -203,6 +203,23 @@ describe('agent-sidecar-events', () => {
       streamStatus: 'streaming',
       events: [
         {
+          type: 'agent_event',
+          event: {
+            id: 'run-start-1',
+            type: 'agent.run.started',
+            runId: 'run-1',
+            sessionId: 'session-1',
+            agentId: 'agent-1',
+            timestamp: '2026-05-02T09:59:59.000Z',
+            seq: 0,
+            schemaVersion: 1,
+            redacted: true,
+            visibility: 'user',
+            level: 'info',
+            inputPreview: '{"nextThoughtNeeded":true,"thought":"检查工作区"}',
+          },
+        },
+        {
           type: 'tool_start',
           toolName: 'search_files',
           input: {
@@ -230,7 +247,7 @@ describe('agent-sidecar-events', () => {
       ],
     });
 
-    expect(runningProjection.activityText).toBe('在 D:/repo/src 搜索「useAiAssistant」');
+    expect(runningProjection.activityText).toBe('正在搜索「useAiAssistant」，范围 D:/repo/src');
     expect(runningProjection.activityTrail).toEqual(['将修改 2 个文件']);
     expect(runningProjection.activityEvents.map((event) => event.type)).toContain('ACTIVITY_SNAPSHOT');
 
@@ -299,7 +316,69 @@ describe('agent-sidecar-events', () => {
     expect(completedProjection.activityEvents.some((event) => event.type === 'ACTIVITY_DELTA')).toBe(true);
     expect(completedProjection.activities[0]).toMatchObject({
       kind: 'run',
-      title: '在 D:/repo/src 搜索「useAiAssistant」',
+      title: '检查工作区',
     });
+  });
+
+  it('有工具事件时不会把逐字增长的文本 delta 堆进 activityTrail', () => {
+    const projection = projectSidecarEventsToActivityState({
+      assistantMessageId: 'assistant-delta-1',
+      fallbackActivityText: '请求处理中',
+      streamStatus: 'streaming',
+      events: [
+        {
+          type: 'tool_start',
+          toolName: 'tavily_search',
+          input: {
+            query: 'Meta Llama 2026 open source AI',
+          },
+        },
+        {
+          type: 'agent_event',
+          event: {
+            id: 'text-delta-1',
+            type: 'agent.text.delta',
+            runId: 'run-1',
+            sessionId: 'session-1',
+            agentId: 'agent-1',
+            timestamp: '2026-05-03T10:00:00.000Z',
+            seq: 1,
+            schemaVersion: 1,
+            redacted: true,
+            visibility: 'user',
+            level: 'info',
+            text: '让我先搜索最新的 AI 格局信息，然后为你做系统分析。',
+          },
+        },
+        {
+          type: 'message_delta',
+          text: '让我先搜索最新的 AI 格局信息，然后为你做系统分析。再补充一些关于开源模型和中国 AI 格局的信息。',
+        },
+        {
+          type: 'agent_event',
+          event: {
+            id: 'tool-progress-1',
+            type: 'agent.tool.progress',
+            runId: 'run-1',
+            sessionId: 'session-1',
+            agentId: 'agent-1',
+            timestamp: '2026-05-03T10:00:01.000Z',
+            seq: 2,
+            schemaVersion: 1,
+            redacted: true,
+            visibility: 'user',
+            level: 'info',
+            dataPreview: '已搜索 7 个 AI 领域参与者',
+          },
+        },
+      ],
+    });
+
+    expect(projection.activityText).toBe('正在联网搜索「Meta Llama 2026 open source AI」');
+    expect(projection.toolCalls[0]).toMatchObject({
+      name: 'tavily_search',
+      status: 'running',
+    });
+    expect(projection.activityTrail).toEqual(['已搜索 7 个 AI 领域参与者']);
   });
 });

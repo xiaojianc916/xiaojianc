@@ -479,6 +479,84 @@ pub struct AiConversationTitlePayload {
     pub(crate) model: String,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiNarratorChangedFilePayload {
+    pub(crate) path: String,
+    pub(crate) additions: Option<u32>,
+    pub(crate) deletions: Option<u32>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiNarratorReadFilePayload {
+    pub(crate) path: String,
+    pub(crate) range: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiNarratorSearchSummaryPayload {
+    pub(crate) query: String,
+    pub(crate) result_count: Option<u32>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiNarratorFactsPayload {
+    pub(crate) user_goal: String,
+    pub(crate) trigger: String,
+    pub(crate) recent_actions: Vec<String>,
+    pub(crate) changed_files: Vec<AiNarratorChangedFilePayload>,
+    pub(crate) read_files: Vec<AiNarratorReadFilePayload>,
+    pub(crate) search_summary: Option<AiNarratorSearchSummaryPayload>,
+    pub(crate) error_summary: Option<String>,
+    pub(crate) current_finding: Option<String>,
+    pub(crate) next_action: Option<String>,
+    pub(crate) previous_narrations: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiNarratorRequest {
+    pub(crate) run_id: String,
+    pub(crate) message_id: String,
+    pub(crate) turn_id: Option<String>,
+    pub(crate) facts_hash: String,
+    pub(crate) sequence: u32,
+    pub(crate) facts: AiNarratorFactsPayload,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiNarratorResponsePayload {
+    pub(crate) run_id: String,
+    pub(crate) message_id: String,
+    pub(crate) turn_id: Option<String>,
+    pub(crate) facts_hash: String,
+    pub(crate) sequence: u32,
+    pub(crate) trigger: String,
+    pub(crate) should_show: bool,
+    pub(crate) tone: String,
+    pub(crate) text: String,
+    pub(crate) related_files: Vec<String>,
+    pub(crate) confidence: Option<String>,
+    pub(crate) model: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiNarratorStreamPayload {
+    pub(crate) stream_id: String,
+    pub(crate) run_id: String,
+    pub(crate) message_id: String,
+    pub(crate) turn_id: Option<String>,
+    pub(crate) facts_hash: String,
+    pub(crate) sequence: u32,
+    pub(crate) trigger: String,
+    pub(crate) model: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiChatStreamPayload {

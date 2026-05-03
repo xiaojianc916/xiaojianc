@@ -16,11 +16,11 @@ import type {
   IAiAgentNetworkPermissionPayload,
   IAiAgentPlanPayload,
   IAiAgentPlanRequest,
+  IAiAgentResolveToolConfirmationRequest,
   IAiAgentRunIdRequest,
   IAiAgentRunPayload,
   IAiAgentRunPlanRequest,
   IAiAgentRunStepRequest,
-  IAiAgentResolveToolConfirmationRequest,
   IAiAgentSetNetworkPermissionRequest,
   IAiApplyPatchPayload,
   IAiApplyPatchRequest,
@@ -35,9 +35,12 @@ import type {
   IAiConfigPayload,
   IAiConversationTitlePayload,
   IAiConversationTitleRequest,
-  TAiAgentStreamEvent,
   IAiInlineCompletionRequest,
   IAiInlineCompletionResult,
+  IAiNarratorRequest,
+  IAiNarratorResponse,
+  IAiNarratorStreamEventPayload,
+  IAiNarratorStreamPayload,
   IAiProposePatchPayload,
   IAiProposePatchRequest,
   IAiProviderConnectionPayload,
@@ -55,6 +58,7 @@ import type {
   IAiWebFetchPayload,
   IAiWebSearchInput,
   IAiWebSearchPayload,
+  TAiAgentStreamEvent,
 } from './ai';
 import type {
   IAiEditAuthState,
@@ -267,9 +271,14 @@ export interface ITauriService {
   aiGenerateConversationTitle(
     payload: IAiConversationTitleRequest,
   ): Promise<IAiConversationTitlePayload>;
+  aiNarrateActivity(payload: IAiNarratorRequest): Promise<IAiNarratorResponse>;
+  aiNarrateActivityStream(payload: IAiNarratorRequest): Promise<IAiNarratorStreamPayload>;
   aiChatStream(payload: IAiChatRequest): Promise<IAiChatStreamPayload>;
   aiCancel(payload: { streamId: string }): Promise<void>;
   onAiChatStream(handler: (payload: IAiChatStreamEventPayload) => void): Promise<() => void>;
+  onAiNarratorStream(
+    handler: (payload: IAiNarratorStreamEventPayload) => void,
+  ): Promise<() => void>;
   onAiAgentStream(handler: (payload: TAiAgentStreamEvent) => void): Promise<() => void>;
   aiInlineComplete(payload: IAiInlineCompletionRequest): Promise<IAiInlineCompletionResult>;
   aiCodeAction(payload: IAiCodeActionRequest): Promise<IAiCodeActionResult>;

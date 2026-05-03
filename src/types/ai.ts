@@ -6,6 +6,31 @@ export type TAiProviderType =
 export type TAiModelRole = 'main' | 'narrator';
 export type TAiStatus = 'idle' | 'generating' | 'streaming' | 'error';
 export type TAiChatRole = 'user' | 'assistant' | 'system' | 'tool';
+export type TActivityNoteSource = 'trail' | 'reasoning_summary' | 'narrator';
+export type TActivityNoteTone = 'plan' | 'progress' | 'decision' | 'repair' | 'warning' | 'summary';
+export type TActivityNoteStatus = 'streaming' | 'completed';
+export type TActivityNoteTrigger =
+  | 'run_started'
+  | 'plan_ready'
+  | 'plan_approved'
+  | 'context_checked'
+  | 'search_done'
+  | 'files_read'
+  | 'file_batch_read'
+  | 'web_search_done'
+  | 'time_checked'
+  | 'edit_done'
+  | 'edit_batch_done'
+  | 'patch_failed'
+  | 'verification_started'
+  | 'verification_failed'
+  | 'test_failed'
+  | 'verification_done'
+  | 'git_checked'
+  | 'git_diff_ready'
+  | 'git_commit_ready'
+  | 'git_done'
+  | 'final_summary';
 export type {
   IAiContextRange,
   IAiContextReference,
@@ -74,8 +99,22 @@ export interface IAiChatStreamRenderState {
   status: 'streaming' | 'completed' | 'cancelled';
   activityText?: string;
   activityTrail?: string[];
+  activityNotes?: IActivityNote[];
   activities?: IAgentActivity[];
   activityEvents?: TAgentActivityEvent[];
+}
+
+export interface IActivityNote {
+  id: string;
+  runId: string;
+  source: TActivityNoteSource;
+  trigger: TActivityNoteTrigger;
+  text: string;
+  tone: TActivityNoteTone;
+  status?: TActivityNoteStatus;
+  relatedActionIds: string[];
+  factsHash: string;
+  createdAt: number;
 }
 
 export type TAiChatMessageActionId = 'allow-agent-execution';
@@ -190,6 +229,89 @@ export interface IAiConversationTitleRequest {
 export interface IAiConversationTitlePayload {
   title: string;
   model: string;
+}
+
+export interface IAiNarratorChangedFile {
+  path: string;
+  additions?: number;
+  deletions?: number;
+}
+
+export interface IAiNarratorReadFile {
+  path: string;
+  range?: string;
+}
+
+export interface IAiNarratorSearchSummary {
+  query: string;
+  resultCount?: number;
+}
+
+export interface IAiNarratorFacts {
+  userGoal: string;
+  trigger: TActivityNoteTrigger;
+  recentActions: string[];
+  changedFiles: IAiNarratorChangedFile[];
+  readFiles: IAiNarratorReadFile[];
+  searchSummary?: IAiNarratorSearchSummary;
+  errorSummary?: string;
+  currentFinding?: string;
+  nextAction?: string;
+  previousNarrations: string[];
+}
+
+export interface IAiNarratorRequest {
+  runId: string;
+  messageId: string;
+  turnId?: string | null;
+  factsHash: string;
+  sequence: number;
+  facts: IAiNarratorFacts;
+}
+
+export interface IAiNarratorResponse {
+  runId: string;
+  messageId: string;
+  turnId?: string | null;
+  factsHash: string;
+  sequence: number;
+  trigger: TActivityNoteTrigger;
+  shouldShow: boolean;
+  tone: TActivityNoteTone;
+  text: string;
+  relatedFiles: string[];
+  confidence?: 'low' | 'medium' | 'high' | null;
+  model: string;
+}
+
+export interface IAiNarratorStreamPayload {
+  streamId: string;
+  runId: string;
+  messageId: string;
+  turnId?: string | null;
+  factsHash: string;
+  sequence: number;
+  trigger: TActivityNoteTrigger;
+  model: string;
+}
+
+export interface IAiNarratorStreamEventPayload {
+  streamId: string;
+  runId: string;
+  messageId: string;
+  turnId?: string | null;
+  factsHash: string;
+  sequence: number;
+  trigger: TActivityNoteTrigger;
+  kind: 'start' | 'delta' | 'done' | 'error' | 'cancelled';
+  delta: string | null;
+  message: string | null;
+  shouldShow?: boolean | null;
+  tone?: TActivityNoteTone | null;
+  text?: string | null;
+  relatedFiles?: string[];
+  confidence?: 'low' | 'medium' | 'high' | null;
+  model: string | null;
 }
 
 export interface IAiChatStreamPayload {

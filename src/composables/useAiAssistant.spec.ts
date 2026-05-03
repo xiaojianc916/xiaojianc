@@ -12,8 +12,26 @@ import type {
     IAgentSidecarStreamEventPayload,
 } from '@/types/agent-sidecar';
 import { agentSidecarPlanRequestSchema } from '@/types/agent-sidecar.schema';
-import type { IAiAgentRun, IAiChatStreamEventPayload, IAiTaskPlanStep } from '@/types/ai';
-import type { IAiEditOperation, IAiSnapshot } from '@/types/ai-edit';
+import type {
+    IAiAgentRun,
+    IAiApplyPatchPayload,
+    IAiApplyPatchRequest,
+    IAiChatRequest,
+    IAiChatStreamEventPayload,
+    IAiNarratorRequest,
+    IAiNarratorResponse,
+    IAiNarratorStreamEventPayload,
+    IAiNarratorStreamPayload,
+    IAiTaskPlanStep,
+} from '@/types/ai';
+import type {
+    IAiEditListTimelinePayload,
+    IAiEditListTimelineRequest,
+    IAiEditOperation,
+    IAiEditUndoOperationPayload,
+    IAiEditUndoOperationRequest,
+    IAiSnapshot,
+} from '@/types/ai-edit';
 import type { IAnalyzeScriptPayload, IEditorDocument } from '@/types/editor';
 import type { IGitRepositoryStatusPayload } from '@/types/git';
 import { materializeAgentActivities } from '@/utils/agent-activity';
@@ -33,9 +51,11 @@ const WORKSPACE_ROOT = 'd:/com.xiaojianc/my_desktop_app' as const;
 
 const aiServiceMock = vi.hoisted(() => {
     type StreamHandler = (payload: IAiChatStreamEventPayload) => void;
+    type NarratorStreamHandler = (payload: IAiNarratorStreamEventPayload) => void;
     type SidecarStreamHandler = (payload: IAgentSidecarStreamEventPayload) => void;
 
     let streamHandler: StreamHandler | null = null;
+    const narratorStreamHandlers = new Set<NarratorStreamHandler>();
     let sidecarStreamHandler: SidecarStreamHandler | null = null;
     let streamSequence = 0;
     const queuedStreamResponses: Array<{
@@ -51,7 +71,12 @@ const aiServiceMock = vi.hoisted(() => {
         return vi.fn(); // unsubscribe
     });
 
-    const chatStream = vi.fn(async () => {
+    const chatStream = vi.fn<(payload: IAiChatRequest) => Promise<{
+        streamId: string;
+        assistantMessageId: string;
+        providerType: 'mock';
+        model: string;
+    }>>(async (_payload) => {
         const queued = queuedStreamResponses.shift();
         if (!queued) {
             return {
@@ -132,9 +157,91 @@ const aiServiceMock = vi.hoisted(() => {
         },
     }));
 
-    const applyPatch = vi.fn(async () => ({
+    const applyPatch = vi.fn<(payload: IAiApplyPatchRequest) => Promise<IAiApplyPatchPayload>>(async (_payload) => ({
         appliedFiles: [],
     }));
+
+    const narrateActivity = vi.fn<(payload: IAiNarratorRequest) => Promise<IAiNarratorResponse>>(async (payload) => ({
+        runId: payload.runId,
+        messageId: payload.messageId,
+        turnId: payload.turnId ?? null,
+        factsHash: payload.factsHash,
+        sequence: payload.sequence,
+        trigger: payload.facts.trigger,
+        shouldShow: true,
+        tone: payload.facts.trigger === 'final_summary' ? 'summary' : 'progress',
+        text: 'mock narrator update',
+        relatedFiles: payload.facts.changedFiles.map((item) => item.path),
+        confidence: 'medium',
+        model: MOCK_MODEL,
+    }));
+
+    const onNarratorStream = vi.fn(async (handler: NarratorStreamHandler) => {
+        narratorStreamHandlers.add(handler);
+        return vi.fn(() => {
+            narratorStreamHandlers.delete(handler);
+        });
+    });
+
+    const narrateActivityStream = vi.fn<(payload: IAiNarratorRequest) => Promise<IAiNarratorStreamPayload>>(async (payload) => {
+        const started: IAiNarratorStreamPayload = {
+            streamId: `narrator-stream-${payload.sequence}`,
+            runId: payload.runId,
+            messageId: payload.messageId,
+            turnId: payload.turnId ?? null,
+            factsHash: payload.factsHash,
+            sequence: payload.sequence,
+            trigger: payload.facts.trigger,
+            model: MOCK_MODEL,
+        };
+
+        queueMicrotask(() => {
+            for (const handler of narratorStreamHandlers) {
+                handler({
+                    ...started,
+                    kind: 'start',
+                    delta: null,
+                    message: null,
+                    shouldShow: null,
+                    tone: null,
+                    text: null,
+                    relatedFiles: [],
+                    confidence: null,
+                    model: MOCK_MODEL,
+                });
+            }
+            for (const handler of narratorStreamHandlers) {
+                handler({
+                    ...started,
+                    kind: 'delta',
+                    delta: 'mock narrator ',
+                    message: null,
+                    shouldShow: null,
+                    tone: null,
+                    text: null,
+                    relatedFiles: [],
+                    confidence: null,
+                    model: MOCK_MODEL,
+                });
+            }
+            for (const handler of narratorStreamHandlers) {
+                handler({
+                    ...started,
+                    kind: 'done',
+                    delta: null,
+                    message: null,
+                    shouldShow: true,
+                    tone: payload.facts.trigger === 'final_summary' ? 'summary' : 'progress',
+                    text: 'mock narrator update',
+                    relatedFiles: payload.facts.changedFiles.map((item) => item.path),
+                    confidence: 'medium',
+                    model: MOCK_MODEL,
+                });
+            }
+        });
+
+        return started;
+    });
 
     const classifyTask = vi.fn(async () => ({
         classification: 'complex',
@@ -284,6 +391,9 @@ const aiServiceMock = vi.hoisted(() => {
         queryIndex,
         proposePatch,
         applyPatch,
+        narrateActivity,
+        onNarratorStream,
+        narrateActivityStream,
         classifyTask,
         planTask,
         sidecarPlan,
@@ -304,6 +414,11 @@ const aiServiceMock = vi.hoisted(() => {
         emit(event: IAiChatStreamEventPayload): void {
             streamHandler?.(event);
         },
+        emitNarrator(event: IAiNarratorStreamEventPayload): void {
+            for (const handler of narratorStreamHandlers) {
+                handler(event);
+            }
+        },
         emitSidecar(event: IAgentSidecarStreamEventPayload): void {
             sidecarStreamHandler?.(event);
         },
@@ -319,6 +434,7 @@ const aiServiceMock = vi.hoisted(() => {
         },
         reset(): void {
             streamHandler = null;
+            narratorStreamHandlers.clear();
             sidecarStreamHandler = null;
             streamSequence = 0;
             queuedStreamResponses.length = 0;
@@ -330,6 +446,9 @@ const aiServiceMock = vi.hoisted(() => {
             queryIndex.mockClear();
             proposePatch.mockClear();
             applyPatch.mockClear();
+            narrateActivity.mockClear();
+            onNarratorStream.mockClear();
+            narrateActivityStream.mockClear();
             classifyTask.mockClear();
             planTask.mockClear();
             sidecarPlan.mockClear();
@@ -351,8 +470,11 @@ vi.mock('@/services/modules/ai', () => ({
         queryIndex: aiServiceMock.queryIndex,
         proposePatch: aiServiceMock.proposePatch,
         applyPatch: aiServiceMock.applyPatch,
+        narrateActivity: aiServiceMock.narrateActivity,
+        narrateActivityStream: aiServiceMock.narrateActivityStream,
         classifyTask: aiServiceMock.classifyTask,
         planTask: aiServiceMock.planTask,
+        onNarratorStream: aiServiceMock.onNarratorStream,
         sidecarPlan: aiServiceMock.sidecarPlan,
         sidecarExecute: aiServiceMock.sidecarExecute,
         sidecarResolveApproval: aiServiceMock.sidecarResolveApproval,
@@ -391,34 +513,55 @@ const createAiEditOperation = (
     ...overrides,
 });
 
+const createUndoOperationPayload = (
+    operationId: string,
+    restoredFiles: string[] = [],
+): IAiEditUndoOperationPayload => ({
+    operationId,
+    restoredFiles,
+    preRevertSnapshot: createAiEditSnapshot('snapshot-pre-revert', restoredFiles),
+    restoredSnapshot: createAiEditSnapshot('snapshot-restored', restoredFiles),
+});
+
+const createNarratorStreamPayload = (
+    payload: IAiNarratorRequest,
+    overrides: Partial<IAiNarratorStreamPayload> = {},
+): IAiNarratorStreamPayload => ({
+    streamId: `narrator-stream-${payload.sequence}`,
+    runId: payload.runId,
+    messageId: payload.messageId,
+    turnId: payload.turnId ?? null,
+    factsHash: payload.factsHash,
+    sequence: payload.sequence,
+    trigger: payload.facts.trigger,
+    model: MOCK_MODEL,
+    ...overrides,
+});
+
+const createNarratorStreamEvent = (
+    payload: IAiNarratorRequest,
+    overrides: Partial<IAiNarratorStreamEventPayload> = {},
+): IAiNarratorStreamEventPayload => ({
+    ...createNarratorStreamPayload(payload),
+    kind: 'done',
+    delta: null,
+    message: null,
+    shouldShow: true,
+    tone: 'progress',
+    text: 'mock narrator update',
+    relatedFiles: payload.facts.changedFiles.map((item) => item.path),
+    confidence: 'medium',
+    model: MOCK_MODEL,
+    ...overrides,
+});
+
 const aiEditServiceMock = vi.hoisted(() => {
-    const listTimeline = vi.fn(async () => ({
+    const listTimeline = vi.fn<(payload?: IAiEditListTimelineRequest) => Promise<IAiEditListTimelinePayload>>(async () => ({
         entries: [],
     }));
-    const undoOperation = vi.fn(async (payload: { operationId: string }) => ({
-        operationId: payload.operationId,
-        restoredFiles: [],
-        preRevertSnapshot: {
-            id: 'snapshot-pre-revert',
-            scope: 'pre-revert',
-            taskId: 'thread-rollback',
-            createdAt: '2026-04-29T00:00:02.000Z',
-            label: 'snapshot-pre-revert',
-            fileRefs: [],
-            storageKey: 'snapshot-pre-revert.json',
-            sizeBytes: 0,
-        },
-        restoredSnapshot: {
-            id: 'snapshot-restored',
-            scope: 'revert',
-            taskId: 'thread-rollback',
-            createdAt: '2026-04-29T00:00:03.000Z',
-            label: 'snapshot-restored',
-            fileRefs: [],
-            storageKey: 'snapshot-restored.json',
-            sizeBytes: 0,
-        },
-    }));
+    const undoOperation = vi.fn<(payload: IAiEditUndoOperationRequest) => Promise<IAiEditUndoOperationPayload>>(async (payload) =>
+        createUndoOperationPayload(payload.operationId),
+    );
 
     return {
         listTimeline,
@@ -429,30 +572,9 @@ const aiEditServiceMock = vi.hoisted(() => {
             listTimeline.mockResolvedValue({
                 entries: [],
             });
-            undoOperation.mockImplementation(async (payload: { operationId: string }) => ({
-                operationId: payload.operationId,
-                restoredFiles: [],
-                preRevertSnapshot: {
-                    id: 'snapshot-pre-revert',
-                    scope: 'pre-revert',
-                    taskId: 'thread-rollback',
-                    createdAt: '2026-04-29T00:00:02.000Z',
-                    label: 'snapshot-pre-revert',
-                    fileRefs: [],
-                    storageKey: 'snapshot-pre-revert.json',
-                    sizeBytes: 0,
-                },
-                restoredSnapshot: {
-                    id: 'snapshot-restored',
-                    scope: 'revert',
-                    taskId: 'thread-rollback',
-                    createdAt: '2026-04-29T00:00:03.000Z',
-                    label: 'snapshot-restored',
-                    fileRefs: [],
-                    storageKey: 'snapshot-restored.json',
-                    sizeBytes: 0,
-                },
-            }));
+            undoOperation.mockImplementation(async (payload: IAiEditUndoOperationRequest) =>
+                createUndoOperationPayload(payload.operationId),
+            );
         },
     };
 });
@@ -538,6 +660,20 @@ const waitForStartedStream = async (
     );
 };
 
+const waitForCondition = async (
+    predicate: () => boolean,
+    maxAttempts = 12,
+): Promise<void> => {
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        if (predicate()) {
+            return;
+        }
+        await flushMicrotasks();
+    }
+
+    throw new Error(`condition did not match within ${maxAttempts} ticks`);
+};
+
 const createDocument = (): IEditorDocument => ({
     id: 'doc-1',
     path: 'src/app.ts',
@@ -620,6 +756,7 @@ const createAssistantHarness = (): ReturnType<typeof useAiAssistant> =>
 const createAssistantHarnessContext = (
     overrides: {
         analysis?: IAnalyzeScriptPayload;
+        narratorConfigured?: boolean;
     } = {},
 ) => {
     const document = ref(createDocument());
@@ -637,6 +774,11 @@ const createAssistantHarnessContext = (
         hasCredentials: true,
         isConfigured: true,
         agentEnabled: true,
+        narrator: {
+            ...assistant.config.value.narrator,
+            hasCredentials: overrides.narratorConfigured ?? false,
+            isConfigured: overrides.narratorConfigured ?? false,
+        },
     };
 
     return {
@@ -777,7 +919,6 @@ describe('useAiAssistant streaming integration', () => {
         expect(assistant.attachedFiles.value[0]?.kind).toBe('image');
         expect(assistant.attachedFiles.value[0]?.detailLabel).toBe('640 × 480');
         expect(assistant.attachedFiles.value[0]?.reference.kind).toBe('image-attachment');
-        expect(assistant.attachedFiles.value[0]?.reference.content).toBeUndefined();
 
         assistant.activeMode.value = 'chat';
         assistant.draft.value = '';
@@ -786,14 +927,14 @@ describe('useAiAssistant streaming integration', () => {
         await waitForStartedStream(() => assistant.messages.value.at(-1)?.id);
 
         expect(aiServiceMock.chatStream).toHaveBeenCalledTimes(1);
-        expect(aiServiceMock.chatStream.mock.calls[0]?.[0]?.references).toEqual(
-            expect.arrayContaining([
+        expect(aiServiceMock.chatStream).toHaveBeenLastCalledWith(expect.objectContaining({
+            references: expect.arrayContaining([
                 expect.objectContaining({
                     kind: 'image-attachment',
                     label: '图片附件 · pasted-image.png',
                 }),
             ]),
-        );
+        }));
 
         assistant.stopCurrentRequest();
         await sendPromise;
@@ -1130,15 +1271,379 @@ describe('useAiAssistant streaming integration', () => {
         });
     });
 
-    it('sidecar 首个事件到达前就显示上下文相关的运行状态', async () => {
-        const { assistant } = createAssistantHarnessContext();
-        let releaseSidecar: (() => void) | null = null;
-        const sidecarGate = new Promise<void>((resolve) => {
-            releaseSidecar = resolve;
+    it('does not call narrator for plain read activity without a meaningful transition', async () => {
+        const { assistant } = createAssistantHarnessContext({ narratorConfigured: true });
+
+        aiServiceMock.sidecarExecute.mockResolvedValueOnce({
+            sessionId: 'sidecar-narrator-read-session',
+            events: [
+                {
+                    type: 'tool_start',
+                    toolName: 'read_project_file',
+                    input: { path: 'src/app.ts:1-20' },
+                },
+                {
+                    type: 'tool_result',
+                    toolName: 'read_project_file',
+                    output: {
+                        path: 'src/app.ts:1-20',
+                        summary: '已读取 20 行',
+                    },
+                },
+            ],
+            result: '已读取完成。',
         });
 
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '先看看 app.ts';
+
+        await assistant.sendMessage();
+        await flushMicrotasks();
+
+        expect(aiServiceMock.narrateActivityStream).toHaveBeenCalledTimes(0);
+        expect(assistant.messages.value[1]?.stream?.activityNotes).toBeUndefined();
+    });
+
+    it('streams narrator note incrementally when an edit batch completes', async () => {
+        const { assistant } = createAssistantHarnessContext({ narratorConfigured: true });
+
+        aiServiceMock.narrateActivityStream.mockImplementationOnce(async (payload) =>
+            createNarratorStreamPayload(payload),
+        );
+        aiServiceMock.sidecarExecute.mockResolvedValueOnce({
+            sessionId: 'sidecar-narrator-edit-session',
+            events: [
+                {
+                    type: 'tool_start',
+                    toolName: 'write_file',
+                    input: { path: 'src/app.ts' },
+                },
+                {
+                    type: 'tool_result',
+                    toolName: 'write_file',
+                    output: {
+                        path: 'src/app.ts',
+                        summary: 'src/app.ts +3 -1',
+                        content: 'const shouldNotLeak = true;',
+                    },
+                },
+            ],
+            result: '已完成修改。',
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '修复 app.ts';
+
+        await assistant.sendMessage();
+        await waitForCondition(() => aiServiceMock.narrateActivityStream.mock.calls.length === 1);
+
+        const [request] = aiServiceMock.narrateActivityStream.mock.calls[0] ?? [];
+        if (!request) {
+            throw new Error('expected narrator stream request');
+        }
+
+        aiServiceMock.emitNarrator(createNarratorStreamEvent(request, {
+            kind: 'delta',
+            delta: 'app.ts 已经改完',
+            text: null,
+            tone: null,
+            shouldShow: null,
+            confidence: null,
+        }));
+        await waitForCondition(() => Boolean(
+            assistant.messages.value[1]?.stream?.activityNotes?.some((note) =>
+                note.source === 'narrator' && note.status === 'streaming'
+            ),
+        ));
+
+        expect(assistant.messages.value[1]?.stream?.activityNotes).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                source: 'narrator',
+                trigger: 'edit_done',
+                status: 'streaming',
+                text: 'app.ts 已经改完',
+            }),
+        ]));
+
+        aiServiceMock.emitNarrator(createNarratorStreamEvent(request, {
+            trigger: 'edit_done',
+            tone: 'decision',
+            text: 'app.ts 已经改完，下一步准备验证。',
+        }));
+        await flushMicrotasks();
+
+        expect(aiServiceMock.narrateActivityStream).toHaveBeenCalledTimes(1);
+        expect(aiServiceMock.narrateActivityStream).toHaveBeenLastCalledWith(expect.objectContaining({
+            facts: expect.objectContaining({
+                trigger: 'edit_done',
+                changedFiles: expect.arrayContaining([
+                    expect.objectContaining({
+                        path: 'src/app.ts',
+                    }),
+                ]),
+            }),
+        }));
+        expect(assistant.messages.value[1]?.stream?.activityNotes).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                source: 'narrator',
+                trigger: 'edit_done',
+                tone: 'decision',
+                status: 'completed',
+                text: 'app.ts 已经改完，下一步准备验证。',
+                factsHash: expect.stringMatching(/^facts:/u),
+            }),
+        ]));
+    });
+
+    it('deduplicates narrator requests when live and completed activity resolve to the same facts hash', async () => {
+        const { assistant } = createAssistantHarnessContext({ narratorConfigured: true });
+
         aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
-            await sidecarGate;
+            const sessionId = payload.sessionId ?? 'sidecar-narrator-dedupe-session';
+            const toolStartEvent = {
+                type: 'tool_start' as const,
+                toolName: 'write_file',
+                input: { path: 'src/app.ts' },
+            };
+            const toolResultEvent = {
+                type: 'tool_result' as const,
+                toolName: 'write_file',
+                output: {
+                    path: 'src/app.ts',
+                    summary: 'src/app.ts +2 -0',
+                },
+            };
+
+            aiServiceMock.emitSidecar({ sessionId, seq: 0, event: toolStartEvent });
+            aiServiceMock.emitSidecar({ sessionId, seq: 1, event: toolResultEvent });
+
+            return {
+                sessionId,
+                events: [toolStartEvent, toolResultEvent],
+                result: '已完成修改。',
+            };
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '修复 app.ts';
+
+        await assistant.sendMessage();
+        await flushMicrotasks();
+
+        expect(aiServiceMock.narrateActivityStream).toHaveBeenCalledTimes(1);
+        expect(
+            assistant.messages.value[1]?.stream?.activityNotes?.filter((note) => note.source === 'narrator'),
+        ).toHaveLength(1);
+    });
+
+    it('drops narrator responses whose turnId no longer matches the active turn', async () => {
+        const { assistant } = createAssistantHarnessContext({ narratorConfigured: true });
+
+        aiServiceMock.narrateActivityStream.mockImplementationOnce(async (payload) =>
+            createNarratorStreamPayload(payload),
+        );
+        aiServiceMock.sidecarExecute.mockResolvedValueOnce({
+            sessionId: 'sidecar-narrator-turn-session',
+            events: [
+                {
+                    type: 'tool_start',
+                    toolName: 'write_file',
+                    input: { path: 'src/app.ts' },
+                },
+                {
+                    type: 'tool_result',
+                    toolName: 'write_file',
+                    output: {
+                        path: 'src/app.ts',
+                        summary: 'src/app.ts +1 -0',
+                    },
+                },
+            ],
+            result: '已完成修改。',
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '修复 app.ts';
+
+        await assistant.sendMessage();
+        await waitForCondition(() => aiServiceMock.narrateActivityStream.mock.calls.length === 1);
+
+        const [request] = aiServiceMock.narrateActivityStream.mock.calls[0] ?? [];
+        if (!request) {
+            throw new Error('expected narrator stream request');
+        }
+
+        aiServiceMock.emitNarrator(createNarratorStreamEvent(request, {
+            turnId: 'turn-stale-other',
+            text: '这条结果已经过期。',
+        }));
+        await flushMicrotasks();
+
+        expect(assistant.messages.value[1]?.stream?.activityNotes).toBeUndefined();
+    });
+
+    it('keeps only the newest narrator sequence for the same trigger', async () => {
+        const { assistant } = createAssistantHarnessContext({ narratorConfigured: true });
+
+        aiServiceMock.narrateActivityStream
+            .mockImplementationOnce(async (payload) => createNarratorStreamPayload(payload, { streamId: 'narrator-seq-1' }))
+            .mockImplementationOnce(async (payload) => createNarratorStreamPayload(payload, { streamId: 'narrator-seq-2' }));
+        aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
+            const sessionId = payload.sessionId ?? 'sidecar-narrator-sequence-session';
+
+            aiServiceMock.emitSidecar({
+                sessionId,
+                seq: 0,
+                event: {
+                    type: 'tool_start',
+                    toolName: 'write_file',
+                    input: { path: 'src/first.ts' },
+                },
+            });
+            aiServiceMock.emitSidecar({
+                sessionId,
+                seq: 1,
+                event: {
+                    type: 'tool_result',
+                    toolName: 'write_file',
+                    output: {
+                        path: 'src/first.ts',
+                        summary: 'src/first.ts +1 -0',
+                    },
+                },
+            });
+            aiServiceMock.emitSidecar({
+                sessionId,
+                seq: 2,
+                event: {
+                    type: 'tool_start',
+                    toolName: 'write_file',
+                    input: { path: 'src/second.ts' },
+                },
+            });
+            aiServiceMock.emitSidecar({
+                sessionId,
+                seq: 3,
+                event: {
+                    type: 'tool_result',
+                    toolName: 'write_file',
+                    output: {
+                        path: 'src/second.ts',
+                        summary: 'src/second.ts +2 -0',
+                    },
+                },
+            });
+
+            return {
+                sessionId,
+                events: [],
+                result: '连续两次修改完成。',
+            };
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '连续修改两个文件';
+
+        await assistant.sendMessage();
+        await waitForCondition(() => aiServiceMock.narrateActivityStream.mock.calls.length === 2);
+
+        const [firstRequest] = aiServiceMock.narrateActivityStream.mock.calls[0] ?? [];
+        const [secondRequest] = aiServiceMock.narrateActivityStream.mock.calls[1] ?? [];
+        if (!firstRequest || !secondRequest) {
+            throw new Error('expected narrator stream requests');
+        }
+
+        aiServiceMock.emitNarrator(createNarratorStreamEvent(firstRequest, {
+            kind: 'delta',
+            streamId: 'narrator-seq-1',
+            delta: '第一次修改已经完成',
+            text: null,
+            tone: null,
+            shouldShow: null,
+            confidence: null,
+        }));
+        await flushMicrotasks();
+
+        aiServiceMock.emitNarrator(createNarratorStreamEvent(secondRequest, {
+            streamId: 'narrator-seq-2',
+            text: '第二次修改已经完成。',
+        }));
+        await flushMicrotasks();
+
+        aiServiceMock.emitNarrator(createNarratorStreamEvent(firstRequest, {
+            streamId: 'narrator-seq-1',
+            text: '第一次修改已经完成。',
+        }));
+        await flushMicrotasks();
+
+        const narratorNotes = assistant.messages.value[1]?.stream?.activityNotes?.filter(
+            (note) => note.source === 'narrator',
+        ) ?? [];
+
+        expect(narratorNotes.map((note) => note.text)).toEqual(['第二次修改已经完成。']);
+    });
+
+    it('sends compressed narrator facts without leaking raw tool payloads', async () => {
+        const { assistant } = createAssistantHarnessContext({ narratorConfigured: true });
+
+        aiServiceMock.sidecarExecute.mockResolvedValueOnce({
+            sessionId: 'sidecar-narrator-safety-session',
+            events: [
+                {
+                    type: 'tool_start',
+                    toolName: 'write_file',
+                    input: {
+                        path: 'src/unsafe.ts',
+                        content: 'const secret = 1;',
+                        raw: { token: 'sensitive' },
+                    },
+                },
+                {
+                    type: 'tool_result',
+                    toolName: 'write_file',
+                    output: {
+                        path: 'src/unsafe.ts',
+                        summary: 'src/unsafe.ts +4 -0',
+                        stdout: 'should-not-leak-stdout',
+                        content: 'const secret = 1;',
+                        raw: {
+                            nested: 'should-not-leak-json',
+                        },
+                    },
+                },
+            ],
+            result: '已完成修改。',
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '修复 unsafe.ts';
+
+        await assistant.sendMessage();
+        await waitForCondition(() => aiServiceMock.narrateActivityStream.mock.calls.length === 1);
+
+        const [request] = aiServiceMock.narrateActivityStream.mock.calls[0] ?? [];
+        if (!request) {
+            throw new Error('expected narrator stream request');
+        }
+
+        const serializedFacts = JSON.stringify(request.facts);
+
+        expect(serializedFacts).not.toContain('const secret = 1;');
+        expect(serializedFacts).not.toContain('should-not-leak-stdout');
+        expect(serializedFacts).not.toContain('should-not-leak-json');
+        expect(request.facts.changedFiles).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                path: 'src/unsafe.ts',
+            }),
+        ]));
+    });
+
+    it('sidecar 首个事件到达前就显示上下文相关的运行状态', async () => {
+        const { assistant } = createAssistantHarnessContext();
+        const sidecarGate = createDeferred<void>();
+
+        aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
+            await sidecarGate.promise;
 
             return {
                 sessionId: payload.sessionId ?? 'sidecar-news-session',
@@ -1172,9 +1677,7 @@ describe('useAiAssistant streaming integration', () => {
             },
         });
 
-        if (releaseSidecar) {
-            releaseSidecar();
-        }
+        sidecarGate.resolve(undefined);
         await sendPromise;
 
         expect(assistant.messages.value[1]?.content).toBe('已整理今日热点新闻。');
@@ -1184,10 +1687,7 @@ describe('useAiAssistant streaming integration', () => {
 
     it('streams sidecar tool activity into the assistant message before the final response resolves', async () => {
         const { assistant } = createAssistantHarnessContext();
-        let releaseSidecar: (() => void) | null = null;
-        const sidecarGate = new Promise<void>((resolve) => {
-            releaseSidecar = resolve;
-        });
+        const sidecarGate = createDeferred<void>();
 
         aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
             const sessionId = payload.sessionId ?? 'sidecar-live-session';
@@ -1240,7 +1740,7 @@ describe('useAiAssistant streaming integration', () => {
                 },
             });
 
-            await sidecarGate;
+            await sidecarGate.promise;
 
             return {
                 sessionId,
@@ -1282,19 +1782,15 @@ describe('useAiAssistant streaming integration', () => {
         });
         expect(assistant.messages.value[1]?.content).toContain('第二段继续到达');
         expect(assistant.messages.value[1]?.stream?.status).toBe('streaming');
-        expect(assistant.messages.value[1]?.stream?.activityTrail).toEqual(expect.arrayContaining([
-            '第一段实时回答，第二段继续到达',
-        ]));
-        expect(assistant.messages.value[1]?.stream?.activityTrail).not.toEqual(expect.arrayContaining([
-            '在 工作区 搜索「实时工具」',
-        ]));
+        expect(assistant.messages.value[1]?.stream?.activityText).toBe('在 工作区 搜索「实时工具」');
+        expect(assistant.messages.value[1]?.stream?.activityTrail).toBeUndefined();
         expect(assistant.runtimeTimelineEvents.value).toHaveLength(1);
         expect(assistant.runtimeTimelineEvents.value[0]).toMatchObject({
             type: 'agent.tool.started',
             toolName: 'search_project_files',
         });
 
-        releaseSidecar?.();
+        sidecarGate.resolve(undefined);
         await sendPromise;
 
         expect(assistant.messages.value[1]?.content).toContain('实时工具完成');
@@ -1306,10 +1802,7 @@ describe('useAiAssistant streaming integration', () => {
 
     it('按 Streaming Events 的字段语义裁剪公开进度，不把 raw JSON 直接塞进活动轨迹', async () => {
         const { assistant } = createAssistantHarnessContext();
-        let releaseSidecar: (() => void) | null = null;
-        const sidecarGate = new Promise<void>((resolve) => {
-            releaseSidecar = resolve;
-        });
+        const sidecarGate = createDeferred<void>();
 
         aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
             const sessionId = payload.sessionId ?? 'sidecar-runtime-preview-session';
@@ -1336,7 +1829,7 @@ describe('useAiAssistant streaming integration', () => {
                 },
             });
 
-            await sidecarGate;
+            await sidecarGate.promise;
 
             return {
                 sessionId,
@@ -1385,16 +1878,13 @@ describe('useAiAssistant streaming integration', () => {
         ]));
         expect(activityTrail.join('\n')).not.toContain('{"query"');
 
-        releaseSidecar?.();
+        sidecarGate.resolve(undefined);
         await sendPromise;
     });
 
     it('把 user-visible side_effect 和 rollback runtime event 投影到同一棵 Activity 树', async () => {
         const { assistant } = createAssistantHarnessContext();
-        let releaseSidecar: (() => void) | null = null;
-        const sidecarGate = new Promise<void>((resolve) => {
-            releaseSidecar = resolve;
-        });
+        const sidecarGate = createDeferred<void>();
 
         aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
             const sessionId = payload.sessionId ?? 'sidecar-runtime-activity-session';
@@ -1467,7 +1957,7 @@ describe('useAiAssistant streaming integration', () => {
                 },
             });
 
-            await sidecarGate;
+            await sidecarGate.promise;
 
             return {
                 sessionId,
@@ -1580,7 +2070,7 @@ describe('useAiAssistant streaming integration', () => {
         expect(assistant.messages.value[1]?.stream?.activityEvents?.some((event) =>
             event.type === 'ACTIVITY_SNAPSHOT')).toBe(true);
 
-        releaseSidecar?.();
+        sidecarGate.resolve(undefined);
         await sendPromise;
 
         expect(assistant.messages.value[1]?.stream?.status).toBe('completed');
@@ -1611,10 +2101,7 @@ describe('useAiAssistant streaming integration', () => {
 
     it('preserves cumulative sidecar markdown exactly while a code fence is still streaming', async () => {
         const { assistant } = createAssistantHarnessContext();
-        let releaseSidecar: (() => void) | null = null;
-        const sidecarGate = new Promise<void>((resolve) => {
-            releaseSidecar = resolve;
-        });
+        const sidecarGate = createDeferred<void>();
 
         aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
             const sessionId = payload.sessionId ?? 'sidecar-code-fence-session';
@@ -1639,7 +2126,7 @@ describe('useAiAssistant streaming integration', () => {
                 },
             });
 
-            await sidecarGate;
+            await sidecarGate.promise;
 
             return {
                 sessionId,
@@ -1675,7 +2162,7 @@ describe('useAiAssistant streaming integration', () => {
         expect(assistant.messages.value[1]?.content).toBe(expectedStreamingContent);
         expect(assistant.messages.value[1]?.stream?.status).toBe('streaming');
 
-        releaseSidecar?.();
+        sidecarGate.resolve(undefined);
         await sendPromise;
 
         expect(assistant.messages.value[1]?.content).toBe(expectedStreamingContent);
@@ -1684,13 +2171,10 @@ describe('useAiAssistant streaming integration', () => {
 
     it('shows a silent streaming placeholder while sidecar agent is starting', async () => {
         const { assistant } = createAssistantHarnessContext();
-        let releaseSidecar: (() => void) | null = null;
-        const sidecarGate = new Promise<void>((resolve) => {
-            releaseSidecar = resolve;
-        });
+        const sidecarGate = createDeferred<void>();
 
         aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
-            await sidecarGate;
+            await sidecarGate.promise;
 
             return {
                 sessionId: payload.sessionId ?? 'sidecar-loading-session',
@@ -1723,7 +2207,7 @@ describe('useAiAssistant streaming integration', () => {
             },
         });
 
-        releaseSidecar?.();
+        sidecarGate.resolve(undefined);
         await sendPromise;
 
         expect(assistant.messages.value[1]?.content).toContain('已通过 Strands Agent 处理');

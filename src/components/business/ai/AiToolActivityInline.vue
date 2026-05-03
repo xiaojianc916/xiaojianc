@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {
   Activity,
-  Bot,
   Brain,
   CheckCircle2,
   ChevronRight,
@@ -21,995 +20,632 @@ import { CollapsibleContent, CollapsibleRoot, CollapsibleTrigger } from 'reka-ui
 import type { Component } from 'vue';
 import { computed, ref } from 'vue';
 
-import type {
-  IAgentActivity,
-  IAgentActivityDetail,
-  TAgentActivityEvent,
-  TAgentActivityStatus,
-} from '@/types/agent-activity';
-import type { IAiToolCall } from '@/types/ai';
-import { materializeAgentActivities } from '@/utils/agent-activity';
+import type { IAgentActivity, TAgentActivityEvent } from '@/types/agent-activity';
+import type { IActivityNote, IAiToolCall } from '@/types/ai';
 import {
-  getActionKind,
-  getPhaseKeyForActivity,
-  getPhaseKeyForToolName,
-  getToolDisplayName,
-  type TActivityPhaseKey,
-  type TToolActionKind,
-} from '@/utils/agent-activity-inline-catalog';
-import {
-  formatElapsed,
-  getAggregateDurationLabel,
-  getDetailPreview,
-  getTargetLeafLabel,
-  getTargetSource,
-  isMachinePreview,
-  normalizeText,
-  parseTarget,
-  stripTargetNoise,
-  uniqueStrings,
-} from '@/utils/agent-activity-inline-formatters';
-import { sectionizeToolDetails, type IToolDetailSection } from '@/utils/agent-activity-inline-sections';
+  buildActivityFeedBlocks,
+  type IActivityFeedGroup,
+  type IActivityFeedRow,
+  type TActivityFeedBlock
+} from '@/utils/agent-activity-feed';
+import type { TToolActionKind } from '@/utils/agent-activity-inline-catalog';
 
 const props = defineProps<{
   toolCalls: IAiToolCall[];
   activityText?: string;
   activityTrail?: string[];
+  activityNotes?: IActivityNote[];
   activities?: IAgentActivity[];
   activityEvents?: TAgentActivityEvent[];
 }>();
 
-interface IToolActionMeta {
-  verb: string;
-  fallbackTarget: string;
-  icon: Component;
-}
+type TOpenState = Record<string, boolean>;
 
-interface IToolStatusMeta {
-  label: string;
-  badgeLabel: string;
-  detail: string;
-  icon: Component;
-}
-
-interface IToolTimelineItem extends IAiToolCall {
-  toolName: string;
-  actionLabel: string;
-  headline: string;
-  statusLabel: string;
-  target: string;
-  preview: string | null;
-  leafItems: string[];
-  lineRange: string | null;
-  toolIcon: Component;
-  durationLabel: string | null;
-  defaultOpen: boolean;
-  phaseKey: TActivityPhaseKey;
-  sections: IToolDetailSection[];
-}
-
-interface IToolPhaseRow {
-  id: string;
-  key: TActivityPhaseKey;
-  title: string;
-  summary: string;
-  icon: Component;
-  status: IAiToolCall['status'];
-  statusLabel: string;
-  durationLabel: string | null;
-  processItems: string[];
-  items: IToolTimelineItem[];
-  defaultOpen: boolean;
-}
-
-interface IToolActivityRow {
-  id: string;
-  title: string;
-  status: IAiToolCall['status'];
-  leadingIcon: Component;
-  statusIcon: Component;
-  statusLabel: string;
-  durationLabel: string | null;
-  isSpinning: boolean;
-}
-
-type TActivityOpenState = Record<string, boolean>;
-
-const TOOL_ACTION_META: Record<TToolActionKind, IToolActionMeta> = {
-  read: {
-    verb: '查看文件',
-    fallbackTarget: '文件',
-    icon: FileText,
-  },
-  fileSearch: {
-    verb: '搜索文件',
-    fallbackTarget: '项目',
-    icon: Search,
-  },
-  symbolSearch: {
-    verb: '搜索符号',
-    fallbackTarget: '项目',
-    icon: Search,
-  },
-  diagnose: {
-    verb: '检查',
-    fallbackTarget: '工作区',
-    icon: Activity,
-  },
-  patch: {
-    verb: '生成 Patch',
-    fallbackTarget: '变更',
-    icon: Pencil,
-  },
-  applyPatch: {
-    verb: '应用 Patch',
-    fallbackTarget: '变更',
-    icon: Pencil,
-  },
-  execute: {
-    verb: '执行',
-    fallbackTarget: '命令',
-    icon: Terminal,
-  },
-  verify: {
-    verb: '验证',
-    fallbackTarget: '测试',
-    icon: Terminal,
-  },
-  git: {
-    verb: 'Git',
-    fallbackTarget: '变更',
-    icon: GitBranch,
-  },
-  knowledge: {
-    verb: '知识图谱',
-    fallbackTarget: '节点',
-    icon: Brain,
-  },
-  reasoning: {
-    verb: '任务规划',
-    fallbackTarget: '计划',
-    icon: Brain,
-  },
-  time: {
-    verb: '时间工具',
-    fallbackTarget: '时间',
-    icon: Clock3,
-  },
-  web: {
-    verb: '检索',
-    fallbackTarget: '资源',
-    icon: Globe,
-  },
-  webFetch: {
-    verb: '查看网页',
-    fallbackTarget: '网页',
-    icon: Globe,
-  },
-  tree: {
-    verb: '查看目录',
-    fallbackTarget: '项目结构',
-    icon: FolderTree,
-  },
-  unknown: {
-    verb: '调用',
-    fallbackTarget: '任务',
-    icon: Activity,
-  },
+const STATUS_META: Record<IAiToolCall['status'], { label: string }> = {
+  pending: { label: '等待中' },
+  running: { label: '进行中' },
+  succeeded: { label: '已完成' },
+  failed: { label: '失败' },
+  denied: { label: '已停止' },
 };
 
-const TOOL_STATUS_META: Record<IAiToolCall['status'], IToolStatusMeta> = {
-  pending: {
-    label: '等待中',
-    badgeLabel: '等待',
-    detail: '等待确认',
-    icon: Clock3,
-  },
-  running: {
-    label: '运行中',
-    badgeLabel: '进行中',
-    detail: '正在执行',
-    icon: LoaderCircle,
-  },
-  succeeded: {
-    label: '已完成',
-    badgeLabel: '完成',
-    detail: '结果已返回',
-    icon: CheckCircle2,
-  },
-  failed: {
-    label: '失败',
-    badgeLabel: '失败',
-    detail: '执行失败',
-    icon: CircleAlert,
-  },
-  denied: {
-    label: '已停止',
-    badgeLabel: '已停止',
-    detail: '已停止',
-    icon: XCircle,
-  },
+const ACTION_ICONS: Record<TToolActionKind, Component> = {
+  read: FileText,
+  fileSearch: Search,
+  symbolSearch: Search,
+  diagnose: Activity,
+  patch: Pencil,
+  applyPatch: Pencil,
+  execute: Terminal,
+  verify: Terminal,
+  git: GitBranch,
+  knowledge: Brain,
+  reasoning: Brain,
+  time: Clock3,
+  web: Globe,
+  webFetch: Globe,
+  tree: FolderTree,
+  unknown: Activity,
 };
 
-const ACTIVITY_STATUS_TO_TOOL_STATUS: Record<TAgentActivityStatus, IAiToolCall['status']> = {
-  pending: 'pending',
-  running: 'running',
-  success: 'succeeded',
-  error: 'failed',
-  cancelled: 'denied',
+const ACTION_SUBTITLES: Record<TToolActionKind, string> = {
+  read: '文件读取',
+  fileSearch: '工作区搜索',
+  symbolSearch: '符号搜索',
+  diagnose: '诊断检查',
+  patch: '生成修补',
+  applyPatch: '文件编辑',
+  execute: '终端执行',
+  verify: '验证执行',
+  git: 'Git 检查',
+  knowledge: '知识处理',
+  reasoning: '任务规划',
+  time: '时间检查',
+  web: '联网搜索',
+  webFetch: '网页读取',
+  tree: '目录浏览',
+  unknown: '步骤详情',
 };
 
-const PHASE_META: Record<TActivityPhaseKey, { title: string; icon: Component; order: number }> = {
-  planning: {
-    title: '任务规划',
-    icon: Brain,
-    order: 0,
-  },
-  safety: {
-    title: '权限与安全',
-    icon: Activity,
-    order: 1,
-  },
-  project_scan: {
-    title: '项目扫描',
-    icon: FolderTree,
-    order: 2,
-  },
-  files_read: {
-    title: '阅读文件',
-    icon: FileText,
-    order: 3,
-  },
-  files_modify: {
-    title: '修改文件',
-    icon: Pencil,
-    order: 4,
-  },
-  knowledge: {
-    title: '知识图谱',
-    icon: Brain,
-    order: 5,
-  },
-  web: {
-    title: '网络研究',
-    icon: Globe,
-    order: 6,
-  },
-  git: {
-    title: 'Git 操作',
-    icon: GitBranch,
-    order: 7,
-  },
-  verify: {
-    title: '验证结果',
-    icon: Terminal,
-    order: 8,
-  },
-  summary: {
-    title: '总结',
-    icon: CheckCircle2,
-    order: 9,
-  },
+const groupOpenState = ref<TOpenState>({});
+const rowOpenState = ref<TOpenState>({});
+
+const blocks = computed(() =>
+  buildActivityFeedBlocks({
+    toolCalls: props.toolCalls,
+    activityText: props.activityText,
+    activityTrail: props.activityTrail,
+    activityNotes: props.activityNotes,
+    activities: props.activities,
+    activityEvents: props.activityEvents,
+  }),
+);
+
+const hasBlocks = computed(() => blocks.value.length > 0);
+
+const isGroupOpen = (group: IActivityFeedGroup): boolean =>
+  groupOpenState.value[group.id] ?? (group.rows.length === 1
+    ? group.rows[0]?.status === 'failed'
+    : true);
+
+const isRowOpen = (row: IActivityFeedRow): boolean =>
+  rowOpenState.value[row.id] ?? row.status === 'failed';
+
+const updateGroupOpen = (groupId: string, open: boolean): void => {
+  groupOpenState.value = {
+    ...groupOpenState.value,
+    [groupId]: open,
+  };
 };
 
-const ACTIVITY_KIND_ICON: Record<IAgentActivity['kind'], Component> = {
-  run: Activity,
-  search: Search,
-  read_file: FileText,
-  edit_file: Pencil,
-  tool_call: Activity,
-  command: Terminal,
-  reasoning_summary: Activity,
-  llm: Activity,
-  error: CircleAlert,
+const updateRowOpen = (rowId: string, open: boolean): void => {
+  rowOpenState.value = {
+    ...rowOpenState.value,
+    [rowId]: open,
+  };
 };
-const getFactStatusIcon = (
-  status: IAiToolCall['status'],
-  isActive = false,
-): Component => {
-  if (status === 'running' && isActive) {
+
+const getStatusLabel = (status: IAiToolCall['status']): string =>
+  STATUS_META[status].label;
+
+const shouldShowStatusText = (status: IAiToolCall['status']): boolean =>
+  status !== 'succeeded';
+
+const getRowIcon = (row: IActivityFeedRow): Component => {
+  if (row.status === 'running') {
     return LoaderCircle;
   }
 
-  return TOOL_STATUS_META[status].icon;
+  if (row.status === 'failed') {
+    return CircleAlert;
+  }
+
+  if (row.status === 'denied') {
+    return XCircle;
+  }
+
+  if (row.status === 'pending') {
+    return Clock3;
+  }
+
+  return ACTION_ICONS[row.actionKind] ?? CheckCircle2;
 };
 
-const getFactTopicIcon = (value: string): Component => {
-  if (/计划|规划|步骤|阶段/u.test(value)) {
-    return Brain;
+const getRowSubtitle = (row: IActivityFeedRow): string =>
+  ACTION_SUBTITLES[row.actionKind] ?? '步骤详情';
+
+const getGroupIcon = (group: IActivityFeedGroup): Component => {
+  if (group.status === 'running') {
+    return LoaderCircle;
   }
 
-  if (/搜索|检索|查询|命中/u.test(value)) {
-    return Search;
+  if (group.status === 'failed') {
+    return CircleAlert;
   }
 
-  if (/目录|项目结构|工作区/u.test(value)) {
-    return FolderTree;
+  if (group.status === 'denied') {
+    return XCircle;
   }
 
-  if (/文件|路径|位置|读取|打开/u.test(value)) {
-    return FileText;
+  if (group.status === 'pending') {
+    return Clock3;
   }
 
-  if (/网页|联网|站点|URL|网址/u.test(value)) {
-    return Globe;
-  }
-
-  if (/命令|终端|测试|验证/u.test(value)) {
-    return Terminal;
-  }
-
-  if (/Git|提交|暂存/u.test(value)) {
-    return GitBranch;
-  }
-
-  return Activity;
+  return CheckCircle2;
 };
 
-const phaseOpenState = ref<TActivityOpenState>({});
-const itemOpenState = ref<TActivityOpenState>({});
-
-const shouldAutoOpenPhase = (phase: IToolPhaseRow): boolean =>
-  phase.defaultOpen || phase.status === 'running' || phase.status === 'failed';
-
-const shouldAutoOpenItem = (item: IToolTimelineItem): boolean =>
-  item.defaultOpen || item.status === 'failed';
-
-const resolveNodeOpen = <TNode extends { id: string }>(
-  openState: TActivityOpenState,
-  node: TNode,
-  getFallback: (target: TNode) => boolean,
-): boolean => openState[node.id] ?? getFallback(node);
-
-const isPhaseOpen = (phase: IToolPhaseRow): boolean =>
-  resolveNodeOpen(phaseOpenState.value, phase, shouldAutoOpenPhase);
-
-const isItemOpen = (item: IToolTimelineItem): boolean =>
-  resolveNodeOpen(itemOpenState.value, item, shouldAutoOpenItem);
-
-const updatePhaseOpen = (phaseId: string, open: boolean): void => {
-  phaseOpenState.value = {
-    ...phaseOpenState.value,
-    [phaseId]: open,
-  };
-};
-
-const updateItemOpen = (itemId: string, open: boolean): void => {
-  itemOpenState.value = {
-    ...itemOpenState.value,
-    [itemId]: open,
-  };
-};
-
-const buildPhaseSummary = (
-  phaseKey: TActivityPhaseKey,
-  processValues: readonly string[],
-  timelineItems: readonly IToolTimelineItem[],
-): string => {
-  if (!timelineItems.length && processValues.length === 1) {
-    return processValues[0] ?? '';
-  }
-
-  if (timelineItems.length === 1 && !processValues.length) {
-    return timelineItems[0]?.headline ?? '';
-  }
-
-  if (phaseKey === 'planning' && processValues.length) {
-    return `${processValues.length} 条可见摘要`;
-  }
-
-  const totalCount = processValues.length + timelineItems.length;
-  const failureCount = timelineItems.filter((item) => item.status === 'failed').length;
-  const runningCount = timelineItems.filter((item) => item.status === 'running').length;
-
-  if (failureCount > 0) {
-    return `${totalCount} 个节点，${failureCount} 个异常`;
-  }
-
-  if (runningCount > 0) {
-    return `${totalCount} 个节点，${runningCount} 个进行中`;
-  }
-
-  return `${totalCount} 个节点`;
-};
-
-const buildTimelineItem = (toolCall: IAiToolCall): IToolTimelineItem => {
-  const actionKind = getActionKind(toolCall.name);
-  const actionMeta = TOOL_ACTION_META[actionKind];
-  const statusMeta = TOOL_STATUS_META[toolCall.status];
-  const parsedTarget = parseTarget(stripTargetNoise(getTargetSource(toolCall, actionMeta.fallbackTarget)));
-  const target = parsedTarget.target || actionMeta.fallbackTarget;
-  const elapsed = formatElapsed(toolCall.elapsedMs);
-  const actionLabel = getToolDisplayName(toolCall.name, actionMeta.verb);
-  const headline = `${actionLabel} · ${target}`;
-  const preview = getDetailPreview(toolCall.summary, target, statusMeta.detail);
-  const detailItems = uniqueStrings(toolCall.detailItems ?? [])
-    .filter((item) => !isMachinePreview(item))
-    .slice(0, 4);
-  const lineRange = parsedTarget.lineRange;
-  const metaItems = uniqueStrings([
-    getTargetLeafLabel(actionKind, target, actionMeta.fallbackTarget, detailItems) ?? '',
-    lineRange ? `位置：${lineRange}` : '',
-    elapsed ? `耗时：${elapsed}` : '',
-    preview ? `结果：${preview}` : '',
-    detailItems.length || preview ? '' : `状态：${statusMeta.detail}`,
-  ]);
-  const leafItems = uniqueStrings([
-    ...detailItems,
-    ...metaItems,
-  ]).slice(0, 7);
-  const phaseKey = getPhaseKeyForToolName(toolCall.name);
-
-  return {
-    ...toolCall,
-    toolName: toolCall.name,
-    actionLabel,
-    headline,
-    statusLabel: statusMeta.badgeLabel,
-    target,
-    preview,
-    leafItems,
-    lineRange,
-    toolIcon: actionMeta.icon,
-    durationLabel: elapsed,
-    defaultOpen: false,
-    phaseKey,
-    sections: sectionizeToolDetails({
-      toolLabel: actionLabel,
-      status: toolCall.status,
-      statusDetail: statusMeta.detail,
-      target,
-      lineRange,
-      durationLabel: elapsed,
-      preview,
-      leafItems,
-    }),
-  };
-};
-
-const formatActivityDetail = (detail: IAgentActivityDetail): string =>
-  `${detail.label}：${detail.value}`;
-
-const buildActivityLeafItems = (activity: IAgentActivity): string[] => {
-  const detailItems = (activity.details ?? [])
-    .map(formatActivityDetail)
-    .filter((item) => !isMachinePreview(item));
-  const output = activity.outputSummary && !isMachinePreview(activity.outputSummary)
-    ? `结果：${activity.outputSummary}`
-    : '';
-  const error = activity.error?.message ? `错误：${activity.error.message}` : '';
-  const duration = formatElapsed(activity.durationMs);
-
-  return uniqueStrings([
-    ...detailItems,
-    output,
-    error,
-    duration ? `耗时：${duration}` : '',
-    detailItems.length || output || error ? '' : `状态：${TOOL_STATUS_META[
-      ACTIVITY_STATUS_TO_TOOL_STATUS[activity.status]
-    ].detail}`,
-  ]).slice(0, 7);
-};
-
-const buildTimelineItemFromActivity = (activity: IAgentActivity): IToolTimelineItem => {
-  const status = ACTIVITY_STATUS_TO_TOOL_STATUS[activity.status];
-  const target = normalizeText(
-    activity.description ?? activity.inputSummary ?? activity.outputSummary ?? '',
-  );
-  const fallbackTarget = activity.kind === 'search' ? '检索' : '任务';
-  const displayTarget = target || fallbackTarget;
-  const preview = activity.outputSummary ?? activity.error?.message ?? null;
-  const leafItems = buildActivityLeafItems(activity);
-  const toolName = activity.tool?.name ?? activity.kind;
-  const phaseKey = getPhaseKeyForActivity(activity);
-
-  return {
-    id: activity.id,
-    name: toolName,
-    status,
-    summary: activity.outputSummary ?? activity.description ?? activity.title,
-    targetPreview: displayTarget,
-    elapsedMs: activity.durationMs,
-    toolName,
-    actionLabel: activity.title,
-    headline: target ? `${activity.title} · ${target}` : activity.title,
-    statusLabel: TOOL_STATUS_META[status].label,
-    target: displayTarget,
-    preview,
-    leafItems,
-    lineRange: null,
-    toolIcon: ACTIVITY_KIND_ICON[activity.kind],
-    durationLabel: formatElapsed(activity.durationMs),
-    defaultOpen: false,
-    phaseKey,
-    sections: sectionizeToolDetails({
-      toolLabel: activity.title,
-      status,
-      statusDetail: TOOL_STATUS_META[status].detail,
-      target: displayTarget,
-      lineRange: null,
-      durationLabel: formatElapsed(activity.durationMs),
-      preview,
-      leafItems,
-      inputSummary: activity.inputSummary ?? activity.description ?? null,
-      outputSummary: activity.outputSummary ?? null,
-      errorMessage: activity.error?.message ?? null,
-    }),
-  };
-};
-
-const resolvedActivities = computed(() => {
-  if (props.activities?.length) {
-    return props.activities;
-  }
-
-  if (props.activityEvents?.length) {
-    return materializeAgentActivities(props.activityEvents);
-  }
-
-  return [];
-});
-
-const activityRoot = computed(() =>
-  resolvedActivities.value.find((activity) => !activity.parentId) ?? null,
-);
-
-const activityDescendants = computed(() => {
-  const root = activityRoot.value;
-
-  if (!root) {
-    return [];
-  }
-
-  const childrenByParentId = new Map<string, IAgentActivity[]>();
-
-  for (const activity of resolvedActivities.value) {
-    if (!activity.parentId) {
-      continue;
+const getBlockMarkerIcon = (block: TActivityFeedBlock): Component => {
+  if (block.kind === 'assistant_note') {
+    if (block.note.status === 'streaming') {
+      return LoaderCircle;
     }
 
-    const siblings = childrenByParentId.get(activity.parentId);
-    if (siblings) {
-      siblings.push(activity);
-      continue;
-    }
-
-    childrenByParentId.set(activity.parentId, [activity]);
+    return block.note.source === 'narrator' ? Brain : Activity;
   }
 
-  const descendants: IAgentActivity[] = [];
-  const visited = new Set<string>();
-
-  const appendDescendants = (parentId: string): void => {
-    const children = childrenByParentId.get(parentId) ?? [];
-
-    for (const child of children) {
-      if (visited.has(child.id)) {
-        continue;
-      }
-
-      visited.add(child.id);
-      descendants.push(child);
-      appendDescendants(child.id);
-    }
-  };
-
-  appendDescendants(root.id);
-
-  return descendants;
-});
-
-const items = computed(() => {
-  if (activityRoot.value) {
-    return activityDescendants.value
-      .filter((activity) => activity.kind !== 'reasoning_summary' && activity.kind !== 'llm')
-      .map(buildTimelineItemFromActivity);
-  }
-
-  return props.toolCalls.map(buildTimelineItem);
-});
-
-const processItems = computed(() => {
-  if (activityRoot.value) {
-    return uniqueStrings(
-      activityDescendants.value
-        .filter((activity) => activity.kind === 'reasoning_summary' || activity.kind === 'llm')
-        .map((activity) => activity.description ?? activity.title),
-    ).slice(-3);
-  }
-
-  const activityTitle = normalizeText(props.activityText ?? '');
-
-  return uniqueStrings(props.activityTrail ?? [])
-    .filter((item) => !isMachinePreview(item))
-    .filter((item) => normalizeText(item) !== activityTitle)
-    .slice(-2);
-});
-
-const overallStatus = computed<IAiToolCall['status']>(() => {
-  if (activityRoot.value) {
-    return ACTIVITY_STATUS_TO_TOOL_STATUS[activityRoot.value.status];
-  }
-
-  return items.value.length ? getGroupStatus(items.value) : 'running';
-});
-
-const phases = computed<IToolPhaseRow[]>(() => {
-  const groups = new Map<TActivityPhaseKey, { processItems: string[]; items: IToolTimelineItem[] }>();
-
-  if (processItems.value.length) {
-    groups.set('planning', {
-      processItems: processItems.value,
-      items: [],
-    });
-  }
-
-  for (const item of items.value) {
-    const existing = groups.get(item.phaseKey);
-    if (existing) {
-      existing.items.push(item);
-      continue;
-    }
-
-    groups.set(item.phaseKey, {
-      processItems: [],
-      items: [item],
-    });
-  }
-
-  return [...groups.entries()]
-    .sort((left, right) => PHASE_META[left[0]].order - PHASE_META[right[0]].order)
-    .map(([phaseKey, group]) => {
-      const phaseStatus = group.items.length ? getGroupStatus(group.items) : overallStatus.value;
-      const phaseMeta = PHASE_META[phaseKey];
-
-      return {
-        id: `${activityRow.value?.id ?? 'run'}:${phaseKey}`,
-        key: phaseKey,
-        title: phaseMeta.title,
-        summary: buildPhaseSummary(phaseKey, group.processItems, group.items),
-        icon: phaseMeta.icon,
-        status: phaseStatus,
-        statusLabel: TOOL_STATUS_META[phaseStatus].badgeLabel,
-        durationLabel: getAggregateDurationLabel(group.items.map((item) => item.elapsedMs)),
-        processItems: group.processItems,
-        items: group.items,
-        defaultOpen: true,
-      };
-    });
-});
-
-const getPrimaryItem = (timelineItems: readonly IToolTimelineItem[]): IToolTimelineItem | null => {
-  const running = timelineItems.find((item) => item.status === 'running');
-  if (running) {
-    return running;
-  }
-
-  const failed = timelineItems.find((item) => item.status === 'failed');
-  if (failed) {
-    return failed;
-  }
-
-  return timelineItems[timelineItems.length - 1] ?? null;
+  return getGroupIcon(block.group);
 };
 
-const getGroupStatus = (timelineItems: readonly IToolTimelineItem[]): IAiToolCall['status'] => {
-  if (timelineItems.some((item) => item.status === 'failed')) {
-    return 'failed';
+const isBlockMarkerSpinning = (block: TActivityFeedBlock): boolean =>
+  block.kind === 'assistant_note'
+    ? block.note.status === 'streaming'
+    : block.group.status === 'running';
+
+const getBlockMarkerClasses = (block: TActivityFeedBlock): string[] => {
+  if (block.kind === 'assistant_note') {
+    return [
+      `is-source-${block.note.source}`,
+      block.note.status ? `is-status-${block.note.status}` : '',
+      `is-tone-${block.note.tone}`,
+    ].filter(Boolean);
   }
 
-  if (timelineItems.some((item) => item.status === 'running')) {
-    return 'running';
-  }
-
-  if (timelineItems.some((item) => item.status === 'pending')) {
-    return 'pending';
-  }
-
-  if (timelineItems.some((item) => item.status === 'denied')) {
-    return 'denied';
-  }
-
-  return 'succeeded';
+  return [`is-${block.group.status}`];
 };
 
-const activityRow = computed<IToolActivityRow | null>(() => {
-  const root = activityRoot.value;
-  if (root) {
-    const status = ACTIVITY_STATUS_TO_TOOL_STATUS[root.status];
-    const statusMeta = TOOL_STATUS_META[status];
-    const durationLabel = formatElapsed(root.durationMs)
-      ?? getAggregateDurationLabel(activityDescendants.value.map((activity) => activity.durationMs));
-
-    return {
-      id: root.id,
-      title: root.title,
-      status,
-      leadingIcon: Bot,
-      statusIcon: statusMeta.icon,
-      statusLabel: statusMeta.badgeLabel,
-      durationLabel,
-      isSpinning: status === 'running',
-    };
+const getGroupProgressLabel = (group: IActivityFeedGroup): string => {
+  if (group.status === 'running' || group.status === 'pending') {
+    return `已完成 ${group.completedSteps}/${group.rows.length} 步`;
   }
 
-  const trimmedActivity = props.activityText?.trim();
-  if (!trimmedActivity && !items.value.length && !processItems.value.length) {
+  return `共 ${group.rows.length} 步`;
+};
+
+const getGroupActionCountLabel = (group: IActivityFeedGroup): string =>
+  `${group.rows.length} 个动作`;
+
+const getDiffLabel = (
+  diff: IActivityFeedGroup['diff'] | IActivityFeedRow['diff'],
+): string | null => {
+  if (!diff) {
     return null;
   }
 
-  const primaryItem = getPrimaryItem(items.value);
-  const status = overallStatus.value;
-  const statusMeta = TOOL_STATUS_META[status];
-  const durationLabel = getAggregateDurationLabel(items.value.map((item) => item.elapsedMs));
+  return `+${diff.additions} -${diff.deletions}`;
+};
 
-  return {
-    id: 'current-activity',
-    title: trimmedActivity || primaryItem?.headline || statusMeta.detail,
-    status,
-    leadingIcon: Bot,
-    statusIcon: statusMeta.icon,
-    statusLabel: statusMeta.badgeLabel,
-    durationLabel,
-    isSpinning: status === 'running',
-  };
-});
+const getGroupPrimaryRow = (group: IActivityFeedGroup): IActivityFeedRow | null =>
+  group.rows[0] ?? null;
+
+const isSingleRowGroup = (group: IActivityFeedGroup): boolean =>
+  group.rows.length === 1 && Boolean(getGroupPrimaryRow(group));
+
+const getGroupPrimaryRowStatus = (group: IActivityFeedGroup): IAiToolCall['status'] =>
+  getGroupPrimaryRow(group)?.status ?? group.status;
+
+const getGroupPrimaryRowDurationLabel = (group: IActivityFeedGroup): string | null =>
+  getGroupPrimaryRow(group)?.durationLabel ?? null;
+
+const getGroupPrimaryRowSections = (group: IActivityFeedGroup) =>
+  getGroupPrimaryRow(group)?.sections ?? [];
+
+const getGroupPrimaryRowSubtitle = (group: IActivityFeedGroup): string => {
+  const row = getGroupPrimaryRow(group);
+
+  return row ? getRowSubtitle(row) : '';
+};
+
+const hasUniformGroupActionKind = (group: IActivityFeedGroup): boolean => {
+  const primaryRow = getGroupPrimaryRow(group);
+
+  if (!primaryRow) {
+    return false;
+  }
+
+  return group.rows.every((row) => row.actionKind === primaryRow.actionKind);
+};
+
+const getGroupVerbPrefix = (group: IActivityFeedGroup): string =>
+  group.status === 'running' || group.status === 'pending' ? '正在' : '已';
+
+const getGroupEyebrow = (group: IActivityFeedGroup): string => {
+  const primaryRow = getGroupPrimaryRow(group);
+
+  if (!primaryRow || !hasUniformGroupActionKind(group)) {
+    return '工具调用';
+  }
+
+  switch (primaryRow.actionKind) {
+    case 'read':
+      return '已审阅文件';
+    case 'fileSearch':
+    case 'symbolSearch':
+      return '搜索结果';
+    case 'web':
+    case 'webFetch':
+      return '联网';
+    case 'applyPatch':
+    case 'patch':
+      return '编辑';
+    case 'execute':
+    case 'verify':
+      return '运行';
+    case 'git':
+      return 'Git';
+    default:
+      return '工具调用';
+  }
+};
+
+const getGroupDisplayTitle = (group: IActivityFeedGroup): string => {
+  const primaryRow = getGroupPrimaryRow(group);
+
+  if (!primaryRow) {
+    return group.title;
+  }
+
+  if (group.rows.length === 1) {
+    return primaryRow.compactLine;
+  }
+
+  if (!hasUniformGroupActionKind(group)) {
+    return group.title;
+  }
+
+  const verbPrefix = getGroupVerbPrefix(group);
+
+  switch (primaryRow.actionKind) {
+    case 'read':
+      return `${verbPrefix}查看 ${group.rows.length} 个文件`;
+    case 'fileSearch':
+    case 'symbolSearch':
+      return `${verbPrefix}搜索 ${group.rows.length} 个目标`;
+    case 'web':
+      return `${verbPrefix}联网搜索 ${group.rows.length} 次`;
+    case 'webFetch':
+      return `${verbPrefix}读取 ${group.rows.length} 个网页`;
+    case 'applyPatch':
+    case 'patch':
+      return `${verbPrefix}编辑 ${group.rows.length} 个文件`;
+    case 'execute':
+    case 'verify':
+      return `${verbPrefix}执行 ${group.rows.length} 个命令`;
+    case 'git':
+      return `${verbPrefix}查看 ${group.rows.length} 条 Git 操作`;
+    case 'tree':
+      return `${verbPrefix}查看 ${group.rows.length} 个目录`;
+    default:
+      return group.title;
+  }
+};
+
 </script>
 
 <template>
-  <section v-if="activityRow" class="ai-tool-activity-inline ai-tool-run-timeline" :class="`is-${activityRow.status}`"
-    aria-label="工具调用树">
-    <ol class="ai-tool-tree">
-      <li class="ai-tool-tree-node ai-tool-run-item ai-tool-run-current" :class="`is-${activityRow.status}`"
-        aria-live="polite">
-        <CollapsibleRoot class="ai-tool-node-details ai-tool-root-details" :default-open="true">
-          <CollapsibleTrigger as-child>
-            <button type="button" class="ai-tool-tree-row ai-tool-tree-root-row">
-              <span class="ai-tool-run-status-node">
-                <component :is="activityRow.leadingIcon" class="ai-tool-node-icon" />
-              </span>
-              <span class="ai-tool-row-copy">
-                <span class="ai-tool-run-title" :title="activityRow.title">{{ activityRow.title }}</span>
-              </span>
-              <span v-if="activityRow.status !== 'succeeded' || activityRow.durationLabel" class="ai-tool-row-meta">
-                <span v-if="activityRow.status !== 'succeeded'" class="ai-tool-status-text"
-                  :class="`is-${activityRow.status}`">{{ activityRow.statusLabel }}</span>
-                <span v-if="activityRow.durationLabel" class="ai-tool-duration-pill">{{ activityRow.durationLabel
-                }}</span>
-              </span>
-              <span class="ai-tool-chevron-shell" aria-hidden="true">
-                <ChevronRight class="ai-tool-run-chevron" />
-              </span>
-            </button>
-          </CollapsibleTrigger>
+  <section v-if="hasBlocks" class="ai-tool-activity-inline" aria-label="Agent 活动流">
+    <TransitionGroup name="ai-tool-feed-motion" tag="ol" class="ai-tool-feed">
+      <li v-for="block in blocks" :key="block.id" class="ai-tool-feed-entry" :class="`is-${block.kind}`">
+        <span class="ai-tool-entry-rail" aria-hidden="true">
+          <span class="ai-tool-entry-marker" :class="getBlockMarkerClasses(block)">
+            <component :is="getBlockMarkerIcon(block)" class="ai-tool-entry-marker-icon"
+              :class="{ 'is-spinning': isBlockMarkerSpinning(block) }" />
+          </span>
+        </span>
 
-          <CollapsibleContent v-if="phases.length" force-mount as-child>
-            <div class="ai-tool-collapsible-content">
-              <div class="ai-tool-collapsible-shell">
-                <TransitionGroup name="ai-tool-list-motion" tag="ol"
-                  class="ai-tool-subtree ai-tool-tool-list ai-tool-phase-list">
-      <li v-for="phase in phases" :key="phase.id" class="ai-tool-tree-node ai-tool-phase-node"
-        :class="`is-${phase.status}`">
-        <CollapsibleRoot class="ai-tool-node-details ai-tool-phase-details" :open="isPhaseOpen(phase)"
-          @update:open="(open) => updatePhaseOpen(phase.id, open)">
-          <CollapsibleTrigger as-child>
-            <button type="button" class="ai-tool-tree-row ai-tool-phase-summary">
-              <span class="ai-tool-run-status-node is-branch">
-                <component :is="phase.icon" class="ai-tool-node-icon" />
-              </span>
-              <span class="ai-tool-run-main ai-tool-phase-main">
-                <span class="ai-tool-run-heading-line ai-tool-phase-heading-line">
-                  <span class="ai-tool-run-action ai-tool-phase-title">{{ phase.title }}</span>
-                  <span class="ai-tool-phase-summary-text" :title="phase.summary">{{ phase.summary }}</span>
-                </span>
-              </span>
-              <span v-if="phase.status !== 'succeeded' || phase.durationLabel" class="ai-tool-row-meta">
-                <span v-if="phase.status !== 'succeeded'" class="ai-tool-status-text" :class="`is-${phase.status}`">{{
-                  phase.statusLabel }}</span>
-                <span v-if="phase.durationLabel" class="ai-tool-duration-pill">{{ phase.durationLabel }}</span>
-              </span>
-              <span class="ai-tool-chevron-shell" aria-hidden="true">
-                <ChevronRight class="ai-tool-run-chevron" />
-              </span>
-            </button>
-          </CollapsibleTrigger>
+        <div class="ai-tool-entry-main">
+          <div v-if="block.kind === 'assistant_note'" class="ai-tool-note-line">
+            <p class="ai-tool-note-text" :class="[
+              `is-source-${block.note.source}`,
+              `is-tone-${block.note.tone}`,
+              block.note.status ? `is-status-${block.note.status}` : '',
+              block.note.trigger ? `is-trigger-${block.note.trigger}` : '',
+            ]">
+              <span class="ai-tool-note-body">{{ block.note.text }}</span>
+            </p>
+          </div>
 
-          <CollapsibleContent v-if="phase.processItems.length || phase.items.length" as-child>
-            <ol class="ai-tool-subtree ai-tool-phase-items ai-tool-collapsible-content">
-              <li v-for="process in phase.processItems" :key="`${phase.id}:process:${process}`"
-                class="ai-tool-tree-node ai-tool-detail-node ai-tool-process-node">
-                <span class="ai-tool-fact-rail" aria-hidden="true">
-                  <span class="ai-tool-fact-status" :class="`is-${phase.status}`">
-                    <component
-                      :is="getFactStatusIcon(phase.status, phase.status === 'running' && process === phase.processItems.at(-1))"
-                      class="ai-tool-fact-status-icon"
-                      :class="{ 'is-spinning': phase.status === 'running' && process === phase.processItems.at(-1) }" />
+          <CollapsibleRoot v-else class="ai-tool-group ai-tool-group-shell" :open="isGroupOpen(block.group)"
+            @update:open="(open) => updateGroupOpen(block.group.id, open)">
+            <template v-if="isSingleRowGroup(block.group)">
+              <CollapsibleTrigger as-child>
+                <button type="button" class="ai-tool-group-header ai-tool-single-row-header"
+                  :class="`is-${block.group.status}`">
+                  <span class="ai-tool-row-icon-shell" aria-hidden="true">
+                    <component :is="getRowIcon(getGroupPrimaryRow(block.group) ?? block.group.rows[0])"
+                      class="ai-tool-row-icon" :class="{
+                        'is-spinning': getGroupPrimaryRow(block.group)?.status === 'running',
+                        [`is-${getGroupPrimaryRowStatus(block.group)}`]: true,
+                      }" />
                   </span>
-                  <span class="ai-tool-fact-topic">
-                    <component :is="getFactTopicIcon(process)" class="ai-tool-fact-topic-icon" />
+                  <span class="ai-tool-row-main">
+                    <span class="ai-tool-row-text" :title="getGroupPrimaryRow(block.group)?.compactLine">
+                      {{ getGroupPrimaryRow(block.group)?.compactLine }}
+                    </span>
+                    <span class="ai-tool-row-subtitle">{{ getGroupPrimaryRowSubtitle(block.group) }}</span>
                   </span>
-                </span>
-                <span class="ai-tool-run-fact" :title="process">{{ process }}</span>
-              </li>
+                  <span v-if="shouldShowStatusText(getGroupPrimaryRowStatus(block.group))
+                    || getGroupPrimaryRowDurationLabel(block.group)" class="ai-tool-row-meta">
+                    <span v-if="shouldShowStatusText(getGroupPrimaryRowStatus(block.group))" class="ai-tool-status-text"
+                      :class="`is-${getGroupPrimaryRowStatus(block.group)}`">
+                      {{ getStatusLabel(getGroupPrimaryRowStatus(block.group)) }}
+                    </span>
+                    <span v-if="getGroupPrimaryRowDurationLabel(block.group)" class="ai-tool-duration-pill">
+                      {{ getGroupPrimaryRowDurationLabel(block.group) }}
+                    </span>
+                  </span>
+                  <span class="ai-tool-chevron-shell" aria-hidden="true">
+                    <ChevronRight class="ai-tool-chevron" />
+                  </span>
+                </button>
+              </CollapsibleTrigger>
 
-              <li v-for="item in phase.items" :key="item.id" class="ai-tool-tree-node ai-tool-run-item"
-                :class="`is-${item.status}`">
-                <CollapsibleRoot class="ai-tool-node-details" :open="isItemOpen(item)"
-                  @update:open="(open) => updateItemOpen(item.id, open)">
-                  <CollapsibleTrigger as-child>
-                    <button type="button" class="ai-tool-tree-row ai-tool-run-summary">
-                      <span class="ai-tool-run-status-node is-branch">
-                        <component :is="item.toolIcon" class="ai-tool-node-icon" />
-                      </span>
-                      <span class="ai-tool-run-main">
-                        <span class="ai-tool-run-heading-line">
-                          <span class="ai-tool-run-action">{{ item.actionLabel }}</span>
-                          <span class="ai-tool-run-target" :title="item.target">{{ item.target }}</span>
-                        </span>
-                      </span>
-                      <span v-if="item.status !== 'succeeded' || item.durationLabel" class="ai-tool-row-meta">
-                        <span v-if="item.status !== 'succeeded'" class="ai-tool-status-text"
-                          :class="`is-${item.status}`">{{ item.statusLabel }}</span>
-                        <span v-if="item.durationLabel" class="ai-tool-duration-pill">{{ item.durationLabel }}</span>
-                      </span>
-                      <span class="ai-tool-chevron-shell" aria-hidden="true">
-                        <ChevronRight class="ai-tool-run-chevron" />
-                      </span>
-                    </button>
-                  </CollapsibleTrigger>
+              <CollapsibleContent v-if="getGroupPrimaryRowSections(block.group).length" as-child>
+                <div class="ai-tool-detail-panel is-standalone">
+                  <section v-for="section in getGroupPrimaryRowSections(block.group)"
+                    :key="`${block.group.id}:section:${section.title}`" class="ai-tool-detail-section"
+                    :class="section.tone ? `is-${section.tone}` : ''">
+                    <h4 class="ai-tool-detail-heading">{{ section.title }}</h4>
+                    <ol class="ai-tool-detail-points">
+                      <li v-for="detail in section.items" :key="`${block.group.id}:detail:${section.title}:${detail}`"
+                        class="ai-tool-detail-point" :title="detail">
+                        {{ detail }}
+                      </li>
+                    </ol>
+                  </section>
+                </div>
+              </CollapsibleContent>
+            </template>
 
-                  <CollapsibleContent v-if="item.sections.length" as-child>
-                    <div class="ai-tool-collapsible-content ai-tool-detail-card">
-                      <section v-for="section in item.sections" :key="`${item.id}:section:${section.title}`"
-                        class="ai-tool-detail-section" :class="section.tone ? `is-${section.tone}` : ''">
-                        <h4 class="ai-tool-detail-heading">{{ section.title }}</h4>
-                        <ol class="ai-tool-detail-points">
-                          <li v-for="detail in section.items" :key="`${item.id}:detail:${section.title}:${detail}`"
-                            class="ai-tool-detail-point" :title="detail">
-                            {{ detail }}
-                          </li>
-                        </ol>
-                      </section>
-                    </div>
-                  </CollapsibleContent>
-                </CollapsibleRoot>
-              </li>
-            </ol>
-          </CollapsibleContent>
-        </CollapsibleRoot>
+            <template v-else>
+              <CollapsibleTrigger as-child>
+                <button type="button" class="ai-tool-group-header" :class="`is-${block.group.status}`">
+                  <span class="ai-tool-group-heading">
+                    <span class="ai-tool-group-eyebrow">{{ getGroupEyebrow(block.group) }}</span>
+                    <span class="ai-tool-group-title">{{ getGroupDisplayTitle(block.group) }}</span>
+                    <span class="ai-tool-group-pills">
+                      <span class="ai-tool-group-pill is-steps">{{ getGroupProgressLabel(block.group) }}</span>
+                      <span class="ai-tool-group-pill is-count">{{ getGroupActionCountLabel(block.group) }}</span>
+                      <span v-if="getDiffLabel(block.group.diff)" class="ai-tool-group-pill is-diff">
+                        {{ getDiffLabel(block.group.diff) }}
+                      </span>
+                    </span>
+                  </span>
+                  <span class="ai-tool-group-header-trailing">
+                    <span v-if="shouldShowStatusText(block.group.status)" class="ai-tool-status-text"
+                      :class="`is-${block.group.status}`">
+                      {{ getStatusLabel(block.group.status) }}
+                    </span>
+                    <span class="ai-tool-chevron-shell" aria-hidden="true">
+                      <ChevronRight class="ai-tool-chevron" />
+                    </span>
+                  </span>
+                </button>
+              </CollapsibleTrigger>
+
+              <CollapsibleContent as-child>
+                <ol class="ai-tool-group-rows">
+                  <li v-for="row in block.group.rows" :key="row.id" class="ai-tool-row" :class="`is-${row.status}`">
+                    <span class="ai-tool-row-branch" aria-hidden="true">
+                      <span class="ai-tool-row-branch-node" :class="`is-${row.status}`"></span>
+                    </span>
+                    <CollapsibleRoot class="ai-tool-row-details" :open="isRowOpen(row)"
+                      @update:open="(open) => updateRowOpen(row.id, open)">
+                      <CollapsibleTrigger as-child>
+                        <button type="button" class="ai-tool-row-summary">
+                          <span class="ai-tool-row-icon-shell" aria-hidden="true">
+                            <component :is="getRowIcon(row)" class="ai-tool-row-icon"
+                              :class="{ 'is-spinning': row.status === 'running', [`is-${row.status}`]: true }" />
+                          </span>
+                          <span class="ai-tool-row-main">
+                            <span class="ai-tool-row-text" :title="row.compactLine">{{ row.compactLine }}</span>
+                            <span class="ai-tool-row-subtitle">{{ getRowSubtitle(row) }}</span>
+                          </span>
+                          <span v-if="shouldShowStatusText(row.status) || row.durationLabel" class="ai-tool-row-meta">
+                            <span v-if="shouldShowStatusText(row.status)" class="ai-tool-status-text"
+                              :class="`is-${row.status}`">
+                              {{ getStatusLabel(row.status) }}
+                            </span>
+                            <span v-if="row.durationLabel" class="ai-tool-duration-pill">{{ row.durationLabel }}</span>
+                          </span>
+                          <span class="ai-tool-chevron-shell" aria-hidden="true">
+                            <ChevronRight class="ai-tool-chevron" />
+                          </span>
+                        </button>
+                      </CollapsibleTrigger>
+
+                      <CollapsibleContent v-if="row.sections.length" as-child>
+                        <div class="ai-tool-detail-panel">
+                          <section v-for="section in row.sections" :key="`${row.id}:section:${section.title}`"
+                            class="ai-tool-detail-section" :class="section.tone ? `is-${section.tone}` : ''">
+                            <h4 class="ai-tool-detail-heading">{{ section.title }}</h4>
+                            <ol class="ai-tool-detail-points">
+                              <li v-for="detail in section.items" :key="`${row.id}:detail:${section.title}:${detail}`"
+                                class="ai-tool-detail-point" :title="detail">
+                                {{ detail }}
+                              </li>
+                            </ol>
+                          </section>
+                        </div>
+                      </CollapsibleContent>
+                    </CollapsibleRoot>
+                  </li>
+                </ol>
+              </CollapsibleContent>
+            </template>
+          </CollapsibleRoot>
+        </div>
       </li>
-      </TransitionGroup>
-      </div>
-      </div>
-      </CollapsibleContent>
-      </CollapsibleRoot>
-      </li>
-    </ol>
+    </TransitionGroup>
   </section>
 </template>
 
 <style scoped>
-.ai-tool-run-timeline {
-  width: min(100%, 760px);
-  color: var(--text-tertiary);
+.ai-tool-activity-inline {
+  width: 100%;
+  color: var(--text-secondary);
   font-size: 13px;
   line-height: 20px;
 }
 
-.ai-tool-run-status-node {
+.ai-tool-feed,
+.ai-tool-group-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ai-tool-feed {
+  display: grid;
+  gap: 4px;
+}
+
+.ai-tool-feed-entry {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 10px;
+  min-width: 0;
+}
+
+.ai-tool-entry-rail {
+  position: relative;
+  display: flex;
+  min-height: 100%;
+  justify-content: center;
+  padding-top: 3px;
+}
+
+.ai-tool-entry-rail::after {
+  position: absolute;
+  top: 22px;
+  bottom: -6px;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--shell-divider) 72%, transparent);
+  content: '';
+}
+
+.ai-tool-feed-entry:last-child .ai-tool-entry-rail::after {
+  display: none;
+}
+
+.ai-tool-entry-marker {
   display: inline-flex;
-  width: 24px;
-  min-width: 24px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   align-items: center;
   justify-content: center;
-}
-
-.ai-tool-run-status-node.is-branch {
-  width: 24px;
-  min-width: 24px;
-  height: 20px;
-}
-
-.ai-tool-node-icon {
-  width: 14px;
-  height: 14px;
-  color: var(--text-secondary);
-  stroke-width: 2;
-}
-
-.ai-tool-fact-status-icon {
-  width: 12px;
-  height: 12px;
-  stroke-width: 2;
-}
-
-.ai-tool-fact-status-icon.is-spinning {
-  animation: ai-tool-status-spin 900ms linear infinite;
+  border: 1px solid color-mix(in srgb, var(--shell-divider) 78%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-panel) 90%, transparent);
   color: var(--text-secondary);
 }
 
-.ai-tool-run-title {
+.ai-tool-entry-marker.is-running,
+.ai-tool-entry-marker.is-status-streaming {
+  border-color: color-mix(in srgb, var(--accent-strong) 42%, transparent);
+  background: color-mix(in srgb, var(--accent-strong) 16%, var(--surface-panel));
+  color: color-mix(in srgb, var(--accent-strong) 88%, var(--text-primary));
+}
+
+.ai-tool-entry-marker.is-failed,
+.ai-tool-entry-marker.is-note-source-narrator.is-tone-repair,
+.ai-tool-entry-marker.is-note-source-narrator.is-tone-warning {
+  border-color: color-mix(in srgb, var(--warning) 38%, transparent);
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface-panel));
+  color: color-mix(in srgb, var(--warning) 88%, var(--text-primary));
+}
+
+.ai-tool-entry-marker.is-source-narrator,
+.ai-tool-entry-marker.is-note-source-narrator {
+  border-color: color-mix(in srgb, var(--accent-strong) 32%, transparent);
+  background: color-mix(in srgb, var(--accent-strong) 12%, var(--surface-panel));
+}
+
+.ai-tool-entry-marker-icon {
+  width: 11px;
+  height: 11px;
+  stroke-width: 2.1;
+}
+
+.ai-tool-entry-main {
   min-width: 0;
-  color: inherit;
-  font-size: 14px;
-  font-weight: 560;
-  line-height: 22px;
+}
+
+.ai-tool-note-line,
+.ai-tool-group-shell {
+  display: grid;
+  gap: 4px;
+}
+
+.ai-tool-note-line {
+  display: flex;
+  align-items: flex-start;
+  padding: 0 0 6px;
+}
+
+.ai-tool-note-text {
+  display: block;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.ai-tool-note-body {
+  display: block;
   unicode-bidi: plaintext;
   word-break: break-word;
 }
 
-.ai-tool-tree,
-.ai-tool-subtree {
-  display: grid;
-  min-width: 0;
-  list-style: none;
+.ai-tool-note-text.is-source-narrator:not(.is-status-streaming) .ai-tool-note-body {
+  opacity: 0;
+  transform: translateY(4px);
+  animation: ai-tool-note-focus 140ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
 }
 
-.ai-tool-tree {
-  gap: 2px;
-  margin: 0;
+.ai-tool-note-text.is-source-narrator.is-status-streaming .ai-tool-note-body::after {
+  display: inline-block;
+  width: 0.5em;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.12em;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-strong) 78%, var(--text-secondary));
+  opacity: 0.75;
+  content: '';
+  animation: ai-tool-note-caret 920ms ease-in-out infinite;
+}
+
+.ai-tool-note-text.is-tone-repair .ai-tool-note-body,
+.ai-tool-note-text.is-trigger-patch_failed .ai-tool-note-body,
+.ai-tool-note-text.is-trigger-verification_failed .ai-tool-note-body,
+.ai-tool-note-text.is-trigger-test_failed .ai-tool-note-body {
+  color: color-mix(in srgb, var(--warning) 88%, var(--text-primary));
+}
+
+.ai-tool-group {
+  display: grid;
+  gap: 4px;
+}
+
+.ai-tool-group-shell {
   padding: 0;
 }
 
-.ai-tool-subtree {
-  gap: 2px;
-  margin: 6px 0 0 17px;
-  border-left: 1px solid color-mix(in srgb, var(--shell-divider) 68%, transparent);
-  padding: 2px 0 4px 18px;
-}
-
-.ai-tool-tree-node {
-  position: relative;
-  min-width: 0;
-}
-
-.ai-tool-run-item {
-  padding: 4px 0;
-}
-
-.ai-tool-subtree>.ai-tool-tree-node::before {
-  position: absolute;
-  top: 18px;
-  left: -18px;
-  width: 14px;
-  border-top: 1px solid color-mix(in srgb, var(--shell-divider) 68%, transparent);
-  content: '';
-}
-
-.ai-tool-run-current {
-  padding-top: 0;
-}
-
-.ai-tool-tree-row {
-  display: grid;
-  min-width: 0;
-  align-items: center;
-  column-gap: 8px;
-  width: 100%;
-}
-
-.ai-tool-tree-root-row {
-  grid-template-columns: 24px minmax(0, 1fr) auto 14px;
-  min-height: 34px;
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  cursor: pointer;
-  list-style: none;
-  padding: 3px 0;
-  transition:
-    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.ai-tool-node-details {
-  display: block;
-  min-width: 0;
-}
-
-.ai-tool-tree-root-row,
-.ai-tool-phase-summary,
-.ai-tool-run-summary {
+.ai-tool-group-header,
+.ai-tool-row-summary {
   border: 0;
   background: transparent;
   font: inherit;
@@ -1017,45 +653,255 @@ const activityRow = computed<IToolActivityRow | null>(() => {
   appearance: none;
 }
 
-.ai-tool-chevron-shell {
-  display: inline-flex;
-  width: 14px;
-  align-items: center;
-  justify-content: center;
-  justify-self: end;
-}
-
-.ai-tool-row-copy {
+.ai-tool-group-header {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 0 4px;
+  transition:
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ai-tool-single-row-header {
+  grid-template-columns: 20px minmax(0, 1fr) auto 12px;
+  align-items: center;
+  min-height: 32px;
+  padding: 2px 0 4px;
+}
+
+.ai-tool-group-heading {
+  display: grid;
+  gap: 3px;
   min-width: 0;
 }
 
-.ai-tool-row-meta {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 6px;
-  margin-left: 8px;
-  justify-self: end;
-}
-
-.ai-tool-duration-pill {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 2px 8px;
+.ai-tool-group-eyebrow {
+  color: var(--text-quaternary);
   font-size: 11px;
+  font-weight: 560;
+  letter-spacing: 0.04em;
+  line-height: 16px;
+  text-transform: uppercase;
+}
+
+.ai-tool-group-title {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.ai-tool-group-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-tool-group-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  color: var(--text-quaternary);
+  font-size: 11px;
+  font-weight: 520;
   line-height: 16px;
   white-space: nowrap;
 }
 
-.ai-tool-duration-pill {
+.ai-tool-group-pill.is-steps {
+  color: color-mix(in srgb, var(--accent-strong) 82%, var(--text-secondary));
+}
+
+.ai-tool-group-pill.is-diff {
+  color: color-mix(in srgb, var(--success) 82%, var(--text-secondary));
+}
+
+.ai-tool-group-header-trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
+}
+
+.ai-tool-group-rows {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0 0 0 1px;
+  list-style: none;
+  position: relative;
+}
+
+.ai-tool-group-rows::before {
+  position: relative;
+}
+
+.ai-tool-group-rows::after {
+  position: absolute;
+  top: 0;
+  bottom: 8px;
+  left: 5px;
+  width: 1px;
+  background: color-mix(in srgb, var(--shell-divider) 64%, transparent);
+  content: '';
+}
+
+.ai-tool-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 8px;
+  min-width: 0;
+}
+
+.ai-tool-row-branch {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  width: 12px;
+  justify-content: center;
+  padding-top: 11px;
+}
+
+.ai-tool-row-branch::before {
+  position: absolute;
+  top: 14px;
+  left: 5px;
+  width: 9px;
+  border-top: 1px solid color-mix(in srgb, var(--shell-divider) 64%, transparent);
+  content: '';
+}
+
+.ai-tool-row-branch-node {
+  position: relative;
+  z-index: 1;
+  width: 6px;
+  height: 6px;
+  border: 1px solid color-mix(in srgb, var(--surface-panel) 90%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-quaternary) 84%, transparent);
+}
+
+.ai-tool-row-branch-node.is-running {
+  background: color-mix(in srgb, var(--accent-strong) 84%, transparent);
+}
+
+.ai-tool-row-branch-node.is-failed,
+.ai-tool-row-branch-node.is-denied {
+  background: color-mix(in srgb, var(--danger) 84%, transparent);
+}
+
+.ai-tool-row-branch-node.is-pending {
+  background: color-mix(in srgb, var(--warning) 76%, transparent);
+}
+
+.ai-tool-row-summary {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto 12px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 3px 0;
+  transition:
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ai-tool-row-icon-shell,
+.ai-tool-chevron-shell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-tool-row-icon-shell {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+}
+
+.ai-tool-row-icon {
+  width: 13px;
+  height: 13px;
+  color: color-mix(in srgb, var(--text-quaternary) 84%, transparent);
+  stroke-width: 2;
+}
+
+.ai-tool-row-icon.is-running {
+  color: var(--text-secondary);
+}
+
+.ai-tool-row-icon.is-failed,
+.ai-tool-row-icon.is-denied {
+  color: color-mix(in srgb, var(--danger) 84%, var(--text-secondary));
+}
+
+.ai-tool-row-icon.is-pending {
   color: var(--text-quaternary);
-  font-variant-numeric: tabular-nums;
-  background: color-mix(in srgb, var(--surface-panel) 54%, transparent);
+}
+
+.ai-tool-row-icon.is-spinning {
+  animation: ai-tool-status-spin 900ms linear infinite;
+}
+
+.ai-tool-row-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 560;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  unicode-bidi: plaintext;
+  white-space: nowrap;
+}
+
+.ai-tool-row-main {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.ai-tool-row-subtitle {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-quaternary);
+  font-size: 11px;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-tool-row-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
+  align-self: start;
 }
 
 .ai-tool-status-text {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
   color: var(--text-quaternary);
   font-size: 11px;
   font-weight: 520;
@@ -1072,116 +918,46 @@ const activityRow = computed<IToolActivityRow | null>(() => {
   color: color-mix(in srgb, var(--danger) 84%, var(--text-secondary));
 }
 
-.ai-tool-run-summary {
-  grid-template-columns: 24px minmax(0, 1fr) auto 14px;
-  min-height: 30px;
-  gap: 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  list-style: none;
-  padding: 2px 0;
-  transition:
-    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.ai-tool-phase-summary {
-  grid-template-columns: 24px minmax(0, 1fr) auto 14px;
-  min-height: 30px;
-  gap: 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  list-style: none;
-  padding: 2px 0;
-  transition:
-    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.ai-tool-run-main {
-  display: grid;
-  min-width: 0;
-}
-
-.ai-tool-phase-main {
-  align-items: center;
-}
-
-.ai-tool-run-heading-line {
+.ai-tool-duration-pill {
   display: inline-flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 7px;
-  flex-wrap: wrap;
-}
-
-.ai-tool-phase-heading-line {
   align-items: center;
+  padding: 0;
+  color: var(--text-quaternary);
+  font-size: 11px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.ai-tool-phase-title {
-  font-weight: 560;
-}
-
-.ai-tool-phase-summary-text {
-  max-width: 100%;
-}
-
-.ai-tool-kind-icon {
+.ai-tool-chevron {
   width: 13px;
   height: 13px;
   color: var(--text-quaternary);
-  stroke-width: 1.9;
+  stroke-width: 2;
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.ai-tool-run-action {
-  color: var(--text-primary);
-  font-weight: 540;
-  white-space: nowrap;
+.ai-tool-group[data-state='open']>.ai-tool-group-header .ai-tool-chevron,
+.ai-tool-row-details[data-state='open']>.ai-tool-row-summary .ai-tool-chevron {
+  transform: rotate(90deg);
 }
 
-.ai-tool-run-target {
-  min-width: 0;
-  overflow: hidden;
-  color: color-mix(in srgb, var(--text-secondary) 84%, var(--text-tertiary));
-  text-overflow: ellipsis;
-  unicode-bidi: plaintext;
-  white-space: nowrap;
-}
-
-.ai-tool-run-status {
-  color: var(--text-quaternary);
-  font-size: 12px;
-  line-height: 18px;
-  white-space: nowrap;
-}
-
-.ai-tool-run-fact {
-  max-width: 100%;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 19px;
-  text-overflow: ellipsis;
-  unicode-bidi: plaintext;
-  white-space: nowrap;
-}
-
-.ai-tool-detail-list {
-  margin-top: 4px;
-}
-
-.ai-tool-detail-card {
+.ai-tool-detail-panel {
   display: grid;
-  gap: 10px;
-  margin: 6px 0 0 11px;
-  border-left: 1px solid color-mix(in srgb, var(--shell-divider) 68%, transparent);
-  padding: 6px 0 4px 21px;
+  gap: 8px;
+  margin: 2px 0 0;
+  border-left: 1px solid color-mix(in srgb, var(--shell-divider) 66%, transparent);
+  padding: 2px 0 0 12px;
+}
+
+.ai-tool-detail-panel.is-standalone {
+  margin-top: 2px;
+  margin-left: 20px;
 }
 
 .ai-tool-detail-section {
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
 
 .ai-tool-detail-section.is-warning .ai-tool-detail-heading,
@@ -1233,110 +1009,54 @@ const activityRow = computed<IToolActivityRow | null>(() => {
   content: '';
 }
 
-.ai-tool-detail-node {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: 24px minmax(0, 1fr);
-  column-gap: 8px;
-  padding: 2px 0;
-}
-
-.ai-tool-process-node {
-  align-items: center;
-}
-
-.ai-tool-fact-rail {
-  display: inline-flex;
-  width: 24px;
-  min-width: 24px;
-  align-items: center;
-  gap: 4px;
-}
-
-.ai-tool-fact-status,
-.ai-tool-fact-topic {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.ai-tool-fact-status {
-  color: var(--text-quaternary);
-}
-
-.ai-tool-fact-topic-icon {
-  width: 12px;
-  height: 12px;
-  color: color-mix(in srgb, var(--text-quaternary) 78%, transparent);
-  stroke-width: 2;
-}
-
-.ai-tool-run-timeline.is-running .ai-tool-tree-root-row {
-  color: var(--text-primary);
-}
-
-.ai-tool-run-chevron {
-  width: 13px;
-  height: 13px;
-  color: var(--text-quaternary);
-  stroke-width: 2;
-  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.ai-tool-node-details[data-state='open']>.ai-tool-tree-row .ai-tool-run-chevron {
-  transform: rotate(90deg);
-}
-
-.ai-tool-root-details>.ai-tool-collapsible-content {
-  display: grid;
-  grid-template-rows: 1fr;
-  opacity: 1;
+.ai-tool-feed-motion-enter-active,
+.ai-tool-feed-motion-move {
   transition:
-    grid-template-rows 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 120ms cubic-bezier(0.23, 1, 0.32, 1),
     opacity 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.ai-tool-root-details>.ai-tool-collapsible-content[data-state='closed'] {
-  grid-template-rows: 0fr;
+.ai-tool-feed-motion-enter-from {
   opacity: 0;
-  pointer-events: none;
-}
-
-.ai-tool-collapsible-shell {
-  min-height: 0;
-  overflow: hidden;
-}
-
-.ai-tool-list-motion-enter-active {
-  transition:
-    transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
-    opacity 180ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.ai-tool-list-motion-enter-from {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-.ai-tool-list-motion-move {
-  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+  transform: translateY(4px);
 }
 
 @media (hover: hover) and (pointer: fine) {
 
-  .ai-tool-tree-root-row:hover,
-  .ai-tool-phase-summary:hover,
-  .ai-tool-run-summary:hover {
-    background: color-mix(in srgb, var(--surface-hover) 42%, transparent);
+  .ai-tool-group-header:hover,
+  .ai-tool-row-summary:hover {
+    background: color-mix(in srgb, var(--surface-hover) 28%, transparent);
     color: var(--text-primary);
   }
 }
 
-.ai-tool-tree-root-row:focus-visible,
-.ai-tool-phase-summary:focus-visible,
-.ai-tool-run-summary:focus-visible {
+.ai-tool-group-header:active,
+.ai-tool-row-summary:active {
+  transform: scale(0.998);
+}
+
+.ai-tool-group-header:focus-visible,
+.ai-tool-row-summary:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent-strong) 46%, transparent);
   outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .ai-tool-entry-marker-icon.is-spinning,
+  .ai-tool-feed-motion-enter-active,
+  .ai-tool-feed-motion-move,
+  .ai-tool-note-text.is-source-narrator:not(.is-status-streaming) .ai-tool-note-body,
+  .ai-tool-note-text.is-source-narrator.is-status-streaming .ai-tool-note-body::after {
+    animation: none;
+    transition: none;
+  }
+
+  .ai-tool-group-header,
+  .ai-tool-row-summary,
+  .ai-tool-chevron {
+    transition: none;
+  }
 }
 
 @keyframes ai-tool-status-spin {
@@ -1345,18 +1065,62 @@ const activityRow = computed<IToolActivityRow | null>(() => {
   }
 }
 
+@keyframes ai-tool-note-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ai-tool-note-focus {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ai-tool-note-caret {
+
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scaleY(0.92);
+  }
+
+  50% {
+    opacity: 0.92;
+    transform: scaleY(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
 
-  .ai-tool-fact-status-icon.is-spinning,
-  .ai-tool-run-chevron,
-  .ai-tool-root-details>.ai-tool-collapsible-content,
-  .ai-tool-list-motion-enter-active,
-  .ai-tool-list-motion-move {
+  .ai-tool-row-icon.is-spinning,
+  .ai-tool-chevron,
+  .ai-tool-note-text.is-source-narrator .ai-tool-note-body,
+  .ai-tool-note-text.is-source-narrator.is-status-streaming .ai-tool-note-body::after,
+  .ai-tool-feed-motion-enter-active,
+  .ai-tool-feed-motion-move {
     animation: none;
     transition: none;
   }
 
-  .ai-tool-list-motion-enter-from {
+  .ai-tool-feed-motion-enter-from {
+    opacity: 1;
+    transform: none;
+  }
+
+  .ai-tool-note-text.is-source-narrator .ai-tool-note-body {
     opacity: 1;
     transform: none;
   }

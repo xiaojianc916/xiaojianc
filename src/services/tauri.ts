@@ -1,6 +1,9 @@
-import { aiChatStreamEventPayloadSchema } from '@/types/ai.schema';
-import { aiAgentStreamEventSchema } from '@/types/ai-stream.schema';
 import { agentSidecarStreamEventPayloadSchema } from '@/types/agent-sidecar.schema';
+import { aiAgentStreamEventSchema } from '@/types/ai-stream.schema';
+import {
+  aiChatStreamEventPayloadSchema,
+  aiNarratorStreamEventPayloadSchema,
+} from '@/types/ai.schema';
 import { AppError, isAppError } from '@/types/app-error';
 import type { ITauriService } from '@/types/tauri';
 import { assertDesktopRuntime } from '@/utils/desktop-runtime';
@@ -861,6 +864,20 @@ const aiGenerateConversationTitleIpc = definePayloadIpc(
   { audit: 'sensitive', timeoutMs: 30_000, measureInput: buildPayloadMetrics },
 );
 
+const aiNarrateActivityIpc = definePayloadIpc(
+  'ai_narrate_activity',
+  '生成 AI 活动旁白',
+  tauriContracts.aiNarrateActivity,
+  { audit: 'sensitive', timeoutMs: 20_000, measureInput: buildPayloadMetrics },
+);
+
+const aiNarrateActivityStreamIpc = definePayloadIpc(
+  'ai_narrate_activity_stream',
+  '发送 AI 活动旁白流式请求',
+  tauriContracts.aiNarrateActivityStream,
+  { audit: 'sensitive', timeoutMs: 20_000, measureInput: buildPayloadMetrics },
+);
+
 const aiChatStreamIpc = definePayloadIpc(
   'ai_chat_stream',
   '发送 AI 流式对话请求',
@@ -1295,6 +1312,10 @@ export const tauriService: ITauriService & {
 
   aiGenerateConversationTitle: aiGenerateConversationTitleIpc,
 
+  aiNarrateActivity: aiNarrateActivityIpc,
+
+  aiNarrateActivityStream: aiNarrateActivityStreamIpc,
+
   aiChatStream: aiChatStreamIpc,
 
   aiCancel: aiCancelIpc,
@@ -1304,6 +1325,18 @@ export const tauriService: ITauriService & {
     const { listen } = await loadTauriEvent();
     return listen('ai:chat-stream', (event) => {
       const parsed = aiChatStreamEventPayloadSchema.safeParse(event.payload);
+      if (!parsed.success) {
+        return;
+      }
+      handler(parsed.data);
+    });
+  },
+
+  async onAiNarratorStream(handler) {
+    await assertDesktopRuntime('监听 AI 活动旁白流式响应');
+    const { listen } = await loadTauriEvent();
+    return listen('ai:narrator-stream', (event) => {
+      const parsed = aiNarratorStreamEventPayloadSchema.safeParse(event.payload);
       if (!parsed.success) {
         return;
       }

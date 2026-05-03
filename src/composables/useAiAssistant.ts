@@ -15,6 +15,13 @@ import {
 import { aiEditService } from '@/services/modules/ai-edit';
 import { useAiConversationStore } from '@/store/aiConversation';
 import {
+  buildActivityFactsHash,
+  buildActivityNarrationCandidate,
+  createNarratorActivityNote,
+  hasImportantNarrationFact,
+  shouldNarrateActivity,
+} from '@/utils/activity-note-narrator';
+import {
   appendAgentActivityEvents,
   materializeAgentActivities,
 } from '@/utils/agent-activity';
@@ -28,6 +35,7 @@ import { createDefaultAiConfigPayload } from '@/utils/ai-config';
 import type { IAgentActivity } from '@/types/agent-activity';
 import type { IAgentSidecarMessage, TAgentRuntimeEvent, TAgentUiEvent } from '@/types/agent-sidecar';
 import type {
+  IActivityNote,
   IAiApplyPatchMetadata,
   IAiChatMessage,
   IAiChatStreamEventPayload,
@@ -38,9 +46,10 @@ import type {
   IAiProviderProfileDetailPayload,
   IAiProviderProfilePayload,
   IAiToolDefinitionPayload,
-  TAiModelRole,
+  TActivityNoteTrigger,
   TAiChatMessageActionId,
-  TAiToolConfirmationDecision,
+  TAiModelRole,
+  TAiToolConfirmationDecision
 } from '@/types/ai';
 import type { IAiEditOperation, IAiEditTimelineEntry } from '@/types/ai-edit';
 import type {
@@ -87,6 +96,7 @@ interface IAiImageDimensions {
 interface ISidecarAgentSession {
   sessionId: string;
   assistantMessageId: string;
+  turnId: string | null;
   baseMessages: IAiChatMessage[];
   messageContent: string;
   references: IAiContextReference[];
@@ -101,6 +111,21 @@ interface IAgentExecutionStep {
 interface IActiveAgentPatchTarget {
   runId: string;
   stepId: string;
+}
+
+interface IActivityNarratorRunState {
+  runId: string;
+  turnId: string | null;
+  seenFactsHashes: Set<string>;
+  inFlightFactsHashes: Set<string>;
+  lastNarrationAt: number;
+  narrationCount: number;
+  latestSequence: number;
+  latestStartedSequenceByTrigger: Partial<Record<TActivityNoteTrigger, number>>;
+  latestAppliedSequenceByTrigger: Partial<Record<TActivityNoteTrigger, number>>;
+  activeStreamIds: Set<string>;
+  activeStreamIdByTrigger: Partial<Record<TActivityNoteTrigger, string>>;
+  cancelled: boolean;
 }
 
 export interface IAiAttachedFile {
@@ -177,8 +202,8 @@ const createMessageId = (role: IAiChatMessage['role']): string =>
 const clipActivityText = (value: string): string =>
   clipTextPreview(value, { maxGraphemes: AGENT_ACTIVITY_PREVIEW_CHARS });
 
-const buildInitialAgentActivityText = (goal: string): string =>
-  clipActivityText(goal) || '请求处理中';
+const buildInitialAgentActivityText = (_goal: string): string =>
+  '正在加载';
 
 const appendActivityTrail = (
   currentTrail: readonly string[] | undefined,
@@ -449,6 +474,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const activeAssistantBaseMessages = ref<IAiChatMessage[]>([]);
   const activeSidecarAgentSession = ref<ISidecarAgentSession | null>(null);
   const pendingTitleThreadIds = new Set<string>();
+  const activityNarratorStates = new Map<string, IActivityNarratorRunState>();
 
   const aiStream = useAiStream();
   const agentPlan = useAiAgentPlan();
@@ -544,6 +570,128 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     return nextMessages;
   };
 
+  const mergeActivityNotes = (
+    currentNotes: readonly IActivityNote[] | undefined,
+    incomingNotes: readonly IActivityNote[] | undefined,
+  ): IActivityNote[] | undefined => {
+    const nextNotes = [...(currentNotes ?? [])];
+
+    for (const note of incomingNotes ?? []) {
+      const existingIndex = nextNotes.findIndex((currentNote) => (
+        currentNote.id === note.id
+        || (
+          note.source === 'narrator'
+          && currentNote.source === 'narrator'
+          && currentNote.factsHash === note.factsHash
+        )
+      ));
+
+      if (existingIndex >= 0) {
+        const existingNote = nextNotes[existingIndex]!;
+
+        nextNotes[existingIndex] = {
+          ...existingNote,
+          ...note,
+          createdAt: existingNote.createdAt,
+          relatedActionIds: note.relatedActionIds.length
+            ? [...note.relatedActionIds]
+            : existingNote.relatedActionIds,
+          status: note.status ?? existingNote.status,
+        };
+        continue;
+      }
+
+      nextNotes.push(note);
+    }
+
+    return nextNotes.length
+      ? [...nextNotes].sort((left, right) => left.createdAt - right.createdAt)
+      : undefined;
+  };
+
+  const upsertActivityNoteToMessage = (
+    messageId: string,
+    note: IActivityNote,
+  ): void => {
+    const nextActivityNotes = mergeActivityNotes(
+      messages.value.find((message) => message.id === messageId)?.stream?.activityNotes,
+      [note],
+    );
+
+    replaceMessageById(messageId, (message) => ({
+      ...message,
+      stream: message.stream
+        ? {
+          ...message.stream,
+          ...(nextActivityNotes
+            ? { activityNotes: nextActivityNotes }
+            : {}),
+        }
+        : {
+          status: 'streaming',
+          activityNotes: [note],
+        },
+    }));
+  };
+
+  const removeActivityNoteFromMessage = (
+    messageId: string,
+    matcher: (note: IActivityNote) => boolean,
+  ): void => {
+    replaceMessageById(messageId, (message) => {
+      const nextActivityNotes = message.stream?.activityNotes?.filter((note) => !matcher(note));
+
+      return {
+        ...message,
+        stream: message.stream
+          ? {
+            ...message.stream,
+            ...(nextActivityNotes?.length ? { activityNotes: nextActivityNotes } : {}),
+            ...(!nextActivityNotes?.length ? { activityNotes: undefined } : {}),
+          }
+          : message.stream,
+      };
+    });
+  };
+
+  const removeStreamingNarratorNotesFromMessage = (
+    messageId: string,
+    trigger?: TActivityNoteTrigger,
+  ): void => {
+    removeActivityNoteFromMessage(messageId, (note) => (
+      note.source === 'narrator'
+      && note.status === 'streaming'
+      && (!trigger || note.trigger === trigger)
+    ));
+  };
+
+  const inferDraftNarratorTone = (
+    trigger: TActivityNoteTrigger,
+    hasError: boolean,
+  ): IActivityNote['tone'] => {
+    if (hasError || trigger === 'patch_failed' || trigger === 'verification_failed' || trigger === 'test_failed') {
+      return 'repair';
+    }
+
+    if (trigger === 'git_checked' || trigger === 'git_diff_ready') {
+      return 'warning';
+    }
+
+    if (trigger === 'edit_done' || trigger === 'edit_batch_done' || trigger === 'git_commit_ready') {
+      return 'decision';
+    }
+
+    if (trigger === 'verification_done' || trigger === 'git_done' || trigger === 'final_summary') {
+      return 'summary';
+    }
+
+    if (trigger === 'run_started' || trigger === 'plan_ready' || trigger === 'plan_approved') {
+      return 'plan';
+    }
+
+    return 'progress';
+  };
+
   const updateAgentStep = (
     stepId: string,
     title: string,
@@ -582,6 +730,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     streamStatus?: NonNullable<IAiChatMessage['stream']>['status'],
     activityText?: string,
     activityTrail?: string[],
+    activityNotes?: IActivityNote[],
     activities?: IAgentActivity[],
     activityEvents?: NonNullable<IAiChatMessage['stream']>['activityEvents'],
   ): void => {
@@ -602,6 +751,10 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
           : previousActivityEvents.length
             ? previousActivityEvents
             : undefined);
+      const nextActivityNotes = mergeActivityNotes(
+        message.stream?.activityNotes,
+        activityNotes,
+      );
       const nextActivities = activities
         ?? (nextActivityEvents?.length
           ? materializeAgentActivities(nextActivityEvents)
@@ -615,12 +768,14 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
             status: streamStatus,
             activityText: nextActivityText,
             ...(nextActivityTrail?.length ? { activityTrail: nextActivityTrail } : {}),
+            ...(nextActivityNotes?.length ? { activityNotes: nextActivityNotes } : {}),
             ...(persistedActivities?.length ? { activities: persistedActivities } : {}),
             ...(nextActivityEvents?.length ? { activityEvents: nextActivityEvents } : {}),
           }
           : {
             status: streamStatus,
             ...(nextActivityTrail?.length ? { activityTrail: nextActivityTrail } : {}),
+            ...(nextActivityNotes?.length ? { activityNotes: nextActivityNotes } : {}),
             ...(persistedActivities?.length ? { activities: persistedActivities } : {}),
             ...(nextActivityEvents?.length ? { activityEvents: nextActivityEvents } : {}),
           }
@@ -633,6 +788,291 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         stream,
       };
     });
+  };
+
+  const ensureActivityNarratorState = (
+    assistantMessageId: string,
+    runId: string,
+    turnId: string | null,
+  ): IActivityNarratorRunState => {
+    const existing = activityNarratorStates.get(assistantMessageId);
+
+    if (existing && existing.runId === runId && existing.turnId === turnId) {
+      return existing;
+    }
+
+    const nextState: IActivityNarratorRunState = {
+      runId,
+      turnId,
+      seenFactsHashes: new Set<string>(),
+      inFlightFactsHashes: new Set<string>(),
+      lastNarrationAt: 0,
+      narrationCount: 0,
+      latestSequence: 0,
+      latestStartedSequenceByTrigger: {},
+      latestAppliedSequenceByTrigger: {},
+      activeStreamIds: new Set<string>(),
+      activeStreamIdByTrigger: {},
+      cancelled: false,
+    };
+
+    activityNarratorStates.set(assistantMessageId, nextState);
+
+    return nextState;
+  };
+
+  const markActivityNarratorCancelled = (assistantMessageId: string): void => {
+    const state = activityNarratorStates.get(assistantMessageId);
+
+    if (!state) {
+      return;
+    }
+
+    state.cancelled = true;
+
+    for (const streamId of state.activeStreamIds) {
+      void aiService.cancel({ streamId });
+    }
+
+    state.activeStreamIds.clear();
+    state.activeStreamIdByTrigger = {};
+    removeStreamingNarratorNotesFromMessage(assistantMessageId);
+  };
+
+  const maybeRequestActivityNarration = (params: {
+    assistantMessageId: string;
+    runId: string;
+    turnId: string | null;
+    messageContent: string;
+    events: readonly TAgentUiEvent[];
+    toolCalls: readonly NonNullable<IAiChatMessage['toolCalls']>[number][];
+  }): void => {
+    if (!config.value.narrator.isConfigured) {
+      return;
+    }
+
+    const message = messages.value.find((item) => item.id === params.assistantMessageId);
+    if (!message) {
+      return;
+    }
+
+    const previousNarrations = (message.stream?.activityNotes ?? [])
+      .filter((note) => note.source === 'narrator')
+      .map((note) => note.text);
+    const candidate = buildActivityNarrationCandidate({
+      userGoal: params.messageContent,
+      events: params.events,
+      toolCalls: params.toolCalls,
+      previousNarrations,
+    });
+
+    if (!candidate) {
+      return;
+    }
+
+    const factsHash = buildActivityFactsHash(candidate.facts);
+    const narratorState = ensureActivityNarratorState(
+      params.assistantMessageId,
+      params.runId,
+      params.turnId,
+    );
+
+    if (narratorState.cancelled
+      || narratorState.seenFactsHashes.has(factsHash)
+      || narratorState.inFlightFactsHashes.has(factsHash)
+      || !shouldNarrateActivity({
+        trigger: candidate.trigger,
+        hasImportantFact: hasImportantNarrationFact(candidate.facts),
+        lastNarrationAt: narratorState.lastNarrationAt,
+        narrationCount: narratorState.narrationCount,
+        facts: candidate.facts,
+        hasError: candidate.hasError,
+      })) {
+      return;
+    }
+
+    narratorState.latestSequence += 1;
+    narratorState.latestStartedSequenceByTrigger[candidate.trigger] = narratorState.latestSequence;
+    narratorState.inFlightFactsHashes.add(factsHash);
+
+    const sequence = narratorState.latestSequence;
+    const noteCreatedAt = Date.now();
+    const noteTone = inferDraftNarratorTone(candidate.trigger, candidate.hasError);
+    let partialText = '';
+    let unlistenNarrator: (() => void) | null = null;
+    let isSettled = false;
+
+    removeStreamingNarratorNotesFromMessage(params.assistantMessageId, candidate.trigger);
+
+    const buildNarratorNote = (text: string, tone: IActivityNote['tone'], status: IActivityNote['status']): IActivityNote =>
+      createNarratorActivityNote({
+        response: {
+          runId: params.runId,
+          trigger: candidate.trigger,
+          sequence,
+          factsHash,
+          text,
+          tone,
+        },
+        relatedActionIds: candidate.relatedActionIds,
+        status,
+        createdAt: noteCreatedAt,
+      });
+
+    const cleanupNarratorStream = (streamId?: string | null): void => {
+      narratorState.inFlightFactsHashes.delete(factsHash);
+
+      if (streamId) {
+        narratorState.activeStreamIds.delete(streamId);
+        if (narratorState.activeStreamIdByTrigger[candidate.trigger] === streamId) {
+          delete narratorState.activeStreamIdByTrigger[candidate.trigger];
+        }
+      }
+
+      if (unlistenNarrator) {
+        unlistenNarrator();
+        unlistenNarrator = null;
+      }
+    };
+
+    const isNarratorEventStale = (currentState: IActivityNarratorRunState | undefined): boolean => {
+      if (!currentState
+        || currentState.cancelled
+        || currentState.runId !== params.runId
+        || currentState.turnId !== params.turnId) {
+        return true;
+      }
+
+      const latestStartedSequence = currentState.latestStartedSequenceByTrigger[candidate.trigger] ?? sequence;
+      return sequence < latestStartedSequence;
+    };
+
+    void (async () => {
+      try {
+        unlistenNarrator = await aiService.onNarratorStream((event) => {
+          if (event.runId !== params.runId
+            || event.messageId !== params.assistantMessageId
+            || (event.turnId ?? null) !== params.turnId
+            || event.factsHash !== factsHash
+            || event.sequence !== sequence
+            || event.trigger !== candidate.trigger) {
+            return;
+          }
+
+          const currentState = activityNarratorStates.get(params.assistantMessageId);
+          if (isNarratorEventStale(currentState)) {
+            if (event.kind === 'done' || event.kind === 'error' || event.kind === 'cancelled') {
+              cleanupNarratorStream(event.streamId);
+            }
+            return;
+          }
+
+          if (event.kind === 'delta') {
+            partialText += event.delta ?? '';
+            if (!normalizePreviewText(partialText)) {
+              return;
+            }
+
+            upsertActivityNoteToMessage(
+              params.assistantMessageId,
+              buildNarratorNote(partialText, noteTone, 'streaming'),
+            );
+            return;
+          }
+
+          if (event.kind === 'start') {
+            return;
+          }
+
+          isSettled = true;
+          cleanupNarratorStream(event.streamId);
+
+          if (event.kind === 'cancelled') {
+            removeActivityNoteFromMessage(params.assistantMessageId, (note) => note.id === buildNarratorNote('', noteTone, 'streaming').id);
+            return;
+          }
+
+          if (event.kind === 'error') {
+            removeActivityNoteFromMessage(params.assistantMessageId, (note) => note.id === buildNarratorNote('', noteTone, 'streaming').id);
+            logger.warn({
+              event: 'ai.activity_narrator.stream_failed',
+              err: event.message ?? 'unknown narrator stream error',
+              runId: params.runId,
+              messageId: params.assistantMessageId,
+              trigger: candidate.trigger,
+            });
+            return;
+          }
+
+          const latestAppliedSequence = currentState?.latestAppliedSequenceByTrigger[candidate.trigger] ?? -1;
+          if (!currentState || sequence <= latestAppliedSequence) {
+            removeActivityNoteFromMessage(params.assistantMessageId, (note) => note.id === buildNarratorNote('', noteTone, 'streaming').id);
+            return;
+          }
+
+          currentState.latestAppliedSequenceByTrigger[candidate.trigger] = sequence;
+          currentState.seenFactsHashes.add(factsHash);
+
+          const finalText = normalizePreviewText(event.text ?? partialText);
+          if (!event.shouldShow || !finalText) {
+            removeActivityNoteFromMessage(params.assistantMessageId, (note) => note.id === buildNarratorNote('', noteTone, 'streaming').id);
+            return;
+          }
+
+          currentState.lastNarrationAt = Date.now();
+          currentState.narrationCount += 1;
+
+          upsertActivityNoteToMessage(
+            params.assistantMessageId,
+            buildNarratorNote(finalText, event.tone ?? noteTone, 'completed'),
+          );
+        });
+
+        const started = await aiService.narrateActivityStream({
+          runId: params.runId,
+          messageId: params.assistantMessageId,
+          turnId: params.turnId,
+          factsHash,
+          sequence,
+          facts: candidate.facts,
+        });
+
+        if (isSettled) {
+          return;
+        }
+
+        const currentState = activityNarratorStates.get(params.assistantMessageId);
+        if (isNarratorEventStale(currentState)) {
+          cleanupNarratorStream();
+          void aiService.cancel({ streamId: started.streamId });
+          return;
+        }
+
+        if (!currentState) {
+          cleanupNarratorStream();
+          void aiService.cancel({ streamId: started.streamId });
+          return;
+        }
+
+        currentState.activeStreamIds.add(started.streamId);
+        const previousStreamId = currentState.activeStreamIdByTrigger[candidate.trigger];
+        if (previousStreamId && previousStreamId !== started.streamId) {
+          currentState.activeStreamIds.delete(previousStreamId);
+          void aiService.cancel({ streamId: previousStreamId });
+        }
+        currentState.activeStreamIdByTrigger[candidate.trigger] = started.streamId;
+      } catch (error) {
+        cleanupNarratorStream();
+        removeStreamingNarratorNotesFromMessage(params.assistantMessageId, candidate.trigger);
+        logger.warn({
+          event: 'ai.activity_narrator.failed',
+          err: error,
+          runId: params.runId,
+          messageId: params.assistantMessageId,
+          trigger: candidate.trigger,
+        });
+      }
+    })();
   };
 
   const refreshChangedDocumentsAfterSidecarRun = async (
@@ -742,6 +1182,9 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
   const applySidecarLiveEventsToAgentMessage = (
     assistantMessageId: string,
+    runId: string,
+    turnId: string | null,
+    messageContent: string,
     fallbackContent: string,
     events: readonly TAgentUiEvent[],
   ): void => {
@@ -766,12 +1209,13 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       ? `Agent 执行失败：${errorEvent.message}`
       : doneResult ?? latestDelta ?? fallbackContent;
     const streamStatus = errorEvent || doneEvent ? 'completed' : 'streaming';
-    const currentActivityEvents = messages.value.find((message) => message.id === assistantMessageId)
-      ?.stream?.activityEvents;
+    const currentMessage = messages.value.find((message) => message.id === assistantMessageId);
+    const currentActivityEvents = currentMessage?.stream?.activityEvents;
     const activityProjection = projectSidecarEventsToActivityState({
       assistantMessageId,
       events,
       fallbackActivityText: fallbackContent,
+      rootActivityText: currentMessage?.stream?.activityText ?? buildInitialAgentActivityText(messageContent),
       streamStatus,
       hasError: Boolean(errorEvent),
       currentActivityEvents,
@@ -792,9 +1236,19 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       streamStatus,
       activityProjection.activityText,
       activityProjection.activityTrail,
+      undefined,
       activityProjection.activities,
       activityProjection.activityEvents,
     );
+
+    maybeRequestActivityNarration({
+      assistantMessageId,
+      runId,
+      turnId,
+      messageContent,
+      events,
+      toolCalls: activityProjection.toolCalls,
+    });
   };
 
   const appendRuntimeTimelineEvents = (
@@ -864,6 +1318,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     visibleMessages: IAiChatMessage[],
     messageContent: string,
     references: IAiContextReference[],
+    turnId: string,
   ): Promise<void> => {
     errorMessage.value = '';
     isSending.value = true;
@@ -891,6 +1346,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     activeAgentMessageId.value = assistantMessageId;
     activeAbortController.value = new AbortController();
     const sidecarSessionId = `sidecar:${assistantMessageId}`;
+    ensureActivityNarratorState(assistantMessageId, sidecarSessionId, turnId);
     const liveEvents: TAgentUiEvent[] = [];
     let unlistenSidecarStream: (() => void) | null = null;
 
@@ -904,6 +1360,9 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         appendRuntimeTimelineEvents([payload.event]);
         applySidecarLiveEventsToAgentMessage(
           assistantMessageId,
+          sidecarSessionId,
+          turnId,
+          messageContent,
           '',
           liveEvents,
         );
@@ -923,6 +1382,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         assistantMessageId,
         events: payload.events,
         fallbackActivityText: initialActivityText,
+        rootActivityText: initialActivityText,
         streamStatus: 'completed',
         hasError: Boolean(projection.errorMessage),
         currentActivityEvents,
@@ -943,9 +1403,19 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         'completed',
         activityProjection.activityText,
         activityProjection.activityTrail,
+        undefined,
         activityProjection.activities,
         activityProjection.activityEvents,
       );
+
+      maybeRequestActivityNarration({
+        assistantMessageId,
+        runId: sidecarSessionId,
+        turnId,
+        messageContent,
+        events: payload.events,
+        toolCalls: activityProjection.toolCalls,
+      });
 
       await refreshChangedDocumentsAfterSidecarRun(
         projection.changedFilePaths,
@@ -960,6 +1430,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         activeSidecarAgentSession.value = {
           sessionId: payload.sessionId,
           assistantMessageId,
+          turnId,
           baseMessages: visibleMessages,
           messageContent,
           references,
@@ -977,6 +1448,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       }
     } catch (error) {
       const wasAborted = activeAbortController.value?.signal.aborted;
+      markActivityNarratorCancelled(assistantMessageId);
 
       if (!wasAborted) {
         const message = toErrorMessage(error, MSG_CALL_FAILED);
@@ -1011,6 +1483,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
     if (decision === 'stop' || decision === 'skip') {
       activeSidecarAgentSession.value = null;
+      markActivityNarratorCancelled(session.assistantMessageId);
       updateAgentExecutionMessage(
         session.assistantMessageId,
         decision === 'stop' ? 'Agent 工具调用已停止。' : 'Agent 工具调用已跳过。',
@@ -1035,6 +1508,9 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         appendRuntimeTimelineEvents([payload.event]);
         applySidecarLiveEventsToAgentMessage(
           session.assistantMessageId,
+          session.sessionId,
+          session.turnId,
+          session.messageContent,
           '',
           liveEvents,
         );
@@ -1052,6 +1528,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         assistantMessageId: session.assistantMessageId,
         events: payload.events,
         fallbackActivityText: session.messageContent,
+        rootActivityText: session.messageContent,
         streamStatus: 'completed',
         hasError: Boolean(projection.errorMessage),
         currentActivityEvents,
@@ -1064,9 +1541,19 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         'completed',
         activityProjection.activityText,
         activityProjection.activityTrail,
+        undefined,
         activityProjection.activities,
         activityProjection.activityEvents,
       );
+
+      maybeRequestActivityNarration({
+        assistantMessageId: session.assistantMessageId,
+        runId: session.sessionId,
+        turnId: session.turnId,
+        messageContent: session.messageContent,
+        events: payload.events,
+        toolCalls: activityProjection.toolCalls,
+      });
 
       await refreshChangedDocumentsAfterSidecarRun(
         projection.changedFilePaths,
@@ -1825,6 +2312,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         nextMessages,
         messageContent,
         references,
+        userMessage.id,
       );
 
       if (!errorMessage.value) {
@@ -1918,6 +2406,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     activeAssistantBaseMessages.value = [];
     activeAgentMessageId.value = null;
     activeSidecarAgentSession.value = null;
+    activityNarratorStates.clear();
     agentPlan.store.clearPendingToolConfirmation();
     isClearDialogOpen.value = false;
   };
@@ -2075,6 +2564,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     }
 
     if (activeAgentMessageId.value) {
+      markActivityNarratorCancelled(activeAgentMessageId.value);
       updateAgentExecutionMessage(
         activeAgentMessageId.value,
         'Agent 执行已取消。',

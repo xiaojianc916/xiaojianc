@@ -9,10 +9,6 @@ import type {
   IAgentSidecarStreamEventPayload,
 } from '@/types/agent-sidecar';
 import type {
-  IAiEditGetDiffPayload,
-  IAiEditGetDiffRequest,
-} from '@/types/ai-edit';
-import type {
   IAiAgentApprovePlanPayload,
   IAiAgentApprovePlanRequest,
   IAiAgentClassifyTaskPayload,
@@ -21,11 +17,11 @@ import type {
   IAiAgentNetworkPermissionPayload,
   IAiAgentPlanPayload,
   IAiAgentPlanRequest,
+  IAiAgentResolveToolConfirmationRequest,
   IAiAgentRunIdRequest,
   IAiAgentRunPayload,
   IAiAgentRunPlanRequest,
   IAiAgentRunStepRequest,
-  IAiAgentResolveToolConfirmationRequest,
   IAiAgentSetNetworkPermissionRequest,
   IAiApplyPatchPayload,
   IAiApplyPatchRequest,
@@ -40,9 +36,12 @@ import type {
   IAiConfigPayload,
   IAiConversationTitlePayload,
   IAiConversationTitleRequest,
-  TAiAgentStreamEvent,
   IAiInlineCompletionRequest,
   IAiInlineCompletionResult,
+  IAiNarratorRequest,
+  IAiNarratorResponse,
+  IAiNarratorStreamEventPayload,
+  IAiNarratorStreamPayload,
   IAiProposePatchPayload,
   IAiProposePatchRequest,
   IAiProviderConnectionPayload,
@@ -60,7 +59,12 @@ import type {
   IAiWebFetchPayload,
   IAiWebSearchInput,
   IAiWebSearchPayload,
+  TAiAgentStreamEvent,
 } from '@/types/ai';
+import type {
+  IAiEditGetDiffPayload,
+  IAiEditGetDiffRequest,
+} from '@/types/ai-edit';
 
 export const aiService = {
   sidecarHealth(): Promise<IAgentSidecarHealthPayload> {
@@ -125,6 +129,12 @@ export const aiService = {
   ): Promise<IAiConversationTitlePayload> {
     return tauriService.aiGenerateConversationTitle(payload);
   },
+  narrateActivity(payload: IAiNarratorRequest): Promise<IAiNarratorResponse> {
+    return tauriService.aiNarrateActivity(payload);
+  },
+  narrateActivityStream(payload: IAiNarratorRequest): Promise<IAiNarratorStreamPayload> {
+    return tauriService.aiNarrateActivityStream(payload);
+  },
   chatStream(payload: IAiChatRequest): Promise<IAiChatStreamPayload> {
     return tauriService.aiChatStream(payload);
   },
@@ -133,6 +143,11 @@ export const aiService = {
   },
   onChatStream(handler: (payload: IAiChatStreamEventPayload) => void): Promise<() => void> {
     return tauriService.onAiChatStream(handler);
+  },
+  onNarratorStream(
+    handler: (payload: IAiNarratorStreamEventPayload) => void,
+  ): Promise<() => void> {
+    return tauriService.onAiNarratorStream(handler);
   },
   onAgentStream(handler: (payload: TAiAgentStreamEvent) => void): Promise<() => void> {
     return tauriService.onAiAgentStream(handler);

@@ -16,7 +16,8 @@ use super::contracts::{
     AiEditRevertFileRequest, AiEditRevertHunkPayload, AiEditRevertHunkRequest,
     AiEditRevertTaskPayload, AiEditRevertTaskRequest, AiEditSetAuthLevelRequest,
     AiEditUndoOperationPayload, AiEditUndoOperationRequest, AiInlineCompletionRangePayload,
-    AiInlineCompletionRequest, AiInlineCompletionResult, AiProposePatchPayload,
+    AiInlineCompletionRequest, AiInlineCompletionResult, AiNarratorRequest,
+    AiNarratorResponsePayload, AiNarratorStreamPayload, AiProposePatchPayload,
     AiProposePatchRequest, AiProviderConnectionPayload, AiProviderConnectionRequest,
     AiProviderProfileDetailPayload, AiProviderProfilePayload, AiProviderProfileSwitchRequest,
     AiProviderTestPayload, AiQueryIndexPayload, AiQueryIndexRequest, AiSaveConfigRequest,
@@ -253,6 +254,31 @@ pub async fn ai_generate_conversation_title(
     payload: AiConversationTitleRequest,
 ) -> Result<AiConversationTitlePayload, String> {
     gateway::generate_conversation_title(payload).await
+}
+
+#[tauri::command]
+pub async fn ai_narrate_activity(
+    payload: AiNarratorRequest,
+) -> Result<AiNarratorResponsePayload, String> {
+    gateway::narrate_activity(payload).await
+}
+
+#[tauri::command]
+pub async fn ai_narrate_activity_stream(
+    app: AppHandle,
+    payload: AiNarratorRequest,
+) -> Result<AiNarratorStreamPayload, String> {
+    let started = gateway::narrate_activity_stream(app, payload).await?;
+    Ok(AiNarratorStreamPayload {
+        stream_id: started.stream_id,
+        run_id: started.run_id,
+        message_id: started.message_id,
+        turn_id: started.turn_id,
+        facts_hash: started.facts_hash,
+        sequence: started.sequence,
+        trigger: started.trigger,
+        model: started.model,
+    })
 }
 
 #[tauri::command]

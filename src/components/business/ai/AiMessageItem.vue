@@ -50,6 +50,8 @@ const hasToolCalls = computed(() => Boolean(props.message.toolCalls?.length));
 
 const hasActivityTrail = computed(() => Boolean(props.message.stream?.activityTrail?.length));
 
+const hasActivityNotes = computed(() => Boolean(props.message.stream?.activityNotes?.length));
+
 const streamActivities = computed(() => {
   const stream = props.message.stream;
 
@@ -72,7 +74,7 @@ const hasActivities = computed(() => Boolean(streamActivities.value.length));
 
 const shouldShowActivityTimeline = computed(
   () => props.message.role === 'assistant'
-    && (hasToolCalls.value || hasActivityTrail.value || hasActivities.value),
+    && (hasToolCalls.value || hasActivityTrail.value || hasActivityNotes.value || hasActivities.value),
 );
 
 const hasMessageActions = computed(() => Boolean(props.message.actions?.length));
@@ -90,6 +92,7 @@ const activityOnlyTexts = computed(() => {
 
   values.push(stream.activityText ?? '');
   values.push(...(stream.activityTrail ?? []));
+  values.push(...(stream.activityNotes ?? []).map((note) => note.text));
 
   for (const activity of streamActivities.value) {
     if (activity.kind !== 'reasoning_summary' && activity.kind !== 'llm') {
@@ -221,7 +224,8 @@ onBeforeUnmount(() => {
       </div>
       <AiToolActivityInline v-if="shouldShowActivityTimeline" :tool-calls="message.toolCalls ?? []"
         :activity-text="message.stream?.activityText" :activity-trail="message.stream?.activityTrail"
-        :activities="message.stream?.activities" :activity-events="message.stream?.activityEvents" />
+        :activity-notes="message.stream?.activityNotes" :activities="message.stream?.activities"
+        :activity-events="message.stream?.activityEvents" />
       <div v-if="userAttachmentReferences.length" class="ai-message-attachments" aria-label="已发送附件">
         <span v-for="reference in userAttachmentReferences" :key="reference.id" class="ai-message-attachment-chip">
           <svg v-if="reference.kind === 'image-attachment'" viewBox="0 0 24 24" fill="none" stroke="currentColor"
