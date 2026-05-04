@@ -5,6 +5,7 @@ import { codeToHtml } from 'shiki';
 import { computed, onBeforeUnmount, ref, useId, watch } from 'vue';
 
 const COPY_RESET_DELAY_MS = 1600;
+const MAX_SYNC_HIGHLIGHT_CHARS = 20_000;
 
 const props = defineProps<Pick<CodeBlockNodeProps, 'isDark' | 'loading' | 'node'>>();
 
@@ -123,11 +124,17 @@ const AI_CODE_SHIKI_THEME: ThemeRegistration = {
 };
 
 watch(
-  () => [props.node.code, normalizedLanguage.value] as const,
-  async ([code, language]) => {
+  () => [props.node.code, normalizedLanguage.value, props.loading] as const,
+  async ([code, language, isLoading]) => {
     const requestId = ++highlightRequestId;
     const sourceCode = String(code ?? '');
     const lang = toShikiLanguage(language);
+
+    highlightedHtml.value = buildPlainCodeHtml(sourceCode);
+
+    if (isLoading || Array.from(sourceCode).length > MAX_SYNC_HIGHLIGHT_CHARS) {
+      return;
+    }
 
     try {
       const html = await codeToHtml(sourceCode, {
@@ -337,7 +344,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-show="isExpanded" :id="codeBlockBodyId" class="ai-code-block__body">
-      <div class="ai-code-block__highlight" v-html="highlightedHtml" />
+      <div class="ai-code-block__highlight ai-markdown-design-body" v-html="highlightedHtml" />
     </div>
   </div>
 </template>

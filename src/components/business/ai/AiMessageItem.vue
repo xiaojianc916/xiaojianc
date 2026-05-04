@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AiAgentRuntimeTimeline from '@/components/business/ai/AiAgentRuntimeTimeline.vue';
 import AiMarkdown from '@/components/business/ai/AiMarkdown.vue';
 import AiProviderIcon from '@/components/business/ai/AiProviderIcon.vue';
 import AiToolActivityInline from '@/components/business/ai/AiToolActivityInline.vue';
@@ -52,6 +53,8 @@ const hasActivityTrail = computed(() => Boolean(props.message.stream?.activityTr
 
 const hasActivityNotes = computed(() => Boolean(props.message.stream?.activityNotes?.length));
 
+const hasRuntimeTimeline = computed(() => Boolean(props.message.stream?.runtimeEvents?.length));
+
 const streamActivities = computed(() => {
   const stream = props.message.stream;
 
@@ -72,9 +75,20 @@ const streamActivities = computed(() => {
 
 const hasActivities = computed(() => Boolean(streamActivities.value.length));
 
+const shouldShowRuntimeTimeline = computed(
+  () => props.message.role === 'assistant' && hasRuntimeTimeline.value,
+);
+
 const shouldShowActivityTimeline = computed(
   () => props.message.role === 'assistant'
+    && !shouldShowRuntimeTimeline.value
     && (hasToolCalls.value || hasActivityTrail.value || hasActivityNotes.value || hasActivities.value),
+);
+
+const canShowRuntimeMessageBubble = computed(
+  () => !shouldShowRuntimeTimeline.value
+    || props.message.stream?.status !== 'streaming'
+    || props.message.stream?.finalAnswerStarted === true,
 );
 
 const hasMessageActions = computed(() => Boolean(props.message.actions?.length));
@@ -134,7 +148,8 @@ const isActivityOnlyContent = computed(
 const shouldShowMessageBubble = computed(
   () => hasRenderableContent.value
     && !isToolProgressContent.value
-    && !isActivityOnlyContent.value,
+    && !isActivityOnlyContent.value
+    && canShowRuntimeMessageBubble.value,
 );
 
 const copyableContent = computed(() => {
@@ -156,12 +171,14 @@ const shouldShowInlineLoader = computed(
     && props.message.stream?.status === 'streaming'
     && (!hasRenderableContent.value || isToolProgressContent.value)
     && !hasToolCalls.value
+    && !shouldShowRuntimeTimeline.value
     && !shouldShowActivityTimeline.value
 );
 
 const shouldRenderMessage = computed(
   () => props.message.role === 'user'
     || shouldShowMessageBubble.value
+    || shouldShowRuntimeTimeline.value
     || shouldShowActivityTimeline.value
     || shouldShowInlineLoader.value
     || hasMessageActions.value,
@@ -222,6 +239,7 @@ onBeforeUnmount(() => {
         <LoaderCircle class="ai-message-status-icon" aria-hidden="true" />
         <span>{{ inlineLoaderLabel }}</span>
       </div>
+      <AiAgentRuntimeTimeline v-if="shouldShowRuntimeTimeline" :events="message.stream?.runtimeEvents ?? []" />
       <AiToolActivityInline v-if="shouldShowActivityTimeline" :tool-calls="message.toolCalls ?? []"
         :activity-text="message.stream?.activityText" :activity-trail="message.stream?.activityTrail"
         :activity-notes="message.stream?.activityNotes" :activities="message.stream?.activities"
@@ -300,6 +318,7 @@ onBeforeUnmount(() => {
 }
 
 .ai-message-main>.ai-tool-activity-inline+.ai-message-bubble,
+.ai-message-main>.ai-runtime-timeline+.ai-message-bubble,
 .ai-message-main>.ai-message-status-line+.ai-message-bubble {
   margin-top: 6px;
 }

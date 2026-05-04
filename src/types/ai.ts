@@ -1,4 +1,5 @@
 import type { IAgentActivity, TAgentActivityEvent } from '@/types/agent-activity';
+import type { TAgentRuntimeEvent } from '@/types/agent-sidecar';
 import type { IAiContextReference } from '@/types/ai-context';
 
 export type TAiProviderType =
@@ -102,6 +103,8 @@ export interface IAiChatStreamRenderState {
   activityNotes?: IActivityNote[];
   activities?: IAgentActivity[];
   activityEvents?: TAgentActivityEvent[];
+  runtimeEvents?: TAgentRuntimeEvent[];
+  finalAnswerStarted?: boolean;
 }
 
 export interface IActivityNote {

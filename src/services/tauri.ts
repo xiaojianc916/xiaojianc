@@ -82,7 +82,7 @@ type TIpcFactoryOptions<TInSchema extends z.ZodTypeAny, TOutSchema extends z.Zod
 >;
 
 const TAURI_IPC_DEFAULT_TIMEOUT_MS = 10_000;
-const AGENT_SIDECAR_TASK_TIMEOUT_MS = 180_000;
+const AGENT_SIDECAR_TASK_TIMEOUT_MS = 30 * 60 * 1000;
 const LOG_PAYLOAD_SUMMARY_LIMIT = 320;
 const textEncoder = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
 

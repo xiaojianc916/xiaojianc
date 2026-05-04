@@ -10,8 +10,14 @@ export interface ICompletedAgentStream {
   visibleText: string;
 }
 
+type TAgentStreamArgs = Parameters<Agent['stream']>;
+
+interface IAgentEventStreamSource {
+  stream(...args: TAgentStreamArgs): AsyncGenerator<unknown, AgentResult, undefined>;
+}
+
 export interface IRunAgentStreamParams {
-  agent: Agent;
+  agent: IAgentEventStreamSource;
   prompt: string;
   streamOptions: InvokeOptions;
   eventBus: AgentStreamEventBus;
@@ -21,6 +27,10 @@ export interface IRunAgentStreamParams {
 
 interface IAgentStreamCapture {
   visibleText: string;
+  emittedVisibleText: string;
+  activeModelBlock: 'reasoning' | 'text' | 'tool' | null;
+  hasReasoningStarted: boolean;
+  hasReasoningEnded: boolean;
 }
 
 interface IJsonSerializable {
@@ -45,6 +55,17 @@ const getStringValue = (
 
 const getEventType = (event: unknown): string =>
   getStringValue(event, 'type') ?? 'unknown';
+
+const getModelEvent = (event: unknown): Record<string, unknown> | null =>
+  getEventType(event) === 'modelStreamUpdateEvent'
+    ? toRecord(toRecord(event)?.event)
+    : null;
+
+const getModelEventType = (event: unknown): string | undefined =>
+  getStringValue(getModelEvent(event), 'type');
+
+const getModelDeltaType = (event: unknown): string | undefined =>
+  getStringValue(toRecord(getModelEvent(event)?.delta), 'type');
 
 const getToolUse = (event: unknown): Record<string, unknown> | null =>
   toRecord(toRecord(event)?.toolUse);
@@ -75,25 +96,69 @@ const clipPreview = (value: string, limit: number): string => {
   return `${characters.slice(0, limit).join('')}...`;
 };
 
+const shouldStreamFinalAnswerText = (capture: IAgentStreamCapture): boolean =>
+  !capture.hasReasoningStarted || capture.hasReasoningEnded;
+
+const emitVisibleTextDelta = (
+  text: string,
+  params: Pick<IRunAgentStreamParams, 'emitLegacyEvent'>,
+  capture: IAgentStreamCapture,
+  phase: 'stage' | 'final',
+): void => {
+  if (capture.emittedVisibleText === text) {
+    return;
+  }
+
+  capture.emittedVisibleText = text;
+  params.emitLegacyEvent({
+    type: 'message_delta',
+    text,
+    phase,
+  });
+};
+
 const appendLegacySidecarEvent = (
   event: unknown,
   params: Pick<IRunAgentStreamParams, 'emitLegacyEvent' | 'toJsonValue'>,
   capture: IAgentStreamCapture,
 ): void => {
+  if (getModelEventType(event) === 'modelContentBlockStopEvent') {
+    if (capture.activeModelBlock === 'reasoning') {
+      capture.hasReasoningEnded = true;
+    }
+
+    capture.activeModelBlock = null;
+    return;
+  }
+
+  if (getModelDeltaType(event) === 'reasoningContentDelta' || getModelDeltaType(event) === 'reasoningText') {
+    capture.activeModelBlock = 'reasoning';
+    capture.hasReasoningStarted = true;
+    capture.hasReasoningEnded = false;
+    return;
+  }
+
   const textDelta = extractModelTextDelta(event);
 
   if (textDelta) {
+    capture.activeModelBlock = 'text';
     capture.visibleText += textDelta;
-    params.emitLegacyEvent({
-      type: 'message_delta',
-      text: capture.visibleText,
-    });
+    if (shouldStreamFinalAnswerText(capture)) {
+      emitVisibleTextDelta(capture.visibleText, params, capture, 'final');
+    }
     return;
   }
 
   const eventType = getEventType(event);
 
   if (eventType === 'beforeToolCallEvent') {
+    capture.activeModelBlock = 'tool';
+
+    if (capture.visibleText.length > 0 || capture.emittedVisibleText.length > 0) {
+      capture.visibleText = '';
+      emitVisibleTextDelta('', params, capture, 'stage');
+    }
+
     params.emitLegacyEvent({
       type: 'tool_start',
       toolName: getToolUseName(event),
@@ -103,6 +168,7 @@ const appendLegacySidecarEvent = (
   }
 
   if (eventType === 'afterToolCallEvent') {
+    capture.activeModelBlock = null;
     params.emitLegacyEvent({
       type: 'tool_result',
       toolName: getToolUseName(event),
@@ -125,6 +191,10 @@ export const runAgentStream = async (
 ): Promise<ICompletedAgentStream> => {
   const capture: IAgentStreamCapture = {
     visibleText: '',
+    emittedVisibleText: '',
+    activeModelBlock: null,
+    hasReasoningStarted: false,
+    hasReasoningEnded: false,
   };
 
   params.eventBus.emitDraft({

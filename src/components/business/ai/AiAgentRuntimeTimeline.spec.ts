@@ -74,6 +74,42 @@ describe('AiAgentRuntimeTimeline', () => {
         expect(wrapper.text()).toContain('开始调用 read_file');
     });
 
+    it('按具体工具名选择更贴合的图标，而不是只用通用分类图标', () => {
+        const wrapper = mount(AiAgentRuntimeTimeline, {
+            props: {
+                events: [
+                    createEvent({
+                        id: 'multi-read',
+                        type: 'agent.tool.started',
+                        toolName: 'read_multiple_files',
+                    }),
+                    createEvent({
+                        id: 'directory-tree',
+                        type: 'agent.tool.started',
+                        toolName: 'directory_tree',
+                    }),
+                    createEvent({
+                        id: 'docs',
+                        type: 'agent.tool.started',
+                        toolName: 'query-docs',
+                    }),
+                    createEvent({
+                        id: 'browser-evaluate',
+                        type: 'agent.tool.started',
+                        toolName: 'browser_evaluate',
+                    }),
+                ],
+            },
+        });
+
+        const icons = wrapper.findAll('.node-icon');
+
+        expect(icons[0]?.classes()).toContain('icon-files');
+        expect(icons[1]?.classes()).toContain('icon-folder');
+        expect(icons[2]?.classes()).toContain('icon-book');
+        expect(icons[3]?.classes()).toContain('icon-play');
+    });
+
     it('会合并连续 reasoning delta，避免一词一行', () => {
         const wrapper = mount(AiAgentRuntimeTimeline, {
             props: {

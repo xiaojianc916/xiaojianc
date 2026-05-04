@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { AgentResult, Message, TextBlock } from '@strands-agents/sdk';
 
+import type { TAgentUiEvent, TJsonValue } from '../schemas/events.js';
 import { AgentStreamEventBus } from './stream-event-bus.js';
 import { normalizeStrandsStreamEvent } from './stream-normalizer.js';
 import { redactForStream } from './stream-redaction.js';
+import { runAgentStream } from './stream-runner.js';
 
 describe('streaming event layer', () => {
   it('normalizes model text and reasoning delta events', () => {
@@ -140,5 +143,91 @@ describe('streaming event layer', () => {
     assert.equal(events[1]?.seq, 1);
     assert.equal(events[0]?.schemaVersion, 1);
     assert.equal(events[0]?.redacted, true);
+  });
+
+  it('clears pre-tool visible text and streams the final answer segment after tool calls', async () => {
+    const emittedEvents: TAgentUiEvent[] = [];
+    const runtimeEvents = new AgentStreamEventBus({
+      runId: 'run-1',
+      sessionId: 'session-1',
+      agentId: 'agent-1',
+      now: () => '2026-05-02T00:00:00.000Z',
+    });
+    const agent = {
+      async *stream() {
+        yield {
+          type: 'modelStreamUpdateEvent',
+          event: {
+            type: 'modelContentBlockDeltaEvent',
+            delta: {
+              type: 'textDelta',
+              text: '我先查看文件。',
+            },
+          },
+        };
+        yield {
+          type: 'beforeToolCallEvent',
+          toolUse: {
+            name: 'read_file',
+            input: {
+              path: 'src/app.ts',
+            },
+          },
+        };
+        yield {
+          type: 'afterToolCallEvent',
+          toolUse: {
+            name: 'read_file',
+            input: {
+              path: 'src/app.ts',
+            },
+          },
+          result: {
+            status: 'success',
+          },
+        };
+        yield {
+          type: 'modelStreamUpdateEvent',
+          event: {
+            type: 'modelContentBlockDeltaEvent',
+            delta: {
+              type: 'textDelta',
+              text: '最终回答第一段。',
+            },
+          },
+        };
+
+        return new AgentResult({
+          stopReason: 'endTurn',
+          lastMessage: new Message({
+            role: 'assistant',
+            content: [
+              new TextBlock('最终回答第一段。'),
+            ],
+          }),
+          invocationState: {},
+        });
+      },
+    };
+
+    const result = await runAgentStream({
+      agent,
+      prompt: '检查文件',
+      streamOptions: {},
+      eventBus: runtimeEvents,
+      emitLegacyEvent: (event) => {
+        emittedEvents.push(event);
+      },
+      toJsonValue: (value): TJsonValue => JSON.parse(JSON.stringify(value)) as TJsonValue,
+    });
+
+    assert.deepEqual(emittedEvents.filter((event) => event.type === 'message_delta'), [
+      {
+        type: 'message_delta',
+        text: '最终回答第一段。',
+        phase: 'final',
+      },
+    ]);
+    assert.equal(result.visibleText, '最终回答第一段。');
   });
 });

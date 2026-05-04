@@ -4,6 +4,7 @@ import {
   agentActivityEventSchema,
   agentActivitySchema,
 } from '@/types/agent-activity.schema';
+import { agentRuntimeEventSchema } from '@/types/agent-sidecar.schema';
 import {
   aiAgentApprovePlanPayloadSchema,
   aiAgentApprovePlanRequestSchema,
@@ -147,6 +148,8 @@ export const aiChatMessageSchema = z.object({
     activityNotes: z.array(activityNoteSchema).optional(),
     activities: z.array(agentActivitySchema).optional(),
     activityEvents: z.array(agentActivityEventSchema).optional(),
+    runtimeEvents: z.array(agentRuntimeEventSchema).optional(),
+    finalAnswerStarted: z.boolean().optional(),
   }).optional(),
 });
 
@@ -454,4 +457,3 @@ export {
   aiWebSourceEntryStatusSchema,
   aiWebSourceTypeSchema
 };
-

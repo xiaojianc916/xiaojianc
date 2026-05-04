@@ -121,6 +121,7 @@ export const agentUiEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('message_delta'),
     text: z.string(),
+    phase: z.enum(['stage', 'final']).optional(),
   }),
   z.object({
     type: z.literal('agent_event'),

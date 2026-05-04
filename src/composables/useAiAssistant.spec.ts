@@ -76,7 +76,8 @@ const aiServiceMock = vi.hoisted(() => {
         assistantMessageId: string;
         providerType: 'mock';
         model: string;
-    }>>(async (_payload) => {
+    }>>(async (payload) => {
+        void payload;
         const queued = queuedStreamResponses.shift();
         if (!queued) {
             return {
@@ -157,9 +158,12 @@ const aiServiceMock = vi.hoisted(() => {
         },
     }));
 
-    const applyPatch = vi.fn<(payload: IAiApplyPatchRequest) => Promise<IAiApplyPatchPayload>>(async (_payload) => ({
-        appliedFiles: [],
-    }));
+    const applyPatch = vi.fn<(payload: IAiApplyPatchRequest) => Promise<IAiApplyPatchPayload>>(async (payload) => {
+        void payload;
+        return {
+            appliedFiles: [],
+        };
+    });
 
     const narrateActivity = vi.fn<(payload: IAiNarratorRequest) => Promise<IAiNarratorResponse>>(async (payload) => ({
         runId: payload.runId,
@@ -523,38 +527,6 @@ const createUndoOperationPayload = (
     restoredSnapshot: createAiEditSnapshot('snapshot-restored', restoredFiles),
 });
 
-const createNarratorStreamPayload = (
-    payload: IAiNarratorRequest,
-    overrides: Partial<IAiNarratorStreamPayload> = {},
-): IAiNarratorStreamPayload => ({
-    streamId: `narrator-stream-${payload.sequence}`,
-    runId: payload.runId,
-    messageId: payload.messageId,
-    turnId: payload.turnId ?? null,
-    factsHash: payload.factsHash,
-    sequence: payload.sequence,
-    trigger: payload.facts.trigger,
-    model: MOCK_MODEL,
-    ...overrides,
-});
-
-const createNarratorStreamEvent = (
-    payload: IAiNarratorRequest,
-    overrides: Partial<IAiNarratorStreamEventPayload> = {},
-): IAiNarratorStreamEventPayload => ({
-    ...createNarratorStreamPayload(payload),
-    kind: 'done',
-    delta: null,
-    message: null,
-    shouldShow: true,
-    tone: 'progress',
-    text: 'mock narrator update',
-    relatedFiles: payload.facts.changedFiles.map((item) => item.path),
-    confidence: 'medium',
-    model: MOCK_MODEL,
-    ...overrides,
-});
-
 const aiEditServiceMock = vi.hoisted(() => {
     const listTimeline = vi.fn<(payload?: IAiEditListTimelineRequest) => Promise<IAiEditListTimelinePayload>>(async () => ({
         entries: [],
@@ -658,20 +630,6 @@ const waitForStartedStream = async (
     throw new Error(
         `assistant stream did not start in time (expected id="${expectedId}" within ${maxAttempts} ticks)`,
     );
-};
-
-const waitForCondition = async (
-    predicate: () => boolean,
-    maxAttempts = 12,
-): Promise<void> => {
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-        if (predicate()) {
-            return;
-        }
-        await flushMicrotasks();
-    }
-
-    throw new Error(`condition did not match within ${maxAttempts} ticks`);
 };
 
 const createDocument = (): IEditorDocument => ({
@@ -1606,6 +1564,7 @@ describe('useAiAssistant streaming integration', () => {
                 event: {
                     type: 'message_delta',
                     text: '第一段实时回答',
+                    phase: 'final',
                 },
             });
             aiServiceMock.emitSidecar({
@@ -1614,6 +1573,7 @@ describe('useAiAssistant streaming integration', () => {
                 event: {
                     type: 'message_delta',
                     text: '第一段实时回答，第二段继续到达',
+                    phase: 'final',
                 },
             });
 
@@ -1661,6 +1621,12 @@ describe('useAiAssistant streaming integration', () => {
         expect(assistant.messages.value[1]?.stream?.status).toBe('streaming');
         expect(assistant.messages.value[1]?.stream?.activityText).toBe('正在搜索「实时工具」，范围 工作区');
         expect(assistant.messages.value[1]?.stream?.activityTrail).toBeUndefined();
+        expect(assistant.messages.value[1]?.stream?.runtimeEvents).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                type: 'agent.tool.started',
+                toolName: 'search_project_files',
+            }),
+        ]));
         expect(assistant.runtimeTimelineEvents.value).toHaveLength(1);
         expect(assistant.runtimeTimelineEvents.value[0]).toMatchObject({
             type: 'agent.tool.started',
@@ -1675,6 +1641,76 @@ describe('useAiAssistant streaming integration', () => {
         expect(assistant.messages.value[1]?.stream?.status).toBe('completed');
         expect(assistant.messages.value[1]?.stream?.activityText).toBe('在 工作区 搜索「实时工具」');
         expect(assistant.messages.value[1]?.stream?.activityTrail).toBeUndefined();
+    });
+
+    it('收到空的 sidecar message_delta 时清空非最终阶段说明，等待后续最终回答流', async () => {
+        const { assistant } = createAssistantHarnessContext();
+        const finalGate = createDeferred<void>();
+
+        aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
+            const sessionId = payload.sessionId ?? 'sidecar-clear-delta-session';
+
+            aiServiceMock.emitSidecar({
+                sessionId,
+                seq: 0,
+                event: {
+                    type: 'message_delta',
+                    text: '我先查看一下文件。',
+                    phase: 'stage',
+                },
+            });
+            aiServiceMock.emitSidecar({
+                sessionId,
+                seq: 1,
+                event: {
+                    type: 'message_delta',
+                    text: '',
+                    phase: 'stage',
+                },
+            });
+
+            await finalGate.promise;
+
+            aiServiceMock.emitSidecar({
+                sessionId,
+                seq: 2,
+                event: {
+                    type: 'message_delta',
+                    text: '这是最终回答的流式内容。',
+                    phase: 'final',
+                },
+            });
+
+            return {
+                sessionId,
+                events: [
+                    {
+                        type: 'done',
+                        result: '这是最终回答的流式内容。',
+                    },
+                ],
+                result: '这是最终回答的流式内容。',
+            };
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '检查文件';
+
+        const sendPromise = assistant.sendMessage();
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+            if (assistant.messages.value[1]?.stream?.status === 'streaming') {
+                break;
+            }
+            await Promise.resolve();
+        }
+
+        expect(assistant.messages.value[1]?.content).toBe('');
+
+        finalGate.resolve(undefined);
+        await sendPromise;
+
+        expect(assistant.messages.value[1]?.content).toBe('这是最终回答的流式内容。');
+        expect(assistant.messages.value[1]?.stream?.status).toBe('completed');
     });
 
     it('按 Streaming Events 的字段语义裁剪公开进度，不把 raw JSON 直接塞进活动轨迹', async () => {
@@ -1994,6 +2030,7 @@ describe('useAiAssistant streaming integration', () => {
                 event: {
                     type: 'message_delta',
                     text: firstChunk,
+                    phase: 'final',
                 },
             });
             aiServiceMock.emitSidecar({
@@ -2002,6 +2039,7 @@ describe('useAiAssistant streaming integration', () => {
                 event: {
                     type: 'message_delta',
                     text: secondChunk,
+                    phase: 'final',
                 },
             });
 

@@ -254,7 +254,7 @@ export type TAgentRuntimeEvent =
   | IAgentDebugEvent;
 
 export type TAgentUiEvent =
-  | { type: 'message_delta'; text: string }
+  | { type: 'message_delta'; text: string; phase?: 'stage' | 'final' }
   | { type: 'agent_event'; event: TAgentRuntimeEvent }
   | { type: 'plan_ready'; plan: IAgentPlan }
   | { type: 'tool_start'; toolName: string; input: TJsonValue }

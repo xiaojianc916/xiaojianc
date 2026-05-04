@@ -12,7 +12,7 @@ import { getMcpRuntimeStatus } from './tools/mcp.js';
 
 const DEFAULT_PORT = 39871;
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
-export const SIDECAR_PROTOCOL_VERSION = '3';
+export const SIDECAR_PROTOCOL_VERSION = '5';
 
 const agentModeSchema = z.enum(['ask', 'plan', 'agent', 'patch', 'review']);
 
@@ -178,16 +178,22 @@ const handlePost = async (
 };
 
 const writeNdjsonFrame = (response: ServerResponse, payload: unknown): void => {
+  if (response.writableEnded || response.destroyed) {
+    return;
+  }
+
   response.write(`${JSON.stringify(payload)}\n`);
 };
 
 const writeStreamHeaders = (response: ServerResponse): void => {
+  response.socket?.setNoDelay(true);
   response.writeHead(200, {
     'content-type': 'application/x-ndjson; charset=utf-8',
     'cache-control': 'no-cache, no-transform',
     connection: 'keep-alive',
     'x-accel-buffering': 'no',
   });
+  response.flushHeaders();
 };
 
 const handlePostStream = async (

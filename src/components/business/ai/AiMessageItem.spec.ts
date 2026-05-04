@@ -1,4 +1,5 @@
 import AiMessageItem from '@/components/business/ai/AiMessageItem.vue';
+import type { TAgentRuntimeEvent } from '@/types/agent-sidecar';
 import type { IAiChatMessage } from '@/types/ai';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -30,6 +31,22 @@ const createMessage = (overrides: Partial<IAiChatMessage>): IAiChatMessage => ({
   references: [],
   ...overrides,
 });
+
+const createRuntimeEvent = (overrides: Partial<TAgentRuntimeEvent>): TAgentRuntimeEvent => ({
+  id: overrides.id ?? 'runtime-event-1',
+  type: overrides.type ?? 'agent.reasoning.delta',
+  runId: overrides.runId ?? 'run-1',
+  sessionId: overrides.sessionId ?? 'session-1',
+  agentId: overrides.agentId ?? 'agent-1',
+  timestamp: overrides.timestamp ?? '2026-05-03T10:00:00.000Z',
+  seq: overrides.seq ?? 1,
+  schemaVersion: 1,
+  redacted: true,
+  visibility: overrides.visibility ?? 'user',
+  level: overrides.level ?? 'info',
+  text: '我先确认真实工具列表。',
+  ...(overrides as object),
+}) as TAgentRuntimeEvent;
 
 describe('AiMessageItem', () => {
   beforeEach(() => {
@@ -191,6 +208,126 @@ describe('AiMessageItem', () => {
     expect(wrapper.find('.ai-tool-activity-inline').exists()).toBe(true);
     expect(wrapper.text()).toContain('验证内部 AG-UI event log');
     expect(wrapper.text()).toContain('正在从 event log 还原活动树');
+    expect(wrapper.find('.ai-message-bubble').exists()).toBe(false);
+    expect(wrapper.find('.markdown-stub').exists()).toBe(false);
+  });
+
+  it('有 runtimeEvents 时把推理和活动树嵌入同一条 AI 消息，最终回答紧跟其后', () => {
+    const wrapper = mount(AiMessageItem, {
+      props: {
+        message: createMessage({
+          content: '这是最终回答。',
+          stream: {
+            status: 'completed',
+            runtimeEvents: [
+              createRuntimeEvent({
+                id: 'reasoning-1',
+                type: 'agent.reasoning.delta',
+                text: '我先确认真实工具列表。',
+              }),
+              createRuntimeEvent({
+                id: 'tool-start-1',
+                type: 'agent.tool.started',
+                toolName: 'grep_search',
+                inputPreview: '{"query":"agent-sidecar"}',
+              }),
+            ],
+            activityText: '搜索 agent-sidecar',
+          },
+          toolCalls: [
+            {
+              id: 'tool-1',
+              name: 'grep_search',
+              status: 'running',
+              summary: 'agent-sidecar',
+            },
+          ],
+        }),
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
+      },
+      global: {
+        stubs: {
+          AiMarkdown: { template: '<div class="markdown-stub">这是最终回答。</div>' },
+        },
+      },
+    });
+
+    const runtimeTimeline = wrapper.find('.ai-runtime-timeline');
+    const messageBubble = wrapper.find('.ai-message-bubble');
+
+    expect(runtimeTimeline.exists()).toBe(true);
+    expect(wrapper.find('.ai-tool-activity-inline').exists()).toBe(false);
+    expect(wrapper.text()).toContain('我先确认真实工具列表。');
+    expect(wrapper.text()).toContain('开始调用 grep_search');
+    expect(messageBubble.exists()).toBe(true);
+    expect(runtimeTimeline.element.compareDocumentPosition(messageBubble.element) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+  });
+
+  it('runtimeEvents 流式运行时保持同一条消息并实时显示回答气泡', () => {
+    const wrapper = mount(AiMessageItem, {
+      props: {
+        message: createMessage({
+          content: '好的，我先检查当前 sidecar 状态。',
+          stream: {
+            status: 'streaming',
+            finalAnswerStarted: true,
+            runtimeEvents: [
+              createRuntimeEvent({
+                id: 'reasoning-1',
+                type: 'agent.reasoning.delta',
+                text: '我先确认 sidecar 是否还在使用旧进程。',
+              }),
+            ],
+          },
+        }),
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
+      },
+      global: {
+        stubs: {
+          AiMarkdown: { template: '<div class="markdown-stub">好的，我先检查当前 sidecar 状态。</div>' },
+        },
+      },
+    });
+
+    expect(wrapper.find('.ai-message').exists()).toBe(true);
+    expect(wrapper.find('.ai-runtime-timeline').exists()).toBe(true);
+    expect(wrapper.find('.ai-message-status-line').exists()).toBe(false);
+    expect(wrapper.find('.ai-message-bubble').exists()).toBe(true);
+    expect(wrapper.find('.markdown-stub').exists()).toBe(true);
+    expect(wrapper.text()).toContain('我先确认 sidecar 是否还在使用旧进程。');
+    expect(wrapper.text()).toContain('好的，我先检查当前 sidecar 状态。');
+  });
+
+  it('runtimeEvents 流式运行但最终回答未开始时不渲染阶段性气泡', () => {
+    const wrapper = mount(AiMessageItem, {
+      props: {
+        message: createMessage({
+          content: '让我补充更多欧洲具体国家的矿产数据。',
+          stream: {
+            status: 'streaming',
+            runtimeEvents: [
+              createRuntimeEvent({
+                id: 'reasoning-1',
+                type: 'agent.reasoning.delta',
+                text: '我需要继续搜索更具体的数据。',
+              }),
+            ],
+          },
+        }),
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
+      },
+      global: {
+        stubs: {
+          AiMarkdown: { template: '<div class="markdown-stub">不应出现</div>' },
+        },
+      },
+    });
+
+    expect(wrapper.find('.ai-runtime-timeline').exists()).toBe(true);
     expect(wrapper.find('.ai-message-bubble').exists()).toBe(false);
     expect(wrapper.find('.markdown-stub').exists()).toBe(false);
   });

@@ -87,10 +87,13 @@ onBeforeUnmount(() => {
       :custom-id="rendererId"
       :final="isFinal"
       :defer-nodes-until-visible="false"
-      :max-live-nodes="0"
-      :render-batch-size="16"
-      :render-batch-delay="8"
-      :show-tooltips="true"
+      :max-live-nodes="320"
+      :live-node-buffer="80"
+      :initial-render-batch-size="64"
+      :render-batch-size="96"
+      :render-batch-delay="0"
+      :render-batch-budget-ms="8"
+      :show-tooltips="false"
       :typewriter="false"
     />
   </div>
@@ -224,5 +227,27 @@ onBeforeUnmount(() => {
 
 .ai-markdown .boxpad {
   padding: 0;
+}
+
+.ai-markdown .text-node-stream-delta,
+.ai-markdown .inline-code-stream-delta {
+  animation: none !important;
+  will-change: auto !important;
+}
+
+.ai-markdown .table-node--loading tbody td>* {
+  visibility: visible !important;
+}
+
+.ai-markdown .table-node--loading tbody td::after,
+.ai-markdown .table-node__loading,
+.ai-markdown .html-block-node__placeholder,
+.ai-markdown .code-loading-placeholder,
+.ai-markdown .loading-skeleton,
+.ai-markdown .skeleton-line,
+.ai-markdown .code-height-placeholder {
+  display: none !important;
+  animation: none !important;
+  background: transparent !important;
 }
 </style>

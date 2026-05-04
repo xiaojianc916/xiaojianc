@@ -389,7 +389,7 @@ describe('AiAssistantPanel', () => {
         expect(assistantMock.rollbackLatestFileChange).toHaveBeenCalledTimes(1);
     });
 
-    it('在对话框下方显示低调 Agent 事件时间线', () => {
+    it('不再把 Agent 事件时间线作为消息外的独立区域渲染', () => {
         const assistantMock = createAssistantMock([]);
         assistantMock.runtimeTimelineEvents.value = [
             {
@@ -451,7 +451,7 @@ describe('AiAssistantPanel', () => {
             global: {
                 stubs: {
                     AiChatThread: {
-                        template: '<div data-testid="chat-thread"><slot name="before-messages" /><slot name="before-last-assistant" /><slot /></div>',
+                        template: '<div data-testid="chat-thread"><slot name="before-messages" /><slot /></div>',
                     },
                     AiContextChips: { template: '<div />' },
                     AiPatchPreview: { template: '<div class="patch-preview-stub" />' },
@@ -463,11 +463,7 @@ describe('AiAssistantPanel', () => {
             },
         });
 
-        const html = wrapper.html();
-
-        expect(html.indexOf('chat-thread')).toBeLessThan(html.indexOf('ai-runtime-timeline'));
-        expect(wrapper.text()).toContain('完成调用 edit_file');
-        expect(wrapper.text()).toContain('已更新 src/app.ts');
+        expect(wrapper.find('.ai-runtime-timeline').exists()).toBe(false);
     });
 
     it('shows plan panel only in plan mode when a plan exists', () => {

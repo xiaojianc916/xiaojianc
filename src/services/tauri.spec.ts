@@ -215,6 +215,7 @@ describe('tauriService', () => {
     invokeMock.mockImplementation(() => new Promise(() => undefined));
 
     try {
+      const sidecarTaskTimeoutMs = 30 * 60 * 1000;
       const promise = tauriService.agentSidecarResolveApproval({
         requestId: 'approval-request-1',
         decision: 'allow-once',
@@ -233,7 +234,7 @@ describe('tauriService', () => {
       await vi.advanceTimersByTimeAsync(30_001);
       expect(settled).toBe(false);
 
-      await vi.advanceTimersByTimeAsync(149_998);
+      await vi.advanceTimersByTimeAsync(sidecarTaskTimeoutMs - 30_002);
       expect(settled).toBe(false);
 
       await vi.advanceTimersByTimeAsync(1);

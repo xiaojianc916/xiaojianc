@@ -64,7 +64,6 @@ import { toErrorMessage } from '@/utils/error';
 import { logger } from '@/utils/logger';
 import { areFileSystemPathsEqual, normalizeFileSystemPath } from '@/utils/path';
 import {
-  clipTextPreview,
   normalizePreviewText,
 } from '@/utils/text-preview';
 
@@ -169,7 +168,6 @@ const MAX_IMAGE_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const AI_EDIT_ROLLBACK_TIMELINE_LIMIT = 24;
 const AGENT_RUNTIME_TIMELINE_LIMIT = 32;
 const AGENT_ACTIVITY_TRAIL_LIMIT = 6;
-const AGENT_ACTIVITY_PREVIEW_CHARS = 96;
 const ENABLE_ACTIVITY_NARRATOR = false;
 
 const TEXT_ATTACHMENT_PATTERN =
@@ -200,10 +198,7 @@ const MSG_CALL_FAILED = 'AI 调用失败';
 const createMessageId = (role: IAiChatMessage['role']): string =>
   `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-const clipActivityText = (value: string): string =>
-  clipTextPreview(value, { maxGraphemes: AGENT_ACTIVITY_PREVIEW_CHARS });
-
-const buildInitialAgentActivityText = (_goal: string): string =>
+const buildInitialAgentActivityText = (): string =>
   '正在加载';
 
 const appendActivityTrail = (
@@ -230,6 +225,30 @@ const appendActivityTrail = (
   }
 
   return uniqueTrail.slice(-AGENT_ACTIVITY_TRAIL_LIMIT);
+};
+
+const mergeRuntimeEvents = (
+  currentEvents: readonly TAgentRuntimeEvent[] | undefined,
+  incomingEvents: readonly TAgentRuntimeEvent[] | undefined,
+): TAgentRuntimeEvent[] | undefined => {
+  const nextEvents = [...(currentEvents ?? [])];
+
+  if (!incomingEvents?.length) {
+    return nextEvents.length ? nextEvents : undefined;
+  }
+
+  const seenIds = new Set(nextEvents.map((event) => event.id));
+
+  for (const event of incomingEvents) {
+    if (seenIds.has(event.id)) {
+      continue;
+    }
+
+    seenIds.add(event.id);
+    nextEvents.push(event);
+  }
+
+  return nextEvents.length ? nextEvents : undefined;
 };
 
 const normalizePatchDisplayPath = (path: string): string => {
@@ -734,6 +753,8 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     activityNotes?: IActivityNote[],
     activities?: IAgentActivity[],
     activityEvents?: NonNullable<IAiChatMessage['stream']>['activityEvents'],
+    runtimeEvents?: NonNullable<IAiChatMessage['stream']>['runtimeEvents'],
+    finalAnswerStarted?: boolean,
   ): void => {
     replaceMessageById(messageId, (message) => {
       const previousActivityEvents = message.stream?.activityEvents ?? [];
@@ -756,6 +777,13 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         message.stream?.activityNotes,
         activityNotes,
       );
+      const nextRuntimeEvents = mergeRuntimeEvents(
+        message.stream?.runtimeEvents,
+        runtimeEvents,
+      );
+      const nextFinalAnswerStarted = finalAnswerStarted
+        ?? message.stream?.finalAnswerStarted
+        ?? (streamStatus === 'completed' && hasMeaningfulAssistantText(content));
       const nextActivities = activities
         ?? (nextActivityEvents?.length
           ? materializeAgentActivities(nextActivityEvents)
@@ -772,6 +800,8 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
             ...(nextActivityNotes?.length ? { activityNotes: nextActivityNotes } : {}),
             ...(persistedActivities?.length ? { activities: persistedActivities } : {}),
             ...(nextActivityEvents?.length ? { activityEvents: nextActivityEvents } : {}),
+            ...(nextRuntimeEvents?.length ? { runtimeEvents: nextRuntimeEvents } : {}),
+            ...(nextFinalAnswerStarted ? { finalAnswerStarted: true } : {}),
           }
           : {
             status: streamStatus,
@@ -779,6 +809,8 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
             ...(nextActivityNotes?.length ? { activityNotes: nextActivityNotes } : {}),
             ...(persistedActivities?.length ? { activities: persistedActivities } : {}),
             ...(nextActivityEvents?.length ? { activityEvents: nextActivityEvents } : {}),
+            ...(nextRuntimeEvents?.length ? { runtimeEvents: nextRuntimeEvents } : {}),
+            ...(nextFinalAnswerStarted ? { finalAnswerStarted: true } : {}),
           }
         : message.stream;
 
@@ -1205,21 +1237,33 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       .find((event): event is Extract<TAgentUiEvent, { type: 'message_delta' }> =>
         event.type === 'message_delta'
       );
+    const finalMessageEvent = [...events]
+      .reverse()
+      .find((event): event is Extract<TAgentUiEvent, { type: 'message_delta' }> =>
+        event.type === 'message_delta' && event.phase === 'final'
+      );
     const doneResult = hasMeaningfulAssistantText(doneEvent?.result) ? doneEvent.result : null;
-    const latestDelta = hasMeaningfulAssistantText(messageEvent?.text) ? messageEvent.text : null;
     const currentVisibleContent = hasMeaningfulAssistantText(currentMessage?.content)
       ? currentMessage?.content
       : null;
     const content = errorEvent
       ? `Agent 执行失败：${errorEvent.message}`
-      : doneResult ?? latestDelta ?? currentVisibleContent ?? fallbackContent;
+      : doneResult ?? finalMessageEvent?.text ?? (messageEvent?.text === '' ? '' : currentVisibleContent ?? fallbackContent);
     const streamStatus = errorEvent || doneEvent ? 'completed' : 'streaming';
+    const finalAnswerStarted = Boolean(
+      doneResult
+      || finalMessageEvent
+      || (
+        currentMessage?.stream?.finalAnswerStarted
+        && messageEvent?.text !== ''
+      ),
+    );
     const currentActivityEvents = currentMessage?.stream?.activityEvents;
     const activityProjection = projectSidecarEventsToActivityState({
       assistantMessageId,
       events,
       fallbackActivityText: fallbackContent,
-      rootActivityText: currentMessage?.stream?.activityText ?? buildInitialAgentActivityText(messageContent),
+      rootActivityText: currentMessage?.stream?.activityText ?? buildInitialAgentActivityText(),
       streamStatus,
       hasError: Boolean(errorEvent),
       currentActivityEvents,
@@ -1243,6 +1287,8 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       undefined,
       activityProjection.activities,
       activityProjection.activityEvents,
+      extractVisibleAgentRuntimeEvents(events),
+      finalAnswerStarted,
     );
 
     maybeRequestActivityNarration({
@@ -1332,7 +1378,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     activeSidecarAgentSession.value = null;
 
     const assistantMessageId = createMessageId('assistant');
-    const initialActivityText = buildInitialAgentActivityText(messageContent);
+    const initialActivityText = buildInitialAgentActivityText();
     const placeholderMessage: IAiChatMessage = {
       id: assistantMessageId,
       role: 'assistant',
@@ -1410,6 +1456,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         undefined,
         activityProjection.activities,
         activityProjection.activityEvents,
+        extractVisibleAgentRuntimeEvents(payload.events),
       );
 
       maybeRequestActivityNarration({
@@ -1548,6 +1595,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         undefined,
         activityProjection.activities,
         activityProjection.activityEvents,
+        extractVisibleAgentRuntimeEvents(payload.events),
       );
 
       maybeRequestActivityNarration({
