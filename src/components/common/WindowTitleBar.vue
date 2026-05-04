@@ -511,6 +511,7 @@ const aiMenuItems = computed(() => [
 ]);
 
 const helpMenuItems = computed(() => [
+  { key: 'welcome', label: '欢迎' },
   { key: 'walkthrough', label: '交互式演练' },
   { key: 'documentation', label: '文档' },
   { key: 'shortcuts', label: '快捷键参考', shortcut: 'K S' },

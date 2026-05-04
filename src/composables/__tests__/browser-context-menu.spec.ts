@@ -1,22 +1,22 @@
 import type { ILinearContextMenuItem } from '@/components/common/linear-context-menu.types';
-import { mount, type VueWrapper } from '@vue/test-utils';
-import { defineComponent, type ComponentPublicInstance } from 'vue';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { defineComponent, type ComponentPublicInstance } from 'vue';
 import { useBrowserContextMenu } from '../useBrowserContextMenu';
 
 type TBrowserContextMenuApi = ReturnType<typeof useBrowserContextMenu>;
 
 const mockTerminalControls = vi.hoisted(() => ({
   getSelectionText: vi.fn<[], string>(() => ''),
-  copySelection: vi.fn<[], Promise<void>>(async () => {}),
-  pasteFromClipboard: vi.fn<[], Promise<void>>(async () => {}),
-  selectAll: vi.fn<[], void>(() => {}),
+  copySelection: vi.fn<[], Promise<void>>(async () => { }),
+  pasteFromClipboard: vi.fn<[], Promise<void>>(async () => { }),
+  selectAll: vi.fn<[], void>(() => { }),
 }));
 
 const mockClipboard = vi.hoisted(() => ({
   tryReadClipboardText: vi.fn<[], Promise<string | null>>(async () => null),
   tryWriteClipboardText: vi.fn<[string], Promise<boolean>>(async () => true),
-  writeClipboardText: vi.fn<[string], Promise<void>>(async () => {}),
+  writeClipboardText: vi.fn<[string], Promise<void>>(async () => { }),
 }));
 
 vi.mock('@/composables/useIntegratedTerminal', () => ({
@@ -91,12 +91,27 @@ describe('useBrowserContextMenu', () => {
     mockClipboard.tryWriteClipboardText.mockResolvedValue(true);
   });
 
-  it('terminal context menu opens menu instead of direct paste', () => {
+  it('空白区域不会再弹出全局剪贴板菜单', () => {
+    const surface = document.createElement('div');
+    document.body.appendChild(surface);
+    const { api, wrapper } = mountContextMenu();
+
+    const event = dispatchContextMenu(surface);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(api.contextMenuState.open).toBe(false);
+    expect(api.contextMenuGroups.value).toEqual([]);
+
+    wrapper.unmount();
+  });
+
+  it('terminal context menu opens menu instead of direct paste', async () => {
     mockTerminalControls.getSelectionText.mockReturnValue('selected text');
     const surface = createTerminalSurface();
     const { api, wrapper } = mountContextMenu();
 
     const event = dispatchContextMenu(surface);
+    await flushPromises();
 
     expect(event.defaultPrevented).toBe(true);
     expect(api.contextMenuState.open).toBe(true);
@@ -122,15 +137,19 @@ describe('useBrowserContextMenu', () => {
     const { api, wrapper } = mountContextMenu();
 
     dispatchContextMenu(surface);
+    await flushPromises();
     await api.executeContextMenuItem(findMenuItem(api, 'copy'));
     expect(mockTerminalControls.copySelection).toHaveBeenCalledTimes(1);
 
     dispatchContextMenu(surface);
+    await flushPromises();
     await api.executeContextMenuItem(findMenuItem(api, 'paste'));
     expect(mockTerminalControls.pasteFromClipboard).toHaveBeenCalledTimes(1);
 
     dispatchContextMenu(surface);
+    await flushPromises();
     await api.executeContextMenuItem(findMenuItem(api, 'select-all'));
+    await flushPromises();
     expect(mockTerminalControls.selectAll).toHaveBeenCalledTimes(1);
 
     wrapper.unmount();

@@ -184,6 +184,12 @@ const gitCommitSummaryPayloadSchema = z.object({
   authoredAt: z.string(),
 });
 
+const gitCommitHistoryPayloadSchema = z.object({
+  entries: z.array(gitCommitSummaryPayloadSchema),
+  hasMore: z.boolean(),
+  nextOffset: z.number().int().nonnegative().nullable(),
+});
+
 const gitFileStatusPayloadSchema = z.object({
   path: z.string(),
   relativePath: z.string(),
@@ -194,6 +200,24 @@ const gitFileStatusPayloadSchema = z.object({
   worktreeStatus: gitChangeKindSchema.nullable(),
   isConflicted: z.boolean(),
   isUntracked: z.boolean(),
+});
+
+const gitBranchKindSchema = z.enum(['local', 'remote']);
+
+const gitBranchPayloadSchema = z.object({
+  name: z.string(),
+  shorthand: z.string(),
+  kind: gitBranchKindSchema,
+  upstreamName: z.string().nullable(),
+  isCurrent: z.boolean(),
+  isHead: z.boolean(),
+  ahead: z.number().int().nonnegative(),
+  behind: z.number().int().nonnegative(),
+  lastCommit: gitCommitSummaryPayloadSchema.nullable(),
+});
+
+const gitBranchListPayloadSchema = z.object({
+  branches: z.array(gitBranchPayloadSchema),
 });
 
 const gitRepositoryStatusPayloadSchema = z.object({
@@ -215,6 +239,35 @@ const gitRepositoryStatusPayloadSchema = z.object({
   conflictedCount: z.number().int().nonnegative(),
   files: z.array(gitFileStatusPayloadSchema),
   lastCommit: gitCommitSummaryPayloadSchema.nullable(),
+});
+
+const gitStashEntryPayloadSchema = z.object({
+  index: z.number().int().nonnegative(),
+  stashId: z.string(),
+  summary: z.string(),
+  branchName: z.string().nullable(),
+  commitShortId: z.string().nullable(),
+});
+
+const gitStashListPayloadSchema = z.object({
+  entries: z.array(gitStashEntryPayloadSchema),
+});
+
+const gitPullRequestProviderSchema = z.enum([
+  'github',
+  'gitlab',
+  'gitea',
+  'bitbucket',
+  'unknown',
+]);
+
+const gitPullRequestSupportPayloadSchema = z.object({
+  available: z.boolean(),
+  remoteName: z.string().nullable(),
+  provider: gitPullRequestProviderSchema,
+  repositoryUrl: z.string().nullable(),
+  pullRequestsUrl: z.string().nullable(),
+  createPullRequestUrl: z.string().nullable(),
 });
 
 const terminalSessionPayloadSchema = z.object({
@@ -429,6 +482,35 @@ export const tauriContracts = {
     }),
     outSchema: gitRepositoryStatusPayloadSchema,
   },
+  listGitCommitHistory: {
+    inSchema: z.object({
+      repositoryRootPath: z.string().min(1),
+      offset: z.number().int().nonnegative().optional(),
+      limit: z.number().int().positive().max(200).optional(),
+    }),
+    outSchema: gitCommitHistoryPayloadSchema,
+  },
+  listGitBranches: {
+    inSchema: z.object({
+      repositoryRootPath: z.string().min(1),
+    }),
+    outSchema: gitBranchListPayloadSchema,
+  },
+  checkoutGitBranch: {
+    inSchema: z.object({
+      repositoryRootPath: z.string().min(1),
+      branchName: z.string().min(1),
+    }),
+    outSchema: gitRepositoryStatusPayloadSchema,
+  },
+  createGitBranch: {
+    inSchema: z.object({
+      repositoryRootPath: z.string().min(1),
+      branchName: z.string().min(1),
+      checkout: z.boolean(),
+    }),
+    outSchema: gitRepositoryStatusPayloadSchema,
+  },
   getGitFileBaseline: {
     inSchema: z.object({
       path: z.string().min(1),
@@ -491,6 +573,41 @@ export const tauriContracts = {
       status: gitRepositoryStatusPayloadSchema,
       commit: gitCommitSummaryPayloadSchema,
     }),
+  },
+  listGitStashes: {
+    inSchema: z.object({
+      repositoryRootPath: z.string().min(1),
+    }),
+    outSchema: gitStashListPayloadSchema,
+  },
+  saveGitStash: {
+    inSchema: z.object({
+      repositoryRootPath: z.string().min(1),
+      message: z.string().nullable(),
+      includeUntracked: z.boolean(),
+    }),
+    outSchema: gitRepositoryStatusPayloadSchema,
+  },
+  applyGitStash: {
+    inSchema: z.object({
+      repositoryRootPath: z.string().min(1),
+      stashIndex: z.number().int().nonnegative(),
+      pop: z.boolean(),
+    }),
+    outSchema: gitRepositoryStatusPayloadSchema,
+  },
+  dropGitStash: {
+    inSchema: z.object({
+      repositoryRootPath: z.string().min(1),
+      stashIndex: z.number().int().nonnegative(),
+    }),
+    outSchema: gitRepositoryStatusPayloadSchema,
+  },
+  getGitPullRequestSupport: {
+    inSchema: z.object({
+      repositoryRootPath: z.string().min(1),
+    }),
+    outSchema: gitPullRequestSupportPayloadSchema,
   },
   testSshConnection: {
     inSchema: sshConnectionInputSchema,

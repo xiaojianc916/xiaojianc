@@ -1,3 +1,5 @@
+import { formatFileSystemPathForDisplay } from '@/utils/path';
+
 const createFallbackTextarea = (value: string): HTMLTextAreaElement => {
   const textarea = document.createElement('textarea');
   textarea.value = value;
@@ -29,6 +31,12 @@ export const writeClipboardText = async (value: string): Promise<void> => {
   if (!copied) {
     throw new Error('当前环境不支持剪贴板写入');
   }
+};
+
+export const writeFileSystemPathToClipboard = async (
+  value: string | null | undefined,
+): Promise<void> => {
+  await writeClipboardText(formatFileSystemPathForDisplay(value));
 };
 
 export const readClipboardText = async (): Promise<string> => {

@@ -687,6 +687,34 @@ const initGitRepositoryIpc = defineContractIpc(
   tauriContracts.initGitRepository,
 );
 
+const listGitCommitHistoryIpc = definePayloadIpc(
+  'list_git_commit_history',
+  '读取 Git 提交历史',
+  tauriContracts.listGitCommitHistory,
+  { idempotent: true, timeoutMs: 20_000 },
+);
+
+const listGitBranchesIpc = definePayloadIpc(
+  'list_git_branches',
+  '读取 Git 分支列表',
+  tauriContracts.listGitBranches,
+  { idempotent: true },
+);
+
+const checkoutGitBranchIpc = definePayloadIpc(
+  'checkout_git_branch',
+  '切换 Git 分支',
+  tauriContracts.checkoutGitBranch,
+  { audit: 'sensitive', timeoutMs: 20_000 },
+);
+
+const createGitBranchIpc = definePayloadIpc(
+  'create_git_branch',
+  '创建 Git 分支',
+  tauriContracts.createGitBranch,
+  { audit: 'sensitive', timeoutMs: 20_000 },
+);
+
 const getGitFileBaselineIpc = defineContractIpc(
   'get_git_file_baseline',
   '读取 Git 文件基线',
@@ -725,6 +753,41 @@ const commitGitIndexIpc = definePayloadIpc(
   '创建 Git 提交',
   tauriContracts.commitGitIndex,
   { audit: 'sensitive' },
+);
+
+const listGitStashesIpc = definePayloadIpc(
+  'list_git_stashes',
+  '读取 Git 贮藏列表',
+  tauriContracts.listGitStashes,
+  { idempotent: true },
+);
+
+const saveGitStashIpc = definePayloadIpc(
+  'save_git_stash',
+  '保存 Git 贮藏',
+  tauriContracts.saveGitStash,
+  { audit: 'sensitive', timeoutMs: 20_000 },
+);
+
+const applyGitStashIpc = definePayloadIpc(
+  'apply_git_stash',
+  '应用 Git 贮藏',
+  tauriContracts.applyGitStash,
+  { audit: 'sensitive', timeoutMs: 20_000 },
+);
+
+const dropGitStashIpc = definePayloadIpc(
+  'drop_git_stash',
+  '删除 Git 贮藏',
+  tauriContracts.dropGitStash,
+  { audit: 'sensitive', timeoutMs: 20_000 },
+);
+
+const getGitPullRequestSupportIpc = definePayloadIpc(
+  'get_git_pull_request_support',
+  '读取 Git 远程 Pull Request 支持信息',
+  tauriContracts.getGitPullRequestSupport,
+  { idempotent: true },
 );
 
 const testSshConnectionIpc = definePayloadIpc(
@@ -1257,6 +1320,14 @@ export const tauriService: ITauriService & {
     return initGitRepositoryIpc({ workspaceRootPath });
   },
 
+  listGitCommitHistory: listGitCommitHistoryIpc,
+
+  listGitBranches: listGitBranchesIpc,
+
+  checkoutGitBranch: checkoutGitBranchIpc,
+
+  createGitBranch: createGitBranchIpc,
+
   getGitFileBaseline(path) {
     return getGitFileBaselineIpc({ path });
   },
@@ -1270,6 +1341,16 @@ export const tauriService: ITauriService & {
   discardGitPaths: discardGitPathsIpc,
 
   commitGitIndex: commitGitIndexIpc,
+
+  listGitStashes: listGitStashesIpc,
+
+  saveGitStash: saveGitStashIpc,
+
+  applyGitStash: applyGitStashIpc,
+
+  dropGitStash: dropGitStashIpc,
+
+  getGitPullRequestSupport: getGitPullRequestSupportIpc,
 
   ensureTerminalSession: ensureTerminalSessionIpc,
 

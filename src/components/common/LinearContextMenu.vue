@@ -91,12 +91,12 @@
 </template>
 
 <script setup lang="ts">
+import MotionDropdown from '@/components/business/MotionDropdown.vue';
 import type {
-  ILinearContextMenuGroup,
-  ILinearContextMenuItem,
+    ILinearContextMenuGroup,
+    ILinearContextMenuItem,
 } from '@/components/common/linear-context-menu.types';
 import LinearContextMenuIcon from '@/components/common/LinearContextMenuIcon.vue';
-import MotionDropdown from '@/components/business/MotionDropdown.vue';
 import type { TThemeMode } from '@/types/app';
 import type { TDropdownMotionOrigin } from '@/types/motion';
 import { computed, ref, watch } from 'vue';
@@ -266,7 +266,18 @@ watch(
 
 .cmx-i.disabled {
   color: var(--cm-fg-4);
+  opacity: 1;
   pointer-events: none;
+}
+
+.cmx-i.disabled .ic,
+.cmx-i.disabled .arr,
+.cmx-i.disabled .kh kbd {
+  color: var(--cm-fg-4);
+}
+
+.cmx-i.disabled .kh kbd {
+  background: color-mix(in srgb, var(--editor-context-menu-kbd-bg) 88%, var(--cm-fg-4) 12%);
 }
 
 .ic {

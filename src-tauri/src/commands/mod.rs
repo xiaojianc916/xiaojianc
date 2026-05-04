@@ -45,8 +45,11 @@ pub use contracts::{
     WorkspacePathRenamePayload, WorkspacePathRenameRequest,
 };
 pub use git::{
-    commit_git_index, discard_git_paths, get_git_diff_preview, get_git_file_baseline,
-    get_git_repository_status, init_git_repository, stage_git_paths, unstage_git_paths,
+    apply_git_stash, checkout_git_branch, commit_git_index, create_git_branch,
+    discard_git_paths, drop_git_stash, get_git_diff_preview, get_git_file_baseline,
+    get_git_pull_request_support, get_git_repository_status, init_git_repository,
+    list_git_branches, list_git_commit_history, list_git_stashes, save_git_stash,
+    stage_git_paths, unstage_git_paths,
 };
 pub use script_run::detect_execution_environment;
 pub(crate) use script_run::{create_temp_script, find_command_path, line_count};
@@ -63,7 +66,7 @@ pub use terminal::{
     write_terminal_input, TerminalSessionState,
 };
 pub use window::set_window_background;
-pub use window_stage::apply_window_stage;
+pub use window_stage::{apply_window_stage, begin_startup_transition, finalize_startup_transition};
 pub use workspace_fs::{
     create_workspace_path, delete_workspace_path, list_workspace_entries, load_image_asset,
     load_script, rename_workspace_path, save_script,

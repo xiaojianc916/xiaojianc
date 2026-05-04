@@ -4,8 +4,8 @@ use super::{
 };
 use chrono::{TimeZone, Utc};
 use git2::{
-    build::CheckoutBuilder, BranchType, ErrorCode, ObjectType, Repository, Status, StatusEntry,
-    StatusOptions,
+    build::CheckoutBuilder, Branch, BranchType, ErrorCode, ObjectType, Repository, Status,
+    StatusEntry, StatusOptions, StashFlags,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -14,8 +14,30 @@ use std::{
     process::{Command, Stdio},
 };
 
+mod branches;
+mod diff;
+mod history;
+mod pull_request;
+mod stash;
+mod status;
+
+#[cfg(test)]
+mod tests;
+
+pub use branches::{checkout_git_branch, create_git_branch, list_git_branches};
+pub use diff::get_git_diff_preview;
+pub use history::list_git_commit_history;
+pub use pull_request::get_git_pull_request_support;
+pub use stash::{apply_git_stash, drop_git_stash, list_git_stashes, save_git_stash};
+pub use status::{
+    commit_git_index, discard_git_paths, get_git_file_baseline, get_git_repository_status,
+    init_git_repository, stage_git_paths, unstage_git_paths,
+};
+
 const GIT_DIFF_MODE_WORKTREE: &str = "worktree";
 const GIT_DIFF_MODE_STAGED: &str = "staged";
+const DEFAULT_GIT_HISTORY_LIMIT: usize = 20;
+const MAX_GIT_HISTORY_LIMIT: usize = 200;
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -25,6 +47,63 @@ pub struct GitCommitSummaryPayload {
     summary: String,
     author_name: String,
     authored_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitHistoryRequest {
+    repository_root_path: String,
+    offset: Option<usize>,
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitHistoryPayload {
+    entries: Vec<GitCommitSummaryPayload>,
+    has_more: bool,
+    next_offset: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranchPayload {
+    name: String,
+    shorthand: String,
+    kind: String,
+    upstream_name: Option<String>,
+    is_current: bool,
+    is_head: bool,
+    ahead: usize,
+    behind: usize,
+    last_commit: Option<GitCommitSummaryPayload>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranchListPayload {
+    branches: Vec<GitBranchPayload>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRepositoryRootRequest {
+    repository_root_path: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranchCheckoutRequest {
+    repository_root_path: String,
+    branch_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranchCreateRequest {
+    repository_root_path: String,
+    branch_name: String,
+    checkout: bool,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -110,6 +189,22 @@ pub struct GitCommitResultPayload {
     commit: GitCommitSummaryPayload,
 }
 
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStashEntryPayload {
+    index: usize,
+    stash_id: String,
+    summary: String,
+    branch_name: Option<String>,
+    commit_short_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStashListPayload {
+    entries: Vec<GitStashEntryPayload>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitPathOperationRequest {
@@ -124,566 +219,38 @@ pub struct GitCommitRequest {
     message: String,
 }
 
-#[tauri::command]
-pub fn get_git_repository_status(
-    workspace_root_path: Option<String>,
-) -> Result<GitRepositoryStatusPayload, String> {
-    let workspace_root = resolve_git_workspace_root(workspace_root_path)?;
-
-    match Repository::discover(&workspace_root) {
-        Ok(repository) => build_git_repository_status_payload(&repository),
-        Err(error) if error.code() == ErrorCode::NotFound => Ok(build_unavailable_git_status(
-            "当前工作区未检测到 Git 仓库。",
-        )),
-        Err(error) => Err(format!("读取 Git 仓库状态失败：{error}")),
-    }
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStashSaveRequest {
+    repository_root_path: String,
+    message: Option<String>,
+    include_untracked: bool,
 }
 
-#[tauri::command]
-pub fn init_git_repository(
-    workspace_root_path: Option<String>,
-) -> Result<GitRepositoryStatusPayload, String> {
-    let workspace_root = resolve_git_workspace_root(workspace_root_path)?;
-
-    match Repository::open(&workspace_root) {
-        Ok(repository) => build_git_repository_status_payload(&repository),
-        Err(error) if error.code() == ErrorCode::NotFound => {
-            Repository::init(&workspace_root)
-                .map_err(|init_error| format!("初始化 Git 仓库失败：{init_error}"))?;
-
-            let repository = Repository::open(&workspace_root)
-                .map_err(|open_error| format!("读取初始化后的 Git 仓库失败：{open_error}"))?;
-
-            build_git_repository_status_payload(&repository)
-        }
-        Err(error) => Err(format!("初始化 Git 仓库失败：{error}")),
-    }
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStashApplyRequest {
+    repository_root_path: String,
+    stash_index: usize,
+    pop: bool,
 }
 
-#[tauri::command]
-pub fn get_git_file_baseline(path: String) -> Result<GitFileBaselinePayload, String> {
-    let file_path = normalize_path_for_git(Path::new(&path));
-    let discovery_root = file_path.parent().unwrap_or(file_path.as_path());
-
-    match Repository::discover(discovery_root) {
-        Ok(repository) => build_git_file_baseline_payload(&repository, &file_path),
-        Err(error) if error.code() == ErrorCode::NotFound => Ok(GitFileBaselinePayload {
-            available: false,
-            message: Some("当前文件不在 Git 仓库中。".into()),
-            repository_root_path: None,
-            file_path: path,
-            relative_path: None,
-            is_tracked: false,
-            content: None,
-        }),
-        Err(error) => Err(format!("读取 Git 文件基线失败：{error}")),
-    }
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStashDropRequest {
+    repository_root_path: String,
+    stash_index: usize,
 }
 
-#[tauri::command]
-pub fn get_git_diff_preview(
-    payload: GitDiffPreviewRequest,
-) -> Result<GitDiffPreviewPayload, String> {
-    let repository = open_repository_from_root(&payload.repository_root_path)?;
-    let repository_root = resolve_repository_root(&repository)?;
-    let mode = parse_git_diff_mode(&payload.mode)?;
-    let relative_path = resolve_single_relative_path(&repository_root, &payload.path)?;
-    let relative_path_text = path_to_forward_slashes(&relative_path);
-    let diff_text = build_git_diff_text(&repository, &repository_root, &relative_path, mode)?;
-    let content_pair =
-        build_git_diff_content_pair(&repository, &repository_root, &relative_path, mode)?;
-    let is_empty = diff_text.trim().is_empty();
-    let mode_text = mode.as_str().to_string();
-    let mode_label = match mode {
-        GitDiffMode::Staged => "已暂存",
-        GitDiffMode::Worktree => "工作区",
-    };
-
-    Ok(GitDiffPreviewPayload {
-        id: format!(
-            "git-diff:{}:{}:{}",
-            mode_text,
-            repository_root.to_string_lossy(),
-            relative_path_text
-        ),
-        repository_root_path: repository_root.to_string_lossy().to_string(),
-        path: repository_root
-            .join(&relative_path)
-            .to_string_lossy()
-            .to_string(),
-        relative_path: relative_path_text.clone(),
-        title: format!("{relative_path_text} · {mode_label} Diff"),
-        mode: mode_text,
-        original_content: content_pair.original_content,
-        modified_content: content_pair.modified_content,
-        is_empty,
-    })
-}
-
-#[tauri::command]
-pub fn stage_git_paths(
-    payload: GitPathOperationRequest,
-) -> Result<GitRepositoryStatusPayload, String> {
-    let repository = open_repository_from_root(&payload.repository_root_path)?;
-    let repository_root = resolve_repository_root(&repository)?;
-    let pathspecs = resolve_pathspecs(&repository_root, &payload.paths)?;
-
-    if pathspecs.is_empty() {
-        return build_git_repository_status_payload(&repository);
-    }
-
-    let mut index = repository
-        .index()
-        .map_err(|error| format!("读取 Git 索引失败：{error}"))?;
-
-    for pathspec in &pathspecs {
-        let relative_path = Path::new(pathspec);
-        let file_status = repository
-            .status_file(relative_path)
-            .map_err(|error| format!("读取 Git 文件状态失败：{error}"))?;
-
-        if file_status.contains(Status::WT_DELETED) || file_status.contains(Status::INDEX_DELETED) {
-            match index.remove_path(relative_path) {
-                Ok(_) => {}
-                Err(error) if error.code() == ErrorCode::NotFound => {}
-                Err(error) => return Err(format!("暂存 Git 变更失败：{error}")),
-            }
-            continue;
-        }
-
-        index
-            .add_path(relative_path)
-            .map_err(|error| format!("暂存 Git 变更失败：{error}"))?;
-    }
-
-    index
-        .write()
-        .map_err(|error| format!("写入 Git 索引失败：{error}"))?;
-
-    build_git_repository_status_payload(&repository)
-}
-
-#[tauri::command]
-pub fn unstage_git_paths(
-    payload: GitPathOperationRequest,
-) -> Result<GitRepositoryStatusPayload, String> {
-    let repository = open_repository_from_root(&payload.repository_root_path)?;
-    let repository_root = resolve_repository_root(&repository)?;
-    let pathspecs = resolve_pathspecs(&repository_root, &payload.paths)?;
-
-    if pathspecs.is_empty() {
-        return build_git_repository_status_payload(&repository);
-    }
-
-    if let Some(head_object) = resolve_head_object(&repository)? {
-        repository
-            .reset_default(Some(&head_object), pathspecs.iter().map(String::as_str))
-            .map_err(|error| format!("取消暂存 Git 变更失败：{error}"))?;
-    } else {
-        let mut index = repository
-            .index()
-            .map_err(|error| format!("读取 Git 索引失败：{error}"))?;
-
-        for pathspec in &pathspecs {
-            match index.remove_path(Path::new(pathspec)) {
-                Ok(_) => {}
-                Err(error) if error.code() == ErrorCode::NotFound => {}
-                Err(error) => return Err(format!("取消暂存 Git 变更失败：{error}")),
-            }
-        }
-
-        index
-            .write()
-            .map_err(|error| format!("写入 Git 索引失败：{error}"))?;
-    }
-
-    build_git_repository_status_payload(&repository)
-}
-
-#[tauri::command]
-pub fn discard_git_paths(
-    payload: GitPathOperationRequest,
-) -> Result<GitRepositoryStatusPayload, String> {
-    let repository = open_repository_from_root(&payload.repository_root_path)?;
-    let repository_root = resolve_repository_root(&repository)?;
-    let pathspecs = resolve_pathspecs(&repository_root, &payload.paths)?;
-
-    if pathspecs.is_empty() {
-        return build_git_repository_status_payload(&repository);
-    }
-
-    let mut checkout_builder = CheckoutBuilder::new();
-    checkout_builder.force();
-    let mut has_tracked_worktree_paths = false;
-
-    for pathspec in &pathspecs {
-        let relative_path = Path::new(pathspec);
-        let file_status = repository
-            .status_file(relative_path)
-            .map_err(|error| format!("读取 Git 文件状态失败：{error}"))?;
-
-        if file_status.contains(Status::CONFLICTED) {
-            return Err("冲突文件需要先手动解决，不能直接放弃更改。".into());
-        }
-
-        let is_only_untracked =
-            file_status.contains(Status::WT_NEW) && !file_status.contains(Status::INDEX_NEW);
-        if is_only_untracked {
-            remove_untracked_worktree_path(&repository_root, relative_path)?;
-            continue;
-        }
-
-        if file_status.intersects(
-            Status::WT_MODIFIED | Status::WT_DELETED | Status::WT_RENAMED | Status::WT_TYPECHANGE,
-        ) {
-            checkout_builder.path(pathspec);
-            has_tracked_worktree_paths = true;
-        }
-    }
-
-    if has_tracked_worktree_paths {
-        repository
-            .checkout_index(None, Some(&mut checkout_builder))
-            .map_err(|error| format!("放弃 Git 工作区更改失败：{error}"))?;
-    }
-
-    build_git_repository_status_payload(&repository)
-}
-
-#[tauri::command]
-pub fn commit_git_index(payload: GitCommitRequest) -> Result<GitCommitResultPayload, String> {
-    let repository = open_repository_from_root(&payload.repository_root_path)?;
-    let message = payload.message.trim();
-
-    if message.is_empty() {
-        return Err("提交说明不能为空。".into());
-    }
-
-    let status = build_git_repository_status_payload(&repository)?;
-    if status.staged_count == 0 {
-        return Err("当前没有已暂存的 Git 变更。".into());
-    }
-
-    let signature = repository.signature().map_err(|error| {
-        format!("读取 Git 提交身份失败：{error}。请先配置 user.name 和 user.email。")
-    })?;
-
-    let mut index = repository
-        .index()
-        .map_err(|error| format!("读取 Git 索引失败：{error}"))?;
-    index
-        .write()
-        .map_err(|error| format!("写入 Git 索引失败：{error}"))?;
-
-    let tree_id = index
-        .write_tree()
-        .map_err(|error| format!("写入 Git 树对象失败：{error}"))?;
-    let tree = repository
-        .find_tree(tree_id)
-        .map_err(|error| format!("读取 Git 树对象失败：{error}"))?;
-    let parent_commit = resolve_head_commit(&repository)?;
-
-    let commit_id = if let Some(parent) = parent_commit.as_ref() {
-        repository
-            .commit(
-                Some("HEAD"),
-                &signature,
-                &signature,
-                message,
-                &tree,
-                &[parent],
-            )
-            .map_err(|error| format!("创建 Git 提交失败：{error}"))?
-    } else {
-        repository
-            .commit(Some("HEAD"), &signature, &signature, message, &tree, &[])
-            .map_err(|error| format!("创建 Git 提交失败：{error}"))?
-    };
-
-    let commit = repository
-        .find_commit(commit_id)
-        .map_err(|error| format!("读取新提交失败：{error}"))?;
-
-    Ok(GitCommitResultPayload {
-        status: build_git_repository_status_payload(&repository)?,
-        commit: build_git_commit_summary(&commit),
-    })
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum GitDiffMode {
-    Worktree,
-    Staged,
-}
-
-impl GitDiffMode {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Worktree => GIT_DIFF_MODE_WORKTREE,
-            Self::Staged => GIT_DIFF_MODE_STAGED,
-        }
-    }
-}
-
-fn parse_git_diff_mode(value: &str) -> Result<GitDiffMode, String> {
-    match value {
-        GIT_DIFF_MODE_WORKTREE => Ok(GitDiffMode::Worktree),
-        GIT_DIFF_MODE_STAGED => Ok(GitDiffMode::Staged),
-        _ => Err(format!("不支持的 Git Diff 模式：{value}")),
-    }
-}
-
-fn remove_untracked_worktree_path(
-    repository_root: &Path,
-    relative_path: &Path,
-) -> Result<(), String> {
-    let target_path = repository_root.join(relative_path);
-    if !target_path.exists() {
-        return Ok(());
-    }
-
-    let canonical_root = normalize_path_for_git(
-        &repository_root
-            .canonicalize()
-            .map_err(|error| format!("读取 Git 工作区根目录失败：{error}"))?,
-    );
-    let canonical_target = normalize_path_for_git(
-        &target_path
-            .canonicalize()
-            .map_err(|error| format!("读取未跟踪文件路径失败：{error}"))?,
-    );
-
-    if !canonical_target.starts_with(&canonical_root) {
-        return Err("拒绝删除 Git 工作区之外的未跟踪路径。".into());
-    }
-
-    let metadata = fs::symlink_metadata(&target_path)
-        .map_err(|error| format!("读取未跟踪路径元数据失败：{error}"))?;
-    if metadata.is_dir() {
-        fs::remove_dir_all(&target_path).map_err(|error| format!("删除未跟踪目录失败：{error}"))?;
-        return Ok(());
-    }
-
-    fs::remove_file(&target_path).map_err(|error| format!("删除未跟踪文件失败：{error}"))
-}
-
-fn resolve_git_executable() -> Result<PathBuf, String> {
-    let executable_name = if cfg!(windows) { "git.exe" } else { "git" };
-    find_command_path(
-        executable_name,
-        &[
-            r"C:\Program Files\Git\cmd\git.exe",
-            r"C:\Program Files (x86)\Git\cmd\git.exe",
-        ],
-    )
-    .ok_or_else(|| "未找到 git 可执行文件，无法读取 Git Diff。".to_string())
-}
-
-fn run_git_diff_command(repository_root: &Path, args: &[String]) -> Result<String, String> {
-    let git_executable = resolve_git_executable()?;
-    let mut command = Command::new(git_executable);
-    configure_std_command_for_background(&mut command);
-    command
-        .current_dir(repository_root)
-        .args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    let output = command
-        .output()
-        .map_err(|error| format!("执行 Git diff 失败：{error}"))?;
-
-    if !output.status.success() {
-        let stderr = decode_process_output(&output.stderr);
-        return Err(if stderr.is_empty() {
-            "执行 Git diff 失败。".to_string()
-        } else {
-            format!("执行 Git diff 失败：{stderr}")
-        });
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-}
-
-fn run_git_bytes_command(repository_root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
-    let git_executable = resolve_git_executable()?;
-    let mut command = Command::new(git_executable);
-    configure_std_command_for_background(&mut command);
-    command
-        .current_dir(repository_root)
-        .args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    let output = command
-        .output()
-        .map_err(|error| format!("执行 Git 命令失败：{error}"))?;
-
-    if !output.status.success() {
-        let stderr = decode_process_output(&output.stderr);
-        return Err(if stderr.is_empty() {
-            "执行 Git 命令失败。".to_string()
-        } else {
-            format!("执行 Git 命令失败：{stderr}")
-        });
-    }
-
-    Ok(output.stdout)
-}
-
-fn read_git_revision_text(repository_root: &Path, spec: &str) -> Result<Option<String>, String> {
-    match run_git_bytes_command(repository_root, &["show", spec]) {
-        Ok(bytes) => decode_script_bytes(&bytes)
-            .map(|(content, _)| Some(content))
-            .map_err(|_| format!("Git 对象不是可直接比较的文本内容：{spec}")),
-        Err(_) => Ok(None),
-    }
-}
-
-fn read_worktree_text(
-    repository_root: &Path,
-    relative_path: &Path,
-) -> Result<Option<String>, String> {
-    let file_path = repository_root.join(relative_path);
-    if !file_path.exists() {
-        return Ok(None);
-    }
-    if file_path.is_dir() {
-        return Err("当前路径是目录，暂不支持直接预览目录 Diff。".to_string());
-    }
-
-    let bytes = fs::read(&file_path).map_err(|error| format!("读取工作区文件失败：{error}"))?;
-    decode_script_bytes(&bytes)
-        .map(|(content, _)| Some(content))
-        .map_err(|_| "当前工作区文件不是可直接比较的文本内容。".to_string())
-}
-
-fn build_git_diff_content_pair(
-    repository: &Repository,
-    repository_root: &Path,
-    relative_path: &Path,
-    mode: GitDiffMode,
-) -> Result<GitDiffContentPair, String> {
-    let relative_path_text = path_to_forward_slashes(relative_path);
-
-    match mode {
-        GitDiffMode::Worktree => {
-            let original_content = if is_untracked_worktree_path(repository, relative_path)? {
-                String::new()
-            } else {
-                read_git_revision_text(repository_root, &format!(":{relative_path_text}"))?
-                    .unwrap_or_default()
-            };
-            let modified_content =
-                read_worktree_text(repository_root, relative_path)?.unwrap_or_default();
-
-            Ok(GitDiffContentPair {
-                original_content,
-                modified_content,
-            })
-        }
-        GitDiffMode::Staged => {
-            let original_content =
-                read_git_revision_text(repository_root, &format!("HEAD:{relative_path_text}"))?
-                    .unwrap_or_default();
-            let modified_content =
-                read_git_revision_text(repository_root, &format!(":{relative_path_text}"))?
-                    .unwrap_or_default();
-
-            Ok(GitDiffContentPair {
-                original_content,
-                modified_content,
-            })
-        }
-    }
-}
-
-fn build_git_diff_text(
-    repository: &Repository,
-    repository_root: &Path,
-    relative_path: &Path,
-    mode: GitDiffMode,
-) -> Result<String, String> {
-    if mode == GitDiffMode::Worktree && is_untracked_worktree_path(repository, relative_path)? {
-        return build_untracked_file_diff(repository_root, relative_path);
-    }
-
-    let relative_path_text = path_to_forward_slashes(relative_path);
-    let mut args = vec![
-        "-c".to_string(),
-        "core.quotepath=false".to_string(),
-        "diff".to_string(),
-        "--no-ext-diff".to_string(),
-        "--no-color".to_string(),
-        "--ignore-cr-at-eol".to_string(),
-        "--find-renames".to_string(),
-    ];
-
-    if mode == GitDiffMode::Staged {
-        args.push("--cached".to_string());
-    }
-
-    args.push("--".to_string());
-    args.push(relative_path_text);
-    run_git_diff_command(repository_root, &args)
-}
-
-fn is_untracked_worktree_path(
-    repository: &Repository,
-    relative_path: &Path,
-) -> Result<bool, String> {
-    match repository.status_file(relative_path) {
-        Ok(status) => Ok(status.contains(Status::WT_NEW)),
-        Err(error) if error.code() == ErrorCode::NotFound => Ok(false),
-        Err(error) => Err(format!("读取 Git 文件状态失败：{error}")),
-    }
-}
-
-fn build_untracked_file_diff(
-    repository_root: &Path,
-    relative_path: &Path,
-) -> Result<String, String> {
-    let file_path = repository_root.join(relative_path);
-    if file_path.is_dir() {
-        return Err("当前未跟踪路径是目录，暂不支持直接预览目录 Diff。".to_string());
-    }
-
-    let bytes = fs::read(&file_path).map_err(|error| format!("读取未跟踪文件失败：{error}"))?;
-    let (content, _) = decode_script_bytes(&bytes)
-        .map_err(|_| "当前未跟踪文件不是可直接比较的文本内容。".to_string())?;
-    let relative_path_text = path_to_forward_slashes(relative_path);
-    let mut lines: Vec<&str> = if content.is_empty() {
-        Vec::new()
-    } else {
-        content.split('\n').collect()
-    };
-    let has_trailing_newline = content.ends_with('\n');
-
-    if has_trailing_newline {
-        lines.pop();
-    }
-
-    let mut diff = format!(
-        "diff --git a/{0} b/{0}\nnew file mode 100644\nindex 0000000..0000000\n--- /dev/null\n+++ b/{0}\n@@ -0,0 +1,{1} @@\n",
-        relative_path_text,
-        lines.len(),
-    );
-
-    for line in &lines {
-        diff.push('+');
-        diff.push_str(line.strip_suffix('\r').unwrap_or(*line));
-        diff.push('\n');
-    }
-
-    if !has_trailing_newline && !content.is_empty() {
-        diff.push_str("\\ No newline at end of file\n");
-    }
-
-    Ok(diff)
-}
-
-fn decode_process_output(bytes: &[u8]) -> String {
-    String::from_utf8_lossy(bytes).trim().to_string()
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GitPullRequestSupportPayload {
+    available: bool,
+    remote_name: Option<String>,
+    provider: String,
+    repository_url: Option<String>,
+    pull_requests_url: Option<String>,
+    create_pull_request_url: Option<String>,
 }
 
 fn open_repository_from_root(repository_root_path: &str) -> Result<Repository, String> {
@@ -737,215 +304,6 @@ fn build_unavailable_git_status(message: &str) -> GitRepositoryStatusPayload {
         files: Vec::new(),
         last_commit: None,
     }
-}
-
-fn build_git_repository_status_payload(
-    repository: &Repository,
-) -> Result<GitRepositoryStatusPayload, String> {
-    let repository_root = resolve_repository_root(repository)?;
-    let git_dir_path = normalize_path_for_git(
-        &repository
-            .path()
-            .canonicalize()
-            .unwrap_or_else(|_| repository.path().to_path_buf()),
-    );
-    let head_commit = resolve_head_commit(repository)?;
-    let head_branch_name = resolve_head_branch_name(repository)?;
-    let is_detached = resolve_head_detached(repository)?;
-    let head_short_oid = head_commit
-        .as_ref()
-        .map(|commit| short_commit_id(commit.id()));
-    let head_short_name = if is_detached {
-        head_short_oid.clone()
-    } else {
-        head_branch_name.clone()
-    };
-    let (ahead, behind) = resolve_ahead_behind(repository, head_branch_name.as_deref())?;
-
-    let mut status_options = StatusOptions::new();
-    status_options
-        .include_untracked(true)
-        .include_ignored(false)
-        .include_unmodified(false)
-        .recurse_untracked_dirs(true)
-        .renames_head_to_index(true)
-        .renames_index_to_workdir(true)
-        .exclude_submodules(true);
-
-    let statuses = repository
-        .statuses(Some(&mut status_options))
-        .map_err(|error| format!("读取 Git 文件状态失败：{error}"))?;
-
-    let mut files = Vec::new();
-    for entry in statuses.iter() {
-        if let Some(file_status) = build_git_file_status_payload(&repository_root, entry)? {
-            files.push(file_status);
-        }
-    }
-
-    files.sort_by(|left, right| {
-        left.relative_path
-            .cmp(&right.relative_path)
-            .then_with(|| left.path.cmp(&right.path))
-    });
-
-    let staged_count = files
-        .iter()
-        .filter(|item| item.index_status.is_some() && !item.is_conflicted)
-        .count();
-    let unstaged_count = files
-        .iter()
-        .filter(|item| {
-            item.worktree_status
-                .as_deref()
-                .is_some_and(|status| status != "untracked")
-                && !item.is_conflicted
-        })
-        .count();
-    let untracked_count = files.iter().filter(|item| item.is_untracked).count();
-    let conflicted_count = files.iter().filter(|item| item.is_conflicted).count();
-
-    Ok(GitRepositoryStatusPayload {
-        available: true,
-        message: None,
-        repository_root_path: Some(repository_root.to_string_lossy().to_string()),
-        repository_name: Some(workspace_name(&repository_root)),
-        git_dir_path: Some(git_dir_path.to_string_lossy().to_string()),
-        head_branch_name,
-        head_short_name,
-        head_short_oid,
-        is_detached,
-        is_clean: staged_count == 0
-            && unstaged_count == 0
-            && untracked_count == 0
-            && conflicted_count == 0,
-        ahead,
-        behind,
-        staged_count,
-        unstaged_count,
-        untracked_count,
-        conflicted_count,
-        files,
-        last_commit: head_commit.as_ref().map(build_git_commit_summary),
-    })
-}
-
-fn build_git_file_baseline_payload(
-    repository: &Repository,
-    file_path: &Path,
-) -> Result<GitFileBaselinePayload, String> {
-    let repository_root = resolve_repository_root(repository)?;
-    let relative_path = resolve_relative_path(&repository_root, file_path)?;
-    let relative_path_string = path_to_forward_slashes(&relative_path);
-    let head_commit = resolve_head_commit(repository)?;
-
-    let Some(commit) = head_commit else {
-        return Ok(GitFileBaselinePayload {
-            available: true,
-            message: None,
-            repository_root_path: Some(repository_root.to_string_lossy().to_string()),
-            file_path: file_path.to_string_lossy().to_string(),
-            relative_path: Some(relative_path_string),
-            is_tracked: false,
-            content: None,
-        });
-    };
-
-    let tree = commit
-        .tree()
-        .map_err(|error| format!("读取 Git 基线树失败：{error}"))?;
-
-    let tree_entry = match tree.get_path(&relative_path) {
-        Ok(entry) => entry,
-        Err(error) if error.code() == ErrorCode::NotFound => {
-            return Ok(GitFileBaselinePayload {
-                available: true,
-                message: None,
-                repository_root_path: Some(repository_root.to_string_lossy().to_string()),
-                file_path: file_path.to_string_lossy().to_string(),
-                relative_path: Some(relative_path_string),
-                is_tracked: false,
-                content: None,
-            })
-        }
-        Err(error) => return Err(format!("读取 Git 基线路径失败：{error}")),
-    };
-
-    let object = tree_entry
-        .to_object(repository)
-        .map_err(|error| format!("读取 Git 基线对象失败：{error}"))?;
-
-    if object.kind() != Some(ObjectType::Blob) {
-        return Ok(GitFileBaselinePayload {
-            available: true,
-            message: Some("当前文件不是可比较的文本 Blob。".into()),
-            repository_root_path: Some(repository_root.to_string_lossy().to_string()),
-            file_path: file_path.to_string_lossy().to_string(),
-            relative_path: Some(relative_path_string),
-            is_tracked: true,
-            content: None,
-        });
-    }
-
-    let blob = object
-        .as_blob()
-        .ok_or_else(|| "读取 Git 基线 Blob 失败。".to_string())?;
-    let content = match decode_script_bytes(blob.content()) {
-        Ok((content, _)) => Some(content),
-        Err(_) => None,
-    };
-
-    Ok(GitFileBaselinePayload {
-        available: true,
-        message: if content.is_none() {
-            Some("当前文件基线不是可直接比较的文本内容。".into())
-        } else {
-            None
-        },
-        repository_root_path: Some(repository_root.to_string_lossy().to_string()),
-        file_path: file_path.to_string_lossy().to_string(),
-        relative_path: Some(relative_path_string),
-        is_tracked: true,
-        content,
-    })
-}
-
-fn build_git_file_status_payload(
-    repository_root: &Path,
-    entry: StatusEntry<'_>,
-) -> Result<Option<GitFileStatusPayload>, String> {
-    let status = entry.status();
-    if status.is_empty() {
-        return Ok(None);
-    }
-
-    let relative_path =
-        resolve_status_path(&entry).ok_or_else(|| "解析 Git 变更路径失败。".to_string())?;
-    let previous_relative_path = resolve_previous_status_path(&entry, &relative_path);
-    let index_status = map_index_status(status).map(str::to_string);
-    let worktree_status = map_worktree_status(status).map(str::to_string);
-    let absolute_path = repository_root.join(&relative_path);
-    let file_name = relative_path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .map(str::to_string)
-        .unwrap_or_else(|| path_to_forward_slashes(&relative_path));
-
-    Ok(Some(GitFileStatusPayload {
-        path: absolute_path.to_string_lossy().to_string(),
-        relative_path: path_to_forward_slashes(&relative_path),
-        file_name,
-        previous_path: previous_relative_path
-            .as_ref()
-            .map(|value| repository_root.join(value).to_string_lossy().to_string()),
-        previous_relative_path: previous_relative_path
-            .as_ref()
-            .map(|value| path_to_forward_slashes(value)),
-        index_status,
-        worktree_status,
-        is_conflicted: status.contains(Status::CONFLICTED),
-        is_untracked: status.contains(Status::WT_NEW),
-    }))
 }
 
 fn resolve_repository_root(repository: &Repository) -> Result<PathBuf, String> {
@@ -1070,83 +428,6 @@ fn short_commit_id(oid: git2::Oid) -> String {
     value.chars().take(7).collect()
 }
 
-fn resolve_status_path(entry: &StatusEntry<'_>) -> Option<PathBuf> {
-    entry
-        .path()
-        .map(PathBuf::from)
-        .or_else(|| {
-            entry
-                .index_to_workdir()
-                .and_then(|delta| delta.new_file().path().map(PathBuf::from))
-        })
-        .or_else(|| {
-            entry
-                .head_to_index()
-                .and_then(|delta| delta.new_file().path().map(PathBuf::from))
-        })
-}
-
-fn resolve_previous_status_path(entry: &StatusEntry<'_>, current_path: &Path) -> Option<PathBuf> {
-    entry
-        .index_to_workdir()
-        .and_then(|delta| delta.old_file().path().map(PathBuf::from))
-        .filter(|path| path != current_path)
-        .or_else(|| {
-            entry
-                .head_to_index()
-                .and_then(|delta| delta.old_file().path().map(PathBuf::from))
-                .filter(|path| path != current_path)
-        })
-}
-
-fn map_index_status(status: Status) -> Option<&'static str> {
-    if status.contains(Status::CONFLICTED) {
-        return Some("conflicted");
-    }
-
-    if status.contains(Status::INDEX_NEW) {
-        return Some("added");
-    }
-    if status.contains(Status::INDEX_MODIFIED) {
-        return Some("modified");
-    }
-    if status.contains(Status::INDEX_DELETED) {
-        return Some("deleted");
-    }
-    if status.contains(Status::INDEX_RENAMED) {
-        return Some("renamed");
-    }
-    if status.contains(Status::INDEX_TYPECHANGE) {
-        return Some("typechange");
-    }
-
-    None
-}
-
-fn map_worktree_status(status: Status) -> Option<&'static str> {
-    if status.contains(Status::CONFLICTED) {
-        return Some("conflicted");
-    }
-
-    if status.contains(Status::WT_NEW) {
-        return Some("untracked");
-    }
-    if status.contains(Status::WT_MODIFIED) {
-        return Some("modified");
-    }
-    if status.contains(Status::WT_DELETED) {
-        return Some("deleted");
-    }
-    if status.contains(Status::WT_RENAMED) {
-        return Some("renamed");
-    }
-    if status.contains(Status::WT_TYPECHANGE) {
-        return Some("typechange");
-    }
-
-    None
-}
-
 fn resolve_relative_path(repository_root: &Path, path: &Path) -> Result<PathBuf, String> {
     let path_candidate = if path.is_absolute() {
         path.to_path_buf()
@@ -1217,283 +498,4 @@ fn normalize_path_for_git(path: &Path) -> PathBuf {
 #[cfg(not(windows))]
 fn normalize_path_for_git(path: &Path) -> PathBuf {
     path.to_path_buf()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use git2::Signature;
-    use std::{
-        env,
-        time::{SystemTime, UNIX_EPOCH},
-    };
-
-    struct TempGitDir {
-        path: PathBuf,
-    }
-
-    impl TempGitDir {
-        fn new(label: &str) -> Result<Self, String> {
-            let nanos = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_err(|error| error.to_string())?
-                .as_nanos();
-            let path = env::temp_dir().join(format!(
-                "calamex-git-{label}-{}-{nanos}",
-                std::process::id()
-            ));
-            fs::create_dir_all(&path).map_err(|error| error.to_string())?;
-            Ok(Self { path })
-        }
-    }
-
-    impl Drop for TempGitDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.path);
-        }
-    }
-
-    fn write_worktree_file(root: &Path, relative_path: &str, content: &str) -> Result<(), String> {
-        let file_path = root.join(relative_path);
-        if let Some(parent) = file_path.parent() {
-            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-        }
-
-        fs::write(file_path, content).map_err(|error| error.to_string())
-    }
-
-    fn create_initial_commit(
-        repository: &Repository,
-        root: &Path,
-        relative_path: &str,
-        content: &str,
-    ) -> Result<(), String> {
-        write_worktree_file(root, relative_path, content)?;
-
-        let mut index = repository.index().map_err(|error| error.to_string())?;
-        index
-            .add_path(Path::new(relative_path))
-            .map_err(|error| error.to_string())?;
-        index.write().map_err(|error| error.to_string())?;
-        let tree_id = index.write_tree().map_err(|error| error.to_string())?;
-        let tree = repository
-            .find_tree(tree_id)
-            .map_err(|error| error.to_string())?;
-        let signature = Signature::now("Calamex Test", "test@example.com")
-            .map_err(|error| error.to_string())?;
-
-        repository
-            .commit(
-                Some("HEAD"),
-                &signature,
-                &signature,
-                "feat: initial",
-                &tree,
-                &[],
-            )
-            .map_err(|error| error.to_string())?;
-        Ok(())
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn normalize_path_for_git_strips_windows_verbatim_prefix() {
-        assert_eq!(
-            normalize_path_for_git(Path::new(r"\\?\D:\workspace\repo")),
-            PathBuf::from(r"D:\workspace\repo")
-        );
-        assert_eq!(
-            normalize_path_for_git(Path::new("//?/D:/workspace/repo")),
-            PathBuf::from(r"D:\workspace\repo")
-        );
-    }
-
-    #[test]
-    fn init_git_repository_creates_repository_at_workspace_root() -> Result<(), String> {
-        let temp = TempGitDir::new("init-root")?;
-
-        let status = init_git_repository(Some(temp.path.to_string_lossy().to_string()))?;
-        let expected_root = normalize_path_for_git(
-            &temp
-                .path
-                .canonicalize()
-                .map_err(|error| error.to_string())?,
-        );
-        let expected_root_text = expected_root.to_string_lossy().to_string();
-
-        assert!(temp.path.join(".git").exists());
-        assert!(status.available);
-        assert_eq!(
-            status.repository_root_path.as_deref(),
-            Some(expected_root_text.as_str())
-        );
-        Ok(())
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn init_git_repository_accepts_windows_verbatim_workspace_root() -> Result<(), String> {
-        let temp = TempGitDir::new("init-verbatim")?;
-        let verbatim_workspace_root = format!(r"\\?\{}", temp.path.display());
-
-        let status = init_git_repository(Some(verbatim_workspace_root))?;
-        let expected_root = normalize_path_for_git(
-            &temp
-                .path
-                .canonicalize()
-                .map_err(|error| error.to_string())?,
-        );
-        let expected_root_text = expected_root.to_string_lossy().to_string();
-
-        assert!(temp.path.join(".git").exists());
-        assert!(status.available);
-        assert_eq!(
-            status.repository_root_path.as_deref(),
-            Some(expected_root_text.as_str())
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn init_git_repository_does_not_reuse_parent_repository() -> Result<(), String> {
-        let temp = TempGitDir::new("init-nested")?;
-        let parent_repository = Repository::init(&temp.path).map_err(|error| error.to_string())?;
-        let parent_root = resolve_repository_root(&parent_repository)?;
-        let child_root = temp.path.join("child-workspace");
-        fs::create_dir_all(&child_root).map_err(|error| error.to_string())?;
-
-        let status = init_git_repository(Some(child_root.to_string_lossy().to_string()))?;
-        let expected_child_root = normalize_path_for_git(
-            &child_root
-                .canonicalize()
-                .map_err(|error| error.to_string())?,
-        );
-        let expected_child_root_text = expected_child_root.to_string_lossy().to_string();
-
-        assert!(child_root.join(".git").exists());
-        assert_ne!(parent_root, expected_child_root);
-        assert_eq!(
-            status.repository_root_path.as_deref(),
-            Some(expected_child_root_text.as_str())
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn build_untracked_file_diff_includes_added_lines() -> Result<(), String> {
-        let temp = TempGitDir::new("diff-untracked")?;
-        write_worktree_file(&temp.path, "src/new.sh", "echo 1\necho 2\n")?;
-
-        let diff = build_untracked_file_diff(&temp.path, Path::new("src/new.sh"))?;
-
-        assert!(diff.contains("diff --git a/src/new.sh b/src/new.sh"));
-        assert!(diff.contains("new file mode 100644"));
-        assert!(diff.contains("@@ -0,0 +1,2 @@"));
-        assert!(diff.contains("+echo 1\n+echo 2\n"));
-        Ok(())
-    }
-
-    #[test]
-    fn build_untracked_file_diff_handles_empty_file() -> Result<(), String> {
-        let temp = TempGitDir::new("diff-empty-untracked")?;
-        write_worktree_file(&temp.path, "empty.sh", "")?;
-
-        let diff = build_untracked_file_diff(&temp.path, Path::new("empty.sh"))?;
-
-        assert!(diff.contains("diff --git a/empty.sh b/empty.sh"));
-        assert!(diff.contains("@@ -0,0 +1,0 @@"));
-        Ok(())
-    }
-
-    #[test]
-    fn parse_git_diff_mode_rejects_unknown_mode() {
-        assert!(parse_git_diff_mode("unknown").is_err());
-    }
-
-    #[test]
-    fn build_git_diff_content_pair_reads_worktree_versions() -> Result<(), String> {
-        let temp = TempGitDir::new("diff-content-worktree")?;
-        let repository = Repository::init(&temp.path).map_err(|error| error.to_string())?;
-        create_initial_commit(&repository, &temp.path, "src/app.sh", "echo original\n")?;
-        write_worktree_file(&temp.path, "src/app.sh", "echo changed\n")?;
-
-        let pair = build_git_diff_content_pair(
-            &repository,
-            &temp.path,
-            Path::new("src/app.sh"),
-            GitDiffMode::Worktree,
-        )?;
-
-        assert_eq!(pair.original_content, "echo original\n");
-        assert_eq!(pair.modified_content, "echo changed\n");
-        Ok(())
-    }
-
-    #[test]
-    fn build_git_diff_content_pair_reads_staged_versions() -> Result<(), String> {
-        let temp = TempGitDir::new("diff-content-staged")?;
-        let repository = Repository::init(&temp.path).map_err(|error| error.to_string())?;
-        create_initial_commit(&repository, &temp.path, "src/app.sh", "echo original\n")?;
-        write_worktree_file(&temp.path, "src/app.sh", "echo staged\n")?;
-        let mut index = repository.index().map_err(|error| error.to_string())?;
-        index
-            .add_path(Path::new("src/app.sh"))
-            .map_err(|error| error.to_string())?;
-        index.write().map_err(|error| error.to_string())?;
-        write_worktree_file(&temp.path, "src/app.sh", "echo worktree\n")?;
-
-        let pair = build_git_diff_content_pair(
-            &repository,
-            &temp.path,
-            Path::new("src/app.sh"),
-            GitDiffMode::Staged,
-        )?;
-
-        assert_eq!(pair.original_content, "echo original\n");
-        assert_eq!(pair.modified_content, "echo staged\n");
-        Ok(())
-    }
-
-    #[test]
-    fn discard_git_paths_removes_untracked_file() -> Result<(), String> {
-        let temp = TempGitDir::new("discard-untracked")?;
-        let repository = Repository::init(&temp.path).map_err(|error| error.to_string())?;
-        let repository_root = resolve_repository_root(&repository)?;
-        write_worktree_file(&temp.path, "scratch/new.sh", "echo scratch\n")?;
-
-        let status = discard_git_paths(GitPathOperationRequest {
-            repository_root_path: repository_root.to_string_lossy().to_string(),
-            paths: vec![repository_root
-                .join("scratch/new.sh")
-                .to_string_lossy()
-                .to_string()],
-        })?;
-
-        assert!(!temp.path.join("scratch/new.sh").exists());
-        assert_eq!(status.untracked_count, 0);
-        Ok(())
-    }
-
-    #[test]
-    fn discard_git_paths_restores_tracked_worktree_file() -> Result<(), String> {
-        let temp = TempGitDir::new("discard-tracked")?;
-        let repository = Repository::init(&temp.path).map_err(|error| error.to_string())?;
-        let repository_root = resolve_repository_root(&repository)?;
-        create_initial_commit(&repository, &temp.path, "src/app.sh", "echo original\n")?;
-        write_worktree_file(&temp.path, "src/app.sh", "echo changed\n")?;
-
-        let status = discard_git_paths(GitPathOperationRequest {
-            repository_root_path: repository_root.to_string_lossy().to_string(),
-            paths: vec![repository_root
-                .join("src/app.sh")
-                .to_string_lossy()
-                .to_string()],
-        })?;
-
-        let content =
-            fs::read_to_string(temp.path.join("src/app.sh")).map_err(|error| error.to_string())?;
-        assert_eq!(content.replace("\r\n", "\n"), "echo original\n");
-        assert!(status.is_clean);
-        Ok(())
-    }
 }

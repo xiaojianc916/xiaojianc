@@ -22,7 +22,7 @@ import { createDefaultAiModelEndpointConfig } from '@/utils/ai-config';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 
 const useAiAssistantMock = vi.hoisted(() => vi.fn());
 
@@ -269,7 +269,7 @@ describe('AiAssistantPanel', () => {
         setActivePinia(createPinia());
     });
 
-    it('顶部使用当前模型平台图标，不再直接显示模型 id', () => {
+    it('顶部保留 AI 图标和模型名称，但不再渲染 Chat Agent Plan 模式选择入口', () => {
         const assistantMock = createAssistantMock([]);
         assistantMock.config.value.selectedModel = 'deepseek/deepseek-v4-pro';
         useAiAssistantMock.mockReturnValue(assistantMock);
@@ -296,11 +296,16 @@ describe('AiAssistantPanel', () => {
             },
         });
 
-        const modelButton = wrapper.get('.ai-model-button');
+        const providerMark = wrapper.get('.ai-provider-mark');
 
-        expect(modelButton.find('.ai-provider-icon').exists()).toBe(true);
-        expect(modelButton.text()).not.toContain('deepseek/deepseek-v4-pro');
-        expect(modelButton.attributes('title')).toContain('DeepSeek');
+        expect(providerMark.find('.ai-provider-icon').exists()).toBe(true);
+        expect(providerMark.text()).toContain('deepseek-v4-pro');
+        expect(providerMark.attributes('title')).toContain('DeepSeek');
+        expect(providerMark.attributes('title')).toContain('deepseek/deepseek-v4-pro');
+        expect(wrapper.find('.ai-model-switch').exists()).toBe(false);
+        expect(wrapper.find('.ai-model-button').exists()).toBe(false);
+        expect(wrapper.find('.ai-mode-menu').exists()).toBe(false);
+        expect(wrapper.findAll('.ai-panel-actions .ai-icon-button')).toHaveLength(3);
     });
 
     it('将预览 Patch 入口放在预览面板下方并保留点击动作', async () => {
@@ -799,6 +804,7 @@ describe('AiAssistantPanel', () => {
         expect(wrapper.text()).toContain('最近 20 组');
         expect(wrapper.text()).toContain('第 25 组对话');
         expect(wrapper.text()).not.toContain('第 5 组对话');
+        expect(wrapper.text()).not.toContain('请帮我分析第 25 个脚本');
         expect(wrapper.find('.ai-history-list').exists()).toBe(true);
     });
 
@@ -864,5 +870,42 @@ describe('AiAssistantPanel', () => {
         await wrapper.findAll('.ai-history-button')[1]?.trigger('click');
 
         expect(assistantMock.switchConversation).toHaveBeenCalledWith('thread-1');
+    });
+
+    it('点击弹窗外部时自动关闭对话记录', async () => {
+        const historyThreads = [createThread(1), createThread(2)];
+        useAiAssistantMock.mockReturnValue(
+            createAssistantMock(historyThreads[1]?.messages ?? [], historyThreads),
+        );
+
+        const wrapper = mount(AiAssistantPanel, {
+            props: {
+                document: createDocument(),
+                activeRun: null as IActiveRunSummary | null,
+                analysis: createAnalysis(),
+                selection: null as IEditorSelectionSummary | null,
+                gitStatus: createGitStatus(),
+                workspaceRootPath: 'd:/com.xiaojianc/my_desktop_app',
+            },
+            global: {
+                stubs: {
+                    AiChatThread: { template: '<div />' },
+                    AiContextChips: { template: '<div />' },
+                    AiPatchPreview: { template: '<div />' },
+                    AiPlanModePanel: { template: '<div />' },
+                    AiPromptInput: { template: '<div />' },
+                    AiProviderSettings: { template: '<div />' },
+                    teleport: true,
+                },
+            },
+        });
+
+        await wrapper.get('[aria-label="对话记录"]').trigger('click');
+        expect(wrapper.find('.ai-history-popover').exists()).toBe(true);
+
+        document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        await nextTick();
+
+        expect(wrapper.find('.ai-history-popover').exists()).toBe(false);
     });
 });

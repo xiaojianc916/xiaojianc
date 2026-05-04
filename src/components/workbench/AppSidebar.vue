@@ -234,21 +234,21 @@ import { tauriService } from '@/services/tauri';
 import { useAppStore } from '@/store/app';
 import type { TWorkbenchSidebarView } from '@/types/app';
 import type {
-  IActiveRunSummary,
-  ICommandTemplate,
-  IEditorDocument,
-  IRunHistoryEntry,
-  IWorkspaceDirectoryPayload,
-  IWorkspaceEntry,
-  TExecutorKind,
+    IActiveRunSummary,
+    ICommandTemplate,
+    IEditorDocument,
+    IRunHistoryEntry,
+    IWorkspaceDirectoryPayload,
+    IWorkspaceEntry,
+    TExecutorKind,
 } from '@/types/editor';
 import type { IGitDiffPreviewRequest } from '@/types/git';
-import { writeClipboardText } from '@/utils/clipboard';
+import { writeFileSystemPathToClipboard } from '@/utils/clipboard';
 import { toErrorMessage } from '@/utils/error';
 import {
-  filterWorkspaceEntriesByQuery,
-  resolveWorkspaceKey,
-  resolveWorkspaceRootPayload,
+    filterWorkspaceEntriesByQuery,
+    resolveWorkspaceKey,
+    resolveWorkspaceRootPayload,
 } from '@/utils/workspace';
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 
@@ -999,7 +999,7 @@ const handleExplorerContextMenuSelect = async (
       return;
     case 'copy-path':
       if (target) {
-        await writeClipboardText(target.path);
+        await writeFileSystemPathToClipboard(target.path);
         message.success('已复制路径');
       }
       return;

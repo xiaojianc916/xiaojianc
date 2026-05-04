@@ -98,13 +98,24 @@ import type {
   IWorkspacePathRenameRequest,
 } from './editor';
 import type {
+  IGitBranchCheckoutRequest,
+  IGitBranchCreateRequest,
+  IGitBranchListPayload,
+  IGitCommitHistoryPayload,
+  IGitCommitHistoryRequest,
   IGitCommitRequest,
   IGitCommitResultPayload,
   IGitDiffPreviewPayload,
   IGitDiffPreviewRequest,
   IGitFileBaselinePayload,
   IGitPathOperationRequest,
+  IGitPullRequestSupportPayload,
+  IGitRepositoryRootRequest,
   IGitRepositoryStatusPayload,
+  IGitStashApplyRequest,
+  IGitStashDropRequest,
+  IGitStashListPayload,
+  IGitStashSaveRequest,
 } from './git';
 import type { IWorkspaceSearchPayload, IWorkspaceSearchRequest } from './search';
 import type {
@@ -231,12 +242,23 @@ export interface ITauriService {
   searchWorkspace(payload: IWorkspaceSearchRequest): Promise<IWorkspaceSearchPayload>;
   getGitRepositoryStatus(workspaceRootPath?: string | null): Promise<IGitRepositoryStatusPayload>;
   initGitRepository(workspaceRootPath?: string | null): Promise<IGitRepositoryStatusPayload>;
+  listGitCommitHistory(payload: IGitCommitHistoryRequest): Promise<IGitCommitHistoryPayload>;
+  listGitBranches(payload: IGitRepositoryRootRequest): Promise<IGitBranchListPayload>;
+  checkoutGitBranch(payload: IGitBranchCheckoutRequest): Promise<IGitRepositoryStatusPayload>;
+  createGitBranch(payload: IGitBranchCreateRequest): Promise<IGitRepositoryStatusPayload>;
   getGitFileBaseline(path: string): Promise<IGitFileBaselinePayload>;
   getGitDiffPreview(payload: IGitDiffPreviewRequest): Promise<IGitDiffPreviewPayload>;
   stageGitPaths(payload: IGitPathOperationRequest): Promise<IGitRepositoryStatusPayload>;
   unstageGitPaths(payload: IGitPathOperationRequest): Promise<IGitRepositoryStatusPayload>;
   discardGitPaths(payload: IGitPathOperationRequest): Promise<IGitRepositoryStatusPayload>;
   commitGitIndex(payload: IGitCommitRequest): Promise<IGitCommitResultPayload>;
+  listGitStashes(payload: IGitRepositoryRootRequest): Promise<IGitStashListPayload>;
+  saveGitStash(payload: IGitStashSaveRequest): Promise<IGitRepositoryStatusPayload>;
+  applyGitStash(payload: IGitStashApplyRequest): Promise<IGitRepositoryStatusPayload>;
+  dropGitStash(payload: IGitStashDropRequest): Promise<IGitRepositoryStatusPayload>;
+  getGitPullRequestSupport(
+    payload: IGitRepositoryRootRequest,
+  ): Promise<IGitPullRequestSupportPayload>;
   ensureTerminalSession(payload: IEnsureTerminalSessionRequest): Promise<ITerminalSessionPayload>;
   dispatchScriptToTerminal(
     payload: IDispatchTerminalScriptRequest,

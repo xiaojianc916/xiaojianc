@@ -28,18 +28,114 @@ use commands::{
     ai_query_index, ai_save_config, ai_save_credentials, ai_switch_provider_profile,
     ai_test_provider, ai_test_provider_config, ai_web_fetch, ai_web_search, analyze_script,
     ai_narrate_activity, ai_narrate_activity_stream,
-    apply_window_stage, cancel_terminal_run, close_terminal_session,
-    commit_git_index, create_ssh_directory, create_workspace_path, delete_ssh_path,
-    delete_workspace_path, detect_execution_environment, discard_git_paths,
-    dispatch_script_to_terminal, download_ssh_file, ensure_terminal_session,
-    format_script, get_git_diff_preview, get_git_file_baseline,
-    get_git_repository_status, init_git_repository, list_ssh_config_hosts, list_ssh_directory,
-    list_workspace_entries, load_image_asset, load_script, rename_ssh_path, rename_workspace_path,
-    resize_terminal_session, save_script, search_workspace, set_window_background,
-    shutdown_all_terminal_sessions, stage_git_paths, test_ssh_connection, unstage_git_paths,
-    upload_ssh_file, write_terminal_input, TerminalSessionState,
+    apply_window_stage, begin_startup_transition, cancel_terminal_run, close_terminal_session,
+    apply_git_stash, checkout_git_branch, commit_git_index, create_git_branch,
+    create_ssh_directory, create_workspace_path, delete_ssh_path, delete_workspace_path,
+    detect_execution_environment, discard_git_paths, dispatch_script_to_terminal,
+    download_ssh_file, drop_git_stash, ensure_terminal_session, finalize_startup_transition,
+    format_script, get_git_diff_preview, get_git_file_baseline, get_git_pull_request_support,
+    get_git_repository_status, init_git_repository, list_git_branches, list_git_commit_history,
+    list_git_stashes, list_ssh_config_hosts, list_ssh_directory, list_workspace_entries,
+    load_image_asset, load_script, rename_ssh_path, rename_workspace_path,
+    resize_terminal_session, save_git_stash, save_script, search_workspace,
+    set_window_background, shutdown_all_terminal_sessions, stage_git_paths,
+    test_ssh_connection, unstage_git_paths, upload_ssh_file, write_terminal_input,
+    TerminalSessionState,
 };
-use tauri::{Manager, WindowEvent};
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::{
+    menu::MenuBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager, WindowEvent,
+};
+
+const MAIN_WINDOW_LABEL: &str = "main";
+const TRAY_ICON_ID: &str = "main-tray";
+const TRAY_MENU_SHOW_ID: &str = "tray.show-main-window";
+const TRAY_MENU_QUIT_ID: &str = "tray.quit-app";
+
+#[derive(Default)]
+struct AppLifecycleState {
+    is_quitting: AtomicBool,
+}
+
+impl AppLifecycleState {
+    fn mark_quitting(&self) {
+        self.is_quitting.store(true, Ordering::SeqCst);
+    }
+
+    fn is_quitting(&self) -> bool {
+        self.is_quitting.load(Ordering::SeqCst)
+    }
+}
+
+fn reveal_main_window<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) {
+    let Some(window) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) else {
+        return;
+    };
+
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+}
+
+fn request_app_exit<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) {
+    let lifecycle_state = app_handle.state::<AppLifecycleState>();
+    lifecycle_state.mark_quitting();
+
+    let terminal_state = app_handle.state::<TerminalSessionState>();
+    if let Err(error) = shutdown_all_terminal_sessions(terminal_state.inner()) {
+        eprintln!("failed to shutdown terminal sessions: {error}");
+    }
+
+    app_handle.exit(0);
+}
+
+fn setup_system_tray<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
+    let show_item = tauri::menu::MenuItemBuilder::with_id(TRAY_MENU_SHOW_ID, "显示主窗口")
+        .build(app)?;
+    let quit_item = tauri::menu::MenuItemBuilder::with_id(TRAY_MENU_QUIT_ID, "退出")
+        .build(app)?;
+    let menu = MenuBuilder::new(app)
+        .item(&show_item)
+        .separator()
+        .item(&quit_item)
+        .build()?;
+
+    let Some(icon) = app.default_window_icon().cloned() else {
+        eprintln!("missing default window icon, tray setup skipped");
+        return Ok(());
+    };
+
+    TrayIconBuilder::with_id(TRAY_ICON_ID)
+        .icon(icon)
+        .tooltip("Calamex")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app_handle, event| {
+            if event.id() == TRAY_MENU_SHOW_ID {
+                reveal_main_window(app_handle);
+                return;
+            }
+
+            if event.id() == TRAY_MENU_QUIT_ID {
+                request_app_exit(app_handle);
+            }
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                reveal_main_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+
+    Ok(())
+}
 
 #[cfg(windows)]
 fn disable_webview_default_context_menu<R: tauri::Runtime>(
@@ -78,17 +174,21 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .manage(AiEditState::default())
+        .manage(AppLifecycleState::default())
         .manage(TerminalSessionState::default())
         .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { .. } = event {
+            if let WindowEvent::CloseRequested { api, .. } = event {
                 let app_handle = window.app_handle();
-                if window.label() == "main" {
-                    let terminal_state = app_handle.state::<TerminalSessionState>();
-                    if let Err(error) = shutdown_all_terminal_sessions(terminal_state.inner()) {
-                        eprintln!("failed to shutdown terminal sessions: {error}");
+                if window.label() == MAIN_WINDOW_LABEL {
+                    let lifecycle_state = app_handle.state::<AppLifecycleState>();
+                    if lifecycle_state.is_quitting() {
+                        return;
                     }
 
-                    app_handle.exit(0);
+                    api.prevent_close();
+                    if let Err(error) = window.hide() {
+                        eprintln!("failed to hide main window to tray: {error}");
+                    }
                 }
             }
         })
@@ -97,11 +197,13 @@ fn main() {
                 .event_bus
                 .attach_app(app.handle().clone());
 
+            setup_system_tray(app)?;
+
             for webview_window in app.webview_windows().into_values() {
                 disable_webview_default_context_menu(&webview_window);
             }
 
-            if let Some(window) = app.get_webview_window("main") {
+            if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
                 let _ = window.unminimize();
             }
 
@@ -110,6 +212,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             apply_window_stage,
             set_window_background,
+            begin_startup_transition,
+            finalize_startup_transition,
             load_script,
             load_image_asset,
             save_script,
@@ -124,12 +228,21 @@ fn main() {
             search_workspace,
             get_git_repository_status,
             init_git_repository,
+            list_git_commit_history,
+            list_git_branches,
+            checkout_git_branch,
+            create_git_branch,
             get_git_file_baseline,
             get_git_diff_preview,
             stage_git_paths,
             unstage_git_paths,
             discard_git_paths,
             commit_git_index,
+            list_git_stashes,
+            save_git_stash,
+            apply_git_stash,
+            drop_git_stash,
+            get_git_pull_request_support,
             ensure_terminal_session,
             cancel_terminal_run,
             write_terminal_input,

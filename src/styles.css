@@ -118,7 +118,6 @@
   --bg-a: rgba(255, 255, 255, 0.12);
   --bg-code: #1a1b1e;
   --bg-gutter: #1a1b1e;
-  --window-underlay-bg: #1a1b1e;
 
   --app-bg: var(--bg-0);
   --titlebar-bg: var(--bg-1);
@@ -164,7 +163,7 @@
     inset 0 0 0 1px rgba(255, 255, 255, 0.04);
   --editor-context-menu-separator: rgba(255, 255, 255, 0.06);
   --editor-context-menu-muted: #8a8f98;
-  --editor-context-menu-disabled: #3e4248;
+  --editor-context-menu-disabled: #6b7280;
   --editor-context-menu-kbd-bg: rgba(255, 255, 255, 0.06);
   --editor-context-menu-kbd-hover-bg: rgba(255, 255, 255, 0.09);
   --editor-context-menu-accent: #5e6ad2;
@@ -226,7 +225,6 @@
   --bg-a: rgba(15, 23, 42, 0.12);
   --bg-code: #ffffff;
   --bg-gutter: #f8fafc;
-  --window-underlay-bg: #1a1b1e;
 
   --app-bg: #f3f5f8;
   --titlebar-bg: #f6f7fb;
@@ -311,7 +309,7 @@ body,
 #app {
   margin: 0;
   min-height: 100%;
-  background: var(--window-underlay-bg);
+  background: var(--app-bg);
   color: var(--text-primary);
 }
 
@@ -370,7 +368,7 @@ button:disabled,
 
   body {
     @apply text-foreground;
-    background: var(--window-underlay-bg);
+    background: var(--app-bg);
   }
 }
 
@@ -410,7 +408,7 @@ button:disabled,
 .app-window-shell[data-workbench-motion-state='terminal-opening'],
 .app-window-shell[data-workbench-motion-state='terminal-closing'],
 .app-window-shell[data-workbench-motion-state='settling'] {
-  background: var(--window-underlay-bg);
+  background: var(--app-bg);
 }
 
 .app-window-shell[data-workbench-motion-state='opening'] .app-shell-pane,
@@ -5014,8 +5012,26 @@ button:disabled,
   position: relative;
   min-height: 100vh;
   overflow: hidden;
-  background: var(--window-underlay-bg);
+  background: var(--app-bg);
   isolation: isolate;
+}
+
+.app-root-stage.is-welcome-window {
+  background: var(--bg-0);
+}
+
+.startup-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  background: var(--bg-0);
+  opacity: 1;
+  transition: opacity 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.startup-veil.is-leaving {
+  opacity: 0;
 }
 
 .splash-screen {
@@ -5322,6 +5338,7 @@ button:disabled,
 
 @media (prefers-reduced-motion: reduce) {
 
+  .startup-veil,
   .splash-screen,
   .splash-progress {
     transition: none;

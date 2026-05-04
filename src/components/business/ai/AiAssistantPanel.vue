@@ -82,18 +82,28 @@ const webSources = useAiWebSources();
 const settingsDraft = ref<IAiConfigPayload>(cloneAiConfigPayload(assistant.config.value));
 const settingsApiKey = ref('');
 const isAgentRunActionPending = ref(false);
-const isModeMenuOpen = ref(false);
 const isHistoryOpen = ref(false);
 const historyButtonRef = ref<HTMLButtonElement | null>(null);
+const historyPopoverRef = ref<HTMLElement | null>(null);
 const historyPopoverStyle = ref<CSSProperties>({});
 const currentServicePlatform = computed(() =>
   findAiServicePlatformByModel(assistant.config.value.selectedModel),
 );
 const aiIconPlatformId = computed(() => currentServicePlatform.value.id);
 const aiIconTitle = computed(() => currentServicePlatform.value.label);
-const aiModelButtonLabel = computed(() =>
-  `${aiIconTitle.value} · ${assistant.config.value.selectedModel?.trim() || 'AI Assistant'}`,
-);
+const aiModelName = computed(() => {
+  const selectedModel = assistant.config.value.selectedModel?.trim();
+
+  if (!selectedModel) {
+    return '未选择模型';
+  }
+
+  return selectedModel.split('/').filter(Boolean).at(-1) ?? selectedModel;
+});
+const aiProviderSummaryTitle = computed(() => {
+  const selectedModel = assistant.config.value.selectedModel?.trim();
+  return `${aiIconTitle.value} · ${selectedModel || '未选择模型'}`;
+});
 const historyThreads = computed(() => assistant.historyThreads.value.slice(-MAX_HISTORY_MESSAGES).reverse());
 const historyCountLabel = computed(() => `最近 ${historyThreads.value.length} 组`);
 const planStore = computed(() => assistant.agentPlan.store);
@@ -323,7 +333,6 @@ const handleToggleHistoryPopover = async (): Promise<void> => {
     return;
   }
 
-  isModeMenuOpen.value = false;
   updateHistoryPopoverPosition();
   isHistoryOpen.value = true;
   await nextTick();
@@ -338,12 +347,29 @@ const handleHistoryViewportChange = (): void => {
   updateHistoryPopoverPosition();
 };
 
+const handleHistoryDocumentMouseDown = (event: MouseEvent): void => {
+  if (!isHistoryOpen.value) {
+    return;
+  }
+
+  const target = event.target;
+
+  if (!(target instanceof Node)) {
+    return;
+  }
+
+  if (historyPopoverRef.value?.contains(target) || historyButtonRef.value?.contains(target)) {
+    return;
+  }
+
+  isHistoryOpen.value = false;
+};
+
 const startNewConversation = (): void => {
   if (assistant.isSending.value) {
     assistant.stopCurrentRequest();
   }
   isHistoryOpen.value = false;
-  isModeMenuOpen.value = false;
   assistant.startNewConversation();
 };
 
@@ -353,12 +379,10 @@ const openHistoryThread = (threadId: string): void => {
   }
   assistant.switchConversation(threadId);
   isHistoryOpen.value = false;
-  isModeMenuOpen.value = false;
 };
 
 const selectMode = (mode: TAiAssistantViewMode): void => {
   assistant.activeMode.value = mode;
-  isModeMenuOpen.value = false;
 };
 
 const getHistoryTimeLabel = (timestampText: string): string => {
@@ -369,13 +393,6 @@ const getHistoryTimeLabel = (timestampText: string): string => {
     minute: '2-digit',
     hour12: false,
   }).format(new Date(timestamp));
-};
-
-const getHistoryPreview = (messages: IAiChatMessage[]): string => {
-  const lastMessage = [...messages].reverse().find((message) => message.content.trim());
-  if (!lastMessage) return '空对话';
-  const normalized = lastMessage.content.replace(/\s+/g, ' ').trim();
-  return normalized.length > 64 ? `${normalized.slice(0, 64)}…` : normalized;
 };
 
 const getHistoryMessageCountLabel = (messages: IAiChatMessage[]): string => `${messages.length} 条消息`;
@@ -766,11 +783,19 @@ onMounted(() => {
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', handleHistoryViewportChange);
   }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('mousedown', handleHistoryDocumentMouseDown);
+  }
 });
 
 onBeforeUnmount(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', handleHistoryViewportChange);
+  }
+
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('mousedown', handleHistoryDocumentMouseDown);
   }
 });
 </script>
@@ -778,28 +803,12 @@ onBeforeUnmount(() => {
 <template>
   <section class="ai-assistant-panel" aria-label="AI 助手面板">
     <header class="ai-panel-header">
-      <div class="ai-model-switch">
-        <button type="button" class="ai-model-button" :aria-expanded="isModeMenuOpen" aria-haspopup="menu"
-          :title="aiModelButtonLabel" aria-label="切换 AI 模式" @click="isModeMenuOpen = !isModeMenuOpen">
-          <AiProviderIcon class="ai-model-icon" :platform-id="aiIconPlatformId" :title="aiIconTitle" decorative />
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </button>
-        <div v-if="isModeMenuOpen" class="ai-mode-menu" role="menu">
-          <button type="button" role="menuitemradio" :aria-checked="assistant.activeMode.value === 'chat'"
-            :class="{ active: assistant.activeMode.value === 'chat' }" @click="selectMode('chat')">
-            Chat
-          </button>
-          <button type="button" role="menuitemradio" :aria-checked="assistant.activeMode.value === 'agent'"
-            :class="{ active: assistant.activeMode.value === 'agent' }" @click="selectMode('agent')">
-            Agent
-          </button>
-          <button type="button" role="menuitemradio" :aria-checked="assistant.activeMode.value === 'plan'"
-            :class="{ active: assistant.activeMode.value === 'plan' }" @click="selectMode('plan')">
-            Plan
-          </button>
-        </div>
+      <div class="ai-provider-mark" :title="aiProviderSummaryTitle" aria-label="当前 AI 平台和模型">
+        <AiProviderIcon class="ai-provider-mark__icon" :platform-id="aiIconPlatformId" :title="aiIconTitle"
+          decorative />
+        <span class="ai-provider-mark__copy">
+          <span class="ai-provider-mark__label">{{ aiModelName }}</span>
+        </span>
       </div>
       <div class="ai-panel-actions">
         <button type="button" class="ai-icon-button" aria-label="新建对话" @click="startNewConversation">
@@ -891,8 +900,8 @@ onBeforeUnmount(() => {
       @test-provider="testProvider" @switch-profile="switchProviderProfile" />
 
     <Teleport to="body">
-      <section v-if="isHistoryOpen" class="ai-history-popover" :style="historyPopoverStyle" role="dialog"
-        aria-label="最近 20 组对话记录">
+      <section v-if="isHistoryOpen" ref="historyPopoverRef" class="ai-history-popover" :style="historyPopoverStyle"
+        role="dialog" aria-label="最近 20 组对话记录">
         <header class="ai-history-header">
           <div class="ai-history-title-group">
             <strong>对话记录</strong>
@@ -907,7 +916,6 @@ onBeforeUnmount(() => {
                 <strong class="ai-history-title">{{ thread.title }}</strong>
                 <time>{{ getHistoryTimeLabel(thread.updatedAt) }}</time>
               </div>
-              <p class="ai-history-content">{{ getHistoryPreview(thread.messages) }}</p>
               <div class="ai-history-subtitle">{{ getHistoryMessageCountLabel(thread.messages) }}</div>
             </button>
           </article>
@@ -967,73 +975,37 @@ onBeforeUnmount(() => {
   font-weight: 500;
 }
 
-.ai-model-switch {
-  position: relative;
-  min-width: 0;
-  flex: 0 0 auto;
-}
-
-.ai-model-button {
+.ai-provider-mark {
   display: inline-flex;
-  height: 26px;
-  min-width: 42px;
+  min-width: 0;
+  max-width: min(48%, 320px);
+  flex: 0 1 auto;
   align-items: center;
-  gap: 5px;
-  border-radius: 6px;
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 500;
-  padding: 0 6px;
-}
-
-.ai-model-button:hover {
-  background: var(--surface-soft);
+  gap: 10px;
+  border-radius: 7px;
   color: var(--text-primary);
 }
 
-.ai-model-icon {
-  width: 18px;
-  height: 18px;
-}
-
-.ai-model-button>svg:not(.ai-model-icon) {
-  width: 13px;
-  height: 13px;
+.ai-provider-mark__icon {
+  width: 22px;
+  height: 22px;
   flex: 0 0 auto;
-  color: var(--text-quaternary);
-  stroke-width: 1.9;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
-.ai-mode-menu {
-  position: absolute;
-  top: 31px;
-  left: 0;
-  z-index: 5;
-  display: grid;
-  width: 104px;
-  gap: 2px;
-  border: 1px solid color-mix(in srgb, var(--shell-divider) 100%, rgba(255, 255, 255, 0.1));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--panel-bg) 96%, var(--sidebar-bg));
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-  padding: 5px;
+.ai-provider-mark__copy {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
 }
 
-.ai-mode-menu button {
-  height: 26px;
-  border-radius: 5px;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  text-align: left;
-  padding: 0 8px;
-}
-
-.ai-mode-menu button:hover,
-.ai-mode-menu button.active {
-  background: var(--surface-soft);
+.ai-provider-mark__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 .ai-panel-actions {
@@ -1089,7 +1061,6 @@ onBeforeUnmount(() => {
   border: 1px solid color-mix(in srgb, var(--shell-divider) 100%, rgba(255, 255, 255, 0.1));
   border-radius: 12px;
   background: color-mix(in srgb, var(--panel-bg) 97%, var(--sidebar-bg));
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
 }
 
 .ai-history-header {
@@ -1196,15 +1167,6 @@ onBeforeUnmount(() => {
 
 .ai-history-meta time {
   color: var(--text-quaternary);
-}
-
-.ai-history-content {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 18px;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .ai-history-subtitle {

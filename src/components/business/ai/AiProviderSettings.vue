@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import AiProviderIcon from '@/components/business/ai/AiProviderIcon.vue';
-import { useAiAutoApply } from '@/composables/useAiAutoApply';
 import type { TAiServicePlatformId } from '@/constants/ai-providers';
 import {
     AI_SERVICE_PLATFORM_PRESETS,
@@ -18,7 +17,6 @@ import type {
     IAiProviderSettingsActionFeedback,
     TAiModelRole,
 } from '@/types/ai';
-import type { TAiEditAuthLevel } from '@/types/ai-edit';
 import {
     getAiModelEndpointConfig,
     patchAiModelEndpointConfig,
@@ -83,7 +81,6 @@ const emit = defineEmits<{
 
 const nextConfig = defineModel<IAiConfigPayload>('draft', { required: true });
 const apiKey = defineModel<string>('apiKey', { required: true });
-const autoApply = useAiAutoApply();
 
 const statusMessage = ref('');
 const statusTone = ref<'success' | 'error' | 'info'>('info');
@@ -102,6 +99,7 @@ const advancedDraft = ref<IAiAdvancedDraft>(createDefaultAdvancedDraft());
 const profileDetail = ref<IAiProviderProfileDetailPayload | null>(null);
 const isProfileDetailLoading = ref(false);
 const isApiKeyVisible = ref(false);
+const activeProfileRole = ref<TAiModelRole>('main');
 const activeServicePlatformId = ref<TAiServicePlatformId>(
     findAiServicePlatformByModel(nextConfig.value.selectedModel).id,
 );
@@ -120,17 +118,18 @@ const modelRoleOptions: Array<{
     label: string;
     description: string;
 }> = [
-    {
-        value: 'main',
-        label: '主力模型',
-        description: '负责对话、Agent 执行、代码修改和验证。',
-    },
-    {
-        value: 'narrator',
-        label: '小模型',
-        description: '只负责活动区旁白，不调用工具、不影响主力模型。',
-    },
-];
+        {
+            value: 'main',
+            label: '主力模型',
+            description: '负责对话、Agent 执行、代码修改和验证。',
+        },
+        {
+            value: 'narrator',
+            label: '小模型',
+            description: '只负责活动区旁白，不调用工具、不影响主力模型。',
+        },
+    ];
+const profileRoleOptions = modelRoleOptions.map(({ value, label }) => ({ value, label }));
 
 const activeRoleConfig = computed<IAiModelEndpointConfigPayload>(() =>
     getAiModelEndpointConfig(nextConfig.value, activeModelRole.value),
@@ -176,55 +175,23 @@ const requiresApiKey = computed(
 
 const canTestProvider = computed(() => !isTesting.value);
 const canSaveProvider = computed(() => !isSaving.value);
-const autoApplyOptions = computed<
-    Array<{ value: TAiEditAuthLevel; label: string; description: string }>
->(() => [
-    {
-        value: 'manual',
-        label: '手动审批',
-        description: '保留 patch 预览，逐次确认后再写盘。',
-    },
-    {
-        value: 'per_task',
-        label: '任务内自动应用',
-        description: '当前对话线程内自动写盘，关闭任务后回到手动模式。',
-    },
-    {
-        value: 'session',
-        label: '会话内自动应用',
-        description: '当前应用会话持续自动写盘，重启后恢复手动模式。',
-    },
-]);
-const autoApplyModeLabel = computed(() => {
-    switch (autoApply.authLevel.value) {
-        case 'per_task':
-            return 'Per-task';
-        case 'session':
-            return 'Session';
-        default:
-            return 'Manual';
-    }
-});
-const autoApplyStatusLabel = computed(() => {
-    switch (autoApply.authLevel.value) {
-        case 'per_task':
-            return autoApply.activeTaskId.value
-                ? '当前对话线程已授权自动写盘。'
-                : '当前暂无活跃任务，切回对话后会自动绑定 taskId。';
-        case 'session':
-            return '当前应用会话内允许 Agent 自动应用 patch。';
-        default:
-            return '当前仍为手动审批模式，Agent 写盘前必须显式确认。';
-    }
-});
-const sortedProfiles = computed(() =>
-    [...props.profiles].sort((left, right) => {
-        const leftTime = Date.parse(left.lastUsedAt ?? left.updatedAt);
-        const rightTime = Date.parse(right.lastUsedAt ?? right.updatedAt);
-        return rightTime - leftTime;
-    }),
+const filteredProfiles = computed(() =>
+    props.profiles
+        .filter((profile) => profile.role === activeProfileRole.value)
+        .sort((left, right) => {
+            const leftTime = Date.parse(left.lastUsedAt ?? left.updatedAt);
+            const rightTime = Date.parse(right.lastUsedAt ?? right.updatedAt);
+            return rightTime - leftTime;
+        }),
 );
-const hasProfiles = computed(() => sortedProfiles.value.length > 0);
+const hasFilteredProfiles = computed(() => filteredProfiles.value.length > 0);
+const activeProfileRoleLabel = computed(
+    () => profileRoleOptions.find((option) => option.value === activeProfileRole.value)?.label ?? '主力模型',
+);
+const profileEmptyTitle = computed(() => `还没有${activeProfileRoleLabel.value}配置`);
+const profileEmptyDescription = computed(
+    () => `完成一次“开始连接”后，成功的${activeProfileRoleLabel.value}配置会自动出现在这里。`,
+);
 const settingsTitle = computed(() => {
     switch (settingsView.value) {
         case 'profiles':
@@ -243,31 +210,8 @@ const settingsSubtitle = computed(() => {
             return '只读查看，API Key 仅本地显示';
         default:
             return activeModelRole.value === 'main'
-                ? '连接成功后会自动保存为配置记录'
-                : '用于 Agent 自然语言叙事，与主力模型隔离保存';
-    }
-});
-const autoApplyUpdatedAtLabel = computed(() => {
-    const parsed = Date.parse(autoApply.authState.value.updatedAt);
-    if (!Number.isFinite(parsed)) {
-        return '尚未记录授权变更';
-    }
-
-    return new Intl.DateTimeFormat('zh-CN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-    }).format(new Date(parsed));
-});
-const autoApplyToneClass = computed(() => {
-    switch (autoApply.authLevel.value) {
-        case 'per_task':
-            return 'is-task';
-        case 'session':
-            return 'is-session';
-        default:
-            return 'is-manual';
+                ? ''
+                : '';
     }
 });
 
@@ -326,8 +270,11 @@ const closeDropdowns = (): void => {
     isModelOpen.value = false;
 };
 
-const showProfileSwitcher = (): void => {
+const showProfileSwitcher = (options?: { resetRole?: boolean }): void => {
     closeDropdowns();
+    if (options?.resetRole) {
+        activeProfileRole.value = 'main';
+    }
     settingsView.value = 'profiles';
     profileDetail.value = null;
     isApiKeyVisible.value = false;
@@ -342,7 +289,7 @@ const showConnectionForm = (): void => {
 
 const handleHeaderNavigation = (): void => {
     if (settingsView.value === 'form') {
-        showProfileSwitcher();
+        showProfileSwitcher({ resetRole: true });
         return;
     }
 
@@ -451,25 +398,6 @@ const updateBaseUrl = (event: Event): void => {
     patchAiModelEndpointConfig(nextConfig.value, activeModelRole.value, {
         baseUrl: target.value,
     });
-};
-
-const updateAutoApplyLevel = async (level: TAiEditAuthLevel): Promise<void> => {
-    if (autoApply.authLevel.value === level) {
-        return;
-    }
-
-    try {
-        showStatus('正在更新 AED 授权…', 'info', false);
-        await autoApply.setAuthLevel({ level });
-        showStatus(`AED 授权已切换到 ${autoApplyModeLabel.value}`, 'success');
-    } catch (error) {
-        showStatus(
-            error instanceof Error && error.message.trim()
-                ? error.message
-                : 'AED 授权更新失败',
-            'error',
-        );
-    }
 };
 
 const createSwitchFeedback = (profile: IAiProviderProfilePayload): IAiProviderSettingsActionFeedback => ({
@@ -707,11 +635,11 @@ watch(
             return;
         }
         resetEphemeralState();
+        activeProfileRole.value = 'main';
         settingsView.value = 'form';
         profileDetail.value = null;
         isApiKeyVisible.value = false;
         syncDraftWithServicePlatform(findAiServicePlatformByModel(activeRoleConfig.value.selectedModel).id);
-        void autoApply.loadAuthState().catch(() => undefined);
     },
     { immediate: true },
 );
@@ -719,7 +647,6 @@ watch(
 onMounted(() => {
     document.addEventListener('click', onDocumentClick);
     document.addEventListener('keydown', onDocumentKeydown);
-    void autoApply.loadAuthState().catch(() => undefined);
 });
 
 onBeforeUnmount(() => {
@@ -738,37 +665,16 @@ onBeforeUnmount(() => {
                         <h2>{{ settingsTitle }}</h2>
                         <span>{{ settingsSubtitle }}</span>
                     </div>
-                    <button
-                        type="button"
-                        class="profile-icon-action"
-                        :title="settingsView === 'form' ? '进入配置记录' : '返回'"
-                        :aria-label="settingsView === 'form' ? '进入配置记录' : '返回'"
-                        @click="handleHeaderNavigation"
-                    >
-                        <svg
-                            v-if="settingsView === 'form'"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            aria-hidden="true"
-                        >
+                    <button type="button" class="profile-icon-action" :title="settingsView === 'form' ? '进入配置记录' : '返回'"
+                        :aria-label="settingsView === 'form' ? '进入配置记录' : '返回'" @click="handleHeaderNavigation">
+                        <svg v-if="settingsView === 'form'" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <rect x="4" y="5" width="16" height="4" rx="1.5" />
                             <rect x="4" y="11" width="16" height="4" rx="1.5" />
                             <rect x="4" y="17" width="16" height="2" rx="1" />
                         </svg>
-                        <svg
-                            v-else
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            aria-hidden="true"
-                        >
+                        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="m15 18-6-6 6-6" />
                         </svg>
                     </button>
@@ -776,14 +682,9 @@ onBeforeUnmount(() => {
 
                 <div v-if="settingsView === 'form'" class="modal-body">
                     <section class="model-role-section" aria-label="模型用途">
-                        <button
-                            v-for="option in modelRoleOptions"
-                            :key="option.value"
-                            type="button"
-                            class="model-role-card"
-                            :class="{ 'is-selected': option.value === activeModelRole }"
-                            @click="updateModelRole(option.value)"
-                        >
+                        <button v-for="option in modelRoleOptions" :key="option.value" type="button"
+                            class="model-role-card" :class="{ 'is-selected': option.value === activeModelRole }"
+                            @click="updateModelRole(option.value)">
                             <span class="model-role-card__label">{{ option.label }}</span>
                             <span class="model-role-card__description">{{ option.description }}</span>
                         </button>
@@ -795,12 +696,8 @@ onBeforeUnmount(() => {
                             <div class="lr-select" :class="{ open: isPlatformOpen }" data-key="platform">
                                 <button type="button" class="lr-select-trigger" aria-haspopup="listbox"
                                     @click.stop="isPlatformOpen = !isPlatformOpen; isModelOpen = false">
-                                    <AiProviderIcon
-                                        class="lr-select-icon"
-                                        :platform-id="activeServicePlatformId"
-                                        :title="selectedPlatformLabel"
-                                        decorative
-                                    />
+                                    <AiProviderIcon class="lr-select-icon" :platform-id="activeServicePlatformId"
+                                        :title="selectedPlatformLabel" decorative />
                                     <span class="lr-select-value">{{ selectedPlatformLabel }}</span>
                                     <svg class="lr-select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -812,12 +709,8 @@ onBeforeUnmount(() => {
                                         :data-provider-id="option.value" class="lr-option"
                                         :class="{ selected: option.value === activeServicePlatformId }" role="option"
                                         @click="updatePlatform(option.value)">
-                                        <AiProviderIcon
-                                            class="lr-option-icon"
-                                            :platform-id="option.value"
-                                            :title="option.label"
-                                            decorative
-                                        />
+                                        <AiProviderIcon class="lr-option-icon" :platform-id="option.value"
+                                            :title="option.label" decorative />
                                         <span class="lr-option-main">{{ option.label }}</span>
                                     </div>
                                 </div>
@@ -837,8 +730,8 @@ onBeforeUnmount(() => {
                                 </button>
                                 <div class="lr-select-menu" role="listbox" @click.stop>
                                     <div v-for="option in modelOptions" :key="option.value" class="lr-option"
-                                        :class="{ selected: option.value === activeRoleConfig.selectedModel }" role="option"
-                                        @click="updateModel(option.value)">
+                                        :class="{ selected: option.value === activeRoleConfig.selectedModel }"
+                                        role="option" @click="updateModel(option.value)">
                                         <span class="lr-option-main">{{ option.label }}</span>
                                     </div>
                                 </div>
@@ -866,8 +759,7 @@ onBeforeUnmount(() => {
 
                     <div class="form-item">
                         <label class="form-label">API Base URL</label>
-                        <input :value="activeRoleConfig.baseUrl ?? ''" class="form-input"
-                            @input="updateBaseUrl"
+                        <input :value="activeRoleConfig.baseUrl ?? ''" class="form-input" @input="updateBaseUrl"
                             :readonly="!activePreset.isEndpointEditable" :placeholder="activePreset.baseUrl ?? ''" />
                     </div>
 
@@ -912,66 +804,38 @@ onBeforeUnmount(() => {
                         </div>
                     </div>
 
-                    <section v-if="activeModelRole === 'main'" class="aed-section" aria-label="AED 授权设置">
-                        <div class="aed-section__header">
-                            <div>
-                                <span class="aed-section__eyebrow">Agent Edit</span>
-                                <strong>自动应用授权</strong>
-                            </div>
-                            <span class="aed-section__badge" :class="autoApplyToneClass">{{ autoApplyModeLabel }}</span>
-                        </div>
-                        <p class="aed-section__copy">控制 Agent patch 是保持手动审批，还是在当前任务 / 当前会话内直接自动应用。</p>
 
-                        <div class="aed-auth-grid">
-                            <button v-for="option in autoApplyOptions" :key="option.value" type="button"
-                                class="aed-auth-card" :class="{
-                                    'is-selected': option.value === autoApply.authLevel.value,
-                                    'is-manual': option.value === 'manual',
-                                    'is-task': option.value === 'per_task',
-                                    'is-session': option.value === 'session',
-                                }" @click="updateAutoApplyLevel(option.value)">
-                                <span class="aed-auth-card__title">{{ option.label }}</span>
-                                <span class="aed-auth-card__description">{{ option.description }}</span>
-                            </button>
-                        </div>
-
-                        <div class="aed-section__meta">
-                            <span>{{ autoApplyStatusLabel }}</span>
-                            <span>最近变更：{{ autoApplyUpdatedAtLabel }}</span>
-                        </div>
-                    </section>
-                    <section v-else class="narrator-note" aria-label="小模型说明">
-                        <strong>小模型只服务 Agent 旁白</strong>
-                        <span>这里保存的模型、Base URL 和 API Key 与主力模型隔离；后续 Narrator Agent 只会接收压缩事实摘要，不接触完整文件和工具 JSON。</span>
-                    </section>
                 </div>
 
                 <div v-else-if="settingsView === 'profiles'" class="modal-body profile-switcher">
-                    <div v-if="hasProfiles" class="profile-list" aria-label="AI 配置记录列表">
-                        <article
-                            v-for="profile in sortedProfiles"
-                            :key="profile.id"
-                            class="profile-card"
-                            :class="{ 'is-active': profile.isConnected }"
-                        >
+                    <div class="profile-role-switch" aria-label="配置记录模型类型切换">
+                        <button v-for="option in profileRoleOptions" :key="option.value" type="button"
+                            class="profile-role-switch__button"
+                            :class="{ 'is-selected': option.value === activeProfileRole }"
+                            :aria-pressed="option.value === activeProfileRole"
+                            @click="activeProfileRole = option.value">
+                            {{ option.label }}
+                        </button>
+                    </div>
+
+                    <div v-if="hasFilteredProfiles" class="profile-list" aria-label="AI 配置记录列表">
+                        <article v-for="profile in filteredProfiles" :key="profile.id" class="profile-card"
+                            :class="{ 'is-active': profile.isConnected }">
                             <span class="profile-drag" aria-hidden="true">
                                 <span></span>
                                 <span></span>
                                 <span></span>
                             </span>
-                            <AiProviderIcon
-                                class="profile-provider-icon"
-                                :platform-id="getProfilePlatformId(profile)"
-                                :title="getProfilePlatformLabel(profile)"
-                                decorative
-                            />
+                            <AiProviderIcon class="profile-provider-icon" :platform-id="getProfilePlatformId(profile)"
+                                :title="getProfilePlatformLabel(profile)" decorative />
                             <div class="profile-main">
                                 <div class="profile-title-row">
                                     <strong>{{ profile.name }}</strong>
                                     <span class="profile-role-badge" :class="getProfileRoleToneClass(profile)">
                                         {{ getProfileRoleLabel(profile) }}
                                     </span>
-                                    <span class="profile-connection-badge" :class="getProfileConnectionToneClass(profile)">
+                                    <span class="profile-connection-badge"
+                                        :class="getProfileConnectionToneClass(profile)">
                                         {{ getProfileConnectionLabel(profile) }}
                                     </span>
                                 </div>
@@ -996,43 +860,20 @@ onBeforeUnmount(() => {
                                 </dl>
                             </div>
                             <div class="profile-actions">
-                                <button
-                                    type="button"
-                                    class="profile-action-button"
-                                    title="查看配置"
-                                    aria-label="查看配置"
-                                    @click="showProfileDetail(profile)"
-                                >
-                                    <svg
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        aria-hidden="true"
-                                    >
+                                <button type="button" class="profile-action-button" title="查看配置" aria-label="查看配置"
+                                    @click="showProfileDetail(profile)">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
                                         <circle cx="12" cy="12" r="3" />
                                     </svg>
                                 </button>
-                                <button
-                                    type="button"
-                                    class="profile-action-button"
+                                <button type="button" class="profile-action-button"
                                     :disabled="profile.isConnected || isSaving"
                                     :title="profile.isConnected ? '已连接' : '快速切换'"
-                                    :aria-label="profile.isConnected ? '已连接' : '快速切换'"
-                                    @click="switchProfile(profile)"
-                                >
-                                    <svg
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        aria-hidden="true"
-                                    >
+                                    :aria-label="profile.isConnected ? '已连接' : '快速切换'" @click="switchProfile(profile)">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
                                     </svg>
                                 </button>
@@ -1040,8 +881,8 @@ onBeforeUnmount(() => {
                         </article>
                     </div>
                     <div v-else class="profile-empty">
-                        <strong>还没有可切换的配置</strong>
-                        <span>完成一次“开始连接”后，成功的 API 配置会自动出现在这里。</span>
+                        <strong>{{ profileEmptyTitle }}</strong>
+                        <span>{{ profileEmptyDescription }}</span>
                         <button type="button" class="btn btn-test" @click="showConnectionForm">去连接</button>
                     </div>
                 </div>
@@ -1053,15 +894,13 @@ onBeforeUnmount(() => {
                     </div>
                     <section v-else-if="detailProfile" class="profile-detail-card">
                         <div class="profile-detail-head">
-                            <AiProviderIcon
-                                class="profile-detail-icon"
+                            <AiProviderIcon class="profile-detail-icon"
                                 :platform-id="getProfilePlatformId(detailProfile)"
-                                :title="getProfilePlatformLabel(detailProfile)"
-                                decorative
-                            />
+                                :title="getProfilePlatformLabel(detailProfile)" decorative />
                             <div>
                                 <strong>{{ detailProfile.name }}</strong>
-                                <span>{{ getProfilePlatformLabel(detailProfile) }} · {{ getProfileModelLabel(detailProfile) }}</span>
+                                <span>{{ getProfilePlatformLabel(detailProfile) }} · {{
+                                    getProfileModelLabel(detailProfile) }}</span>
                             </div>
                         </div>
 
@@ -1077,7 +916,8 @@ onBeforeUnmount(() => {
                             <div>
                                 <dt>连接状态</dt>
                                 <dd>
-                                    <span class="profile-connection-badge" :class="getProfileConnectionToneClass(detailProfile)">
+                                    <span class="profile-connection-badge"
+                                        :class="getProfileConnectionToneClass(detailProfile)">
                                         {{ getProfileConnectionLabel(detailProfile) }}
                                     </span>
                                 </dd>
@@ -1102,23 +942,12 @@ onBeforeUnmount(() => {
                                 <dt>API Key</dt>
                                 <dd>
                                     <code :class="{ 'is-visible': isApiKeyVisible }">{{ maskedDetailApiKey }}</code>
-                                    <button
-                                        type="button"
-                                        class="profile-action-button"
-                                        :disabled="!detailApiKey"
+                                    <button type="button" class="profile-action-button" :disabled="!detailApiKey"
                                         :title="isApiKeyVisible ? '隐藏 API Key' : '查看 API Key'"
                                         :aria-label="isApiKeyVisible ? '隐藏 API Key' : '查看 API Key'"
-                                        @click="isApiKeyVisible = !isApiKeyVisible"
-                                    >
-                                        <svg
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            stroke-width="2"
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            aria-hidden="true"
-                                        >
+                                        @click="isApiKeyVisible = !isApiKeyVisible">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                             <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
                                             <circle cx="12" cy="12" r="3" />
                                         </svg>
@@ -1182,6 +1011,12 @@ onBeforeUnmount(() => {
     --accent-hover: #6e79da;
     --accent-soft: rgba(94, 106, 210, 0.12);
     --accent-ring: rgba(94, 106, 210, 0.32);
+    --selection-soft: color-mix(in srgb, var(--accent) 6%, var(--bg-input));
+    --selection-soft-hover: color-mix(in srgb, var(--accent) 8%, var(--bg-input-hover));
+    --selection-border: color-mix(in srgb, var(--accent) 20%, var(--border));
+    --selection-ring: color-mix(in srgb, var(--accent) 14%, transparent);
+    --selection-chip-bg: color-mix(in srgb, var(--accent) 7%, var(--bg-active));
+    --selection-chip-border: color-mix(in srgb, var(--accent) 18%, var(--border));
 
     --success: #4cb782;
     --danger: #eb5757;
@@ -1234,12 +1069,16 @@ onBeforeUnmount(() => {
     background: var(--bg-elevated);
     width: clamp(560px, 62vw, 720px);
     max-width: calc(100vw - 48px);
+    min-height: min(620px, calc(100vh - 48px));
+    max-height: calc(100vh - 48px);
     border-radius: var(--r-lg);
     box-shadow: var(--shadow-modal);
     overflow: hidden;
     pointer-events: auto;
     animation: pop 0.16s var(--ease);
     color: var(--fg-primary);
+    display: flex;
+    flex-direction: column;
 }
 
 @keyframes pop {
@@ -1287,18 +1126,25 @@ onBeforeUnmount(() => {
     display: grid;
     width: 30px;
     height: 30px;
+    padding: 0;
     place-items: center;
     flex: 0 0 auto;
-    border: 1px solid var(--border);
-    border-radius: var(--r-md);
-    background: var(--bg-input);
-    color: var(--fg-secondary);
-    transition: background 0.12s var(--ease), border-color 0.12s var(--ease), color 0.12s var(--ease), transform 0.12s var(--ease);
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    background-color: transparent;
+    box-shadow: none;
+    outline: none;
+    color: var(--fg-tertiary);
+    transition: color 0.12s var(--ease), transform 0.12s var(--ease), opacity 0.12s var(--ease);
 }
 
-.profile-icon-action:hover {
-    border-color: var(--border-strong);
-    background: var(--bg-hover);
+.profile-icon-action:hover,
+.profile-icon-action:focus-visible,
+.profile-icon-action:active {
+    background: transparent;
+    background-color: transparent;
+    box-shadow: none;
     color: var(--fg-primary);
 }
 
@@ -1317,8 +1163,9 @@ onBeforeUnmount(() => {
 }
 
 .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
     padding: 16px;
-    max-height: 72vh;
     overflow-y: auto;
 }
 
@@ -1436,10 +1283,10 @@ input[type='number'] {
 }
 
 .model-role-card.is-selected {
-    border-color: var(--accent);
-    background: var(--accent-soft);
+    border-color: var(--selection-border);
+    background: var(--selection-soft);
     color: var(--fg-primary);
-    box-shadow: 0 0 0 1px var(--accent-ring);
+    box-shadow: 0 0 0 1px var(--selection-ring);
 }
 
 .model-role-card__label,
@@ -1562,7 +1409,7 @@ input[type='number'] {
 
 .lr-option {
     min-height: 28px;
-    padding: 0 10px 0 26px;
+    padding: 0 28px 0 10px;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1602,18 +1449,18 @@ input[type='number'] {
 
 .lr-option.selected {
     color: var(--fg-primary);
-    background: var(--accent-soft);
+    background: var(--selection-soft-hover);
 }
 
 .lr-option.selected::before {
     content: '';
     position: absolute;
-    left: 8px;
+    right: 8px;
     top: 50%;
     width: 11px;
     height: 11px;
     transform: translateY(-50%);
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235E6AD2' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>");
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237D86BC' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>");
     background-size: contain;
     background-repeat: no-repeat;
 }
@@ -1735,79 +1582,6 @@ input[type='number'] {
     margin-bottom: 14px;
 }
 
-.aed-section {
-    display: grid;
-    gap: 12px;
-    margin-top: 4px;
-    border: 1px solid var(--border-subtle);
-    border-radius: 12px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
-    padding: 14px;
-}
-
-.aed-section__header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-}
-
-.aed-section__header strong {
-    display: block;
-    color: var(--fg-primary);
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-}
-
-.aed-section__eyebrow {
-    display: inline-flex;
-    margin-bottom: 6px;
-    color: var(--fg-muted);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-}
-
-.aed-section__badge {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    padding: 4px 9px;
-    color: var(--fg-secondary);
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-}
-
-.aed-section__badge.is-task {
-    border-color: rgba(86, 168, 255, 0.35);
-    background: rgba(86, 168, 255, 0.12);
-    color: #dcecff;
-}
-
-.aed-section__badge.is-session {
-    border-color: rgba(245, 158, 11, 0.42);
-    background: rgba(245, 158, 11, 0.14);
-    color: #fff1cf;
-}
-
-.aed-section__copy,
-.aed-section__meta {
-    color: var(--fg-secondary);
-    font-size: 12px;
-    line-height: 1.6;
-}
-
-.aed-section__meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    color: var(--fg-tertiary);
-}
-
 .narrator-note {
     display: grid;
     gap: 6px;
@@ -1832,7 +1606,48 @@ input[type='number'] {
 }
 
 .profile-switcher {
+    display: grid;
+    align-content: start;
+    gap: 12px;
     min-height: 320px;
+}
+
+.profile-role-switch {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.profile-role-switch__button {
+    height: 34px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background: var(--bg-input);
+    color: var(--fg-secondary);
+    font-size: 12.5px;
+    font-weight: 600;
+    transition:
+        border-color 0.12s var(--ease),
+        background 0.12s var(--ease),
+        color 0.12s var(--ease),
+        transform 0.12s var(--ease);
+}
+
+.profile-role-switch__button:hover {
+    border-color: var(--border);
+    background: var(--bg-input-hover);
+    color: var(--fg-primary);
+}
+
+.profile-role-switch__button:active {
+    transform: scale(0.985);
+}
+
+.profile-role-switch__button.is-selected {
+    border-color: var(--selection-border);
+    background: var(--selection-soft);
+    color: var(--fg-primary);
+    box-shadow: 0 0 0 1px var(--selection-ring);
 }
 
 .profile-list {
@@ -1859,8 +1674,8 @@ input[type='number'] {
 }
 
 .profile-card.is-active {
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 10%, var(--bg-input));
+    border-color: var(--selection-border);
+    background: var(--selection-soft);
 }
 
 .profile-drag {
@@ -1872,6 +1687,7 @@ input[type='number'] {
 
 .profile-drag span {
     width: 3px;
+
     height: 3px;
     border-radius: 999px;
     background: currentColor;
@@ -1926,8 +1742,8 @@ input[type='number'] {
 }
 
 .profile-role-badge.is-main {
-    border-color: var(--accent-ring);
-    background: var(--accent-soft);
+    border-color: var(--selection-chip-border);
+    background: var(--selection-chip-bg);
     color: var(--fg-primary);
 }
 
@@ -2071,7 +1887,7 @@ input[type='number'] {
     gap: 8px;
 }
 
-.profile-readonly-list > div {
+.profile-readonly-list>div {
     display: grid;
     grid-template-columns: 120px minmax(0, 1fr);
     align-items: center;
@@ -2266,10 +2082,6 @@ input[type='range']::-moz-range-thumb {
 }
 
 @media (max-width: 720px) {
-    .aed-auth-grid {
-        grid-template-columns: 1fr;
-    }
-
     .profile-card {
         grid-template-columns: 12px 30px minmax(0, 1fr);
     }
@@ -2283,13 +2095,9 @@ input[type='range']::-moz-range-thumb {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .profile-readonly-list > div {
+    .profile-readonly-list>div {
         grid-template-columns: 1fr;
         gap: 4px;
-    }
-
-    .aed-section__header {
-        flex-direction: column;
     }
 }
 

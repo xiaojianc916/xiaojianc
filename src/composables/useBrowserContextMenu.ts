@@ -2,7 +2,6 @@ import type {
   ILinearContextMenuGroup,
   ILinearContextMenuItem,
 } from '@/components/common/linear-context-menu.types';
-import { useIntegratedTerminalControls } from '@/composables/useIntegratedTerminal';
 import { openExternalUrl } from '@/utils/browser';
 import { tryReadClipboardText, tryWriteClipboardText, writeClipboardText } from '@/utils/clipboard';
 import { onBeforeUnmount, reactive, ref } from 'vue';
@@ -48,6 +47,13 @@ interface IResolvedContextTarget {
   documentSelectionRange: Range | null;
   isTerminalSurface: boolean;
 }
+
+type TTerminalControls = {
+  copySelection: () => Promise<void>;
+  pasteFromClipboard: () => Promise<void>;
+  selectAll: () => void;
+  getSelectionText: () => string;
+};
 
 const isTargetInsideMenu = (target: EventTarget | null): boolean =>
   target instanceof Element && target.closest(MENU_ROOT_SELECTOR) !== null;
@@ -391,7 +397,6 @@ const restoreEditableSelection = (target: IResolvedContextTarget): void => {
 };
 
 export const useBrowserContextMenu = () => {
-  const terminalControls = useIntegratedTerminalControls();
   const state = reactive<IBrowserContextMenuState>({
     open: false,
     x: 0,
@@ -399,6 +404,17 @@ export const useBrowserContextMenu = () => {
   });
   const groups = ref<TBrowserContextMenuGroup[]>([]);
   const contextTarget = ref<IResolvedContextTarget | null>(null);
+  let terminalControlsPromise: Promise<TTerminalControls | null> | null = null;
+
+  const getTerminalControls = async (): Promise<TTerminalControls | null> => {
+    if (!terminalControlsPromise) {
+      terminalControlsPromise = import('@/composables/useIntegratedTerminal')
+        .then(({ useIntegratedTerminalControls }) => useIntegratedTerminalControls())
+        .catch(() => null);
+    }
+
+    return terminalControlsPromise;
+  };
 
   const closeMenu = (): void => {
     state.open = false;
@@ -406,10 +422,10 @@ export const useBrowserContextMenu = () => {
     contextTarget.value = null;
   };
 
-  const buildMenuGroups = (target: IResolvedContextTarget): TBrowserContextMenuGroup[] => {
-    const hasTerminalSelection = target.isTerminalSurface
-      ? terminalControls.getSelectionText().length > 0
-      : false;
+  const buildMenuGroups = (
+    target: IResolvedContextTarget,
+    hasTerminalSelection = false,
+  ): TBrowserContextMenuGroup[] => {
     const hasSelection = target.selectedText.length > 0 || hasTerminalSelection;
     const canEdit = target.isEditableText && !target.isReadOnly;
     const nextGroups: TBrowserContextMenuGroup[] = [];
@@ -467,6 +483,10 @@ export const useBrowserContextMenu = () => {
         ],
       });
 
+      return nextGroups;
+    }
+
+    if (!target.linkHref && !target.isEditableText && !hasSelection) {
       return nextGroups;
     }
 
@@ -536,8 +556,12 @@ export const useBrowserContextMenu = () => {
     return nextGroups;
   };
 
-  const openMenu = (event: MouseEvent, target: IResolvedContextTarget): void => {
-    groups.value = buildMenuGroups(target);
+  const openMenu = (
+    event: MouseEvent,
+    target: IResolvedContextTarget,
+    hasTerminalSelection = false,
+  ): void => {
+    groups.value = buildMenuGroups(target, hasTerminalSelection);
     if (groups.value.length === 0) {
       closeMenu();
       return;
@@ -552,6 +576,10 @@ export const useBrowserContextMenu = () => {
 
   const handleCopy = async (target: IResolvedContextTarget): Promise<void> => {
     if (target.isTerminalSurface) {
+      const terminalControls = await getTerminalControls();
+      if (!terminalControls) {
+        return;
+      }
       await terminalControls.copySelection();
       return;
     }
@@ -588,6 +616,10 @@ export const useBrowserContextMenu = () => {
 
   const handlePaste = async (target: IResolvedContextTarget): Promise<void> => {
     if (target.isTerminalSurface) {
+      const terminalControls = await getTerminalControls();
+      if (!terminalControls) {
+        return;
+      }
       await terminalControls.pasteFromClipboard();
       return;
     }
@@ -607,8 +639,12 @@ export const useBrowserContextMenu = () => {
     await insertTextIntoEditable(target.editableElement, clipboardText);
   };
 
-  const handleSelectAll = (target: IResolvedContextTarget): void => {
+  const handleSelectAll = async (target: IResolvedContextTarget): Promise<void> => {
     if (target.isTerminalSurface) {
+      const terminalControls = await getTerminalControls();
+      if (!terminalControls) {
+        return;
+      }
       terminalControls.selectAll();
       return;
     }
@@ -688,7 +724,7 @@ export const useBrowserContextMenu = () => {
     closeMenu();
   };
 
-  const handleWindowContextMenu = (event: MouseEvent): void => {
+  const handleWindowContextMenu = async (event: MouseEvent): Promise<void> => {
     if (isTargetInsideMenu(event.target)) {
       event.preventDefault();
       return;
@@ -704,7 +740,14 @@ export const useBrowserContextMenu = () => {
     }
 
     event.preventDefault();
-    openMenu(event, target);
+
+    let hasTerminalSelection = false;
+    if (target.isTerminalSurface) {
+      const terminalControls = await getTerminalControls();
+      hasTerminalSelection = terminalControls?.getSelectionText().length > 0;
+    }
+
+    openMenu(event, target, hasTerminalSelection);
   };
 
   const handleWindowKeydown = (event: KeyboardEvent): void => {

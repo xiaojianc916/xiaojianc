@@ -23,6 +23,7 @@ export default defineConfig(({ command }) => ({
     rollupOptions: {
       input: {
         index: fileURLToPath(new URL('./index.html', import.meta.url)),
+        welcome: fileURLToPath(new URL('./welcome.html', import.meta.url)),
       },
       output: {
         manualChunks(id) {

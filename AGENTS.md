@@ -52,6 +52,7 @@ conflict_priority: [security, type-safety, testability, maintainability, perform
 ## 0.1 Baseline
 
 ```yaml
+Strands Agents:
 tauri: ^2
 vue: ~3.5
 typescript: 6.0.2

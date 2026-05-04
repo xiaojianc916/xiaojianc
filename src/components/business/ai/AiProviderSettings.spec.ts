@@ -201,7 +201,7 @@ describe('AiProviderSettings', () => {
         expect(getEmittedEvent(emitted)[2]).toBe('narrator');
     });
 
-    it('allows the narrator model to open AI configuration records', async () => {
+    it('opens AI configuration records with main profiles selected by default and allows switching to narrator profiles', async () => {
         const wrapper = mount(AiProviderSettings, {
             props: createSettingsProps(),
             ...createGlobalMountOptions(),
@@ -219,10 +219,19 @@ describe('AiProviderSettings', () => {
         await wrapper.get('[aria-label="进入配置记录"]').trigger('click');
 
         expect(wrapper.text()).toContain('AI 配置记录');
-        expect(wrapper.text()).not.toContain('配置记录当前只适用于主力模型');
+        const mainProfileFilter = findButtonByText(wrapper.findAll('button'), '主力模型');
+        const narratorProfileFilter = findButtonByText(wrapper.findAll('button'), '小模型');
+
+        expect(mainProfileFilter.classes()).toContain('is-selected');
+        expect(narratorProfileFilter.classes()).not.toContain('is-selected');
+
+        await narratorProfileFilter.trigger('click');
+        await nextTick();
+
+        expect(findButtonByText(wrapper.findAll('button'), '小模型').classes()).toContain('is-selected');
     });
 
-    it('renders role badges and real backend connection states in configuration records', async () => {
+    it('filters configuration records by role while preserving connection states', async () => {
         const profiles = [
             createProfile({
                 id: 'profile-main-connected',
@@ -260,10 +269,19 @@ describe('AiProviderSettings', () => {
 
         await wrapper.get('[aria-label="进入配置记录"]').trigger('click');
 
+        expect(wrapper.text()).toContain('主力 GPT');
+        expect(wrapper.text()).toContain('已连接');
+        expect(wrapper.text()).not.toContain('旁白 GLM');
+        expect(wrapper.text()).not.toContain('缺少 Key 的旁白');
+
+        const narratorProfileFilter = findButtonByText(wrapper.findAll('button'), '小模型');
+        await narratorProfileFilter.trigger('click');
+        await nextTick();
+
         const text = wrapper.text();
-        expect(text).toContain('主力模型');
-        expect(text).toContain('小模型');
-        expect(text).toContain('已连接');
+        expect(text).not.toContain('主力 GPT');
+        expect(text).toContain('旁白 GLM');
+        expect(text).toContain('缺少 Key 的旁白');
         expect(text).toContain('未连接');
         expect(text).toContain('缺少 API Key');
     });
@@ -296,22 +314,23 @@ describe('AiProviderSettings', () => {
 
         await wrapper.get('[aria-label="进入配置记录"]').trigger('click');
 
-        const cards = wrapper.findAll('.profile-card');
-        const connectedCard = cards[0];
-        const narratorCard = cards[1];
+        const narratorProfileFilter = findButtonByText(wrapper.findAll('button'), '小模型');
+        await narratorProfileFilter.trigger('click');
+        await nextTick();
 
-        if (!connectedCard || !narratorCard) {
+        const cards = wrapper.findAll('.profile-card');
+        const narratorCard = cards[0];
+
+        if (!narratorCard) {
             throw new Error('配置记录列表渲染不完整');
         }
 
-        const connectedSwitchButton = connectedCard.findAll('.profile-action-button')[1];
         const narratorSwitchButton = narratorCard.findAll('.profile-action-button')[1];
 
-        if (!connectedSwitchButton || !narratorSwitchButton) {
+        if (!narratorSwitchButton) {
             throw new Error('配置记录切换按钮渲染不完整');
         }
 
-        expect(connectedSwitchButton.attributes('disabled')).toBeDefined();
         expect(narratorSwitchButton.attributes('disabled')).toBeUndefined();
 
         await narratorSwitchButton.trigger('click');

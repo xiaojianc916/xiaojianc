@@ -252,38 +252,160 @@
         </template>
 
         <section v-else-if="activeTab === 'history'" class="source-control-info-panel">
-          <p class="source-control-info-eyebrow">Latest commit</p>
-          <template v-if="status.lastCommit">
-            <p class="source-control-info-title">{{ status.lastCommit.summary }}</p>
-            <p class="source-control-info-text">
-              {{ status.lastCommit.shortId }} · {{ status.lastCommit.authorName }} ·
-              {{ formatCommitTime(status.lastCommit.authoredAt) }}
-            </p>
-          </template>
-          <p v-else class="source-control-info-text">当前仓库还没有提交记录。</p>
-          <p class="source-control-info-note">完整提交历史分页尚未开放，当前仅展示 HEAD 摘要，避免伪造历史列表。</p>
+          <p class="source-control-info-eyebrow">History</p>
+          <p class="source-control-info-title">{{ historyPanelTitle }}</p>
+          <p class="source-control-info-text">{{ historyPanelText }}</p>
+
+          <div v-if="isCommitHistoryLoading && filteredCommitHistory.length === 0" class="source-control-info-note">
+            正在读取 Git 提交历史…
+          </div>
+
+          <div v-else-if="filteredCommitHistory.length > 0" class="source-control-file-list">
+            <article v-for="entry in filteredCommitHistory" :key="entry.id" class="source-control-file">
+              <div class="source-control-file-main">
+                <span class="source-control-file-tag is-modified">C</span>
+                <span class="source-control-file-path">
+                  <span class="source-control-file-name">{{ entry.summary }}</span>
+                  <span class="source-control-file-dir">
+                    {{ entry.shortId }} · {{ entry.authorName }} · {{ formatCommitTime(entry.authoredAt) }}
+                  </span>
+                </span>
+              </div>
+            </article>
+          </div>
+
+          <p v-else class="source-control-info-note">{{ historyEmptyText }}</p>
+
+          <div class="source-control-toolbar">
+            <button type="button" class="source-control-toolbar-btn" :disabled="isCommitHistoryLoading || isBusy"
+              @click="handleReloadCommitHistory">
+              刷新历史
+            </button>
+
+            <button type="button" class="source-control-toolbar-btn"
+              :disabled="!canLoadMoreCommitHistory || isCommitHistoryLoading || isBusy"
+              @click="handleLoadMoreCommitHistory">
+              {{ isCommitHistoryLoading ? '加载中…' : '加载更多' }}
+            </button>
+          </div>
         </section>
 
         <section v-else-if="activeTab === 'branches'" class="source-control-info-panel">
-          <p class="source-control-info-eyebrow">Branch</p>
+          <p class="source-control-info-eyebrow">Branches</p>
           <p class="source-control-info-title">{{ branchLabel }}</p>
-          <p class="source-control-info-text">
-            Ahead {{ status.ahead }} · Behind {{ status.behind }} ·
-            {{ status.isDetached ? 'Detached HEAD' : '本地分支' }}
-          </p>
-          <p class="source-control-info-note">切换/新建分支需要工作区脏状态保护，后端命令未开放前不提供空按钮。</p>
+          <p class="source-control-info-text">{{ branchesPanelText }}</p>
+
+          <div class="source-control-toolbar">
+            <button type="button" class="source-control-toolbar-btn" :disabled="isBranchesLoading || isBusy"
+              @click="handleReloadBranches">
+              刷新分支
+            </button>
+
+            <button type="button" class="source-control-toolbar-btn" :disabled="isBranchesLoading || isBusy"
+              @click="handleCreateBranch">
+              新建并切换
+            </button>
+          </div>
+
+          <div v-if="isBranchesLoading && filteredBranchEntries.length === 0" class="source-control-info-note">
+            正在读取 Git 分支…
+          </div>
+
+          <div v-else-if="filteredBranchEntries.length > 0" class="source-control-file-list">
+            <article v-for="entry in filteredBranchEntries" :key="entry.name" class="source-control-file"
+              :class="{ 'is-active': entry.isCurrent }">
+              <div class="source-control-file-main">
+                <span class="source-control-file-tag" :class="'is-' + resolveBranchTagTone(entry)">
+                  {{ resolveBranchTag(entry) }}
+                </span>
+                <span class="source-control-file-path">
+                  <span class="source-control-file-name">{{ entry.shorthand }}</span>
+                  <span class="source-control-file-dir">{{ resolveBranchMeta(entry) }}</span>
+                </span>
+              </div>
+
+              <div v-if="!entry.isCurrent" class="source-control-file-actions">
+                <button type="button" class="source-control-btn" :disabled="isBusy"
+                  @click.stop="handleCheckoutBranch(entry)">
+                  {{ entry.kind === 'remote' ? '检出' : '切换' }}
+                </button>
+              </div>
+            </article>
+          </div>
+
+          <p v-else class="source-control-info-note">{{ branchesEmptyText }}</p>
         </section>
 
         <section v-else-if="activeTab === 'pull-requests'" class="source-control-info-panel">
           <p class="source-control-info-eyebrow">Pull requests</p>
-          <p class="source-control-info-title">未连接远程评审服务</p>
-          <p class="source-control-info-text">本地 Git 状态可用；PR 需要远程平台授权与 API，当前不会展示假数据。</p>
+          <p class="source-control-info-title">{{ pullRequestPanelTitle }}</p>
+          <p class="source-control-info-text">{{ pullRequestPanelText }}</p>
+          <p v-if="pullRequestSupport.remoteName" class="source-control-info-note">
+            远程 {{ pullRequestSupport.remoteName }} · {{ pullRequestProviderLabel }}
+          </p>
+
+          <div class="source-control-toolbar">
+            <button type="button" class="source-control-toolbar-btn"
+              :disabled="!canOpenPullRequestList || isPullRequestSupportLoading" @click="handleOpenPullRequestList">
+              查看列表
+            </button>
+
+            <button type="button" class="source-control-toolbar-btn"
+              :disabled="!canOpenPullRequestCreate || isPullRequestSupportLoading" @click="handleOpenCreatePullRequest">
+              创建 PR
+            </button>
+          </div>
         </section>
 
         <section v-else class="source-control-info-panel">
           <p class="source-control-info-eyebrow">Stash</p>
-          <p class="source-control-info-title">贮藏命令尚未开放</p>
-          <p class="source-control-info-text">为避免误丢改动，stash save/apply/drop 会在 Rust 命令与测试补齐后启用。</p>
+          <p class="source-control-info-title">{{ stashPanelTitle }}</p>
+          <p class="source-control-info-text">{{ stashPanelText }}</p>
+
+          <div class="source-control-toolbar">
+            <button type="button" class="source-control-toolbar-btn"
+              :disabled="isStashesLoading || isBusy || totalChangeCount === 0" @click="handleSaveStash">
+              贮藏当前改动
+            </button>
+
+            <button type="button" class="source-control-toolbar-btn" :disabled="isStashesLoading || isBusy"
+              @click="handleReloadStashes">
+              刷新贮藏
+            </button>
+          </div>
+
+          <div v-if="isStashesLoading && filteredStashEntries.length === 0" class="source-control-info-note">
+            正在读取 Git 贮藏…
+          </div>
+
+          <div v-else-if="filteredStashEntries.length > 0" class="source-control-file-list">
+            <article v-for="entry in filteredStashEntries" :key="entry.stashId" class="source-control-file">
+              <div class="source-control-file-main">
+                <span class="source-control-file-tag is-renamed">S</span>
+                <span class="source-control-file-path">
+                  <span class="source-control-file-name">{{ entry.summary }}</span>
+                  <span class="source-control-file-dir">{{ resolveStashMeta(entry) }}</span>
+                </span>
+              </div>
+
+              <div class="source-control-file-actions">
+                <button type="button" class="source-control-btn" :disabled="isBusy"
+                  @click.stop="handleApplyStash(entry, false)">
+                  应用
+                </button>
+                <button type="button" class="source-control-btn" :disabled="isBusy"
+                  @click.stop="handleApplyStash(entry, true)">
+                  弹出
+                </button>
+                <button type="button" class="source-control-btn" :disabled="isBusy"
+                  @click.stop="handleDropStash(entry)">
+                  删除
+                </button>
+              </div>
+            </article>
+          </div>
+
+          <p v-else class="source-control-info-note">{{ stashEmptyText }}</p>
         </section>
       </div>
 
@@ -333,13 +455,17 @@ import {
 } from '@/composables/useSourceControlContextMenu';
 import { useGitStore } from '@/store/git';
 import type {
+  IGitBranchPayload,
+  IGitCommitSummaryPayload,
   IGitDiffPreviewRequest,
   IGitFileStatusPayload,
-  TGitDiffMode,
+  IGitPullRequestSupportPayload,
+  IGitStashEntryPayload,
   TGitChangeKind,
+  TGitDiffMode,
 } from '@/types/git';
 import { openExternalUrl } from '@/utils/browser';
-import { writeClipboardText } from '@/utils/clipboard';
+import { writeFileSystemPathToClipboard } from '@/utils/clipboard';
 import { toErrorMessage } from '@/utils/error';
 import {
   areFileSystemPathsEqual,
@@ -523,6 +649,10 @@ const syncRepositoryStatus = async (
 
     markStatusSynced();
 
+    if (hasRepository.value && activeTab.value !== 'changes') {
+      await ensureActiveTabData(activeTab.value);
+    }
+
     if (options?.showSuccessMessage) {
       message.success('Git 状态已刷新');
     }
@@ -532,6 +662,49 @@ const syncRepositoryStatus = async (
     }
   }
 };
+
+const promptForText = (title: string, defaultValue = ''): string | null => {
+  if (typeof window === 'undefined' || typeof window.prompt !== 'function') {
+    return null;
+  }
+
+  return window.prompt(title, defaultValue);
+};
+
+async function ensureActiveTabData(tabKey: TGitNavKey): Promise<void> {
+  if (!hasRepository.value || tabKey === 'changes') {
+    return;
+  }
+
+  try {
+    if (tabKey === 'history') {
+      await gitStore.loadCommitHistory();
+      return;
+    }
+
+    if (tabKey === 'branches') {
+      await gitStore.loadBranches();
+      return;
+    }
+
+    if (tabKey === 'stash') {
+      await gitStore.loadStashes();
+      return;
+    }
+
+    await gitStore.loadPullRequestSupport();
+  } catch (error) {
+    const fallbackMessage =
+      tabKey === 'history'
+        ? '读取 Git 提交历史失败'
+        : tabKey === 'branches'
+          ? '读取 Git 分支失败'
+          : tabKey === 'stash'
+            ? '读取 Git 贮藏失败'
+            : '读取 Pull Request 支持信息失败';
+    message.error(toErrorMessage(error, fallbackMessage));
+  }
+}
 
 const conflictedEntries = computed(() => status.value.files.filter((entry) => entry.isConflicted));
 const stagedEntries = computed(() =>
@@ -550,6 +723,15 @@ const stagedPaths = computed(() => stagedEntries.value.map((entry) => entry.path
 const canStageAll = computed(() => stageableEntries.value.length > 0 && !isBusy.value);
 const canUnstageAll = computed(() => stagedPaths.value.length > 0 && !isBusy.value);
 const canDiscardAll = computed(() => discardableEntries.value.length > 0 && !isBusy.value);
+const commitHistoryEntries = computed<IGitCommitSummaryPayload[]>(() => gitStore.commitHistory);
+const isCommitHistoryLoading = computed(() => gitStore.isCommitHistoryLoading);
+const canLoadMoreCommitHistory = computed(() => gitStore.canLoadMoreCommitHistory);
+const branchEntries = computed<IGitBranchPayload[]>(() => gitStore.branches);
+const isBranchesLoading = computed(() => gitStore.isBranchesLoading);
+const stashEntries = computed<IGitStashEntryPayload[]>(() => gitStore.stashes);
+const isStashesLoading = computed(() => gitStore.isStashesLoading);
+const pullRequestSupport = computed<IGitPullRequestSupportPayload>(() => gitStore.pullRequestSupport);
+const isPullRequestSupportLoading = computed(() => gitStore.isPullRequestSupportLoading);
 
 const sections = computed<IGitSection[]>(() => {
   const nextSections: IGitSection[] = [];
@@ -660,25 +842,25 @@ const navItems = computed<IGitNavItem[]>(() => [
   {
     key: 'history',
     label: '历史',
-    count: status.value.lastCommit ? 1 : 0,
+    count: commitHistoryEntries.value.length || (status.value.lastCommit ? 1 : 0),
     active: activeTab.value === 'history',
   },
   {
     key: 'branches',
     label: '分支',
-    count: status.value.headBranchName ? 1 : 0,
+    count: branchEntries.value.length || (status.value.headBranchName ? 1 : 0),
     active: activeTab.value === 'branches',
   },
   {
     key: 'pull-requests',
     label: '拉取请求',
-    count: 0,
+    count: pullRequestSupport.value.available ? 1 : 0,
     active: activeTab.value === 'pull-requests',
   },
   {
     key: 'stash',
     label: '贮藏',
-    count: 0,
+    count: stashEntries.value.length,
     active: activeTab.value === 'stash',
   },
 ]);
@@ -752,6 +934,183 @@ const statusbarText = computed(() => {
 
   return `已同步 · ${formatRelativeTime(lastSyncedAt.value)}`;
 });
+
+const matchesSearchQuery = (parts: Array<string | null | undefined>): boolean => {
+  const keyword = searchQuery.value.trim().toLowerCase();
+  if (!keyword) {
+    return true;
+  }
+
+  return parts
+    .filter((value): value is string => Boolean(value && value.trim().length > 0))
+    .join(' ')
+    .toLowerCase()
+    .includes(keyword);
+};
+
+const filteredCommitHistory = computed(() =>
+  commitHistoryEntries.value.filter((entry) =>
+    matchesSearchQuery([entry.summary, entry.shortId, entry.authorName]),
+  ),
+);
+
+const filteredBranchEntries = computed(() =>
+  branchEntries.value.filter((entry) =>
+    matchesSearchQuery([entry.shorthand, entry.upstreamName, entry.lastCommit?.summary ?? null]),
+  ),
+);
+
+const filteredStashEntries = computed(() =>
+  stashEntries.value.filter((entry) =>
+    matchesSearchQuery([entry.stashId, entry.summary, entry.branchName]),
+  ),
+);
+
+const historyPanelTitle = computed(() => {
+  if (commitHistoryEntries.value.length > 0) {
+    return `最近 ${commitHistoryEntries.value.length} 条提交`;
+  }
+
+  return status.value.lastCommit?.summary ?? '当前仓库还没有提交记录';
+});
+
+const historyPanelText = computed(() => {
+  if (commitHistoryEntries.value.length > 0) {
+    const latestEntry = commitHistoryEntries.value[0];
+    if (!latestEntry) {
+      return '提交历史已同步。';
+    }
+
+    return `${latestEntry.shortId} · ${latestEntry.authorName} · ${formatCommitTime(latestEntry.authoredAt)}`;
+  }
+
+  return '按时间倒序展示本地提交历史，支持继续分页加载。';
+});
+
+const historyEmptyText = computed(() =>
+  searchQuery.value.trim() ? '没有匹配的提交记录。' : '当前仓库还没有提交记录。',
+);
+
+const branchesPanelText = computed(() => {
+  if (status.value.isDetached) {
+    return '当前处于 detached HEAD，切换分支前请确认工作区已经处理干净。';
+  }
+
+  return `Ahead ${status.value.ahead} · Behind ${status.value.behind} · 切换分支会执行工作区脏状态保护。`;
+});
+
+const branchesEmptyText = computed(() =>
+  searchQuery.value.trim() ? '没有匹配的分支。' : '当前仓库没有可显示的分支。',
+);
+
+const stashPanelTitle = computed(() =>
+  stashEntries.value.length > 0 ? `共有 ${stashEntries.value.length} 条贮藏` : '当前没有 Git 贮藏',
+);
+
+const stashPanelText = computed(() =>
+  totalChangeCount.value > 0
+    ? '可将当前改动保存为 stash，并按需应用、弹出或删除。'
+    : '工作区当前没有未提交改动，保存 stash 按钮会保持禁用。',
+);
+
+const stashEmptyText = computed(() =>
+  searchQuery.value.trim() ? '没有匹配的贮藏记录。' : '当前仓库没有 Git 贮藏。',
+);
+
+const pullRequestProviderLabel = computed(() => {
+  switch (pullRequestSupport.value.provider) {
+    case 'github':
+      return 'GitHub';
+    case 'gitlab':
+      return 'GitLab';
+    case 'gitea':
+      return 'Gitea';
+    case 'bitbucket':
+      return 'Bitbucket';
+    default:
+      return '未知平台';
+  }
+});
+
+const pullRequestPanelTitle = computed(() => {
+  if (isPullRequestSupportLoading.value) {
+    return '正在检测远程 Pull Request 支持';
+  }
+
+  if (pullRequestSupport.value.available) {
+    return `已检测到 ${pullRequestProviderLabel.value} 远程`;
+  }
+
+  if (pullRequestSupport.value.remoteName) {
+    return '当前远程暂未识别为可直达的 PR 平台';
+  }
+
+  return '当前仓库没有可用的远程评审入口';
+});
+
+const pullRequestPanelText = computed(() => {
+  if (pullRequestSupport.value.available) {
+    return '已根据 Git 远程地址解析出 Pull Request 列表与创建入口，点击按钮会直接打开外部页面。';
+  }
+
+  if (pullRequestSupport.value.remoteName) {
+    return '已检测到远程仓库，但当前无法可靠推导 Pull Request 页面地址。';
+  }
+
+  return '先为仓库配置远程地址，再在这里打开 PR 列表或创建入口。';
+});
+
+const canOpenPullRequestList = computed(() =>
+  Boolean(pullRequestSupport.value.pullRequestsUrl ?? pullRequestSupport.value.repositoryUrl),
+);
+
+const canOpenPullRequestCreate = computed(() =>
+  Boolean(
+    pullRequestSupport.value.createPullRequestUrl ??
+    pullRequestSupport.value.pullRequestsUrl ??
+    pullRequestSupport.value.repositoryUrl,
+  ),
+);
+
+const resolveBranchTag = (entry: IGitBranchPayload): string => {
+  if (entry.isCurrent) {
+    return '*';
+  }
+
+  return entry.kind === 'remote' ? 'R' : 'L';
+};
+
+const resolveBranchTagTone = (entry: IGitBranchPayload): string => {
+  if (entry.isCurrent) {
+    return 'added';
+  }
+
+  return entry.kind === 'remote' ? 'renamed' : 'modified';
+};
+
+const resolveBranchMeta = (entry: IGitBranchPayload): string => {
+  const segments = [entry.kind === 'remote' ? '远程分支' : '本地分支'];
+  if (entry.upstreamName) {
+    segments.push(`upstream ${entry.upstreamName}`);
+  }
+  if (entry.lastCommit) {
+    segments.push(`${entry.lastCommit.shortId} · ${entry.lastCommit.summary}`);
+  }
+
+  return segments.join(' · ');
+};
+
+const resolveStashMeta = (entry: IGitStashEntryPayload): string => {
+  const segments = [entry.stashId];
+  if (entry.branchName) {
+    segments.push(entry.branchName);
+  }
+  if (entry.commitShortId) {
+    segments.push(entry.commitShortId);
+  }
+
+  return segments.join(' · ');
+};
 
 const resolveEntryKind = (
   sectionKey: TGitSectionKey,
@@ -937,6 +1296,210 @@ const {
   syncRepositoryStatus,
 });
 
+const handleReloadCommitHistory = async (): Promise<void> => {
+  try {
+    await gitStore.loadCommitHistory();
+  } catch (error) {
+    message.error(toErrorMessage(error, '读取 Git 提交历史失败'));
+  }
+};
+
+const handleLoadMoreCommitHistory = async (): Promise<void> => {
+  try {
+    await gitStore.loadCommitHistory({ append: true });
+  } catch (error) {
+    message.error(toErrorMessage(error, '继续加载 Git 提交历史失败'));
+  }
+};
+
+const handleReloadBranches = async (): Promise<void> => {
+  try {
+    await gitStore.loadBranches();
+  } catch (error) {
+    message.error(toErrorMessage(error, '读取 Git 分支失败'));
+  }
+};
+
+const handleCreateBranch = async (): Promise<void> => {
+  const branchNameInput = promptForText('输入新的 Git 分支名称，将基于当前 HEAD 创建并立即切换。');
+  if (branchNameInput === null) {
+    return;
+  }
+
+  const branchName = branchNameInput.trim();
+  if (!branchName) {
+    message.warning('Git 分支名称不能为空。');
+    return;
+  }
+
+  try {
+    const didRun = await runWithPending('create-branch', async () => {
+      await gitStore.createBranch(branchName, true);
+      await gitStore.loadBranches();
+    });
+
+    if (!didRun) {
+      return;
+    }
+
+    markStatusSynced();
+    message.success(`已创建并切换到 ${branchName}`);
+  } catch (error) {
+    message.error(toErrorMessage(error, '创建 Git 分支失败'));
+  }
+};
+
+const handleCheckoutBranch = async (entry: IGitBranchPayload): Promise<void> => {
+  if (entry.isCurrent) {
+    return;
+  }
+
+  try {
+    const didRun = await runWithPending(`checkout-branch:${entry.name}`, async () => {
+      await gitStore.checkoutBranch(entry.shorthand);
+      await gitStore.loadBranches();
+    });
+
+    if (!didRun) {
+      return;
+    }
+
+    markStatusSynced();
+    message.success(`已切换到 ${entry.shorthand}`);
+  } catch (error) {
+    message.error(toErrorMessage(error, '切换 Git 分支失败'));
+  }
+};
+
+const handleReloadStashes = async (): Promise<void> => {
+  try {
+    await gitStore.loadStashes();
+  } catch (error) {
+    message.error(toErrorMessage(error, '读取 Git 贮藏失败'));
+  }
+};
+
+const handleSaveStash = async (): Promise<void> => {
+  const stashMessageInput = promptForText('输入可选的贮藏说明；留空则使用 Git 默认说明。', '');
+  if (stashMessageInput === null) {
+    return;
+  }
+
+  const stashMode = await dialog.confirm({
+    title: '是否同时保存未跟踪文件？',
+    description: '确认会把未跟踪文件也放入 stash；取消则只保存已跟踪改动。',
+    confirmText: '包含未跟踪',
+    cancelText: '仅已跟踪',
+    dismissText: '取消',
+    variant: 'default',
+  });
+  if (stashMode === 'dismiss') {
+    return;
+  }
+
+  const includeUntracked = stashMode === 'confirm';
+  const stashMessage = stashMessageInput.trim() || null;
+
+  try {
+    const didRun = await runWithPending('save-stash', async () => {
+      await gitStore.saveStash(stashMessage, includeUntracked);
+      await gitStore.loadStashes();
+    });
+
+    if (!didRun) {
+      return;
+    }
+
+    markStatusSynced();
+    message.success('当前改动已保存到 Git 贮藏');
+  } catch (error) {
+    message.error(toErrorMessage(error, '保存 Git 贮藏失败'));
+  }
+};
+
+const handleApplyStash = async (entry: IGitStashEntryPayload, pop: boolean): Promise<void> => {
+  if (pop) {
+    const action = await dialog.confirm({
+      title: '弹出此贮藏？',
+      description: `将应用 ${entry.stashId} 的改动并从贮藏列表移除。`,
+      confirmText: '弹出',
+      cancelText: '取消',
+      variant: 'danger',
+    });
+    if (action !== 'confirm') {
+      return;
+    }
+  }
+
+  try {
+    const didRun = await runWithPending(`${pop ? 'pop' : 'apply'}-stash:${entry.stashId}`, async () => {
+      await gitStore.applyStash(entry.index, pop);
+      await gitStore.loadStashes();
+    });
+
+    if (!didRun) {
+      return;
+    }
+
+    markStatusSynced();
+    message.success(pop ? `已弹出 ${entry.stashId}` : `已应用 ${entry.stashId}`);
+  } catch (error) {
+    message.error(toErrorMessage(error, pop ? '弹出 Git 贮藏失败' : '应用 Git 贮藏失败'));
+  }
+};
+
+const handleDropStash = async (entry: IGitStashEntryPayload): Promise<void> => {
+  const action = await dialog.confirm({
+    title: '删除此贮藏？',
+    description: `将永久删除 ${entry.stashId}。此操作无法撤销。`,
+    confirmText: '删除',
+    cancelText: '取消',
+    variant: 'danger',
+  });
+  if (action !== 'confirm') {
+    return;
+  }
+
+  try {
+    const didRun = await runWithPending(`drop-stash:${entry.stashId}`, async () => {
+      await gitStore.dropStash(entry.index);
+      await gitStore.loadStashes();
+    });
+
+    if (!didRun) {
+      return;
+    }
+
+    markStatusSynced();
+    message.success(`已删除 ${entry.stashId}`);
+  } catch (error) {
+    message.error(toErrorMessage(error, '删除 Git 贮藏失败'));
+  }
+};
+
+const handleOpenPullRequestList = (): void => {
+  const targetUrl = pullRequestSupport.value.pullRequestsUrl ?? pullRequestSupport.value.repositoryUrl;
+  if (!targetUrl) {
+    message.warning('当前没有可打开的 Pull Request 列表。');
+    return;
+  }
+
+  openExternalUrl(targetUrl);
+};
+
+const handleOpenCreatePullRequest = (): void => {
+  const targetUrl =
+    pullRequestSupport.value.createPullRequestUrl ??
+    pullRequestSupport.value.pullRequestsUrl ??
+    pullRequestSupport.value.repositoryUrl;
+  if (!targetUrl) {
+    message.warning('当前没有可打开的 Pull Request 创建入口。');
+    return;
+  }
+
+  openExternalUrl(targetUrl);
+};
+
 const {
   buildRepositoryMenuGroups,
   buildEntryMenuGroups,
@@ -955,7 +1518,7 @@ const {
   onOpenDiff: handleOpenDiff,
   onOpenFile: handleOpenFile,
   onCopyPath: async (path) => {
-    await writeClipboardText(path);
+    await writeFileSystemPathToClipboard(path);
     message.success('已复制文件路径');
   },
   onStageEntry: handleSectionAction,
@@ -1047,6 +1610,17 @@ watch(
     sourceControlActionError.value = null;
     closeSourceControlMenu();
     resetSectionCollapse();
+  },
+);
+
+watch(
+  () => activeTab.value,
+  (nextTab) => {
+    if (!hasRepository.value || nextTab === 'changes') {
+      return;
+    }
+
+    void ensureActiveTabData(nextTab);
   },
 );
 

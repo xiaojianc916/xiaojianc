@@ -26,7 +26,7 @@
     </template>
 
     <template #sidebar>
-      <AppSidebar v-show="isWorkbenchContentVisible" :document="editorStore.document" :view="activeSidebarView"
+      <DeferredAppSidebar v-show="isWorkbenchContentVisible" :document="editorStore.document" :view="activeSidebarView"
         :is-desktop-runtime="isDesktopRuntime" :workspace-root-path="editorStore.workspaceRootPath"
         :preloaded-workspace-root="startupWorkspaceRoot" :can-run="canRun" :is-running="editorStore.isRunning"
         :has-run-artifacts="editorStore.hasRunArtifacts" :active-run="editorStore.activeRunSummary"
@@ -54,7 +54,7 @@
           :is-desktop-runtime="isDesktopRuntime" @create="createNewDocument" @open="openDocument"
           @open-folder="openFolder" />
 
-        <SmartScriptEditor v-else-if="editorStore.document.kind === 'text'" ref="editorRef"
+        <DeferredSmartScriptEditor v-else-if="editorStore.document.kind === 'text'" ref="editorRef"
           :document-id="editorStore.document.id" :document-path="editorStore.document.path"
           :document-name="editorStore.document.name" :model-value="editorStore.document.content" :theme="appStore.theme"
           :editor-settings="appStore.settings.editor" :can-run="canRun" @update:model-value="updateContent"
@@ -75,7 +75,7 @@
     </div>
 
     <template #terminal>
-      <RunPanel v-show="isWorkbenchContentVisible" ref="runPanelRef"
+      <DeferredRunPanel v-show="isWorkbenchContentVisible" ref="runPanelRef"
         :terminal-output-length="editorStore.terminalOutputLength"
         :terminal-output-version="editorStore.terminalOutputVersion"
         :resolve-terminal-output="editorStore.getTerminalOutputSnapshot" :run-logs="editorStore.runLogs"
@@ -91,20 +91,14 @@
     </template>
 
     <template #right-sidebar>
-      <AiAssistantPanel
-        v-show="isWorkbenchContentVisible"
-        :document="editorStore.document"
-        :active-run="editorStore.activeRunSummary"
-        :analysis="editorStore.activeScriptAnalysis"
-        :selection="editorStore.activeSelectionSummary"
-        :git-status="gitStore.status"
-        :workspace-root-path="editorStore.workspaceRootPath"
-        @open-patch-diff="openGitDiffPreviewPayload"
-      />
+      <DeferredAiAssistantPanel v-show="isWorkbenchContentVisible" :document="editorStore.document"
+        :active-run="editorStore.activeRunSummary" :analysis="editorStore.activeScriptAnalysis"
+        :selection="editorStore.activeSelectionSummary" :git-status="gitStore.status"
+        :workspace-root-path="editorStore.workspaceRootPath" @open-patch-diff="openGitDiffPreviewPayload" />
     </template>
 
     <template #statusbar>
-      <WorkbenchStatusBar :has-active-document="editorStore.hasActiveDocument"
+      <DeferredWorkbenchStatusBar :has-active-document="editorStore.hasActiveDocument"
         :document-kind="editorStore.document.kind" :status-message="statusbarMessage"
         :script-analysis="editorStore.activeScriptAnalysis" :encoding="editorStore.document.encoding"
         :executor="editorStore.selectedExecutor" :cursor-line="editorStore.cursorLine"
@@ -122,21 +116,42 @@
 </template>
 
 <script setup lang="ts">
-import AiAssistantPanel from '@/components/business/ai/AiAssistantPanel.vue';
 import WindowTitleBar from '@/components/common/WindowTitleBar.vue';
 import AiDiffPreviewEditor from '@/components/editor/AiDiffPreviewEditor.vue';
 import EmptyEditorState from '@/components/editor/EmptyEditorState.vue';
 import GitDiffViewer from '@/components/editor/GitDiffViewer.vue';
 import ImageAssetPreview from '@/components/editor/ImageAssetPreview.vue';
-import SmartScriptEditor from '@/components/editor/SmartScriptEditor.vue';
 import ActivityRail from '@/components/workbench/ActivityRail.vue';
-import AppSidebar from '@/components/workbench/AppSidebar.vue';
-import RunPanel from '@/components/workbench/RunPanel.vue';
 import WorkbenchHeader from '@/components/workbench/WorkbenchHeader.vue';
 import WorkbenchSettingsOverlay from '@/components/workbench/WorkbenchSettingsOverlay.vue';
-import WorkbenchStatusBar from '@/components/workbench/WorkbenchStatusBar.vue';
 import { useShellWorkbenchView } from '@/composables/useShellWorkbenchView';
 import AppShellLayout from '@/layouts/AppShellLayout.vue';
+import { defineAsyncComponent } from 'vue';
+
+const DeferredAppSidebar = defineAsyncComponent({
+  loader: () => import('@/components/workbench/AppSidebar.vue'),
+  suspensible: false,
+});
+
+const DeferredSmartScriptEditor = defineAsyncComponent({
+  loader: () => import('@/components/editor/SmartScriptEditor.vue'),
+  suspensible: false,
+});
+
+const DeferredRunPanel = defineAsyncComponent({
+  loader: () => import('@/components/workbench/RunPanel.vue'),
+  suspensible: false,
+});
+
+const DeferredAiAssistantPanel = defineAsyncComponent({
+  loader: () => import('@/components/business/ai/AiAssistantPanel.vue'),
+  suspensible: false,
+});
+
+const DeferredWorkbenchStatusBar = defineAsyncComponent({
+  loader: () => import('@/components/workbench/WorkbenchStatusBar.vue'),
+  suspensible: false,
+});
 
 const emit = defineEmits<{
   ready: [];

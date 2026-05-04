@@ -1,8 +1,12 @@
 import { tauriService } from '@/services/tauri';
 import type {
+  IGitBranchPayload,
   IGitCommitResultPayload,
+  IGitCommitSummaryPayload,
   IGitFileBaselinePayload,
+  IGitPullRequestSupportPayload,
   IGitRepositoryStatusPayload,
+  IGitStashEntryPayload,
 } from '@/types/git';
 import { areFileSystemPathsEqual, normalizeFileSystemPath } from '@/utils/path';
 import { defineStore } from 'pinia';
@@ -54,6 +58,15 @@ const deduplicatePaths = (paths: string[]): string[] => {
   return result;
 };
 
+const createEmptyPullRequestSupport = (): IGitPullRequestSupportPayload => ({
+  available: false,
+  remoteName: null,
+  provider: 'unknown',
+  repositoryUrl: null,
+  pullRequestsUrl: null,
+  createPullRequestUrl: null,
+});
+
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
@@ -78,6 +91,16 @@ export const useGitStore = defineStore('git', () => {
   const isLoading = ref(false);
   const baselineCache = ref<Record<string, IGitFileBaselinePayload>>({});
   const baselineEpoch = ref(0);
+  const commitHistory = ref<IGitCommitSummaryPayload[]>([]);
+  const commitHistoryHasMore = ref(false);
+  const commitHistoryNextOffset = ref<number | null>(0);
+  const isCommitHistoryLoading = ref(false);
+  const branches = ref<IGitBranchPayload[]>([]);
+  const isBranchesLoading = ref(false);
+  const stashes = ref<IGitStashEntryPayload[]>([]);
+  const isStashesLoading = ref(false);
+  const pullRequestSupport = ref<IGitPullRequestSupportPayload>(createEmptyPullRequestSupport());
+  const isPullRequestSupportLoading = ref(false);
 
   // monotonically increasing id for status fetches; used to discard stale results.
   let statusRequestId = 0;
@@ -101,12 +124,40 @@ export const useGitStore = defineStore('git', () => {
       status.value.untrackedCount +
       status.value.conflictedCount,
   );
+  const canLoadMoreCommitHistory = computed(
+    () => commitHistoryHasMore.value && commitHistoryNextOffset.value !== null,
+  );
 
   // -- baseline cache --------------------------------------------------------
 
   const clearBaselineCache = (): void => {
     baselineCache.value = {};
     baselineEpoch.value += 1;
+  };
+
+  const resetCommitHistory = (): void => {
+    commitHistory.value = [];
+    commitHistoryHasMore.value = false;
+    commitHistoryNextOffset.value = 0;
+  };
+
+  const resetBranches = (): void => {
+    branches.value = [];
+  };
+
+  const resetStashes = (): void => {
+    stashes.value = [];
+  };
+
+  const resetPullRequestSupport = (): void => {
+    pullRequestSupport.value = createEmptyPullRequestSupport();
+  };
+
+  const resetSupplementaryData = (): void => {
+    resetCommitHistory();
+    resetBranches();
+    resetStashes();
+    resetPullRequestSupport();
   };
 
   const invalidateFileBaseline = (path?: string | null): void => {
@@ -156,8 +207,13 @@ export const useGitStore = defineStore('git', () => {
   const reset = (): void => {
     statusRequestId += 1;
     isLoading.value = false;
+    isCommitHistoryLoading.value = false;
+    isBranchesLoading.value = false;
+    isStashesLoading.value = false;
+    isPullRequestSupportLoading.value = false;
     status.value = createEmptyGitRepositoryStatus();
     clearBaselineCache();
+    resetSupplementaryData();
   };
 
   const applyStatus = (
@@ -172,6 +228,7 @@ export const useGitStore = defineStore('git', () => {
 
     if (previousRepositoryRoot !== nextRepositoryRoot || !payload.available) {
       clearBaselineCache();
+      resetSupplementaryData();
     }
     return payload;
   };
@@ -299,12 +356,158 @@ export const useGitStore = defineStore('git', () => {
     return payload;
   };
 
+  const loadCommitHistory = async (options?: {
+    append?: boolean;
+    limit?: number;
+  }): Promise<IGitCommitSummaryPayload[]> => {
+    const append = options?.append ?? false;
+    const nextOffset = append ? commitHistoryNextOffset.value : 0;
+    if (append && nextOffset === null) {
+      return commitHistory.value;
+    }
+
+    isCommitHistoryLoading.value = true;
+    try {
+      const payload = await tauriService.listGitCommitHistory({
+        repositoryRootPath: requireRepositoryRootPath(),
+        offset: nextOffset ?? 0,
+        limit: options?.limit,
+      });
+
+      commitHistory.value = append
+        ? [...commitHistory.value, ...payload.entries]
+        : payload.entries;
+      commitHistoryHasMore.value = payload.hasMore;
+      commitHistoryNextOffset.value = payload.nextOffset;
+      return commitHistory.value;
+    } finally {
+      isCommitHistoryLoading.value = false;
+    }
+  };
+
+  const loadBranches = async (): Promise<IGitBranchPayload[]> => {
+    isBranchesLoading.value = true;
+    try {
+      const payload = await tauriService.listGitBranches({
+        repositoryRootPath: requireRepositoryRootPath(),
+      });
+      branches.value = payload.branches;
+      return branches.value;
+    } finally {
+      isBranchesLoading.value = false;
+    }
+  };
+
+  const loadStashes = async (): Promise<IGitStashEntryPayload[]> => {
+    isStashesLoading.value = true;
+    try {
+      const payload = await tauriService.listGitStashes({
+        repositoryRootPath: requireRepositoryRootPath(),
+      });
+      stashes.value = payload.entries;
+      return stashes.value;
+    } finally {
+      isStashesLoading.value = false;
+    }
+  };
+
+  const loadPullRequestSupport = async (): Promise<IGitPullRequestSupportPayload> => {
+    isPullRequestSupportLoading.value = true;
+    try {
+      const payload = await tauriService.getGitPullRequestSupport({
+        repositoryRootPath: requireRepositoryRootPath(),
+      });
+      pullRequestSupport.value = payload;
+      return pullRequestSupport.value;
+    } finally {
+      isPullRequestSupportLoading.value = false;
+    }
+  };
+
+  const checkoutBranch = async (
+    branchName: string,
+  ): Promise<IGitRepositoryStatusPayload> => {
+    const payload = await tauriService.checkoutGitBranch({
+      repositoryRootPath: requireRepositoryRootPath(),
+      branchName,
+    });
+    clearBaselineCache();
+    resetBranches();
+    return applyStatus(payload);
+  };
+
+  const createBranch = async (
+    branchName: string,
+    checkout: boolean,
+  ): Promise<IGitRepositoryStatusPayload> => {
+    const payload = await tauriService.createGitBranch({
+      repositoryRootPath: requireRepositoryRootPath(),
+      branchName,
+      checkout,
+    });
+    if (checkout) {
+      clearBaselineCache();
+    }
+    resetBranches();
+    return applyStatus(payload);
+  };
+
+  const saveStash = async (
+    message: string | null,
+    includeUntracked: boolean,
+  ): Promise<IGitRepositoryStatusPayload> => {
+    const payload = await tauriService.saveGitStash({
+      repositoryRootPath: requireRepositoryRootPath(),
+      message,
+      includeUntracked,
+    });
+    clearBaselineCache();
+    resetStashes();
+    return applyStatus(payload);
+  };
+
+  const applyStash = async (
+    stashIndex: number,
+    pop: boolean,
+  ): Promise<IGitRepositoryStatusPayload> => {
+    const payload = await tauriService.applyGitStash({
+      repositoryRootPath: requireRepositoryRootPath(),
+      stashIndex,
+      pop,
+    });
+    clearBaselineCache();
+    resetStashes();
+    return applyStatus(payload);
+  };
+
+  const dropStash = async (
+    stashIndex: number,
+  ): Promise<IGitRepositoryStatusPayload> => {
+    const payload = await tauriService.dropGitStash({
+      repositoryRootPath: requireRepositoryRootPath(),
+      stashIndex,
+    });
+    resetStashes();
+    return applyStatus(payload);
+  };
+
   return {
     status,
     isLoading,
     hasRepository,
     totalChangeCount,
     baselineEpoch,
+    commitHistory,
+    commitHistoryHasMore,
+    commitHistoryNextOffset,
+    isCommitHistoryLoading,
+    canLoadMoreCommitHistory,
+    branches,
+    isBranchesLoading,
+    stashes,
+    isStashesLoading,
+    pullRequestSupport,
+    isPullRequestSupportLoading,
     refreshRepositoryStatus,
     initRepository,
     getFileBaseline,
@@ -314,6 +517,15 @@ export const useGitStore = defineStore('git', () => {
     unstagePaths,
     discardPaths,
     commitIndex,
+    loadCommitHistory,
+    loadBranches,
+    loadStashes,
+    loadPullRequestSupport,
+    checkoutBranch,
+    createBranch,
+    saveStash,
+    applyStash,
+    dropStash,
     reset,
   };
 });

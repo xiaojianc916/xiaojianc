@@ -8,11 +8,24 @@ import SourceControlPanel from './SourceControlPanel.vue';
 const tauriServiceMock = vi.hoisted(() => ({
   getGitRepositoryStatus: vi.fn(),
   initGitRepository: vi.fn(),
+  listGitCommitHistory: vi.fn(),
+  listGitBranches: vi.fn(),
+  checkoutGitBranch: vi.fn(),
+  createGitBranch: vi.fn(),
   getGitFileBaseline: vi.fn(),
   stageGitPaths: vi.fn(),
   unstageGitPaths: vi.fn(),
   discardGitPaths: vi.fn(),
   commitGitIndex: vi.fn(),
+  listGitStashes: vi.fn(),
+  saveGitStash: vi.fn(),
+  applyGitStash: vi.fn(),
+  dropGitStash: vi.fn(),
+  getGitPullRequestSupport: vi.fn(),
+}));
+
+const clipboardMock = vi.hoisted(() => ({
+  writeFileSystemPathToClipboard: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/services/tauri', () => ({
@@ -20,7 +33,7 @@ vi.mock('@/services/tauri', () => ({
 }));
 
 vi.mock('@/utils/clipboard', () => ({
-  writeClipboardText: vi.fn().mockResolvedValue(undefined),
+  writeFileSystemPathToClipboard: clipboardMock.writeFileSystemPathToClipboard,
 }));
 
 const createStatus = (
@@ -102,6 +115,75 @@ const unavailableStatus = createStatus({
   lastCommit: null,
 });
 
+const commitHistoryPayload = {
+  entries: [
+    {
+      id: 'commit-2',
+      shortId: 'def5678',
+      summary: 'fix: 修正边界处理',
+      authorName: 'test',
+      authoredAt: '2026-04-27T00:00:00.000Z',
+    },
+    {
+      id: 'commit-1',
+      shortId: 'abc1234',
+      summary: 'feat: 初始化项目',
+      authorName: 'test',
+      authoredAt: '2026-04-26T00:00:00.000Z',
+    },
+  ],
+  hasMore: false,
+  nextOffset: null,
+};
+
+const branchListPayload = {
+  branches: [
+    {
+      name: 'refs/heads/main',
+      shorthand: 'main',
+      kind: 'local',
+      upstreamName: 'origin/main',
+      isCurrent: true,
+      isHead: true,
+      ahead: 0,
+      behind: 0,
+      lastCommit: cleanStatus.lastCommit,
+    },
+    {
+      name: 'refs/heads/feature/demo',
+      shorthand: 'feature/demo',
+      kind: 'local',
+      upstreamName: null,
+      isCurrent: false,
+      isHead: false,
+      ahead: 0,
+      behind: 0,
+      lastCommit: cleanStatus.lastCommit,
+    },
+  ],
+};
+
+const stashListPayload = {
+  entries: [
+    {
+      index: 0,
+      stashId: 'stash@{0}',
+      summary: 'On main: demo stash',
+      branchName: 'main',
+      commitShortId: 'abc1234',
+    },
+  ],
+};
+
+const pullRequestSupportPayload = {
+  available: true,
+  remoteName: 'origin',
+  provider: 'github',
+  repositoryUrl: 'https://github.com/owner/repo',
+  pullRequestsUrl: 'https://github.com/owner/repo/pulls',
+  createPullRequestUrl: 'https://github.com/owner/repo/compare',
+};
+
 const mountPanel = async (status = createStatus()) => {
   tauriServiceMock.getGitRepositoryStatus.mockResolvedValue(status);
   const wrapper = mount(SourceControlPanel, {
@@ -123,6 +205,11 @@ describe('SourceControlPanel', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
+    vi.spyOn(window, 'open').mockImplementation(() => null);
+    tauriServiceMock.listGitCommitHistory.mockResolvedValue(commitHistoryPayload);
+    tauriServiceMock.listGitBranches.mockResolvedValue(branchListPayload);
+    tauriServiceMock.checkoutGitBranch.mockResolvedValue(cleanStatus);
+    tauriServiceMock.createGitBranch.mockResolvedValue(cleanStatus);
     tauriServiceMock.stageGitPaths.mockResolvedValue(cleanStatus);
     tauriServiceMock.unstageGitPaths.mockResolvedValue(cleanStatus);
     tauriServiceMock.discardGitPaths.mockResolvedValue(cleanStatus);
@@ -130,6 +217,11 @@ describe('SourceControlPanel', () => {
       status: cleanStatus,
       commit: cleanStatus.lastCommit,
     });
+    tauriServiceMock.listGitStashes.mockResolvedValue(stashListPayload);
+    tauriServiceMock.saveGitStash.mockResolvedValue(cleanStatus);
+    tauriServiceMock.applyGitStash.mockResolvedValue(createStatus({ unstagedCount: 1, isClean: false }));
+    tauriServiceMock.dropGitStash.mockResolvedValue(cleanStatus);
+    tauriServiceMock.getGitPullRequestSupport.mockResolvedValue(pullRequestSupportPayload);
     window.addEventListener(APP_DIALOG_EVENT, confirmDialog);
   });
 
@@ -222,6 +314,41 @@ describe('SourceControlPanel', () => {
     ]);
   });
 
+  it('右键菜单的复制路径会走文件系统路径剪贴板封装', async () => {
+    const wrapper = await mountPanel(createStatus({
+      files: [
+        {
+          path: String.raw`\\?\D:\repo\src\app.sh`,
+          relativePath: 'src/app.sh',
+          fileName: 'app.sh',
+          previousPath: null,
+          previousRelativePath: null,
+          indexStatus: null,
+          worktreeStatus: 'modified',
+          isConflicted: false,
+          isUntracked: false,
+        },
+      ],
+    }));
+
+    await wrapper.find('.source-control-file').trigger('contextmenu', {
+      clientX: 160,
+      clientY: 180,
+    });
+    await flushPromises();
+
+    const copyPathMenuItem = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.cmx-i'))
+      .find((button) => button.textContent?.includes('复制路径'));
+    expect(copyPathMenuItem).toBeDefined();
+
+    copyPathMenuItem?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(clipboardMock.writeFileSystemPathToClipboard).toHaveBeenCalledWith(
+      String.raw`\\?\D:\repo\src\app.sh`,
+    );
+  });
+
   it('单文件放弃更改会二次确认并调用 discard_git_paths', async () => {
     const wrapper = await mountPanel();
 
@@ -268,5 +395,110 @@ describe('SourceControlPanel', () => {
       repositoryRootPath: 'D:/repo',
       message: '随便写点提交说明。',
     });
+  });
+
+  it('切换到历史标签时会加载并渲染提交历史', async () => {
+    const wrapper = await mountPanel();
+
+    const historyTab = wrapper
+      .findAll('.source-control-nav-item')
+      .find((button) => button.text().includes('历史'));
+    expect(historyTab).toBeDefined();
+
+    await historyTab?.trigger('click');
+    await flushPromises();
+
+    expect(tauriServiceMock.listGitCommitHistory).toHaveBeenCalledWith({
+      repositoryRootPath: 'D:/repo',
+      offset: 0,
+      limit: undefined,
+    });
+    expect(wrapper.text()).toContain('fix: 修正边界处理');
+  });
+
+  it('分支标签里的切换按钮会调用 checkout_git_branch', async () => {
+    tauriServiceMock.listGitBranches
+      .mockResolvedValueOnce(branchListPayload)
+      .mockResolvedValueOnce({
+        branches: branchListPayload.branches.map((entry) => ({
+          ...entry,
+          isCurrent: entry.shorthand === 'feature/demo',
+          isHead: entry.shorthand === 'feature/demo',
+        })),
+      });
+
+    const wrapper = await mountPanel();
+    const branchTab = wrapper
+      .findAll('.source-control-nav-item')
+      .find((button) => button.text().includes('分支'));
+    expect(branchTab).toBeDefined();
+
+    await branchTab?.trigger('click');
+    await flushPromises();
+
+    const checkoutButton = wrapper
+      .findAll('.source-control-btn')
+      .find((button) => button.text() === '切换');
+    expect(checkoutButton).toBeDefined();
+
+    await checkoutButton?.trigger('click');
+    await flushPromises();
+
+    expect(tauriServiceMock.checkoutGitBranch).toHaveBeenCalledWith({
+      repositoryRootPath: 'D:/repo',
+      branchName: 'feature/demo',
+    });
+  });
+
+  it('贮藏标签里的应用按钮会调用 apply_git_stash', async () => {
+    tauriServiceMock.listGitStashes
+      .mockResolvedValueOnce(stashListPayload)
+      .mockResolvedValueOnce(stashListPayload);
+
+    const wrapper = await mountPanel();
+    const stashTab = wrapper
+      .findAll('.source-control-nav-item')
+      .find((button) => button.text().includes('贮藏'));
+    expect(stashTab).toBeDefined();
+
+    await stashTab?.trigger('click');
+    await flushPromises();
+
+    const applyButton = wrapper
+      .findAll('.source-control-btn')
+      .find((button) => button.text() === '应用');
+    expect(applyButton).toBeDefined();
+
+    await applyButton?.trigger('click');
+    await flushPromises();
+
+    expect(tauriServiceMock.applyGitStash).toHaveBeenCalledWith({
+      repositoryRootPath: 'D:/repo',
+      stashIndex: 0,
+      pop: false,
+    });
+  });
+
+  it('拉取请求标签会打开创建 PR 页面', async () => {
+    const wrapper = await mountPanel();
+    const pullRequestTab = wrapper
+      .findAll('.source-control-nav-item')
+      .find((button) => button.text().includes('拉取请求'));
+    expect(pullRequestTab).toBeDefined();
+
+    await pullRequestTab?.trigger('click');
+    await flushPromises();
+
+    const createButton = wrapper
+      .findAll('.source-control-toolbar-btn')
+      .find((button) => button.text() === '创建 PR');
+    expect(createButton).toBeDefined();
+
+    await createButton?.trigger('click');
+    expect(window.open).toHaveBeenCalledWith(
+      'https://github.com/owner/repo/compare',
+      '_blank',
+      'noopener,noreferrer',
+    );
   });
 });

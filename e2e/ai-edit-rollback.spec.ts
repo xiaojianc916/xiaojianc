@@ -202,6 +202,9 @@ const installAedRuntimeMock = async (page: Page): Promise<void> => {
                 });
 
                 switch (command) {
+                    case 'begin_startup_transition':
+                    case 'finalize_startup_transition':
+                        return null;
                     case 'plugin:event|listen':
                         return state.nextListenerId++;
                     case 'plugin:event|unlisten':
