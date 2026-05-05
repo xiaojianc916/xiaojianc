@@ -7,7 +7,7 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from '@/components/ai-elements/conversation';
-import { LoaderCircle } from 'lucide-vue-next';
+import { Loader } from '@/components/ai-elements/loader';
 import { computed } from 'vue';
 import AiMessageItem from './AiMessageItem.vue';
 import AiProviderIcon from './AiProviderIcon.vue';
@@ -37,14 +37,14 @@ const hasInlineProgressMessage = computed(() => {
   }
 
   const isEmptyAssistantPlaceholder =
-    !lastMessage.content.trim()
-    && !lastMessage.toolCalls?.length
-    && !lastMessage.actions?.length;
+    !lastMessage.content.trim() && !lastMessage.toolCalls?.length && !lastMessage.actions?.length;
 
-  return lastMessage.stream?.status === 'streaming'
-    || Boolean(lastMessage.toolCalls?.length)
-    || isEmptyAssistantPlaceholder
-    || TOOL_PROGRESS_PREFIXES.some((prefix) => lastMessage.content.trim().startsWith(prefix));
+  return (
+    lastMessage.stream?.status === 'streaming' ||
+    Boolean(lastMessage.toolCalls?.length) ||
+    isEmptyAssistantPlaceholder ||
+    TOOL_PROGRESS_PREFIXES.some((prefix) => lastMessage.content.trim().startsWith(prefix))
+  );
 });
 
 const shouldRenderStandaloneTyping = computed(
@@ -63,13 +63,9 @@ const lastAssistantMessageId = computed(() => {
   return null;
 });
 
-const handleMessageAction = (
-  messageId: string,
-  actionId: TAiChatMessageActionId,
-): void => {
+const handleMessageAction = (messageId: string, actionId: TAiChatMessageActionId): void => {
   emit('messageAction', messageId, actionId);
 };
-
 </script>
 
 <template>
@@ -100,7 +96,7 @@ const handleMessageAction = (
       >
         <AiProviderIcon class="ai-logo" :platform-id="platformId" :title="providerLabel" />
         <div class="typing-status" role="status" aria-live="polite">
-          <LoaderCircle class="typing-status-icon" aria-hidden="true" />
+          <Loader class="typing-status-icon" :size="13" />
           <span>AI 正在准备回复</span>
         </div>
       </article>
@@ -111,9 +107,7 @@ const handleMessageAction = (
       title="开始一段 AI 对话"
       description="输入你的问题，AI 会结合当前文件、选择区和工作区上下文给出回答。"
     />
-    <template #overlay>
-      <ConversationScrollButton class="ai-chat-scroll-button" />
-    </template>
+    <ConversationScrollButton class="ai-chat-scroll-button" />
   </Conversation>
 </template>
 
@@ -182,20 +176,6 @@ const handleMessageAction = (
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
-  animation: ai-typing-status-spin 900ms linear infinite;
   color: var(--text-tertiary);
-  stroke-width: 2;
-}
-
-@keyframes ai-typing-status-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .typing-status-icon {
-    animation: none;
-  }
 }
 </style>

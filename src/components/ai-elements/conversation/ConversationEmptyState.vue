@@ -2,28 +2,33 @@
 import type { HTMLAttributes } from 'vue';
 import { cn } from '@/lib/utils';
 
-const props = withDefaults(defineProps<{
+interface Props {
   class?: HTMLAttributes['class'];
   title?: string;
   description?: string;
-}>(), {
+}
+
+const props = withDefaults(defineProps<Props>(), {
   class: undefined,
-  title: '开始一段 AI 对话',
-  description: '在下方输入问题，AI 会结合当前工作区给出回答。',
+  title: 'No messages yet',
+  description: 'Start a conversation to see messages here',
 });
 </script>
 
 <template>
   <div
-    :class="cn('flex size-full flex-col items-center justify-center gap-3 p-8 text-center', props.class)"
+    :class="
+      cn('flex size-full flex-col items-center justify-center gap-3 p-8 text-center', props.class)
+    "
     v-bind="$attrs"
   >
     <slot>
       <div v-if="$slots.icon" class="text-muted-foreground">
         <slot name="icon" />
       </div>
+
       <div class="space-y-1">
-        <h3 class="text-sm font-medium">
+        <h3 class="font-medium text-sm">
           {{ props.title }}
         </h3>
         <p v-if="props.description" class="text-muted-foreground text-sm">

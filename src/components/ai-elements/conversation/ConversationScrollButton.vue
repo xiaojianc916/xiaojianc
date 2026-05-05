@@ -6,28 +6,33 @@ import { ArrowDownIcon } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useStickToBottomContext } from 'vue-stick-to-bottom';
 
-const props = withDefaults(defineProps<{
+interface Props {
   class?: HTMLAttributes['class'];
-}>(), {
-  class: undefined,
-});
+}
 
+const props = defineProps<Props>();
 const { isAtBottom, scrollToBottom } = useStickToBottomContext();
-const shouldShow = computed(() => !isAtBottom.value);
+const showScrollButton = computed(() => !isAtBottom.value);
 
-const handleClick = (): void => {
-  void scrollToBottom('smooth');
-};
+function handleClick() {
+  scrollToBottom();
+}
 </script>
 
 <template>
   <Button
-    v-if="shouldShow"
-    :class="cn('rounded-full bg-background/92 shadow-sm backdrop-blur-sm hover:bg-muted', props.class)"
-    aria-label="滚动到底部"
+    v-if="showScrollButton"
+    :class="
+      cn(
+        'absolute bottom-4 left-[50%] translate-x-[-50%] rounded-full dark:bg-background dark:hover:bg-muted',
+        props.class,
+      )
+    "
+    aria-label="Scroll to bottom"
     size="icon"
     type="button"
     variant="outline"
+    v-bind="$attrs"
     @click="handleClick"
   >
     <ArrowDownIcon class="size-4" />

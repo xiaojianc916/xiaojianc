@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue';
-import { InputGroupAddon } from '@/components/ui/input-group';
 import { cn } from '@/lib/utils';
 
-interface Props {
+interface Props extends /* @vue-ignore */ HTMLAttributes {
   class?: HTMLAttributes['class'];
 }
 
@@ -11,11 +10,10 @@ const props = defineProps<Props>();
 </script>
 
 <template>
-  <InputGroupAddon
-    align="block-end"
-    :class="cn('justify-between gap-1', props.class)"
+  <h3
+    :class="cn('mb-2 px-3 font-medium text-muted-foreground text-xs', props.class)"
     v-bind="props"
   >
     <slot />
-  </InputGroupAddon>
+  </h3>
 </template>

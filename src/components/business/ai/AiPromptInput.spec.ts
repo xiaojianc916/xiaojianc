@@ -1,7 +1,7 @@
 import AiPromptInput from '@/components/business/ai/AiPromptInput.vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import { defineComponent, nextTick } from 'vue';
+import { nextTick } from 'vue';
 
 interface IAiPromptInputTestAttachment {
   id: string;
@@ -23,34 +23,21 @@ interface IAiPromptInputTestProps {
   'onUpdate:modelValue': (value: string) => void;
 }
 
-const mountPromptInput = (overrides: Partial<IAiPromptInputTestProps> = {}) => mount(AiPromptInput, {
-  props: {
-    modelValue: '',
-    disabled: false,
-    errorMessage: '',
-    submitLabel: '发送',
-    activeMode: 'agent',
-    providerLabel: 'DeepSeek',
-    attachments: [],
-    hasAttachments: false,
-    'onUpdate:modelValue': () => undefined,
-    ...overrides,
-  },
-  global: {
-    stubs: {
-      AppDropdownMenu: defineComponent({
-        name: 'AppDropdownMenuStub',
-        props: {
-          items: {
-            type: Array,
-            default: () => [],
-          },
-        },
-        template: '<div class="app-dropdown-menu-stub"><slot name="trigger" :open="false" /></div>',
-      }),
+const mountPromptInput = (overrides: Partial<IAiPromptInputTestProps> = {}) =>
+  mount(AiPromptInput, {
+    props: {
+      modelValue: '',
+      disabled: false,
+      errorMessage: '',
+      submitLabel: '发送',
+      activeMode: 'agent',
+      providerLabel: 'DeepSeek',
+      attachments: [],
+      hasAttachments: false,
+      'onUpdate:modelValue': () => undefined,
+      ...overrides,
     },
-  },
-});
+  });
 
 describe('AiPromptInput', () => {
   it('emits pasted image files as attachments', async () => {
@@ -81,7 +68,7 @@ describe('AiPromptInput', () => {
   it('emits fileSelected when choosing a file from attachments shortcut', async () => {
     const wrapper = mountPromptInput();
     const file = new File(['readme'], 'README.md', { type: 'text/markdown' });
-    const fileInput = wrapper.get('.ai-file-input');
+    const fileInput = wrapper.get('input[type="file"]');
 
     Object.defineProperty(fileInput.element, 'files', {
       configurable: true,
@@ -169,15 +156,11 @@ describe('AiPromptInput', () => {
     expect(wrapper.text()).toContain('Agent');
   });
 
-  it('assigns icons to chat agent plan menu items', () => {
+  it('uses the official prompt select for chat agent plan modes', () => {
     const wrapper = mountPromptInput();
-    const dropdown = wrapper.findComponent({ name: 'AppDropdownMenuStub' });
-    const items = dropdown.props('items') as Array<{ key: string; icon?: string }>;
 
-    expect(items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'chat', icon: 'message' }),
-      expect.objectContaining({ key: 'agent', icon: 'sparkles' }),
-      expect.objectContaining({ key: 'plan', icon: 'list' }),
-    ]));
+    expect(wrapper.find('.ai-mode-button').exists()).toBe(true);
+    expect(wrapper.find('.app-dropdown-menu-stub').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Agent');
   });
 });

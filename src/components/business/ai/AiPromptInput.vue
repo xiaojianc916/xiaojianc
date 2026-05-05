@@ -1,18 +1,33 @@
 <script setup lang="ts">
-import { PromptInputBody, PromptInputFooter } from '@/components/ai-elements/prompt-input';
-import AppDropdownMenu from '@/components/common/AppDropdownMenu.vue';
-import { InputGroup } from '@/components/ui/input-group';
-import { Brain, Paperclip } from 'lucide-vue-next';
-import { computed } from 'vue';
+import type { PromptInputMessage } from '@/components/ai-elements/prompt-input';
+import {
+  PromptInput,
+  PromptInputActionAddAttachments,
+  PromptInputActionMenu,
+  PromptInputActionMenuContent,
+  PromptInputActionMenuTrigger,
+  PromptInputBody,
+  PromptInputButton,
+  PromptInputFooter,
+  PromptInputSelect,
+  PromptInputSelectContent,
+  PromptInputSelectItem,
+  PromptInputSelectTrigger,
+  PromptInputSelectValue,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+  usePromptInput,
+} from '@/components/ai-elements/prompt-input';
+import { Brain, FileText, Image as ImageIcon, Paperclip, X } from 'lucide-vue-next';
+import { computed, defineComponent, watch } from 'vue';
 
 type TAiPromptInputMode = 'chat' | 'agent' | 'plan';
-type TAiPromptMenuIcon = 'message' | 'sparkles' | 'list';
-type IAiPromptMenuItem = {
+
+interface IAiPromptModeOption {
   key: TAiPromptInputMode;
   label: string;
-  icon: TAiPromptMenuIcon;
-  selected: boolean;
-};
+}
 
 const modelValue = defineModel<string>({ required: true });
 
@@ -40,6 +55,62 @@ const emit = defineEmits<{
   selectMode: [mode: TAiPromptInputMode];
 }>();
 
+const isBrowserFile = (value: unknown): value is File =>
+  typeof File !== 'undefined' && value instanceof File;
+
+const PromptInputModelBridge = defineComponent({
+  name: 'PromptInputModelBridge',
+  props: {
+    modelValue: {
+      type: String,
+      required: true,
+    },
+  },
+  emits: {
+    'update:modelValue': (value: string) => typeof value === 'string',
+    fileSelected: (file: File) => isBrowserFile(file),
+  },
+  setup(bridgeProps, { emit: bridgeEmit }) {
+    const { textInput, setTextInput, files, clearFiles } = usePromptInput();
+
+    watch(
+      () => bridgeProps.modelValue,
+      (value) => {
+        if (textInput.value !== value) {
+          setTextInput(value);
+        }
+      },
+      { immediate: true },
+    );
+
+    watch(textInput, (value) => {
+      if (value !== bridgeProps.modelValue) {
+        bridgeEmit('update:modelValue', value);
+      }
+    });
+
+    watch(
+      files,
+      (items) => {
+        if (items.length === 0) {
+          return;
+        }
+
+        for (const item of items) {
+          if (isBrowserFile(item.file)) {
+            bridgeEmit('fileSelected', item.file);
+          }
+        }
+
+        clearFiles();
+      },
+      { flush: 'sync' },
+    );
+
+    return () => null;
+  },
+});
+
 const modeLabel = computed(() => {
   switch (props.activeMode) {
     case 'chat':
@@ -51,24 +122,18 @@ const modeLabel = computed(() => {
   }
 });
 
-const modeMenuItems = computed<IAiPromptMenuItem[]>(() => [
+const modeOptions = computed<IAiPromptModeOption[]>(() => [
   {
     key: 'chat',
     label: 'Chat',
-    icon: 'message',
-    selected: props.activeMode === 'chat',
   },
   {
     key: 'agent',
     label: 'Agent',
-    icon: 'sparkles',
-    selected: props.activeMode === 'agent',
   },
   {
     key: 'plan',
     label: 'Plan',
-    icon: 'list',
-    selected: props.activeMode === 'plan',
   },
 ]);
 
@@ -76,41 +141,23 @@ const isPlanModeActive = computed(() => props.activeMode === 'plan');
 const chainOfThoughtTitle = computed(() =>
   isPlanModeActive.value ? '当前为 Plan 模式' : '切换到 Plan 模式',
 );
+const canSubmit = computed(() => modelValue.value.trim().length > 0 || props.hasAttachments);
 
-const handleKeydown = (event: KeyboardEvent): void => {
-  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
-  event.preventDefault();
-  if ((!modelValue.value.trim() && !props.hasAttachments) || props.disabled) return;
+const handlePromptSubmit = (message: PromptInputMessage): void => {
+  if (props.disabled || (!message.text.trim() && !props.hasAttachments)) {
+    return;
+  }
+
+  if (modelValue.value !== message.text) {
+    modelValue.value = message.text;
+  }
+
   emit('submit');
 };
 
-const handleFileChange = (event: Event): void => {
-  const target = event.target;
-  if (!(target instanceof HTMLInputElement)) return;
-  const file = target.files?.[0];
-  target.value = '';
-  if (!file) return;
-  emit('fileSelected', file);
-};
-
-const handlePaste = (event: ClipboardEvent): void => {
-  if (props.disabled) return;
-  const imageFiles = Array.from(event.clipboardData?.items ?? [])
-    .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
-    .map((item) => item.getAsFile())
-    .filter((file): file is File => file !== null);
-
-  if (imageFiles.length === 0) return;
-
-  event.preventDefault();
-  for (const file of imageFiles) {
-    emit('fileSelected', file);
-  }
-};
-
-const handleModeSelect = (key: string): void => {
-  if (key === 'chat' || key === 'agent' || key === 'plan') {
-    emit('selectMode', key);
+const handleModeSelect = (value: unknown): void => {
+  if (value === 'chat' || value === 'agent' || value === 'plan') {
+    emit('selectMode', value);
   }
 };
 
@@ -122,139 +169,128 @@ const handlePlanShortcutClick = (): void => {
 <template>
   <footer class="ai-composer">
     <p v-if="errorMessage" class="ai-error">{{ errorMessage }}</p>
-    <InputGroup
+    <PromptInput
       class="ai-composer-surface"
       :class="{ 'is-disabled': disabled, 'has-attachments': attachments.length > 0 }"
+      :initial-input="modelValue"
+      multiple
+      @submit="handlePromptSubmit"
     >
+      <PromptInputModelBridge
+        :model-value="modelValue"
+        @update:model-value="modelValue = $event"
+        @file-selected="emit('fileSelected', $event)"
+      />
+
       <PromptInputBody>
         <div v-if="attachments.length" class="ai-attachment-strip" aria-label="已添加附件">
           <span v-for="attachment in attachments" :key="attachment.id" class="ai-attachment-chip">
-            <svg
-              v-if="attachment.kind === 'image'"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              aria-hidden="true"
-            >
-              <rect x="3" y="4" width="18" height="16" rx="2" />
-              <circle cx="8.5" cy="9" r="1.5" />
-              <path d="m21 15-4.5-4.5L7 20" />
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <path d="M14 2v6h6" />
-            </svg>
+            <ImageIcon v-if="attachment.kind === 'image'" aria-hidden="true" />
+            <FileText v-else aria-hidden="true" />
             <span class="ai-attachment-name">{{ attachment.name }}</span>
-            <span v-if="attachment.kind !== 'image' && attachment.detailLabel" class="ai-attachment-detail">
+            <span
+              v-if="attachment.kind !== 'image' && attachment.detailLabel"
+              class="ai-attachment-detail"
+            >
               {{ attachment.detailLabel }}
             </span>
-            <button type="button" aria-label="移除附件" title="移除附件" @click="emit('removeFile', attachment.id)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                <path d="M18 6 6 18" />
-                <path d="m6 6 12 12" />
-              </svg>
+            <button
+              type="button"
+              aria-label="移除附件"
+              title="移除附件"
+              @click="emit('removeFile', attachment.id)"
+            >
+              <X aria-hidden="true" />
             </button>
           </span>
         </div>
 
-        <div class="ai-textarea-shell">
-          <textarea
-            ref="textareaRef"
-            v-model="modelValue"
-            data-slot="input-group-control"
-            rows="4"
-            placeholder="输入消息…"
-            aria-label="输入消息"
-            :disabled="disabled"
-            @keydown="handleKeydown"
-            @paste="handlePaste"
-          />
-        </div>
+        <PromptInputTextarea
+          class="ai-prompt-textarea"
+          placeholder="输入消息…"
+          aria-label="输入消息"
+          :disabled="disabled"
+        />
       </PromptInputBody>
 
       <PromptInputFooter class="ai-toolbar-row">
-        <div class="ai-toolbar-group ai-toolbar-tools">
-          <label
-            class="ai-tool-button ai-tool-button-attachment"
-            :class="{ disabled }"
-            aria-label="添加附件"
+        <PromptInputTools class="ai-toolbar-group ai-toolbar-tools">
+          <PromptInputActionMenu v-if="!disabled">
+            <PromptInputActionMenuTrigger
+              class="ai-tool-button ai-tool-button-attachment"
+              title="添加附件"
+            >
+              <Paperclip class="ai-tool-button-icon" aria-hidden="true" />
+              <span class="ai-tool-button-label">Attachments</span>
+            </PromptInputActionMenuTrigger>
+            <PromptInputActionMenuContent align="start">
+              <PromptInputActionAddAttachments label="添加附件" />
+            </PromptInputActionMenuContent>
+          </PromptInputActionMenu>
+          <PromptInputButton
+            v-else
+            class="ai-tool-button ai-tool-button-attachment disabled"
+            disabled
             title="添加附件"
           >
-            <input class="ai-file-input" type="file" :disabled="disabled" @change="handleFileChange" />
             <Paperclip class="ai-tool-button-icon" aria-hidden="true" />
             <span class="ai-tool-button-label">Attachments</span>
-          </label>
+          </PromptInputButton>
 
-          <button
-            type="button"
+          <PromptInputButton
             class="ai-tool-button ai-tool-button-thought"
             :class="{ 'is-active': isPlanModeActive }"
             :aria-label="chainOfThoughtTitle"
             :aria-pressed="isPlanModeActive"
+            :disabled="disabled"
             :title="chainOfThoughtTitle"
             @click="handlePlanShortcutClick"
           >
             <Brain class="ai-tool-button-icon" aria-hidden="true" />
             <span class="ai-tool-button-label">Chain of Thought</span>
-          </button>
-        </div>
+          </PromptInputButton>
+        </PromptInputTools>
 
         <div class="ai-toolbar-group is-end">
-          <AppDropdownMenu
-            :items="modeMenuItems"
-            align="right"
-            :min-width="136"
-            content-class="ai-prompt-mode-menu-panel"
-            @select="handleModeSelect"
-          >
-            <template #trigger="{ open }">
-              <button type="button" class="ai-mode-button" :aria-label="modeLabel" :title="providerLabel">
-                <span class="ai-mode-button-copy">
-                  <span class="ai-mode-button-mode">{{ modeLabel }}</span>
-                </span>
-                <svg
-                  class="ai-mode-button-chevron"
-                  :class="{ 'is-open': open }"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  aria-hidden="true"
-                >
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-              </button>
-            </template>
-          </AppDropdownMenu>
+          <PromptInputSelect :model-value="activeMode" @update:model-value="handleModeSelect">
+            <PromptInputSelectTrigger
+              class="ai-mode-button"
+              :title="providerLabel"
+              aria-label="选择 AI 模式"
+            >
+              <PromptInputSelectValue class="ai-mode-button-copy">
+                <span class="ai-mode-button-mode">{{ modeLabel }}</span>
+              </PromptInputSelectValue>
+            </PromptInputSelectTrigger>
+            <PromptInputSelectContent align="end">
+              <PromptInputSelectItem
+                v-for="option in modeOptions"
+                :key="option.key"
+                :value="option.key"
+              >
+                {{ option.label }}
+              </PromptInputSelectItem>
+            </PromptInputSelectContent>
+          </PromptInputSelect>
 
-          <button
+          <PromptInputSubmit
             v-if="disabled"
-            type="button"
             class="ai-send-button is-stop"
+            status="streaming"
             aria-label="停止"
             title="停止"
-            @click="emit('stop')"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-              <rect x="7" y="7" width="10" height="10" rx="1" />
-            </svg>
-          </button>
-          <button
+            @click.stop.prevent="emit('stop')"
+          />
+          <PromptInputSubmit
             v-else
-            type="button"
             class="ai-send-button"
             :aria-label="submitLabel"
             :title="submitLabel"
-            :disabled="!modelValue.trim() && !hasAttachments"
-            @click="emit('submit')"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-              <path d="M21.5 2.5L11 13" />
-              <path d="M21.5 2.5l-6.5 19-4-8.5-8.5-4 19-6.5z" />
-            </svg>
-          </button>
+            :disabled="!canSubmit"
+          />
         </div>
       </PromptInputFooter>
-    </InputGroup>
+    </PromptInput>
   </footer>
 </template>
 
@@ -280,23 +316,30 @@ const handlePlanShortcutClick = (): void => {
 }
 
 .ai-composer-surface {
-  display: grid;
-  gap: 8px;
-  height: auto;
+  display: block;
   min-width: 0;
+}
+
+.ai-composer-surface :deep([data-slot='input-group']) {
+  display: flex;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
   align-items: stretch;
+  gap: 8px;
   border: 1px solid color-mix(in srgb, var(--shell-divider) 72%, transparent);
   border-radius: 12px;
   background: color-mix(in srgb, var(--panel-bg) 94%, var(--surface-soft));
+  box-shadow: none;
   padding: 0 10px 8px;
   transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.ai-composer-surface.has-attachments {
+.ai-composer-surface.has-attachments :deep([data-slot='input-group']) {
   padding-top: 8px;
 }
 
-.ai-composer-surface.is-disabled {
+.ai-composer-surface.is-disabled :deep([data-slot='input-group']) {
   opacity: 0.94;
 }
 
@@ -327,8 +370,6 @@ const handlePlanShortcutClick = (): void => {
   height: 13px;
   flex: 0 0 auto;
   stroke-width: 1.75;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .ai-attachment-name {
@@ -363,17 +404,9 @@ const handlePlanShortcutClick = (): void => {
   width: 12px;
   height: 12px;
   stroke-width: 1.75;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
-.ai-textarea-shell {
-  display: flex;
-  min-width: 0;
-  min-height: 44px;
-}
-
-.ai-textarea-shell textarea {
+.ai-prompt-textarea {
   box-sizing: border-box;
   min-width: 0;
   width: 100%;
@@ -393,17 +426,18 @@ const handlePlanShortcutClick = (): void => {
   resize: none;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--shell-divider) 72%, transparent) transparent;
+  box-shadow: none;
 }
 
-.ai-textarea-shell textarea::placeholder {
+.ai-prompt-textarea::placeholder {
   color: var(--text-quaternary);
 }
 
-.ai-textarea-shell textarea::-webkit-scrollbar {
+.ai-prompt-textarea::-webkit-scrollbar {
   width: 8px;
 }
 
-.ai-textarea-shell textarea::-webkit-scrollbar-thumb {
+.ai-prompt-textarea::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
@@ -517,6 +551,7 @@ const handlePlanShortcutClick = (): void => {
 }
 
 .ai-mode-button:hover {
+  background: transparent;
   color: var(--text-primary);
 }
 
@@ -540,21 +575,6 @@ const handlePlanShortcutClick = (): void => {
   text-transform: uppercase;
 }
 
-.ai-mode-button-chevron {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  color: var(--text-quaternary);
-  stroke-width: 1.9;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.ai-mode-button-chevron.is-open {
-  transform: rotate(180deg);
-}
-
 .ai-send-button {
   display: inline-flex;
   align-items: center;
@@ -571,6 +591,7 @@ const handlePlanShortcutClick = (): void => {
 }
 
 .ai-send-button:hover:not(:disabled) {
+  background: transparent;
   color: var(--text-primary);
 }
 
@@ -591,21 +612,5 @@ const handlePlanShortcutClick = (): void => {
   width: 16px;
   height: 16px;
   stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.ai-send-button.is-stop:hover,
-.ai-tool-button:hover,
-.ai-mode-button:hover {
-  color: var(--text-primary);
-}
-
-.ai-file-input {
-  display: none;
-}
-
-:global(.dropdown-menu-panel.ai-prompt-mode-menu-panel) {
-  box-shadow: none;
 }
 </style>

@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { reactiveOmit } from '@vueuse/core';
 import { StickToBottom } from 'vue-stick-to-bottom';
 
-interface IConversationProps {
+interface Props {
   ariaLabel?: string;
   class?: HTMLAttributes['class'];
   initial?: boolean | 'instant' | { damping?: number; stiffness?: number; mass?: number };
@@ -15,32 +15,25 @@ interface IConversationProps {
   anchor?: 'auto' | 'none';
 }
 
-const props = withDefaults(defineProps<IConversationProps>(), {
-  ariaLabel: 'AI 对话记录',
+const props = withDefaults(defineProps<Props>(), {
+  ariaLabel: 'Conversation',
   class: undefined,
   initial: true,
   resize: undefined,
   damping: 0.7,
   stiffness: 0.05,
   mass: 1.25,
-  anchor: 'auto',
+  anchor: 'none',
 });
-
 const delegatedProps = reactiveOmit(props, 'class');
 </script>
 
 <template>
   <StickToBottom
     v-bind="delegatedProps"
-    :class="cn('relative flex min-h-0 flex-1 overflow-y-hidden', props.class)"
+    :class="cn('relative flex-1 overflow-y-hidden', props.class)"
     role="log"
   >
     <slot />
-    <template #overlay>
-      <slot name="overlay" />
-    </template>
-    <template #after>
-      <slot name="after" />
-    </template>
   </StickToBottom>
 </template>

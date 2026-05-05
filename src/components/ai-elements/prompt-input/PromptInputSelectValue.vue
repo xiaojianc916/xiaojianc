@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import type { SelectValueProps } from 'reka-ui';
 import type { HTMLAttributes } from 'vue';
-import { InputGroupAddon } from '@/components/ui/input-group';
+import { SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
-interface Props {
+interface Props extends SelectValueProps {
   class?: HTMLAttributes['class'];
 }
 
@@ -11,11 +12,7 @@ const props = defineProps<Props>();
 </script>
 
 <template>
-  <InputGroupAddon
-    align="block-end"
-    :class="cn('justify-between gap-1', props.class)"
-    v-bind="props"
-  >
+  <SelectValue :class="cn(props.class)" v-bind="props">
     <slot />
-  </InputGroupAddon>
+  </SelectValue>
 </template>
