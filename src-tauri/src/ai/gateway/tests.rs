@@ -1,7 +1,7 @@
 use super::connection::{resolve_direct_upstream_endpoint, should_try_direct_upstream_fallback};
 use super::conversation::{
-    build_conversation_title_prompt, build_identity_system_prompt,
-    normalize_conversation_title, with_identity_system_message,
+    build_conversation_title_prompt, build_identity_system_prompt, normalize_conversation_title,
+    with_identity_system_message,
 };
 use super::suggestions::{normalize_suggestion_text, parse_suggestion_pool_response};
 use super::{
@@ -24,11 +24,9 @@ fn litellm_provider_uses_local_proxy_defaults() {
 
 #[test]
 fn deepseek_model_routes_to_direct_upstream_when_default_litellm_is_unavailable() {
-    let endpoint = resolve_direct_upstream_endpoint(
-        DEFAULT_LITELLM_BASE_URL,
-        "deepseek/deepseek-v4-pro",
-    )
-    .expect("deepseek route should resolve");
+    let endpoint =
+        resolve_direct_upstream_endpoint(DEFAULT_LITELLM_BASE_URL, "deepseek/deepseek-v4-pro")
+            .expect("deepseek route should resolve");
 
     assert_eq!(endpoint.provider_name, "DeepSeek");
     assert_eq!(endpoint.base_url, "https://api.deepseek.com");
@@ -37,11 +35,8 @@ fn deepseek_model_routes_to_direct_upstream_when_default_litellm_is_unavailable(
 
 #[test]
 fn zhipu_model_routes_to_direct_upstream_when_default_litellm_is_unavailable() {
-    let endpoint = resolve_direct_upstream_endpoint(
-        DEFAULT_LITELLM_BASE_URL,
-        "zhipu/glm-4-flash",
-    )
-    .expect("zhipu route should resolve");
+    let endpoint = resolve_direct_upstream_endpoint(DEFAULT_LITELLM_BASE_URL, "zhipu/glm-4-flash")
+        .expect("zhipu route should resolve");
 
     assert_eq!(endpoint.provider_name, "智谱 GLM");
     assert_eq!(endpoint.base_url, "https://open.bigmodel.cn/api/paas/v4");
@@ -136,7 +131,13 @@ fn conversation_title_generation_prefers_narrator_model() {
         .unwrap_or(DEFAULT_NARRATOR_MODEL);
 
     assert_eq!(model, "zhipu/glm-4-flash");
-    assert_ne!(model, config.selected_model.as_deref().unwrap_or(DEFAULT_LITELLM_MODEL));
+    assert_ne!(
+        model,
+        config
+            .selected_model
+            .as_deref()
+            .unwrap_or(DEFAULT_LITELLM_MODEL)
+    );
 }
 
 #[test]

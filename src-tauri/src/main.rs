@@ -12,6 +12,7 @@ mod ai_tools;
 mod commands;
 mod error;
 mod terminal;
+mod wsl_link;
 
 use ai_edit::AiEditState;
 use commands::{
@@ -27,18 +28,17 @@ use commands::{
     ai_narrate_activity, ai_narrate_activity_stream, ai_propose_patch, ai_query_index,
     ai_save_config, ai_save_credentials, ai_switch_provider_profile, ai_test_provider,
     ai_test_provider_config, ai_web_fetch, ai_web_search, analyze_script, apply_git_stash,
-    apply_window_stage, begin_startup_transition, cancel_terminal_run, checkout_git_branch,
-    close_terminal_session, commit_git_index, create_git_branch, create_ssh_directory,
-    create_workspace_path, delete_ssh_path, delete_workspace_path, detect_execution_environment,
-    discard_git_paths, dispatch_script_to_terminal, download_ssh_file, drop_git_stash,
-    ensure_terminal_session, finalize_startup_transition, format_script, get_git_diff_preview,
-    get_git_file_baseline, get_git_pull_request_support, get_git_repository_status,
-    init_git_repository, list_git_branches, list_git_commit_history, list_git_stashes,
-    list_ssh_config_hosts, list_ssh_directory, list_workspace_entries, load_image_asset,
-    load_script, rename_ssh_path, rename_workspace_path, resize_terminal_session, save_git_stash,
-    save_script, search_workspace, set_window_background, shutdown_all_terminal_sessions,
-    stage_git_paths, test_ssh_connection, unstage_git_paths, upload_ssh_file, write_terminal_input,
-    TerminalSessionState,
+    apply_window_stage, cancel_terminal_run, checkout_git_branch, close_terminal_session,
+    commit_git_index, create_git_branch, create_ssh_directory, create_workspace_path,
+    delete_ssh_path, delete_workspace_path, detect_execution_environment, discard_git_paths,
+    dispatch_script_to_terminal, download_ssh_file, drop_git_stash, ensure_terminal_session,
+    format_script, get_git_diff_preview, get_git_file_baseline, get_git_pull_request_support,
+    get_git_repository_status, get_wsl_link_status, init_git_repository, list_git_branches,
+    list_git_commit_history, list_git_stashes, list_ssh_config_hosts, list_ssh_directory,
+    list_workspace_entries, load_image_asset, load_script, rename_ssh_path, rename_workspace_path,
+    resize_terminal_session, save_git_stash, save_script, search_workspace, set_window_background,
+    shutdown_all_terminal_sessions, stage_git_paths, test_ssh_connection, unstage_git_paths,
+    upload_ssh_file, write_terminal_input, TerminalSessionState,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
@@ -46,6 +46,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, WindowEvent,
 };
+use wsl_link::runtime::WslLinkRuntimeState;
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const TRAY_ICON_ID: &str = "main-tray";
@@ -90,10 +91,9 @@ fn request_app_exit<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) {
 }
 
 fn setup_system_tray<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
-    let show_item = tauri::menu::MenuItemBuilder::with_id(TRAY_MENU_SHOW_ID, "显示主窗口")
-        .build(app)?;
-    let quit_item = tauri::menu::MenuItemBuilder::with_id(TRAY_MENU_QUIT_ID, "退出")
-        .build(app)?;
+    let show_item =
+        tauri::menu::MenuItemBuilder::with_id(TRAY_MENU_SHOW_ID, "显示主窗口").build(app)?;
+    let quit_item = tauri::menu::MenuItemBuilder::with_id(TRAY_MENU_QUIT_ID, "退出").build(app)?;
     let menu = MenuBuilder::new(app)
         .item(&show_item)
         .separator()
@@ -174,6 +174,7 @@ fn main() {
         .manage(AiEditState::default())
         .manage(AppLifecycleState::default())
         .manage(TerminalSessionState::default())
+        .manage(WslLinkRuntimeState::default())
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let app_handle = window.app_handle();
@@ -210,14 +211,13 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             apply_window_stage,
             set_window_background,
-            begin_startup_transition,
-            finalize_startup_transition,
             load_script,
             load_image_asset,
             save_script,
             analyze_script,
             format_script,
             detect_execution_environment,
+            get_wsl_link_status,
             dispatch_script_to_terminal,
             list_workspace_entries,
             create_workspace_path,

@@ -10,6 +10,7 @@ import type {
     TExecutorKind,
 } from '@/types/editor';
 import type { IGitDiffPreviewRequest } from '@/types/git';
+import { computed, ref, watch } from 'vue';
 import appBrandIcon from '../../../assets/brand/1.svg';
 
 type TPrimarySidebarView = Exclude<TWorkbenchSidebarView, 'ai'>;
@@ -19,7 +20,9 @@ interface ISidebarTabItem {
     view: TPrimarySidebarView;
 }
 
-defineProps<{
+type TSidebarSwitchDirection = 'forward' | 'backward' | 'none';
+
+const props = defineProps<{
     activeView: TWorkbenchSidebarView;
     isAiMode: boolean;
     document: IEditorDocument;
@@ -54,41 +57,96 @@ const sidebarTabs: readonly ISidebarTabItem[] = [
     { label: '运行', view: 'run' },
     { label: 'SSH', view: 'extensions' },
 ] as const;
+
+const activeTabIndex = computed(() =>
+    Math.max(0, sidebarTabs.findIndex((item) => item.view === props.activeView)),
+);
+const switchDirection = ref<TSidebarSwitchDirection>('none');
+
+watch(
+    activeTabIndex,
+    (nextIndex, previousIndex) => {
+        if (previousIndex === undefined || nextIndex === previousIndex) {
+            switchDirection.value = 'none';
+            return;
+        }
+
+        switchDirection.value = nextIndex > previousIndex ? 'forward' : 'backward';
+    },
+    { flush: 'sync' },
+);
+
 </script>
 
 <template>
     <aside class="workbench-dashboard-sidebar flex h-full min-h-0 flex-col overflow-hidden bg-(--sidebar-bg)">
         <div class="workbench-dashboard-sidebar__brand-slot">
-            <button type="button" class="workbench-dashboard-sidebar__brand-button app-tooltip-target"
-                :title="isAiMode ? '切换到编辑区' : '切换到 AI 界面'" :aria-label="isAiMode ? '切换到编辑区' : '切换到 AI 界面'"
-                :data-tooltip="isAiMode ? '切换到编辑区' : '切换到 AI 界面'" data-tooltip-placement="bottom"
-                data-tooltip-lock-placement="true" @click="emit('toggle-primary-mode')">
+            <button
+                type="button"
+                class="workbench-dashboard-sidebar__brand-button app-tooltip-target"
+                :title="props.isAiMode ? '切换到编辑区' : '切换到 AI 界面'"
+                :aria-label="props.isAiMode ? '切换到编辑区' : '切换到 AI 界面'"
+                :data-tooltip="props.isAiMode ? '切换到编辑区' : '切换到 AI 界面'"
+                data-tooltip-placement="bottom"
+                data-tooltip-lock-placement="true"
+                @click="emit('toggle-primary-mode')"
+            >
                 <img class="workbench-dashboard-sidebar__brand-icon" :src="appBrandIcon" alt="软件图标">
             </button>
         </div>
 
         <header class="workbench-dashboard-sidebar__toolbar-shell border-b border-(--shell-divider) px-3 py-3">
             <nav class="workbench-dashboard-sidebar__toolbar" aria-label="工作台侧边栏切换">
-                <button v-for="item in sidebarTabs" :key="item.view" type="button"
+                <button
+                    v-for="item in sidebarTabs"
+                    :key="item.view"
+                    type="button"
                     class="workbench-dashboard-sidebar__toolbar-button app-tooltip-target"
-                    :class="{ 'is-active': activeView === item.view }" :title="item.label" :aria-label="item.label"
-                    :aria-pressed="activeView === item.view" :data-tooltip="item.label" data-tooltip-placement="bottom"
-                    data-tooltip-lock-placement="true" @click="emit('select-view', item.view)">
+                    :class="{ 'is-active': props.activeView === item.view }"
+                    :title="item.label"
+                    :aria-label="item.label"
+                    :aria-pressed="props.activeView === item.view"
+                    :data-tooltip="item.label"
+                    data-tooltip-placement="bottom"
+                    data-tooltip-lock-placement="true"
+                    @click="emit('select-view', item.view)"
+                >
                     <span class="workbench-dashboard-sidebar__toolbar-icon" aria-hidden="true">
-                        <svg v-if="item.view === 'explorer'" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <svg
+                            v-if="item.view === 'explorer'"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
                             <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
                             <path d="M14 3v5h5" />
                         </svg>
 
-                        <svg v-else-if="item.view === 'search'" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <svg
+                            v-else-if="item.view === 'search'"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
                             <circle cx="11" cy="11" r="6.5" />
                             <path d="M20 20l-3.5-3.5" />
                         </svg>
 
-                        <svg v-else-if="item.view === 'source-control'" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <svg
+                            v-else-if="item.view === 'source-control'"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
                             <circle cx="6" cy="6" r="2.5" />
                             <circle cx="18" cy="4" r="2.5" />
                             <circle cx="18" cy="18" r="2.5" />
@@ -96,36 +154,72 @@ const sidebarTabs: readonly ISidebarTabItem[] = [
                             <path d="M15.5 6.5V9" />
                         </svg>
 
-                        <svg v-else-if="item.view === 'run'" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                        <svg
+                            v-else-if="item.view === 'run'"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
                             <rect x="3.5" y="5" width="17" height="14" rx="2" />
                             <path d="M7 9l3 3-3 3" />
                             <path d="M12.5 15h4.5" />
                         </svg>
 
-                        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
-                            stroke-linecap="round" stroke-linejoin="round">
+                        <svg
+                            v-else
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
                             <rect x="3.5" y="4" width="17" height="16" rx="2.5" />
                             <path d="M8 9l4 4-4 4" />
                             <path d="M13.5 17h2.5" />
                         </svg>
                     </span>
 
-                    <span v-if="activeView === item.view" class="workbench-dashboard-sidebar__toolbar-label">
-                        {{ item.label }}
+                    <span class="workbench-dashboard-sidebar__toolbar-label-wrap" aria-hidden="true">
+                        <span class="workbench-dashboard-sidebar__toolbar-label">
+                            {{ item.label }}
+                        </span>
                     </span>
                 </button>
             </nav>
         </header>
 
-        <div class="min-h-0 flex-1 overflow-hidden">
-            <AppSidebar :document="document" :view="activeView" :is-desktop-runtime="isDesktopRuntime"
-                :workspace-root-path="workspaceRootPath" :preloaded-workspace-root="preloadedWorkspaceRoot"
-                :can-run="canRun" :is-running="isRunning" :has-run-artifacts="hasRunArtifacts" :active-run="activeRun"
-                :run-history="runHistory" :command-templates="commandTemplates" :executor="executor"
-                @open-file="emit('open-file', $event)" @open-git-diff="emit('open-git-diff', $event)" @run="emit('run')"
-                @create-document="emit('create-document')" @open-terminal="emit('open-terminal')"
-                @insert-template="emit('insert-template', $event)" @clear-run-history="emit('clear-run-history')" />
+        <div
+            class="workbench-dashboard-sidebar__panel-host min-h-0 flex-1 overflow-hidden"
+            :data-switch-direction="switchDirection"
+        >
+            <Transition name="workbench-sidebar-panel">
+                <AppSidebar
+                    :key="props.activeView"
+                    :document="props.document"
+                    :view="props.activeView"
+                    :is-desktop-runtime="props.isDesktopRuntime"
+                    :workspace-root-path="props.workspaceRootPath"
+                    :preloaded-workspace-root="props.preloadedWorkspaceRoot"
+                    :can-run="props.canRun"
+                    :is-running="props.isRunning"
+                    :has-run-artifacts="props.hasRunArtifacts"
+                    :active-run="props.activeRun"
+                    :run-history="props.runHistory"
+                    :command-templates="props.commandTemplates"
+                    :executor="props.executor"
+                    @open-file="emit('open-file', $event)"
+                    @open-git-diff="emit('open-git-diff', $event)"
+                    @run="emit('run')"
+                    @create-document="emit('create-document')"
+                    @open-terminal="emit('open-terminal')"
+                    @insert-template="emit('insert-template', $event)"
+                    @clear-run-history="emit('clear-run-history')"
+                />
+            </Transition>
         </div>
     </aside>
 </template>
@@ -140,7 +234,7 @@ const sidebarTabs: readonly ISidebarTabItem[] = [
     align-items: center;
     min-height: 28px;
     padding: 8px 18px 2px;
-    background: #fafafa;
+    background: var(--sidebar-bg);
     flex-shrink: 0;
 }
 
@@ -159,7 +253,7 @@ const sidebarTabs: readonly ISidebarTabItem[] = [
 }
 
 .workbench-dashboard-sidebar__brand-button:hover {
-    background: color-mix(in srgb, var(--shell-divider) 12%, #fafafa);
+    background: color-mix(in srgb, var(--shell-divider) 12%, var(--sidebar-bg));
 }
 
 .workbench-dashboard-sidebar__brand-button:focus-visible {
@@ -179,14 +273,21 @@ const sidebarTabs: readonly ISidebarTabItem[] = [
 }
 
 .workbench-dashboard-sidebar__toolbar-shell {
-    background: #fafafa;
+    background: var(--sidebar-bg);
 }
 
 .workbench-dashboard-sidebar__toolbar {
+    --sidebar-pill-ease: cubic-bezier(0.32, 0.72, 0, 1);
+    --sidebar-pill-duration: 160ms;
+    --sidebar-pill-label-delay: 24ms;
+    --sidebar-pill-label-duration: 130ms;
+    --sidebar-pill-state-duration: 90ms;
+
     display: flex;
     align-items: center;
     gap: 6px;
     overflow-x: auto;
+    padding: 0;
     scrollbar-width: none;
 }
 
@@ -195,30 +296,40 @@ const sidebarTabs: readonly ISidebarTabItem[] = [
 }
 
 .workbench-dashboard-sidebar__toolbar-button {
+    position: relative;
     display: inline-flex;
     min-width: 38px;
     height: 38px;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 0;
+    overflow: hidden;
     border-radius: 999px;
     padding: 0 10px;
     color: var(--text-secondary);
+    white-space: nowrap;
     transition:
-        background-color 180ms ease,
-        color 180ms ease,
-        box-shadow 180ms ease;
+        background-color var(--sidebar-pill-state-duration) ease,
+        color var(--sidebar-pill-state-duration) ease,
+        gap var(--sidebar-pill-duration) var(--sidebar-pill-ease);
 }
 
-.workbench-dashboard-sidebar__toolbar-button:hover {
-    color: var(--text-primary);
-    background: #fafafa;
+@media (hover: hover) and (pointer: fine) {
+    .workbench-dashboard-sidebar__toolbar-button:hover {
+        background: color-mix(in srgb, var(--shell-divider) 12%, transparent);
+        color: var(--text-primary);
+    }
 }
 
 .workbench-dashboard-sidebar__toolbar-button.is-active {
+    gap: 8px;
+    background: color-mix(in srgb, var(--shell-divider) 18%, transparent);
     color: var(--text-primary);
-    background: #fafafa;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--shell-divider) 86%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--shell-divider) 66%, transparent);
+}
+
+.workbench-dashboard-sidebar__toolbar-button:active {
+    background: color-mix(in srgb, var(--shell-divider) 24%, transparent);
 }
 
 .workbench-dashboard-sidebar__toolbar-icon {
@@ -235,13 +346,108 @@ const sidebarTabs: readonly ISidebarTabItem[] = [
     height: 18px;
 }
 
+.workbench-dashboard-sidebar__toolbar-label-wrap {
+    display: grid;
+    grid-template-columns: 0fr;
+    transition: grid-template-columns var(--sidebar-pill-duration) var(--sidebar-pill-ease);
+}
+
 .workbench-dashboard-sidebar__toolbar-label {
+    min-width: 0;
+    overflow: hidden;
     white-space: nowrap;
     font-size: 13px;
     font-weight: 500;
+    opacity: 0;
+    transform: translateX(-3px);
+    transition:
+        opacity var(--sidebar-pill-label-duration) ease var(--sidebar-pill-label-delay),
+        transform var(--sidebar-pill-duration) var(--sidebar-pill-ease) var(--sidebar-pill-label-delay);
+}
+
+.workbench-dashboard-sidebar__toolbar-button.is-active .workbench-dashboard-sidebar__toolbar-label-wrap {
+    grid-template-columns: 1fr;
+}
+
+.workbench-dashboard-sidebar__toolbar-button.is-active .workbench-dashboard-sidebar__toolbar-label {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.workbench-dashboard-sidebar__panel-host {
+    --sidebar-panel-enter-x: 0px;
+    --sidebar-panel-leave-x: 0px;
+
+    position: relative;
+    contain: layout paint;
+}
+
+.workbench-dashboard-sidebar__panel-host :deep(.app-sidebar-shell) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+}
+
+.workbench-dashboard-sidebar__panel-host[data-switch-direction='forward'] {
+    --sidebar-panel-enter-x: 12px;
+    --sidebar-panel-leave-x: -10px;
+}
+
+.workbench-dashboard-sidebar__panel-host[data-switch-direction='backward'] {
+    --sidebar-panel-enter-x: -12px;
+    --sidebar-panel-leave-x: 10px;
+}
+
+:deep(.workbench-sidebar-panel-enter-active) {
+    transition:
+        opacity 220ms var(--motion-easing-emphasized),
+        transform 240ms var(--motion-easing-emphasized),
+        filter 220ms var(--motion-easing-emphasized);
+}
+
+:deep(.workbench-sidebar-panel-leave-active) {
+    transition:
+        opacity 130ms var(--motion-easing-exit),
+        transform 130ms var(--motion-easing-exit),
+        filter 130ms var(--motion-easing-exit);
+}
+
+:deep(.workbench-sidebar-panel-enter-from) {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateX(var(--sidebar-panel-enter-x)) scale(0.992);
+}
+
+:deep(.workbench-sidebar-panel-leave-to) {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateX(var(--sidebar-panel-leave-x)) scale(0.992);
+}
+
+:deep(.workbench-sidebar-panel-enter-to),
+:deep(.workbench-sidebar-panel-leave-from) {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateX(0) scale(1);
 }
 
 :deep(.app-sidebar-shell) {
     background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .workbench-dashboard-sidebar__toolbar-button,
+    .workbench-dashboard-sidebar__toolbar-label,
+    .workbench-dashboard-sidebar__toolbar-label-wrap,
+    :deep(.workbench-sidebar-panel-enter-active),
+    :deep(.workbench-sidebar-panel-leave-active) {
+        transition: none;
+    }
+
+    :deep(.workbench-sidebar-panel-enter-from),
+    :deep(.workbench-sidebar-panel-leave-to) {
+        filter: none;
+        transform: none;
+    }
 }
 </style>

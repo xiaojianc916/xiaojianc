@@ -52,6 +52,11 @@
 | 首屏 TTI | 工作台挂载完成事件 |
 | 关键操作 P95 | ShellCheck 分析 / shfmt 格式化 / Git 状态刷新 |
 | JS 堆内存水位 | 每 5 分钟采样 |
+| WSL Link RTT | `wsl_link_rtt_ms`，按 active transport 维度聚合 |
+| WSL Link 重连次数 | `wsl_link_reconnects_total`，区分 reconnect / resume |
+| WSL Link inflight 请求数 | `wsl_link_inflight_requests`，用于识别阻塞和背压 |
+| WSL Link outbox 深度 | `wsl_link_outbox_depth`，用于识别 WAL 堆积 |
+| WSL Link 当前通道 | `wsl_link_active_transport`，取值 `vsockGrpc` / `mirroredQuic` |
 
 ---
 

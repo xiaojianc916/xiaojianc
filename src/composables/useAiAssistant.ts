@@ -1,4 +1,4 @@
-import { computed, ref, shallowRef, unref, type Ref } from 'vue';
+import { computed, ref, shallowRef, unref, watch, type Ref } from 'vue';
 
 import { useAiAgentPlan } from '@/composables/useAiAgentPlan';
 import { useAiStream } from '@/composables/useAiStream';
@@ -738,6 +738,32 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const aiStream = useAiStream();
   const agentPlan = useAiAgentPlan();
   const { refreshSidecarChangedDocuments } = useSidecarChangedDocumentRefresh();
+
+  const syncActiveAssistantMessage = (): void => {
+    const current = activeAssistantMessage.value;
+
+    if (!current) {
+      return;
+    }
+
+    current.content = aiStream.content.value;
+    current.stream = {
+      status: mapStreamStatus(aiStream.status.value),
+    };
+
+    messages.value = [
+      ...activeAssistantBaseMessages.value,
+      { ...current },
+    ];
+  };
+
+  watch(
+    () => [aiStream.content.value, aiStream.status.value] as const,
+    () => {
+      syncActiveAssistantMessage();
+    },
+    { flush: 'sync' },
+  );
 
   const maybeGenerateConversationTitle = async (threadId: string | null): Promise<void> => {
     if (!threadId || pendingTitleThreadIds.has(threadId)) {
@@ -2387,69 +2413,19 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   interface IStreamPipeline {
     readonly handleEvent: (event: IAiChatStreamEventPayload) => void;
     readonly startAssistantStream: (streamId: string, assistantMessageId: string) => void;
-    readonly cleanupRaf: () => void;
+    readonly flushBufferedText: () => void;
   }
 
   const createStreamPipeline = (
     assistantMessage: IAiChatMessage,
     settle: () => void,
   ): IStreamPipeline => {
-    let pendingDelta = '';
-    let animationFrameId: number | null = null;
     let isStreamClosed = false;
     let hasStartedStream = false;
 
-    const syncAssistantMessage = (): void => {
-      const current = activeAssistantMessage.value;
-
-      if (!current) {
-        return;
-      }
-
-      current.content = aiStream.content.value;
-      current.stream = {
-        status: mapStreamStatus(aiStream.status.value),
-      };
-
-      messages.value = [
-        ...activeAssistantBaseMessages.value,
-        { ...current },
-      ];
-    };
-
-    const flushPendingDelta = (): void => {
-      animationFrameId = null;
-
-      if (!pendingDelta || isStreamClosed) {
-        return;
-      }
-
-      const chunk = pendingDelta;
-      pendingDelta = '';
-
-      aiStream.append(chunk);
-      syncAssistantMessage();
-    };
-
-    const scheduleDelta = (delta: string): void => {
-      if (isStreamClosed) {
-        return;
-      }
-
-      pendingDelta += delta;
-
-      if (animationFrameId !== null) {
-        return;
-      }
-
-      animationFrameId = window.requestAnimationFrame(flushPendingDelta);
-    };
-
-    const cleanupRaf = (): void => {
-      if (animationFrameId !== null) {
-        window.cancelAnimationFrame(animationFrameId);
-        animationFrameId = null;
-      }
+    const flushBufferedText = (): void => {
+      aiStream.flushNow();
+      syncActiveAssistantMessage();
     };
 
     const startAssistantStream = (
@@ -2465,7 +2441,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       assistantMessage.id = assistantMessageId;
 
       aiStream.start({ messageId: assistantMessageId });
-      syncAssistantMessage();
+      syncActiveAssistantMessage();
     };
 
     const handleEvent = (event: IAiChatStreamEventPayload): void => {
@@ -2478,18 +2454,20 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         return;
       }
 
-      if (event.kind === 'delta' && event.delta) {
-        scheduleDelta(event.delta);
+      if (isStreamClosed) {
         return;
       }
 
-      cleanupRaf();
-      flushPendingDelta();
+      if (event.kind === 'delta' && event.delta) {
+        aiStream.append(event.delta);
+        return;
+      }
+
       isStreamClosed = true;
 
       if (event.kind === 'done') {
         aiStream.complete();
-        syncAssistantMessage();
+        syncActiveAssistantMessage();
         attachedFiles.value = [];
         settle();
         return;
@@ -2497,7 +2475,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
       if (event.kind === 'cancelled') {
         aiStream.stop();
-        syncAssistantMessage();
+        syncActiveAssistantMessage();
         errorMessage.value = '';
         settle();
         return;
@@ -2505,7 +2483,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
       if (event.kind === 'error') {
         aiStream.stop();
-        syncAssistantMessage();
+        syncActiveAssistantMessage();
         errorMessage.value = event.message ?? MSG_STREAM_ERROR;
         settle();
       }
@@ -2514,7 +2492,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     return {
       handleEvent,
       startAssistantStream,
-      cleanupRaf,
+      flushBufferedText,
     };
   };
 
@@ -2577,7 +2555,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         activeStreamResolve.value = resolve;
       });
     } finally {
-      pipeline.cleanupRaf();
+      pipeline.flushBufferedText();
       unlisten?.();
 
       activeStreamResolve.value = null;

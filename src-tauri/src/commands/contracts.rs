@@ -1402,8 +1402,8 @@ mod agent_sidecar_contract_tests {
     use serde_json::{Map, Value};
 
     use super::{
-        AgentSidecarChatRequest, AgentSidecarCheckpointRestoreRequest,
-        AgentSidecarExecuteRequest, AgentSidecarMessagePayload, AgentSidecarRollbackStepPath,
+        AgentSidecarChatRequest, AgentSidecarCheckpointRestoreRequest, AgentSidecarExecuteRequest,
+        AgentSidecarMessagePayload, AgentSidecarRollbackStepPath,
     };
 
     fn sidecar_message() -> AgentSidecarMessagePayload {
@@ -1501,7 +1501,10 @@ mod agent_sidecar_contract_tests {
         assert!(!object.contains_key("sessionId"));
         assert!(!object.contains_key("snapshotId"));
         assert!(!object.contains_key("step"));
-        assert_eq!(object.get("runId"), Some(&Value::String("run-1".to_string())));
+        assert_eq!(
+            object.get("runId"),
+            Some(&Value::String("run-1".to_string()))
+        );
     }
 
     #[test]

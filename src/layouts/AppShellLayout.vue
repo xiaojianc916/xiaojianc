@@ -19,27 +19,11 @@
                 <div class="app-shell-pane flex min-h-0 flex-1 flex-col overflow-hidden bg-(--app-bg)">
                     <slot name="header" />
 
-                    <main ref="mainRef" class="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <main class="flex min-h-0 flex-1 flex-col overflow-hidden">
                         <section class="editor-surface min-h-0 flex-1 overflow-hidden">
                             <slot />
                         </section>
-
-                        <button v-if="props.terminalVisible" type="button" class="terminal-resize-handle"
-                            aria-label="调整终端高度" @mousedown.prevent="startTerminalResize">
-                            <span class="terminal-resize-handle-bar" />
-                        </button>
-
-                        <section v-show="props.terminalVisible"
-                            class="app-shell-pane min-h-0 overflow-hidden bg-(--panel-bg)" :style="terminalPaneStyle">
-                            <slot name="terminal" />
-                        </section>
                     </main>
-                </div>
-
-                <div v-if="props.contentOverlayVisible" class="pointer-events-none absolute inset-y-0 right-0 z-35">
-                    <div class="pointer-events-auto h-full min-h-0">
-                        <slot name="overlay" />
-                    </div>
                 </div>
             </div>
 
@@ -53,7 +37,7 @@ import {
     SHELL_WINDOW_RESIZE_END_EVENT,
     SHELL_WINDOW_RESIZE_START_EVENT,
 } from '@/utils/window-resize-events';
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed } from 'vue';
 
 type TResizeDirection =
     | 'North'
@@ -65,8 +49,6 @@ type TResizeDirection =
     | 'SouthEast'
     | 'SouthWest';
 
-const TERMINAL_MIN_HEIGHT = 140;
-const EDITOR_MIN_HEIGHT = 220;
 const SIDEBAR_MIN_WIDTH = 240;
 
 const props = withDefaults(
@@ -74,28 +56,15 @@ const props = withDefaults(
         isDesktopRuntime?: boolean;
         activityVisible?: boolean;
         sidebarVisible?: boolean;
-        terminalVisible?: boolean;
-        terminalHeight?: number;
         sidebarWidth?: number;
-        contentOverlayVisible?: boolean;
     }>(),
     {
         isDesktopRuntime: false,
         activityVisible: false,
         sidebarVisible: true,
-        terminalVisible: true,
-        terminalHeight: 236,
         sidebarWidth: 288,
-        contentOverlayVisible: false,
     },
 );
-
-const emit = defineEmits<{
-    'update:terminalHeight': [value: number];
-}>();
-
-const mainRef = ref<HTMLElement | null>(null);
-let terminalResizeCleanup: (() => void) | null = null;
 
 const resizeHandles: Array<{ direction: TResizeDirection; className: string }> = [
     { direction: 'North', className: 'is-top' },
@@ -108,33 +77,14 @@ const resizeHandles: Array<{ direction: TResizeDirection; className: string }> =
     { direction: 'SouthWest', className: 'is-bottom-left' },
 ];
 
-const clampTerminalHeight = (rawHeight: number): number => {
-    if (!mainRef.value) {
-        return Math.max(TERMINAL_MIN_HEIGHT, Math.round(rawHeight));
-    }
-
-    const availableHeight = mainRef.value.clientHeight;
-    const maxHeight = Math.max(TERMINAL_MIN_HEIGHT, availableHeight - EDITOR_MIN_HEIGHT);
-
-    return Math.min(maxHeight, Math.max(TERMINAL_MIN_HEIGHT, Math.round(rawHeight)));
-};
-
 const resolvedSidebarWidth = computed(() =>
     props.sidebarVisible ? Math.max(SIDEBAR_MIN_WIDTH, Math.round(props.sidebarWidth)) : 0,
-);
-
-const resolvedTerminalHeight = computed(() =>
-    props.terminalVisible ? clampTerminalHeight(props.terminalHeight) : 0,
 );
 
 const sidebarStyle = computed(() => ({
     width: `${resolvedSidebarWidth.value}px`,
     minWidth: `${resolvedSidebarWidth.value}px`,
     maxWidth: `${resolvedSidebarWidth.value}px`,
-}));
-
-const terminalPaneStyle = computed(() => ({
-    height: `${resolvedTerminalHeight.value}px`,
 }));
 
 const shellThemeStyle = computed(() => ({
@@ -157,36 +107,6 @@ const shellThemeStyle = computed(() => ({
     '--surface-soft-strong': '#d1d9e0b3',
 }));
 
-const startTerminalResize = (event: MouseEvent): void => {
-    if (!props.terminalVisible || !mainRef.value || event.button !== 0) {
-        return;
-    }
-
-    terminalResizeCleanup?.();
-
-    const startY = event.clientY;
-    const startHeight = clampTerminalHeight(props.terminalHeight);
-    window.dispatchEvent(new Event(SHELL_WINDOW_RESIZE_START_EVENT));
-
-    const handleMouseMove = (moveEvent: MouseEvent): void => {
-        const nextHeight = clampTerminalHeight(startHeight + (startY - moveEvent.clientY));
-        emit('update:terminalHeight', nextHeight);
-    };
-
-    const stopResize = (): void => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', stopResize);
-        window.removeEventListener('blur', stopResize);
-        terminalResizeCleanup = null;
-        window.dispatchEvent(new Event(SHELL_WINDOW_RESIZE_END_EVENT));
-    };
-
-    terminalResizeCleanup = stopResize;
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', stopResize, { once: true });
-    window.addEventListener('blur', stopResize, { once: true });
-};
-
 const startWindowResize = async (direction: TResizeDirection, event: MouseEvent): Promise<void> => {
     if (!props.isDesktopRuntime || event.button !== 0) {
         return;
@@ -202,8 +122,4 @@ const startWindowResize = async (direction: TResizeDirection, event: MouseEvent)
         console.warn('窗口边缘拉伸失败', error);
     }
 };
-
-onBeforeUnmount(() => {
-    terminalResizeCleanup?.();
-});
 </script>

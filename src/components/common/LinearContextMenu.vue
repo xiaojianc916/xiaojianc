@@ -99,19 +99,26 @@ const submenuSide = computed(() =>
   props.submenuDirection === 'left' ? 'left' : 'right',
 );
 
+const createOpenEvent = (): MouseEvent | PointerEvent => {
+  const ContextMenuEvent =
+    typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+
+  return new ContextMenuEvent('contextmenu', {
+    bubbles: false,
+    cancelable: true,
+    button: 2,
+    clientX: props.x,
+    clientY: props.y,
+  });
+};
+
 const dispatchOpenEvent = (): void => {
   const trigger = triggerRef.value;
   if (!trigger) {
     return;
   }
 
-  trigger.dispatchEvent(new MouseEvent('contextmenu', {
-    bubbles: true,
-    cancelable: true,
-    button: 2,
-    clientX: props.x,
-    clientY: props.y,
-  }));
+  trigger.dispatchEvent(createOpenEvent());
 };
 
 watch(

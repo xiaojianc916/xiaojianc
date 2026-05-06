@@ -36,8 +36,8 @@ export const renderFatalBootstrapError = (error: unknown): void => {
         'align-items:center',
         'justify-content:center',
         'padding:24px',
-        'background:#08090a',
-        'color:#e5e7eb',
+        'background:#fafafa',
+        'color:#111827',
         'font-family:Consolas, "JetBrains Mono", monospace',
     ].join(';');
 

@@ -546,12 +546,15 @@ fn normalize_runtime_config(mut config: AiRuntimeConfig) -> AiRuntimeConfig {
         .filter_map(normalize_provider_profile)
         .collect();
 
-    if config.active_profile_id.as_deref().is_some_and(|profile_id| {
-        !config
-            .profiles
-            .iter()
-            .any(|profile| profile.role == AiResolvedModelRole::Main.as_str() && profile.id == profile_id)
-    }) {
+    if config
+        .active_profile_id
+        .as_deref()
+        .is_some_and(|profile_id| {
+            !config.profiles.iter().any(|profile| {
+                profile.role == AiResolvedModelRole::Main.as_str() && profile.id == profile_id
+            })
+        })
+    {
         config.active_profile_id = None;
     }
 

@@ -240,46 +240,44 @@ onBeforeUnmount(() => {
 <template>
   <Message v-if="shouldRenderMessage" :from="message.role" class="ai-message"
     :class="[`is-${message.role}`, { 'is-inline-loading': shouldShowInlineLoader }]">
-    <div class="ai-message-main">
-      <div v-if="shouldShowInlineLoader" class="ai-message-status-line" role="status" aria-live="polite">
-        <Loader class="ai-message-status-icon" :size="13" />
-        <span>{{ inlineLoaderLabel }}</span>
-      </div>
-      <AiAgentRuntimeTimeline v-if="shouldShowRuntimeTimeline" :events="message.stream?.runtimeEvents ?? []"
-        :is-streaming="message.stream?.status === 'streaming'" />
-      <AiToolActivityInline v-if="shouldShowActivityTimeline" :tool-calls="message.toolCalls ?? []"
-        :activity-text="message.stream?.activityText" :activity-trail="message.stream?.activityTrail"
-        :activity-notes="message.stream?.activityNotes" :activities="message.stream?.activities"
-        :activity-events="message.stream?.activityEvents" />
-      <div v-if="userAttachmentReferences.length" class="ai-message-attachments" aria-label="已发送附件">
-        <span v-for="reference in userAttachmentReferences" :key="reference.id" class="ai-message-attachment-chip">
-          <ImageIcon v-if="reference.kind === 'image-attachment'" aria-hidden="true" />
-          <FileText v-else aria-hidden="true" />
-          <span>{{ resolveAttachmentLabel(reference) }}</span>
-        </span>
-      </div>
-      <MessageContent v-if="shouldShowMessageBubble" class="ai-message-bubble"
-        :class="{ 'is-assistant-flat': message.role !== 'user' }">
-        <AiMarkdown :message-id="message.id" :content="message.content" :stream-status="message.stream?.status" />
-      </MessageContent>
-      <MessageActions v-if="hasMessageActions" class="ai-message-options" aria-label="AI 选项">
-        <MessageAction v-for="action in message.actions" :key="`${message.id}:${action.id}`"
-          class="ai-message-option-button" :disabled="action.disabled" :label="action.label" size="sm"
-          :tooltip="action.label" variant="outline" @click.stop="emit('messageAction', message.id, action.id)">
-          {{ action.label }}
+    <div v-if="shouldShowInlineLoader" class="ai-message-status-line" role="status" aria-live="polite">
+      <Loader class="ai-message-status-icon" :size="13" />
+      <span>{{ inlineLoaderLabel }}</span>
+    </div>
+    <AiAgentRuntimeTimeline v-if="shouldShowRuntimeTimeline" :events="message.stream?.runtimeEvents ?? []"
+      :is-streaming="message.stream?.status === 'streaming'" />
+    <AiToolActivityInline v-if="shouldShowActivityTimeline" :tool-calls="message.toolCalls ?? []"
+      :activity-text="message.stream?.activityText" :activity-trail="message.stream?.activityTrail"
+      :activity-notes="message.stream?.activityNotes" :activities="message.stream?.activities"
+      :activity-events="message.stream?.activityEvents" />
+    <div v-if="userAttachmentReferences.length" class="ai-message-attachments" aria-label="已发送附件">
+      <span v-for="reference in userAttachmentReferences" :key="reference.id" class="ai-message-attachment-chip">
+        <ImageIcon v-if="reference.kind === 'image-attachment'" aria-hidden="true" />
+        <FileText v-else aria-hidden="true" />
+        <span>{{ resolveAttachmentLabel(reference) }}</span>
+      </span>
+    </div>
+    <MessageContent v-if="shouldShowMessageBubble" class="ai-message-bubble"
+      :class="{ 'is-assistant-flat': message.role !== 'user' }">
+      <AiMarkdown :message-id="message.id" :content="message.content" :stream-status="message.stream?.status" />
+    </MessageContent>
+    <MessageActions v-if="hasMessageActions" class="ai-message-options" aria-label="AI 选项">
+      <MessageAction v-for="action in message.actions" :key="`${message.id}:${action.id}`"
+        class="ai-message-option-button" :disabled="action.disabled" :label="action.label" size="sm"
+        :tooltip="action.label" variant="outline" @click.stop="emit('messageAction', message.id, action.id)">
+        {{ action.label }}
+      </MessageAction>
+    </MessageActions>
+    <MessageToolbar v-if="canCopyContent" class="ai-message-toolbar">
+      <MessageActions class="ai-message-actions">
+        <MessageAction class="ai-message-copy-button" :class="{ 'is-copied': isCopied }"
+          :label="isCopied ? '已复制对话内容' : '复制对话内容'" :tooltip="isCopied ? '已复制' : '复制对话内容'"
+          @click.stop="copyMessageContent">
+          <Check v-if="isCopied" aria-hidden="true" />
+          <Copy v-else aria-hidden="true" />
         </MessageAction>
       </MessageActions>
-      <MessageToolbar v-if="canCopyContent" class="ai-message-toolbar">
-        <MessageActions class="ai-message-actions">
-          <MessageAction class="ai-message-copy-button" :class="{ 'is-copied': isCopied }"
-            :label="isCopied ? '已复制对话内容' : '复制对话内容'" :tooltip="isCopied ? '已复制' : '复制对话内容'"
-            @click.stop="copyMessageContent">
-            <Check v-if="isCopied" aria-hidden="true" />
-            <Copy v-else aria-hidden="true" />
-          </MessageAction>
-        </MessageActions>
-      </MessageToolbar>
-    </div>
+    </MessageToolbar>
   </Message>
 </template>
 
@@ -287,6 +285,7 @@ onBeforeUnmount(() => {
 .ai-message {
   box-sizing: border-box;
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   gap: 8px;
 }
@@ -294,36 +293,34 @@ onBeforeUnmount(() => {
 .ai-message.is-assistant {
   width: 100%;
   max-width: 100%;
+  padding-left: 12px;
+  padding-right: 88px;
 }
 
 .ai-message.is-user {
-  justify-content: flex-end;
-  padding-inline: 12px;
+  align-items: flex-end;
 }
 
 .ai-message.is-inline-loading {
-  align-items: center;
+  justify-content: center;
 }
 
-.ai-message-main {
-  box-sizing: border-box;
-  min-width: 0;
-}
-
-.ai-message.is-user .ai-message-main {
-  max-width: calc(100% - 50px);
-}
-
-.ai-message.is-assistant .ai-message-main {
+.ai-message.is-assistant>.ai-runtime-timeline,
+.ai-message.is-assistant>.ai-tool-activity-inline {
   width: 100%;
-  max-width: none;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: hidden;
-  padding-inline: 30px;
 }
 
-.ai-message-main>.ai-tool-activity-inline+.ai-message-bubble,
-.ai-message-main>.ai-runtime-timeline+.ai-message-bubble,
-.ai-message-main>.ai-message-status-line+.ai-message-bubble {
+.ai-message.is-assistant> :not(.ai-runtime-timeline):not(.ai-tool-activity-inline) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ai-message>.ai-tool-activity-inline+.ai-message-bubble,
+.ai-message>.ai-runtime-timeline+.ai-message-bubble,
+.ai-message>.ai-message-status-line+.ai-message-bubble {
   margin-top: 6px;
 }
 
@@ -346,11 +343,11 @@ onBeforeUnmount(() => {
   gap: 5px;
   border: 1px solid color-mix(in srgb, var(--shell-divider) 82%, transparent);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-soft) 74%, transparent);
+  background: var(--secondary);
   color: var(--text-tertiary);
-  font-size: 11px;
-  line-height: 20px;
-  padding: 0 8px;
+  font-size: 12px;
+  line-height: 22px;
+  padding: 0 10px;
 }
 
 .ai-message-attachment-chip svg {
@@ -370,35 +367,59 @@ onBeforeUnmount(() => {
 }
 
 .ai-message-bubble {
+  --ai-chat-font-size-body: 14px;
+  --ai-chat-line-height-body: 22px;
+  --ai-chat-line-height-body-ratio: 1.5714285714;
+  --ai-chat-font-size-caption: 12px;
+  --ai-chat-line-height-caption: 18px;
+  --ai-chat-font-size-h1: 16px;
+  --ai-chat-line-height-h1: 24px;
+  --ai-chat-line-height-h1-ratio: 1.5;
+  --ai-chat-font-size-h2: 14px;
+  --ai-chat-line-height-h2: 22px;
+  --ai-chat-line-height-h2-ratio: 1.5714285714;
+  --ai-chat-font-size-h3: 13px;
+  --ai-chat-line-height-h3: 20px;
+  --ai-chat-line-height-h3-ratio: 1.5384615385;
+  --ai-chat-font-size-code: 13px;
+  --ai-chat-line-height-code: 20px;
+  --ai-chat-line-height-code-ratio: 1.5384615385;
+  --ai-chat-font-size-table: 13px;
+  --ai-chat-line-height-table: 20px;
+  --ai-chat-line-height-table-ratio: 1.5384615385;
+  --ai-chat-font-weight-strong: 600;
+  --ai-chat-space-paragraph: 12px;
+  --ai-chat-space-section: 20px;
+  --ai-chat-space-subsection: 14px;
+  --ai-chat-space-subheading: 12px;
   min-width: 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 20px;
+  color: inherit;
+  font-size: var(--ai-chat-font-size-body);
+  line-height: var(--ai-chat-line-height-body);
   overflow: hidden;
   overflow-wrap: anywhere;
 }
 
 .ai-message.is-assistant .ai-message-bubble {
-  width: 100%;
-  max-width: 100%;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
+  max-width: min(680px, 100%);
+  color: var(--text-primary);
+  font-size: var(--ai-chat-font-size-body);
+  line-height: var(--ai-chat-line-height-body);
 }
 
 .ai-message.is-assistant .ai-message-bubble.is-assistant-flat {
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .ai-message-status-line {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-height: 22px;
-  gap: 6px;
+  justify-content: flex-start;
+  min-height: 24px;
+  gap: 8px;
   color: var(--text-quaternary);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 14px;
+  line-height: 22px;
 }
 
 .ai-message-status-icon {
@@ -409,18 +430,14 @@ onBeforeUnmount(() => {
   color: var(--text-tertiary);
 }
 
-.ai-message.is-user .ai-message-bubble {
-  border-radius: 8px;
-  border-top-right-radius: 4px;
-  background: var(--accent-strong);
-  color: var(--accent-foreground, white);
-  padding: 9px 11px;
+.ai-message.is-user .ai-message-attachment-chip {
+  border-color: color-mix(in srgb, var(--secondary-foreground) 10%, transparent);
+  background: #f4f4f5;
+  color: var(--secondary-foreground);
 }
 
-.ai-message.is-user .ai-message-attachment-chip {
-  border-color: color-mix(in srgb, var(--accent-strong) 24%, transparent);
-  background: color-mix(in srgb, var(--accent-strong) 10%, transparent);
-  color: var(--text-primary);
+.ai-message.is-user .ai-message-bubble {
+  background: #f4f4f5;
 }
 
 .ai-message-toolbar {
@@ -440,19 +457,19 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding-top: 8px;
+  padding-top: 10px;
 }
 
 .ai-message-option-button {
-  border: 1px solid color-mix(in srgb, var(--accent-strong) 24%, transparent);
+  border: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-strong) 10%, transparent);
-  color: var(--text-primary);
+  background: color-mix(in srgb, var(--foreground) 3%, var(--background));
+  color: color-mix(in srgb, var(--foreground) 78%, transparent);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1;
-  padding: 8px 12px;
+  padding: 10px 14px;
   transition:
     transform 160ms ease-out,
     border-color 160ms ease-out,
@@ -492,8 +509,8 @@ onBeforeUnmount(() => {
     color 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.ai-message-main:hover .ai-message-copy-button,
-.ai-message-main:focus-within .ai-message-copy-button {
+.ai-message:hover .ai-message-copy-button,
+.ai-message:focus-within .ai-message-copy-button {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);
@@ -527,7 +544,7 @@ onBeforeUnmount(() => {
 
 .ai-message-copy-button.is-copied {
   background: transparent;
-  color: var(--accent-strong);
+  color: color-mix(in srgb, var(--foreground) 80%, transparent);
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);

@@ -60,6 +60,7 @@ import {
   aiWebSearchInputSchema,
   aiWebSearchPayloadSchema
 } from '@/types/ai.schema';
+import { wslLinkStatusPayloadSchema } from '@/types/wsl-link.schema';
 import { z } from 'zod';
 
 export const zTauriVoid = z
@@ -403,6 +404,10 @@ export const tauriContracts = {
   detectEnvironment: {
     inSchema: z.void(),
     outSchema: z.union([executionEnvironmentPayloadSchema, executionEnvironmentPayloadSnakeSchema]),
+  },
+  getWslLinkStatus: {
+    inSchema: z.void(),
+    outSchema: wslLinkStatusPayloadSchema,
   },
   listWorkspaceEntries: {
     inSchema: z.object({

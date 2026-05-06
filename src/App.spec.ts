@@ -1,19 +1,9 @@
 import App from '@/App.vue';
-import { WORKBENCH_READY_EVENT } from '@/utils/startup-ready';
+import { runtimeErrorState } from '@/utils/runtime-diagnostics';
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, nextTick } from 'vue';
 import { createMemoryHistory, createRouter } from 'vue-router';
-
-const { beginStartupTransitionMock, finalizeStartupTransitionMock } = vi.hoisted(() => ({
-    beginStartupTransitionMock: vi.fn(async () => undefined),
-    finalizeStartupTransitionMock: vi.fn(async () => undefined),
-}));
-
-vi.mock('@/services/modules/window', () => ({
-    beginStartupTransition: beginStartupTransitionMock,
-    finalizeStartupTransition: finalizeStartupTransitionMock,
-}));
 
 vi.mock('@/components/common/AppDialogHost.vue', () => ({
     default: {
@@ -54,49 +44,17 @@ const flushUi = async (): Promise<void> => {
 
 describe('App startup handoff', () => {
     beforeEach(() => {
-        beginStartupTransitionMock.mockClear();
-        finalizeStartupTransitionMock.mockClear();
-
+        runtimeErrorState.value = null;
         window.__SH_WINDOW_LABEL__ = 'main';
-
-        const svgPrototype = window.SVGSVGElement?.prototype ?? window.SVGElement.prototype;
-        Object.defineProperty(svgPrototype, 'pauseAnimations', {
-            configurable: true,
-            value: vi.fn(),
-        });
-        Object.defineProperty(svgPrototype, 'setCurrentTime', {
-            configurable: true,
-            value: vi.fn(),
-        });
-
-        vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
-            callback(0);
-            return 1;
-        });
-        vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
-        vi.spyOn(window, 'matchMedia').mockImplementation(
-            () =>
-                ({
-                    matches: false,
-                    media: '',
-                    onchange: null,
-                    addListener: vi.fn(),
-                    removeListener: vi.fn(),
-                    addEventListener: vi.fn(),
-                    removeEventListener: vi.fn(),
-                    dispatchEvent: vi.fn(),
-                }) as unknown as MediaQueryList,
-        );
     });
 
     afterEach(() => {
-        vi.useRealTimers();
+        runtimeErrorState.value = null;
         vi.restoreAllMocks();
         delete window.__SH_WINDOW_LABEL__;
     });
 
-    it('falls back to the global workbench ready event when route component does not emit ready', async () => {
-        vi.useFakeTimers();
+    it('渲染当前路由与全局宿主组件', async () => {
         const router = createTestRouter();
         await router.push('/home');
         await router.isReady();
@@ -109,16 +67,9 @@ describe('App startup handoff', () => {
 
         await flushUi();
 
-        expect(wrapper.find('[data-testid="startup-veil"]').exists()).toBe(true);
-
-        window.dispatchEvent(new Event(WORKBENCH_READY_EVENT));
-        await flushUi();
-        expect(wrapper.find('[data-testid="startup-veil"]').classes()).toContain('is-leaving');
-
-        vi.advanceTimersByTime(240);
-        await flushUi();
-
-        expect(wrapper.find('[data-testid="startup-veil"]').exists()).toBe(false);
+        expect(wrapper.find('[data-testid="app-dialog-host-stub"]').exists()).toBe(true);
+        expect(wrapper.find('[data-testid="browser-context-menu-host-stub"]').exists()).toBe(true);
+        expect(wrapper.find('[data-testid="home-view"]').exists()).toBe(true);
 
         wrapper.unmount();
     });

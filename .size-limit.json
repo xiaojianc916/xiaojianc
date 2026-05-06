@@ -127,7 +127,6 @@
         "name": "app-css-total",
         "path": [
             "dist/assets/index-*.css",
-            "dist/assets/Welcome-*.css",
             "dist/assets/App-*.css",
             "dist/assets/vendor-xterm-*.css",
             "dist/assets/window-*.css",

@@ -120,6 +120,7 @@ import type {
   ITerminalSessionPayload,
   IWriteTerminalInputRequest,
 } from './terminal';
+import type { IWslLinkStatusPayload } from './wsl-link';
 
 export interface ISshConnectionTestRequest {
   host: string;
@@ -230,6 +231,7 @@ export interface ITauriService {
   loadImageAsset(path: string): Promise<IImageAssetPayload>;
   saveScript(payload: ISaveScriptRequest): Promise<IScriptFilePayload>;
   detectEnvironment(): Promise<IExecutionEnvironment>;
+  getWslLinkStatus(): Promise<IWslLinkStatusPayload>;
   listWorkspaceEntries(path?: string, rootPath?: string): Promise<IWorkspaceDirectoryPayload>;
   createWorkspacePath(payload: IWorkspacePathCreateRequest): Promise<IWorkspacePathCreatePayload>;
   renameWorkspacePath(payload: IWorkspacePathRenameRequest): Promise<IWorkspacePathRenamePayload>;

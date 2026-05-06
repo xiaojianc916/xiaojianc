@@ -60,4 +60,37 @@ describe('WorkbenchDashboardSidebar', () => {
 
         expect(wrapper.get('.workbench-dashboard-sidebar__brand-button').attributes('title')).toBe('切换到编辑区');
     });
+
+    it('只展开当前侧栏按钮的文字标签', async () => {
+        const wrapper = mountSidebar();
+        const initialButtons = wrapper.findAll('.workbench-dashboard-sidebar__toolbar-button');
+
+        expect(wrapper.find('.workbench-dashboard-sidebar__toolbar-indicator').exists()).toBe(false);
+        expect(initialButtons).toHaveLength(5);
+        expect(initialButtons[0]?.classes()).toContain('is-active');
+        expect(initialButtons[0]?.text()).toContain('文件');
+        expect(initialButtons[1]?.classes()).not.toContain('is-active');
+        expect(initialButtons[1]?.find('.workbench-dashboard-sidebar__toolbar-label').text()).toBe('搜索');
+
+        await wrapper.setProps({ activeView: 'source-control' });
+
+        const updatedButtons = wrapper.findAll('.workbench-dashboard-sidebar__toolbar-button');
+
+        expect(updatedButtons[0]?.classes()).not.toContain('is-active');
+        expect(updatedButtons[2]?.classes()).toContain('is-active');
+        expect(updatedButtons[2]?.text()).toContain('Git');
+    });
+
+    it('会根据页签顺序标记面板切换方向', async () => {
+        const wrapper = mountSidebar();
+        const panelHost = wrapper.get('.workbench-dashboard-sidebar__panel-host');
+
+        expect(panelHost.attributes('data-switch-direction')).toBe('none');
+
+        await wrapper.setProps({ activeView: 'run' });
+        expect(panelHost.attributes('data-switch-direction')).toBe('forward');
+
+        await wrapper.setProps({ activeView: 'search' });
+        expect(panelHost.attributes('data-switch-direction')).toBe('backward');
+    });
 });

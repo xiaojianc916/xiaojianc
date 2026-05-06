@@ -304,8 +304,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div
-class="code-block-container ai-code-block" :class="{
+  <div class="code-block-container ai-code-block" :class="{
     'is-loading': loading,
     'is-light-surface': !isDark,
     'is-collapsed': !isExpanded,
@@ -319,8 +318,7 @@ class="code-block-container ai-code-block" :class="{
       </div>
 
       <div class="code-header-actions ai-code-block__actions">
-        <button
-type="button" class="code-action-btn ai-code-block__icon-button ai-code-block__toggle"
+        <button type="button" class="code-action-btn ai-code-block__icon-button ai-code-block__toggle"
           :aria-label="isExpanded ? '折叠代码块' : '展开代码块'" :title="isExpanded ? '折叠代码块' : '展开代码块'"
           :aria-expanded="isExpanded" :aria-controls="codeBlockBodyId" @click="toggleExpanded">
           <svg v-if="isExpanded" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
@@ -331,8 +329,7 @@ type="button" class="code-action-btn ai-code-block__icon-button ai-code-block__t
           </svg>
         </button>
 
-        <button
-type="button" class="code-action-btn ai-code-block__icon-button ai-code-block__copy"
+        <button type="button" class="code-action-btn ai-code-block__icon-button ai-code-block__copy"
           :aria-label="isCopied ? '已复制代码' : '复制代码'" :title="isCopied ? '已复制代码' : '复制代码'" :disabled="!canCopy"
           @click="handleCopy">
           <svg v-if="isCopied" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
@@ -436,8 +433,9 @@ type="button" class="code-action-btn ai-code-block__icon-button ai-code-block__c
   background: #1a1b1e !important;
   color: #e7edf4;
   font-family: var(--font-mono);
-  font-size: 0.92em;
-  line-height: 1.65;
+  font-size: var(--ai-chat-font-size-code, 13px);
+  line-height: var(--ai-chat-line-height-code, 20px);
+  font-weight: 400;
 
   /* Firefox 滚动条 */
   scrollbar-width: thin;
@@ -506,7 +504,7 @@ type="button" class="code-action-btn ai-code-block__icon-button ai-code-block__c
   padding: 10px 16px;
   overflow-x: auto;
   overflow-y: hidden;
-  line-height: 1.45;
+  line-height: var(--ai-chat-line-height-code, 20px);
 }
 
 .ai-code-block.is-single-line :global(pre.shiki code) {

@@ -91,12 +91,42 @@ onBeforeUnmount(() => {
 <style scoped>
 .ai-markdown {
   min-width: 0;
+  font-size: var(--ai-chat-font-size-body, 14px);
+  line-height: var(--ai-chat-line-height-body, 22px);
 }
 
 .ai-markdown :global(.markstream-vue) {
   --ms-font-sans: var(--font-sans);
   --ms-font-mono: var(--font-mono);
   --ms-radius: var(--radius-sm);
+  --ms-text-body: var(--ai-chat-font-size-body, 14px);
+  --ms-leading-body: var(--ai-chat-line-height-body-ratio, 1.5714285714);
+  --ms-text-h1: var(--ai-chat-font-size-h1, 16px);
+  --ms-text-h2: var(--ai-chat-font-size-h2, 14px);
+  --ms-text-h3: var(--ai-chat-font-size-h3, 13px);
+  --ms-text-h4: var(--ai-chat-font-size-h3, 13px);
+  --ms-text-h5: var(--ai-chat-font-size-h3, 13px);
+  --ms-text-h6: var(--ai-chat-font-size-h3, 13px);
+  --ms-leading-h1: var(--ai-chat-line-height-h1-ratio, 1.5);
+  --ms-leading-h2: var(--ai-chat-line-height-h2-ratio, 1.5714285714);
+  --ms-leading-h3: var(--ai-chat-line-height-h3-ratio, 1.5384615385);
+  --ms-weight-h1: var(--ai-chat-font-weight-strong, 600);
+  --ms-weight-h2: var(--ai-chat-font-weight-strong, 600);
+  --ms-weight-h3: var(--ai-chat-font-weight-strong, 600);
+  --ms-weight-h4: var(--ai-chat-font-weight-strong, 600);
+  --ms-flow-heading-1-mt: var(--ai-chat-space-section, 20px);
+  --ms-flow-heading-1-mb: var(--ai-chat-space-paragraph, 12px);
+  --ms-flow-heading-2-mt: var(--ai-chat-space-subsection, 14px);
+  --ms-flow-heading-2-mb: 8px;
+  --ms-flow-heading-3-mt: var(--ai-chat-space-subheading, 12px);
+  --ms-flow-heading-3-mb: 6px;
+  --ms-flow-heading-4-mt: var(--ai-chat-space-subheading, 12px);
+  --ms-flow-heading-4-mb: 6px;
+  --ms-flow-heading-5-mt: var(--ai-chat-space-subheading, 12px);
+  --ms-flow-heading-5-mb: 6px;
+  --ms-flow-heading-6-mt: var(--ai-chat-space-subheading, 12px);
+  --ms-flow-heading-6-mb: 6px;
+  --ms-flow-table-y: var(--ai-chat-space-paragraph, 12px);
   --link-color: var(--accent-strong);
   --inline-code-bg: color-mix(in srgb, var(--panel-bg) 72%, transparent);
   --inline-code-fg: var(--text-primary);
@@ -117,18 +147,18 @@ onBeforeUnmount(() => {
   --markstream-code-font-family: var(--font-mono);
   --markstream-code-padding-x: var(--ms-space-3);
   --markstream-code-padding-y: var(--ms-space-2);
-  --vscode-editor-font-size: 0.923em;
-  --vscode-editor-line-height: 1.55;
+  --vscode-editor-font-size: var(--ai-chat-font-size-code, 13px);
+  --vscode-editor-line-height: var(--ai-chat-line-height-code-ratio, 1.5384615385);
   color: inherit;
   font-family: var(--font-sans);
-  font-size: inherit;
-  line-height: inherit;
+  font-size: var(--ai-chat-font-size-body, 14px);
+  line-height: var(--ai-chat-line-height-body, 22px);
 }
 
 .ai-markdown :global(.markdown-renderer) {
   min-width: 0;
-  font-size: inherit;
-  line-height: inherit;
+  font-size: var(--ai-chat-font-size-body, 14px);
+  line-height: var(--ai-chat-line-height-body, 22px);
 }
 
 .ai-markdown :global(.paragraph-node:first-child),
@@ -149,28 +179,88 @@ onBeforeUnmount(() => {
 
 .ai-markdown :global(.paragraph-node) {
   color: inherit;
-  font-size: inherit;
-  line-height: inherit;
+  margin: 0 0 var(--ai-chat-space-paragraph, 12px);
+  font-size: var(--ai-chat-font-size-body, 14px);
+  line-height: var(--ai-chat-line-height-body, 22px);
 }
 
 .ai-markdown :global(.heading-node) {
   color: var(--text-primary);
-  font-size: 1em;
+  font-size: inherit;
   line-height: inherit;
   letter-spacing: 0;
 }
 
+.ai-markdown :global(.heading-1),
+.ai-markdown :global(.heading-2),
+.ai-markdown :global(.heading-3),
+.ai-markdown :global(.heading-4),
+.ai-markdown :global(.heading-5),
+.ai-markdown :global(.heading-6) {
+  color: var(--text-primary);
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+.ai-markdown :global(.heading-1) {
+  font-size: var(--ai-chat-font-size-h1, 16px);
+  line-height: var(--ai-chat-line-height-h1, 24px);
+  font-weight: var(--ai-chat-font-weight-strong, 600);
+}
+
+.ai-markdown :global(.heading-2) {
+  font-size: var(--ai-chat-font-size-h2, 14px);
+  line-height: var(--ai-chat-line-height-h2, 22px);
+  font-weight: var(--ai-chat-font-weight-strong, 600);
+}
+
+.ai-markdown :global(.heading-3),
+.ai-markdown :global(.heading-4),
+.ai-markdown :global(.heading-5),
+.ai-markdown :global(.heading-6) {
+  font-size: var(--ai-chat-font-size-h3, 13px);
+  line-height: var(--ai-chat-line-height-h3, 20px);
+  font-weight: var(--ai-chat-font-weight-strong, 600);
+}
+
 .ai-markdown :global(.list-node),
 .ai-markdown :global(.list-node li),
+.ai-markdown :global(.blockquote) {
+  font-size: var(--ai-chat-font-size-body, 14px);
+  line-height: var(--ai-chat-line-height-body, 22px);
+}
+
+.ai-markdown :global(.list-node),
 .ai-markdown :global(.blockquote),
-.ai-markdown :global(.table-node) {
-  font-size: inherit;
-  line-height: inherit;
+.ai-markdown :global(.code-block-container),
+.ai-markdown :global(.table-node-wrapper) {
+  margin: 0 0 var(--ai-chat-space-paragraph, 12px);
 }
 
 .ai-markdown :global(.inline-code) {
   border: 1px solid color-mix(in srgb, var(--shell-divider) 80%, transparent);
-  font-size: 0.92em;
+  font-size: var(--ai-chat-font-size-code, 13px);
+  line-height: var(--ai-chat-line-height-code, 20px);
+  font-weight: 500;
+}
+
+.ai-markdown :global(.table-node),
+.ai-markdown :global(.table-node th),
+.ai-markdown :global(.table-node td),
+.ai-markdown :global(.table-node .text-node),
+.ai-markdown :global(.table-node code) {
+  font-size: var(--ai-chat-font-size-table, 13px);
+  line-height: var(--ai-chat-line-height-table, 20px);
+}
+
+.ai-markdown :global(.table-node thead th) {
+  font-weight: var(--ai-chat-font-weight-strong, 600);
+}
+
+.ai-markdown :global(.emoji-node) {
+  font-size: 1em;
+  line-height: 1;
+  vertical-align: -0.1em;
 }
 
 .ai-markdown :global(.link-node) {

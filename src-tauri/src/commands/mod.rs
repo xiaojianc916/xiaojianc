@@ -10,6 +10,7 @@ mod terminal;
 mod window;
 mod window_stage;
 mod workspace_fs;
+mod wsl_link;
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW_FLAG: u32 = 0x0800_0000;
@@ -63,7 +64,7 @@ pub use terminal::{
     write_terminal_input, TerminalSessionState,
 };
 pub use window::set_window_background;
-pub use window_stage::{apply_window_stage, begin_startup_transition, finalize_startup_transition};
+pub use window_stage::apply_window_stage;
 pub use workspace_fs::{
     create_workspace_path, delete_workspace_path, list_workspace_entries, load_image_asset,
     load_script, rename_workspace_path, save_script,
@@ -71,6 +72,7 @@ pub use workspace_fs::{
 pub(crate) use workspace_fs::{
     decode_script_bytes, encode_script_content, resolve_workspace_root, workspace_name,
 };
+pub use wsl_link::get_wsl_link_status;
 
 #[cfg(windows)]
 pub(crate) fn configure_std_command_for_background(

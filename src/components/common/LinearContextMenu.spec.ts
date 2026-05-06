@@ -1,6 +1,6 @@
 import LinearContextMenu from '@/components/common/LinearContextMenu.vue';
 import { flushPromises, mount } from '@vue/test-utils';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 
 const flushUi = async (): Promise<void> => {
@@ -47,6 +47,44 @@ describe('LinearContextMenu', () => {
     expect(document.body.textContent).toContain('复制');
     expect(document.body.textContent).toContain('CLIPBOARD');
 
+    wrapper.unmount();
+  });
+
+  it('打开菜单时不会把内部触发事件冒泡到 window', async () => {
+    const handleWindowContextMenu = vi.fn();
+    window.addEventListener('contextmenu', handleWindowContextMenu);
+
+    const wrapper = mount(LinearContextMenu, {
+      attachTo: document.body,
+      props: {
+        open: false,
+        x: 96,
+        y: 128,
+        theme: 'dark',
+        submenuDirection: 'right',
+        groups: [
+          {
+            key: 'clipboard',
+            title: 'CLIPBOARD',
+            items: [
+              {
+                key: 'copy',
+                label: '复制',
+                icon: 'copy',
+                shortcut: ['Ctrl', 'C'],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    await wrapper.setProps({ open: true });
+    await flushUi();
+
+    expect(handleWindowContextMenu).not.toHaveBeenCalled();
+
+    window.removeEventListener('contextmenu', handleWindowContextMenu);
     wrapper.unmount();
   });
 });

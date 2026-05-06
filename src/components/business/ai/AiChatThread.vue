@@ -6,8 +6,10 @@ import {
   ConversationScrollButton,
 } from '@/components/ai-elements/conversation';
 import { Loader } from '@/components/ai-elements/loader';
+import { Message } from '@/components/ai-elements/message';
 import type { TAiServicePlatformId } from '@/constants/ai-providers';
 import type { IAiChatMessage, TAiChatMessageActionId } from '@/types/ai';
+import { MessageSquareIcon } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AiMessageItem from './AiMessageItem.vue';
 
@@ -71,30 +73,32 @@ const handleMessageAction = (messageId: string, actionId: TAiChatMessageActionId
 </script>
 
 <template>
-  <Conversation class="ai-chat-list overflow-x-hidden" aria-label="AI 对话记录">
-    <ConversationContent v-if="messages.length > 0 || shouldRenderStandaloneTyping" class="ai-chat-list__content">
-      <slot name="before-messages" />
-      <template v-for="message in messages" :key="message.id">
-        <slot v-if="message.id === lastAssistantMessageId" name="before-last-assistant" :message="message" />
-        <AiMessageItem :message="message" :platform-id="platformId" :provider-label="providerLabel"
-          @message-action="handleMessageAction" />
-        <slot name="after-message" :message="message" />
+  <Conversation class="relative size-full overflow-x-hidden ai-chat-list" aria-label="AI 对话记录">
+    <ConversationContent class="ai-chat-list__content" :class="{ 'is-empty': shouldRenderEmptyState }">
+      <slot v-if="shouldRenderEmptyState" name="empty">
+        <ConversationEmptyState class="ai-chat-empty-state" title="还没有对话" description="选择一个提示词，或直接输入你的问题。">
+          <template #icon>
+            <MessageSquareIcon class="size-6" />
+          </template>
+        </ConversationEmptyState>
+      </slot>
+      <template v-else>
+        <slot name="before-messages" />
+        <template v-for="message in messages" :key="message.id">
+          <slot v-if="message.id === lastAssistantMessageId" name="before-last-assistant" :message="message" />
+          <AiMessageItem :message="message" :platform-id="platformId" :provider-label="providerLabel"
+            @message-action="handleMessageAction" />
+          <slot name="after-message" :message="message" />
+        </template>
+        <slot name="after-messages" />
+        <Message v-if="shouldRenderStandaloneTyping" from="assistant" class="ai-message-typing" aria-label="AI 正在准备回复">
+          <div class="typing-status" role="status" aria-live="polite">
+            <Loader class="typing-status-icon" :size="13" />
+            <span>AI 正在准备回复</span>
+          </div>
+        </Message>
       </template>
-      <slot name="after-messages" />
-      <article v-if="shouldRenderStandaloneTyping" class="ai-message-typing" aria-label="AI 正在准备回复">
-        <div class="typing-status" role="status" aria-live="polite">
-          <Loader class="typing-status-icon" :size="13" />
-          <span>AI 正在准备回复</span>
-        </div>
-      </article>
     </ConversationContent>
-    <slot v-else-if="shouldRenderEmptyState" name="empty">
-      <ConversationEmptyState
-        class="ai-chat-empty-state"
-        title="还没有对话"
-        description="选择一个提示词，或直接输入你的问题。"
-      />
-    </slot>
     <ConversationScrollButton v-if="messages.length > 0" class="ai-chat-scroll-button" />
   </Conversation>
 </template>
@@ -107,9 +111,14 @@ const handleMessageAction = (messageId: string, actionId: TAiChatMessageActionId
 
 .ai-chat-list__content {
   min-width: 0;
-  gap: 14px;
+  gap: 32px;
+  min-height: 100%;
   overflow-x: hidden;
-  padding: 14px 0;
+  padding: 16px 16px 24px;
+}
+
+.ai-chat-list__content.is-empty {
+  justify-content: center;
 }
 
 .ai-chat-empty-state {
@@ -142,19 +151,18 @@ const handleMessageAction = (messageId: string, actionId: TAiChatMessageActionId
 .ai-message-typing {
   display: flex;
   min-width: 0;
-  align-items: center;
-  padding-inline: 30px;
+  align-items: flex-start;
 }
 
 .typing-status {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: var(--text-quaternary);
-  font-size: 12px;
-  line-height: 18px;
-  min-height: 22px;
+  font-size: 14px;
+  line-height: 22px;
+  min-height: 24px;
 }
 
 .typing-status-icon {

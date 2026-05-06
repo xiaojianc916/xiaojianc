@@ -10,12 +10,17 @@ use reqwest::StatusCode;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 const PROVIDER_REQUEST_TIMEOUT: Duration = Duration::from_secs(45);
 const PROVIDER_STREAM_TIMEOUT: Duration = Duration::from_secs(180);
 const PROVIDER_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const PROVIDER_POOL_IDLE_TIMEOUT: Duration = Duration::from_secs(90);
+const PROVIDER_POOL_MAX_IDLE_PER_HOST: usize = 8;
 const MAX_PROVIDER_ERROR_BODY_CHARS: usize = 600;
+
+static PROVIDER_CLIENT: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
 
 #[derive(Debug, Deserialize)]
 struct ChatCompletionResponse {
@@ -128,12 +133,13 @@ async fn chat_non_streaming(
     model: &str,
     request: AiProviderChatRequest,
 ) -> Result<AiProviderResponse, String> {
-    let client = build_provider_client(PROVIDER_REQUEST_TIMEOUT)?;
+    let client = provider_client()?;
 
     let body = build_chat_request_body(model, request, false);
 
     let response = client
         .post(format!("{base_url}/chat/completions"))
+        .timeout(PROVIDER_REQUEST_TIMEOUT)
         .bearer_auth(api_key)
         .header(ACCEPT, "application/json")
         .header(ACCEPT_ENCODING, "identity")
@@ -156,12 +162,13 @@ async fn chat_stream_response(
     model: &str,
     request: AiProviderChatRequest,
 ) -> Result<AiProviderResponse, String> {
-    let client = build_provider_client(PROVIDER_STREAM_TIMEOUT)?;
+    let client = provider_client()?;
 
     let body = build_chat_request_body(model, request, true);
 
     let mut response = client
         .post(format!("{base_url}/chat/completions"))
+        .timeout(PROVIDER_STREAM_TIMEOUT)
         .bearer_auth(api_key)
         .header(ACCEPT, "text/event-stream")
         .header(ACCEPT_ENCODING, "identity")
@@ -233,21 +240,13 @@ where
         return Err(errors::error("AI_REQUEST_CANCELLED", "AI 请求已取消。"));
     }
 
-    let client = reqwest::Client::builder()
-        .connect_timeout(PROVIDER_CONNECT_TIMEOUT)
-        .timeout(PROVIDER_STREAM_TIMEOUT)
-        .http1_only()
-        .no_gzip()
-        .no_brotli()
-        .no_deflate()
-        .no_zstd()
-        .build()
-        .map_err(|error| errors::error("AI_PROVIDER_UNAVAILABLE", error.to_string()))?;
+    let client = provider_client()?;
 
     let body = build_chat_request_body(model, request, true);
 
     let mut response = client
         .post(format!("{base_url}/chat/completions"))
+        .timeout(PROVIDER_STREAM_TIMEOUT)
         .bearer_auth(api_key)
         .header(ACCEPT, "text/event-stream")
         .header(ACCEPT_ENCODING, "identity")
@@ -315,10 +314,20 @@ pub async fn test(base_url: &str, api_key: &str, model: &str) -> Result<(), Stri
     chat(base_url, api_key, model, request).await.map(|_| ())
 }
 
-fn build_provider_client(timeout: Duration) -> Result<reqwest::Client, String> {
+fn provider_client() -> Result<reqwest::Client, String> {
+    PROVIDER_CLIENT
+        .get_or_init(build_provider_client)
+        .as_ref()
+        .map(reqwest::Client::clone)
+        .map_err(String::clone)
+}
+
+fn build_provider_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .connect_timeout(PROVIDER_CONNECT_TIMEOUT)
-        .timeout(timeout)
+        .pool_idle_timeout(PROVIDER_POOL_IDLE_TIMEOUT)
+        .pool_max_idle_per_host(PROVIDER_POOL_MAX_IDLE_PER_HOST)
+        .tcp_nodelay(true)
         .http1_only()
         .no_gzip()
         .no_brotli()
@@ -1069,6 +1078,64 @@ mod tests {
 
         server.join().expect("test server should finish");
         assert_eq!(response.content, "ok");
+    }
+
+    #[tokio::test]
+    async fn chat_reuses_provider_connection_for_sequential_requests() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("test server should bind");
+        let address = listener
+            .local_addr()
+            .expect("test server address should be available");
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("client should connect once");
+
+            for index in 0..2 {
+                let request = read_http_request(&mut stream);
+
+                assert!(request.headers.contains("accept: application/json"));
+                assert!(request.headers.contains("accept-encoding: identity"));
+                assert!(request.body.contains("\"stream\":false"));
+
+                let response_body =
+                    format!(r#"{{"choices":[{{"message":{{"content":"ok-{index}"}}}}]}}"#);
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    response_body.len(),
+                    response_body
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("response should write");
+            }
+
+            listener
+                .set_nonblocking(true)
+                .expect("listener should become nonblocking");
+            assert!(listener.accept().is_err());
+        });
+
+        let first_request = AiProviderChatRequest::new(vec![AiProviderMessage::user("ping-1")]);
+        let first_response = chat(
+            &format!("http://{address}/v1"),
+            "test-key",
+            "test-model",
+            first_request,
+        )
+        .await
+        .expect("first response should parse");
+        let second_request = AiProviderChatRequest::new(vec![AiProviderMessage::user("ping-2")]);
+        let second_response = chat(
+            &format!("http://{address}/v1"),
+            "test-key",
+            "test-model",
+            second_request,
+        )
+        .await
+        .expect("second response should parse");
+
+        server.join().expect("test server should finish");
+        assert_eq!(first_response.content, "ok-0");
+        assert_eq!(second_response.content, "ok-1");
     }
 
     #[tokio::test]

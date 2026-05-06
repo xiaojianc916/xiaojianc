@@ -11,7 +11,6 @@ import type {
 } from '@/types/editor';
 import type { ITerminalRunCompletedPayload } from '@/types/terminal';
 import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
-import { dispatchWorkbenchReadyEvent } from '@/utils/startup-ready';
 import { consumeProgrammaticWindowCloseAllowance } from '@/utils/window-close';
 import {
   SHELL_WINDOW_RESIZE_END_EVENT,
@@ -27,16 +26,8 @@ export type TEditorExpose = {
   rerunDiagnostics: () => void;
   layoutEditor: () => void;
 };
-
-export type TSettingsOverlayExpose = {
-  focusSearch: () => void;
-  requestClose: () => Promise<boolean>;
-};
-
-type TWorkbenchSurfaceMode = 'workbench' | 'settings';
 type TWorkbenchPrimaryMode = 'editor' | 'ai';
 
-const SETTINGS_STATUS_MESSAGE_DURATION_MS = 2200;
 const READY_PAINT_FALLBACK_TIMEOUT_MS = 96;
 const MAX_DOCUMENT_NAV_HISTORY = 120;
 const AI_PANEL_DEFAULT_WIDTH = 450;
@@ -93,7 +84,6 @@ const waitForInitialWorkbenchPaint = async (): Promise<void> =>
 export const useShellWorkbenchView = (onReady: () => void) => {
   const editorRef = ref<TEditorExpose | null>(null);
   const editorViewportRef = ref<HTMLElement | null>(null);
-  const settingsOverlayRef = ref<TSettingsOverlayExpose | null>(null);
   const workbench = useWorkbench();
   const gitStore = useGitStore();
 
@@ -102,12 +92,10 @@ export const useShellWorkbenchView = (onReady: () => void) => {
   const aiPanelWidth = ref(AI_PANEL_DEFAULT_WIDTH);
   const isDiagnosticsPanelVisible = ref(false);
   const activePrimaryMode = ref<TWorkbenchPrimaryMode>('editor');
-  const activeSurfaceMode = ref<TWorkbenchSurfaceMode>('workbench');
   const terminalHeight = ref(236);
   const terminalHeightBeforeMaximize = ref(236);
   const isTerminalMaximized = ref(false);
   const activeSidebarView = ref<TWorkbenchSidebarView>('explorer');
-  const statusbarMessage = ref<string | null>(null);
   const startupWorkspaceRoot = ref<IWorkspaceDirectoryPayload | null>(null);
   const hasEmittedReady = ref(false);
   const documentBackStack = ref<string[]>([]);
@@ -116,9 +104,7 @@ export const useShellWorkbenchView = (onReady: () => void) => {
 
   let nativeCloseRequestedUnlisten: (() => void) | null = null;
   let isUnmounted = false;
-  let statusbarMessageTimerId: number | null = null;
   let editorLayoutAfterSidebarFrameId: number | null = null;
-  let focusBeforeSettingsOpen: HTMLElement | null = null;
   let globalKeydownCleanup: (() => void) | null = null;
 
   const sidebarWidth = computed(() => DASHBOARD_SIDEBAR_WIDTH);
@@ -272,14 +258,8 @@ export const useShellWorkbenchView = (onReady: () => void) => {
   const shouldRenderDiagnosticsPanel = computed(
     () => workbench.editorStore.hasActiveDocument && workbench.editorStore.document.kind === 'text',
   );
-  const isSettingsView = computed(() => activeSurfaceMode.value === 'settings');
-  const isWorkbenchContentVisible = computed(() => activeSurfaceMode.value === 'workbench');
-  const isEditorMode = computed(
-    () => isWorkbenchContentVisible.value && activePrimaryMode.value === 'editor',
-  );
-  const isAiMode = computed(
-    () => isWorkbenchContentVisible.value && activePrimaryMode.value === 'ai',
-  );
+  const isEditorMode = computed(() => activePrimaryMode.value === 'editor');
+  const isAiMode = computed(() => activePrimaryMode.value === 'ai');
   const canToggleDiagnosticsPanel = computed(
     () => isEditorMode.value && shouldRenderDiagnosticsPanel.value,
   );
@@ -334,56 +314,13 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     isDiagnosticsPanelVisible.value = false;
   };
 
-  const closeSettingsView = async (): Promise<void> => {
-    if (!isSettingsView.value) {
-      return;
-    }
-
-    activeSurfaceMode.value = 'workbench';
-    await nextTick();
-
-    if (focusBeforeSettingsOpen && document.contains(focusBeforeSettingsOpen)) {
-      focusBeforeSettingsOpen.focus();
-      focusBeforeSettingsOpen = null;
-      return;
-    }
-
-    focusBeforeSettingsOpen = null;
-    editorRef.value?.focusEditor();
-  };
-
-  const requestCloseSettingsView = async (): Promise<boolean> => {
-    if (!isSettingsView.value) {
-      return true;
-    }
-
-    if (!settingsOverlayRef.value) {
-      await closeSettingsView();
-      return true;
-    }
-
-    return settingsOverlayRef.value.requestClose();
-  };
-
-  const runAfterClosingSettings = async (action: () => void | Promise<void>): Promise<boolean> => {
-    const didCloseSettings = await requestCloseSettingsView();
-    if (!didCloseSettings) {
-      return false;
-    }
-
-    await action();
-    return true;
-  };
-
   const openDiagnosticsPanel = async (): Promise<void> => {
     if (!canToggleDiagnosticsPanel.value || isDiagnosticsPanelVisible.value) {
       return;
     }
 
-    await runAfterClosingSettings(() => {
-      activePrimaryMode.value = 'editor';
-      isDiagnosticsPanelVisible.value = true;
-    });
+    activePrimaryMode.value = 'editor';
+    isDiagnosticsPanelVisible.value = true;
   };
 
   const openTerminal = async (): Promise<void> => {
@@ -391,9 +328,7 @@ export const useShellWorkbenchView = (onReady: () => void) => {
       return;
     }
 
-    await runAfterClosingSettings(() => {
-      isTerminalVisible.value = true;
-    });
+    isTerminalVisible.value = true;
   };
 
   const openEditorMode = (): void => {
@@ -462,53 +397,12 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     });
   };
 
-  const clearStatusbarMessageTimer = (): void => {
-    if (statusbarMessageTimerId !== null) {
-      window.clearTimeout(statusbarMessageTimerId);
-      statusbarMessageTimerId = null;
-    }
-  };
-
-  const showStatusbarMessage = (message: string): void => {
-    clearStatusbarMessageTimer();
-    statusbarMessage.value = message;
-    statusbarMessageTimerId = window.setTimeout(() => {
-      statusbarMessage.value = null;
-      statusbarMessageTimerId = null;
-    }, SETTINGS_STATUS_MESSAGE_DURATION_MS);
-  };
-
-  const openSettingsView = async (): Promise<void> => {
-    if (isSettingsView.value) {
-      return;
-    }
-
-    focusBeforeSettingsOpen =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    activeSurfaceMode.value = 'settings';
-    await nextTick();
-    settingsOverlayRef.value?.focusSearch();
-  };
-
-  const toggleSettingsView = async (): Promise<void> => {
-    if (isSettingsView.value) {
-      await requestCloseSettingsView();
-      return;
-    }
-
-    await openSettingsView();
-  };
-
-  const handleSettingsSaved = (message: string): void => {
-    showStatusbarMessage(message);
-  };
-
   const handleRequestCloseApplication = async (): Promise<void> => {
-    await runAfterClosingSettings(() => workbench.requestCloseApplication());
+    await workbench.requestCloseApplication();
   };
 
   const saveActiveDocumentFromShortcut = async (): Promise<void> => {
-    if (!isWorkbenchContentVisible.value || !workbench.isDesktopRuntime.value || !workbench.canSave.value) {
+    if (activePrimaryMode.value !== 'editor' || !workbench.isDesktopRuntime.value || !workbench.canSave.value) {
       return;
     }
 
@@ -520,19 +414,6 @@ export const useShellWorkbenchView = (onReady: () => void) => {
       return;
     }
 
-    const isSettingsShortcut =
-      (event.ctrlKey || event.metaKey) &&
-      !event.altKey &&
-      !event.shiftKey &&
-      (event.key === ',' || event.code === 'Comma');
-
-    if (isSettingsShortcut) {
-      event.preventDefault();
-      event.stopPropagation();
-      void toggleSettingsView();
-      return;
-    }
-
     if (isPrimaryModifierShortcut(event, 'KeyS', 's')) {
       event.preventDefault();
       event.stopPropagation();
@@ -540,13 +421,6 @@ export const useShellWorkbenchView = (onReady: () => void) => {
       if (!event.repeat) {
         void saveActiveDocumentFromShortcut();
       }
-      return;
-    }
-
-    if (isSettingsView.value && event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      void requestCloseSettingsView();
     }
   };
 
@@ -580,16 +454,7 @@ export const useShellWorkbenchView = (onReady: () => void) => {
 
   const handleSelectSidebarView = async (view: TWorkbenchSidebarView): Promise<void> => {
     if (view === 'ai') {
-      await runAfterClosingSettings(() => {
-        openAiMode();
-      });
-      return;
-    }
-
-    if (isSettingsView.value) {
-      await runAfterClosingSettings(() => {
-        showSidebarView(view);
-      });
+      openAiMode();
       return;
     }
 
@@ -622,7 +487,6 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     }
 
     hasEmittedReady.value = true;
-    dispatchWorkbenchReadyEvent();
     onReady();
   };
 
@@ -687,12 +551,10 @@ export const useShellWorkbenchView = (onReady: () => void) => {
   };
 
   const handleRunScript = async (): Promise<void> => {
-    await runAfterClosingSettings(async () => {
-      openEditorMode();
-      closeDiagnosticsPanel();
-      isTerminalVisible.value = true;
-      await workbench.runScript();
-    });
+    openEditorMode();
+    closeDiagnosticsPanel();
+    isTerminalVisible.value = true;
+    await workbench.runScript();
   };
 
   const handleIntegratedTerminalRunCompleted = (payload: ITerminalRunCompletedPayload): void => {
@@ -775,7 +637,6 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     window.removeEventListener(SHELL_WINDOW_RESIZE_START_EVENT, handleShellWindowResizeStart);
     window.removeEventListener(SHELL_WINDOW_RESIZE_END_EVENT, handleShellWindowResizeEnd);
     window.removeEventListener(SHELL_WINDOW_RESIZE_SETTLED_EVENT, handleShellWindowResizeSettled);
-    clearStatusbarMessageTimer();
     globalKeydownCleanup?.();
     nativeCloseRequestedUnlisten?.();
     nativeCloseRequestedUnlisten = null;
@@ -795,19 +656,15 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     runPanelRef,
     editorRef,
     editorViewportRef,
-    settingsOverlayRef,
     isTerminalVisible,
     isSidebarVisible,
     aiPanelWidth,
     isEditorMode,
     isAiMode,
     isDiagnosticsPanelVisible,
-    isSettingsView,
-    isWorkbenchContentVisible,
     terminalHeight,
     isTerminalMaximized,
     activeSidebarView,
-    statusbarMessage,
     sidebarWidth,
     diagnosticsTransitionsEnabled,
     startupWorkspaceRoot,
@@ -833,11 +690,8 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     handleTerminalHeightChange,
     handleAiPanelWidthChange,
     toggleTerminalMaximize,
-    closeSettingsView,
-    toggleSettingsView,
     openEditorMode,
     openAiMode,
-    handleSettingsSaved,
     handleRequestCloseApplication,
     toggleDiagnosticsPanel,
     handleSelectSidebarView,

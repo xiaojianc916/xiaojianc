@@ -645,6 +645,13 @@ const detectEnvironmentIpc = defineContractIpc(
   { idempotent: true },
 );
 
+const getWslLinkStatusIpc = defineContractIpc(
+  'get_wsl_link_status',
+  '读取 WSL Link 状态',
+  tauriContracts.getWslLinkStatus,
+  { idempotent: true, timeoutMs: 5_000 },
+);
+
 const listWorkspaceEntriesIpc = defineContractIpc(
   'list_workspace_entries',
   '读取工作区目录',
@@ -1251,6 +1258,8 @@ export const tauriService: ITauriService & {
   saveScript: saveScriptIpc,
 
   detectEnvironment: () => detectEnvironmentIpc(undefined),
+
+  getWslLinkStatus: () => getWslLinkStatusIpc(undefined),
 
   listWorkspaceEntries(path, rootPath) {
     return listWorkspaceEntriesIpc({ path, rootPath });

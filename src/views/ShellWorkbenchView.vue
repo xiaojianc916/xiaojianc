@@ -1,7 +1,6 @@
 <template>
-    <AppShellLayout :is-desktop-runtime="isDesktopRuntime" :sidebar-visible="isSidebarVisible" :terminal-visible="false"
-        :terminal-height="terminalHeight" :sidebar-width="sidebarWidth" :content-overlay-visible="isSettingsView"
-        @update:terminal-height="handleTerminalHeightChange">
+    <AppShellLayout :is-desktop-runtime="isDesktopRuntime" :sidebar-visible="isSidebarVisible"
+        :sidebar-width="sidebarWidth">
         <template #sidebar>
             <WorkbenchDashboardSidebar :active-view="activeSidebarView" :document="editorStore.document"
                 :is-ai-mode="isAiMode" :is-desktop-runtime="isDesktopRuntime"
@@ -15,7 +14,7 @@
                 @insert-template="handleInsertTemplate" @clear-run-history="handleClearRunHistory" />
         </template>
 
-        <section v-show="isWorkbenchContentVisible" :ref="bindEditorViewportRef" data-testid="workbench-root"
+        <section :ref="bindEditorViewportRef" data-testid="workbench-root"
             class="workbench-editor-viewport relative flex h-full min-h-0 flex-col overflow-hidden bg-(--app-bg)"
             :data-diagnostics-resizing="diagnosticsTransitionsEnabled ? 'false' : 'true'">
             <div class="@container/main flex flex-1 flex-col">
@@ -29,8 +28,95 @@
 
                         <Card v-else
                             class="flex h-full min-h-0 flex-1 flex-col gap-0 overflow-hidden rounded-[14px] border-(--shell-divider) bg-white py-0 shadow-sm">
-                            <CardContent v-show="!isTerminalPanelVisible || !isTerminalMaximized"
-                                class="flex min-h-0 flex-1 px-0 pb-0 pt-0">
+                            <ResizablePanelGroup v-if="isTerminalSplitVisible" direction="vertical"
+                                class="h-full min-h-0 w-full">
+                                <ResizablePanel class="min-h-0" :min-size="220" size-unit="px">
+                                    <CardContent class="flex h-full min-h-0 flex-1 px-0 pb-0 pt-0">
+                                        <div class="flex h-full min-h-0 flex-1 flex-col">
+                                            <EmptyEditorState v-if="!editorStore.hasActiveDocument"
+                                                :has-workspace="Boolean(editorStore.workspaceRootPath)"
+                                                :is-desktop-runtime="isDesktopRuntime" @create="createNewDocument"
+                                                @open="openDocument" @open-folder="openFolder" />
+
+                                            <DeferredSmartScriptEditor v-else-if="editorStore.document.kind === 'text'"
+                                                :ref="bindEditorRef" :document-id="editorStore.document.id"
+                                                :document-path="editorStore.document.path"
+                                                :document-name="editorStore.document.name"
+                                                :model-value="editorStore.document.content" theme="light"
+                                                :editor-settings="appStore.settings.editor" :can-run="canRun"
+                                                @update:model-value="updateContent"
+                                                @cursor-position-change="handleCursorPositionChange"
+                                                @diagnostics-change="handleDiagnosticsChange"
+                                                @selection-change="handleSelectionChange"
+                                                @format-request="handleFormatDocument"
+                                                @command-palette-request="handleOpenCommandPalette"
+                                                @run-request="handleRunScript" />
+
+                                            <AiDiffPreviewEditor v-else-if="
+                                                editorStore.document.kind === 'ai-diff' &&
+                                                editorStore.document.aiDiffPreview
+                                            " :preview="editorStore.document.aiDiffPreview" />
+
+                                            <GitDiffViewer v-else-if="
+                                                editorStore.document.kind === 'git-diff' &&
+                                                editorStore.document.gitDiffPreview
+                                            " :preview="editorStore.document.gitDiffPreview" theme="light"
+                                                :editor-settings="appStore.settings.editor" />
+
+                                            <ImageAssetPreview v-else-if="editorStore.document.path"
+                                                :path="editorStore.document.path" :name="editorStore.document.name" />
+                                        </div>
+                                    </CardContent>
+                                </ResizablePanel>
+
+                                <ResizableHandle
+                                    class="bg-transparent after:rounded-full after:bg-(--shell-divider) data-[panel-group-direction=vertical]:after:h-[4px]" />
+
+                                <ResizablePanel class="min-h-0 overflow-hidden" :default-size="terminalHeight"
+                                    :min-size="140" size-unit="px" @resize="handleTerminalHeightChange">
+                                    <DeferredRunPanel :ref="bindRunPanelRef"
+                                        :terminal-output-length="editorStore.terminalOutputLength"
+                                        :terminal-output-version="editorStore.terminalOutputVersion"
+                                        :resolve-terminal-output="editorStore.getTerminalOutputSnapshot"
+                                        :run-logs="editorStore.runLogs" :last-run-result="editorStore.lastRunResult"
+                                        :is-running="editorStore.isRunning" :executor="editorStore.selectedExecutor"
+                                        :document-name="editorStore.document.name"
+                                        :document-content="editorStore.document.content"
+                                        :document-path="editorStore.document.path"
+                                        :script-analysis="editorStore.activeScriptAnalysis"
+                                        :workspace-root-path="editorStore.workspaceRootPath" :theme="appStore.theme"
+                                        :terminal-settings="appStore.settings.terminal"
+                                        :visible="isTerminalPanelVisible" :is-maximized="false" @hide="hideTerminal"
+                                        @toggle-maximize="toggleTerminalMaximize" @clear-logs="clearTerminalLogs"
+                                        @terminal-run-completed="handleIntegratedTerminalRunCompleted"
+                                        @select-diagnostic="handleSelectDiagnostic"
+                                        @rerun-analysis="handleRerunDiagnostics"
+                                        @ai-fix-diagnostic="handleAiFixDiagnostic" />
+                                </ResizablePanel>
+                            </ResizablePanelGroup>
+
+                            <div v-else-if="isTerminalPanelVisible"
+                                class="flex min-h-0 flex-1 flex-col overflow-hidden">
+                                <DeferredRunPanel :ref="bindRunPanelRef"
+                                    :terminal-output-length="editorStore.terminalOutputLength"
+                                    :terminal-output-version="editorStore.terminalOutputVersion"
+                                    :resolve-terminal-output="editorStore.getTerminalOutputSnapshot"
+                                    :run-logs="editorStore.runLogs" :last-run-result="editorStore.lastRunResult"
+                                    :is-running="editorStore.isRunning" :executor="editorStore.selectedExecutor"
+                                    :document-name="editorStore.document.name"
+                                    :document-content="editorStore.document.content"
+                                    :document-path="editorStore.document.path"
+                                    :script-analysis="editorStore.activeScriptAnalysis"
+                                    :workspace-root-path="editorStore.workspaceRootPath" :theme="appStore.theme"
+                                    :terminal-settings="appStore.settings.terminal" :visible="isTerminalPanelVisible"
+                                    :is-maximized="true" @hide="hideTerminal" @toggle-maximize="toggleTerminalMaximize"
+                                    @clear-logs="clearTerminalLogs"
+                                    @terminal-run-completed="handleIntegratedTerminalRunCompleted"
+                                    @select-diagnostic="handleSelectDiagnostic" @rerun-analysis="handleRerunDiagnostics"
+                                    @ai-fix-diagnostic="handleAiFixDiagnostic" />
+                            </div>
+
+                            <CardContent v-else class="flex min-h-0 flex-1 px-0 pb-0 pt-0">
                                 <div class="flex h-full min-h-0 flex-1 flex-col">
                                     <EmptyEditorState v-if="!editorStore.hasActiveDocument"
                                         :has-workspace="Boolean(editorStore.workspaceRootPath)"
@@ -50,50 +136,26 @@
                                         @command-palette-request="handleOpenCommandPalette"
                                         @run-request="handleRunScript" />
 
-                                    <AiDiffPreviewEditor
-                                        v-else-if="editorStore.document.kind === 'ai-diff' && editorStore.document.aiDiffPreview"
-                                        :preview="editorStore.document.aiDiffPreview" />
+                                    <AiDiffPreviewEditor v-else-if="
+                                        editorStore.document.kind === 'ai-diff' && editorStore.document.aiDiffPreview
+                                    " :preview="editorStore.document.aiDiffPreview" />
 
-                                    <GitDiffViewer
-                                        v-else-if="editorStore.document.kind === 'git-diff' && editorStore.document.gitDiffPreview"
-                                        :preview="editorStore.document.gitDiffPreview" theme="light"
+                                    <GitDiffViewer v-else-if="
+                                        editorStore.document.kind === 'git-diff' &&
+                                        editorStore.document.gitDiffPreview
+                                    " :preview="editorStore.document.gitDiffPreview" theme="light"
                                         :editor-settings="appStore.settings.editor" />
 
                                     <ImageAssetPreview v-else-if="editorStore.document.path"
                                         :path="editorStore.document.path" :name="editorStore.document.name" />
                                 </div>
                             </CardContent>
-
-                            <div v-if="isTerminalAllowed" v-show="isTerminalPanelVisible"
-                                class="min-h-0 overflow-hidden" :style="terminalCardPaneStyle">
-                                <DeferredRunPanel :ref="bindRunPanelRef"
-                                    :terminal-output-length="editorStore.terminalOutputLength"
-                                    :terminal-output-version="editorStore.terminalOutputVersion"
-                                    :resolve-terminal-output="editorStore.getTerminalOutputSnapshot"
-                                    :run-logs="editorStore.runLogs" :last-run-result="editorStore.lastRunResult"
-                                    :is-running="editorStore.isRunning" :executor="editorStore.selectedExecutor"
-                                    :document-name="editorStore.document.name"
-                                    :document-content="editorStore.document.content"
-                                    :document-path="editorStore.document.path"
-                                    :script-analysis="editorStore.activeScriptAnalysis"
-                                    :workspace-root-path="editorStore.workspaceRootPath" :theme="appStore.theme"
-                                    :terminal-settings="appStore.settings.terminal" :visible="isTerminalPanelVisible"
-                                    :is-maximized="isTerminalMaximized" @hide="hideTerminal"
-                                    @toggle-maximize="toggleTerminalMaximize" @clear-logs="clearTerminalLogs"
-                                    @terminal-run-completed="handleIntegratedTerminalRunCompleted"
-                                    @select-diagnostic="handleSelectDiagnostic" @rerun-analysis="handleRerunDiagnostics"
-                                    @ai-fix-diagnostic="handleAiFixDiagnostic" />
-                            </div>
                         </Card>
                     </div>
                 </div>
             </div>
         </section>
 
-        <template #overlay>
-            <WorkbenchSettingsOverlay :ref="bindSettingsOverlayRef" :open="isSettingsView" @close="closeSettingsView"
-                @saved="handleSettingsSaved" />
-        </template>
     </AppShellLayout>
 </template>
 
@@ -104,8 +166,8 @@ import EmptyEditorState from '@/components/editor/EmptyEditorState.vue';
 import GitDiffViewer from '@/components/editor/GitDiffViewer.vue';
 import ImageAssetPreview from '@/components/editor/ImageAssetPreview.vue';
 import { Card, CardContent } from '@/components/ui/card';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import WorkbenchDashboardSidebar from '@/components/workbench/WorkbenchDashboardSidebar.vue';
-import WorkbenchSettingsOverlay from '@/components/workbench/WorkbenchSettingsOverlay.vue';
 import { useShellWorkbenchView } from '@/composables/useShellWorkbenchView';
 import AppShellLayout from '@/layouts/AppShellLayout.vue';
 import type { IGitDiffPreviewRequest } from '@/types/git';
@@ -142,12 +204,9 @@ const {
     updateContent,
     editorRef,
     editorViewportRef,
-    settingsOverlayRef,
     isTerminalVisible,
     isSidebarVisible,
     isAiMode,
-    isSettingsView,
-    isWorkbenchContentVisible,
     terminalHeight,
     isTerminalMaximized,
     activeSidebarView,
@@ -162,10 +221,8 @@ const {
     handleRerunDiagnostics,
     handleTerminalHeightChange,
     toggleTerminalMaximize,
-    closeSettingsView,
     openAiMode,
     openEditorMode,
-    handleSettingsSaved,
     handleSelectSidebarView,
     hideTerminal,
     openTerminal,
@@ -177,23 +234,11 @@ const {
     handleAiFixDiagnostic,
 } = useShellWorkbenchView(() => emit('ready'));
 
-const isTerminalAllowed = computed(() => isWorkbenchContentVisible.value && !isAiMode.value);
+const isTerminalAllowed = computed(() => !isAiMode.value);
 const isTerminalPanelVisible = computed(() => isTerminalAllowed.value && isTerminalVisible.value);
-const terminalCardPaneStyle = computed(() => {
-    if (!isTerminalPanelVisible.value) {
-        return {};
-    }
-
-    if (isTerminalMaximized.value) {
-        return {
-            flex: '1 1 100%',
-        };
-    }
-
-    return {
-        height: `${terminalHeight.value}px`,
-    };
-});
+const isTerminalSplitVisible = computed(
+    () => isTerminalPanelVisible.value && !isTerminalMaximized.value,
+);
 
 const handleSidebarOpenFile = async (path: string): Promise<void> => {
     openEditorMode();
@@ -220,38 +265,27 @@ const handleTogglePrimaryMode = (): void => {
 
 const isRunPanelExpose = (value: unknown): value is NonNullable<typeof runPanelRef.value> => {
     return (
-        typeof value === 'object'
-        && value !== null
-        && 'openShellCheck' in value
-        && typeof value.openShellCheck === 'function'
+        typeof value === 'object' &&
+        value !== null &&
+        'openShellCheck' in value &&
+        typeof value.openShellCheck === 'function'
     );
 };
 
 const isEditorExpose = (value: unknown): value is NonNullable<typeof editorRef.value> => {
     return (
-        typeof value === 'object'
-        && value !== null
-        && 'focusEditor' in value
-        && typeof value.focusEditor === 'function'
-        && 'insertSnippet' in value
-        && typeof value.insertSnippet === 'function'
-        && 'revealPosition' in value
-        && typeof value.revealPosition === 'function'
-        && 'rerunDiagnostics' in value
-        && typeof value.rerunDiagnostics === 'function'
-        && 'layoutEditor' in value
-        && typeof value.layoutEditor === 'function'
-    );
-};
-
-const isSettingsOverlayExpose = (value: unknown): value is NonNullable<typeof settingsOverlayRef.value> => {
-    return (
-        typeof value === 'object'
-        && value !== null
-        && 'focusSearch' in value
-        && typeof value.focusSearch === 'function'
-        && 'requestClose' in value
-        && typeof value.requestClose === 'function'
+        typeof value === 'object' &&
+        value !== null &&
+        'focusEditor' in value &&
+        typeof value.focusEditor === 'function' &&
+        'insertSnippet' in value &&
+        typeof value.insertSnippet === 'function' &&
+        'revealPosition' in value &&
+        typeof value.revealPosition === 'function' &&
+        'rerunDiagnostics' in value &&
+        typeof value.rerunDiagnostics === 'function' &&
+        'layoutEditor' in value &&
+        typeof value.layoutEditor === 'function'
     );
 };
 
@@ -265,9 +299,5 @@ const bindEditorRef = (value: unknown): void => {
 
 const bindEditorViewportRef = (value: unknown): void => {
     editorViewportRef.value = value instanceof HTMLElement ? value : null;
-};
-
-const bindSettingsOverlayRef = (value: unknown): void => {
-    settingsOverlayRef.value = isSettingsOverlayExpose(value) ? value : null;
 };
 </script>
