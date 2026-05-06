@@ -133,23 +133,19 @@ describe('AiPromptInput', () => {
     expect(element.style.height).toBe('');
   });
 
-  it('renders the rewritten input-group shell with auto mode label and provider meta', () => {
+  it('renders the rewritten input-group shell with dropdown mode switch', () => {
     const wrapper = mountPromptInput();
 
     expect(wrapper.find('.ai-prompt-shell').exists()).toBe(true);
     expect(wrapper.find('.ai-attachment-button').exists()).toBe(true);
-    expect(wrapper.text()).not.toContain('Attachments');
-    expect(wrapper.text()).not.toContain('Auto Apply');
-    expect(wrapper.text()).not.toContain('deepseek/deepseek-v4-pro');
-    expect(wrapper.text()).toContain('DeepSeek');
-    expect(wrapper.text()).toContain('Auto');
+    expect(wrapper.find('[aria-label="选择模式"]').exists()).toBe(true);
+    expect(wrapper.find('[data-slot="input-group"]').exists()).toBe(true);
   });
 
-  it('uses the dropdown mode trigger for chat agent plan modes', () => {
+  it('keeps the input-group mounted with the dropdown mode trigger', () => {
     const wrapper = mountPromptInput();
 
-    expect(wrapper.find('.ai-mode-button').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="选择模式"]').exists()).toBe(true);
     expect(wrapper.find('[data-slot="input-group"]').exists()).toBe(true);
-    expect(wrapper.text()).toContain('Auto');
   });
 });

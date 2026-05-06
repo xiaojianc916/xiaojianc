@@ -1,7 +1,7 @@
 {
     "$schema": "../gen/schemas/desktop-schema.json",
     "identifier": "wsl-link",
-    "description": "WSL Link 域能力：AF_HYPERV/AF_VSOCK + gRPC 主通道、mirrored QUIC 降级通道与断线恢复状态。当前仅暴露 get_wsl_link_status 查询 P0 可靠性核心状态；生产传输尚未启用。参见 ADR-20260506。",
+    "description": "WSL Link 域能力：AF_HYPERV/AF_VSOCK + gRPC 主通道、mirrored QUIC 降级通道与断线恢复状态。当前暴露 get_wsl_link_status、check_wsl_link_environment、get_wsl_link_agent_artifact_status、probe_wsl_link_primary 以及需显式确认的 install_wsl_link_agent / start_wsl_link_agent；生产终端切流尚未启用。参见 ADR-20260506。",
     "windows": [
         "main"
     ],

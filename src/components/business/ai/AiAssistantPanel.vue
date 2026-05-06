@@ -423,10 +423,6 @@ const openHistoryThread = (threadId: string): void => {
   isHistoryOpen.value = false;
 };
 
-const selectMode = (mode: TAiAssistantViewMode): void => {
-  assistant.activeMode.value = mode;
-};
-
 const handleSuggestionSelect = async (suggestion: string): Promise<void> => {
   if (assistant.isSending.value) {
     return;
@@ -783,11 +779,8 @@ onBeforeUnmount(() => {
     <AiChatThread :messages="threadMessages" :is-typing="assistant.isSending.value" :platform-id="aiIconPlatformId"
       :provider-label="aiIconTitle">
       <template #empty>
-        <AiFloatingSuggestions
-          :suggestions="suggestionPool.suggestions.value"
-          :disabled="assistant.isSending.value"
-          @select="handleSuggestionSelect"
-        />
+        <AiFloatingSuggestions :suggestions="suggestionPool.suggestions.value" :disabled="assistant.isSending.value"
+          @select="handleSuggestionSelect" />
       </template>
       <template #after-message="{ message }">
         <Checkpoint v-if="getConversationCheckpoint(message.id)" class="ai-conversation-checkpoint">
@@ -850,10 +843,10 @@ onBeforeUnmount(() => {
       </div>
       <AiPromptInput v-model="assistant.draft.value" :disabled="assistant.isSending.value"
         :error-message="assistant.errorMessage.value" :submit-label="submitLabel"
-        :active-mode="assistant.activeMode.value" :provider-label="aiIconTitle"
+        v-model:active-mode="assistant.activeMode.value" :provider-label="aiIconTitle"
         :attachments="assistant.attachedFiles.value" :has-attachments="assistant.attachedFiles.value.length > 0"
         @submit="assistant.sendMessage" @stop="assistant.stopCurrentRequest" @file-selected="assistant.attachFile"
-        @remove-file="assistant.removeAttachedFile" @select-mode="selectMode" />
+        @remove-file="assistant.removeAttachedFile" />
     </div>
 
     <AiProviderSettings v-model:draft="settingsDraft" v-model:api-key="settingsApiKey"

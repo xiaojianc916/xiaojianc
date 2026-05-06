@@ -72,7 +72,10 @@ pub use workspace_fs::{
 pub(crate) use workspace_fs::{
     decode_script_bytes, encode_script_content, resolve_workspace_root, workspace_name,
 };
-pub use wsl_link::get_wsl_link_status;
+pub use wsl_link::{
+    check_wsl_link_environment, get_wsl_link_agent_artifact_status, get_wsl_link_status,
+    install_wsl_link_agent, probe_wsl_link_primary, start_wsl_link_agent,
+};
 
 #[cfg(windows)]
 pub(crate) fn configure_std_command_for_background(

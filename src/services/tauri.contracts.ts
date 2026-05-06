@@ -60,7 +60,16 @@ import {
   aiWebSearchInputSchema,
   aiWebSearchPayloadSchema
 } from '@/types/ai.schema';
-import { wslLinkStatusPayloadSchema } from '@/types/wsl-link.schema';
+import {
+  installWslLinkAgentPayloadSchema,
+  installWslLinkAgentRequestSchema,
+  probeWslLinkPrimaryPayloadSchema,
+  startWslLinkAgentPayloadSchema,
+  startWslLinkAgentRequestSchema,
+  wslLinkAgentArtifactPayloadSchema,
+  wslLinkEnvironmentReportSchema,
+  wslLinkStatusPayloadSchema,
+} from '@/types/wsl-link.schema';
 import { z } from 'zod';
 
 export const zTauriVoid = z
@@ -408,6 +417,26 @@ export const tauriContracts = {
   getWslLinkStatus: {
     inSchema: z.void(),
     outSchema: wslLinkStatusPayloadSchema,
+  },
+  checkWslLinkEnvironment: {
+    inSchema: z.void(),
+    outSchema: wslLinkEnvironmentReportSchema,
+  },
+  getWslLinkAgentArtifactStatus: {
+    inSchema: z.void(),
+    outSchema: wslLinkAgentArtifactPayloadSchema,
+  },
+  installWslLinkAgent: {
+    inSchema: installWslLinkAgentRequestSchema,
+    outSchema: installWslLinkAgentPayloadSchema,
+  },
+  startWslLinkAgent: {
+    inSchema: startWslLinkAgentRequestSchema,
+    outSchema: startWslLinkAgentPayloadSchema,
+  },
+  probeWslLinkPrimary: {
+    inSchema: z.void(),
+    outSchema: probeWslLinkPrimaryPayloadSchema,
   },
   listWorkspaceEntries: {
     inSchema: z.object({

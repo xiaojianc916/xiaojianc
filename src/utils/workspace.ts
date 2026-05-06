@@ -169,5 +169,47 @@ export const filterWorkspaceEntriesByQuery = (
   return entries.filter((entry) => workspaceEntryMatchesTree(entry, normalizedQuery, childrenMap));
 };
 
+export const collectWorkspaceExpandedPathsByQuery = (
+  entries: IWorkspaceEntry[],
+  query: string,
+  childrenMap: TWorkspaceChildrenMap,
+): Set<string> => {
+  const normalizedQuery = normalizeWorkspaceQuery(query);
+  const expandedPaths = new Set<string>();
+
+  if (!normalizedQuery) {
+    return expandedPaths;
+  }
+
+  const visit = (entry: IWorkspaceEntry): boolean => {
+    if (workspaceEntryMatchesSearch(entry, normalizedQuery)) {
+      if (entry.kind === 'directory') {
+        expandedPaths.add(entry.path);
+      }
+
+      return true;
+    }
+
+    if (entry.kind !== 'directory') {
+      return false;
+    }
+
+    const descendants = childrenMap[entry.path] ?? [];
+    const hasMatchingDescendant = descendants.some((child) => visit(child));
+
+    if (hasMatchingDescendant) {
+      expandedPaths.add(entry.path);
+    }
+
+    return hasMatchingDescendant;
+  };
+
+  entries.forEach((entry) => {
+    void visit(entry);
+  });
+
+  return expandedPaths;
+};
+
 export const sortByRelativePath = <T extends { relativePath: string }>(entries: T[]): T[] =>
   [...entries].sort((left, right) => left.relativePath.localeCompare(right.relativePath, 'zh-CN'));

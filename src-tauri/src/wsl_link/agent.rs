@@ -1,11 +1,13 @@
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::HashMap,
     sync::{Arc, Mutex},
 };
 
 use tonic::{Request, Response, Status};
 
 use super::{
+    noise::WslLinkNoiseHandshakeConfig,
+    noise_material::WslLinkAgentNoiseMaterial,
     protocol::v1::{
         wsl_link_server::WslLink, ClientFrame, HeartbeatRequest, HeartbeatResponse,
         OpenSessionRequest, OpenSessionResponse, ResumeSessionRequest, ResumeSessionResponse,
@@ -22,7 +24,7 @@ struct AgentSession {
     session_id: String,
     server_seq: u64,
     ack_client_seq: u64,
-    seen_idempotency_keys: BTreeSet<String>,
+    idempotency_cache: HashMap<String, ServerFrame>,
 }
 
 impl AgentSession {
@@ -31,7 +33,7 @@ impl AgentSession {
             session_id,
             server_seq: 1,
             ack_client_seq: last_client_seq,
-            seen_idempotency_keys: BTreeSet::new(),
+            idempotency_cache: HashMap::new(),
         }
     }
 
@@ -53,12 +55,13 @@ struct AgentState {
 }
 
 impl AgentState {
-    fn create_session(&mut self, last_client_seq: u64) -> AgentSession {
+    fn create_session(&mut self, last_client_seq: u64) -> (AgentSession, u64) {
         self.next_session_seq = self.next_session_seq.saturating_add(1);
         let session_id = format!("wsl-link-session-{}", self.next_session_seq);
-        let session = AgentSession::new(session_id.clone(), last_client_seq);
+        let mut session = AgentSession::new(session_id.clone(), last_client_seq);
+        let initial_server_seq = session.next_server_seq();
         self.sessions.insert(session_id, session.clone());
-        session
+        (session, initial_server_seq)
     }
 
     fn get_session_mut(&mut self, session_id: &str) -> Option<&mut AgentSession> {
@@ -69,11 +72,30 @@ impl AgentState {
 #[derive(Debug, Clone, Default)]
 pub struct WslLinkAgentService {
     state: Arc<Mutex<AgentState>>,
+    noise_material: Option<Arc<WslLinkAgentNoiseMaterial>>,
 }
 
 impl WslLinkAgentService {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_noise_material(noise_material: WslLinkAgentNoiseMaterial) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(AgentState::default())),
+            noise_material: Some(Arc::new(noise_material)),
+        }
+    }
+
+    pub fn noise_responder_config(&self) -> Option<WslLinkNoiseHandshakeConfig> {
+        self.noise_material
+            .as_ref()
+            .map(|material| material.responder_config())
+    }
+
+    pub fn handle_client_frame(&self, frame: ClientFrame) -> Result<ServerFrame, Status> {
+        build_server_frame_with_state(&self.state, frame)
+            .unwrap_or_else(|| Err(Status::internal("WSL Link agent 状态锁已损坏。")))
     }
 }
 
@@ -98,11 +120,11 @@ impl WslLink for WslLinkAgentService {
             .state
             .lock()
             .map_err(|_| Status::internal("WSL Link agent 状态锁已损坏。"))?;
-        let session = state.create_session(request.last_client_seq);
+        let (session, server_seq) = state.create_session(request.last_client_seq);
 
         Ok(Response::new(OpenSessionResponse {
             session_id: session.session_id,
-            server_seq: session.server_seq,
+            server_seq,
             ack_client_seq: session.ack_client_seq,
             transport: TransportKind::VsockGrpc as i32,
         }))
@@ -131,7 +153,9 @@ impl WslLink for WslLinkAgentService {
         };
 
         session.ack_client_seq(request.last_client_seq);
-        let server_seq = session.server_seq.max(request.last_ack_server_seq);
+        let server_seq = session
+            .server_seq
+            .max(request.last_ack_server_seq.saturating_add(1));
         session.server_seq = server_seq.saturating_add(1);
 
         Ok(Response::new(ResumeSessionResponse {
@@ -235,24 +259,33 @@ fn build_server_frame(state: &mut AgentState, frame: ClientFrame) -> Result<Serv
     let Some(session) = state.get_session_mut(&frame.session_id) else {
         return Err(Status::not_found("session 不存在。"));
     };
-    let is_duplicate = !session
-        .seen_idempotency_keys
-        .insert(frame.idempotency_key.clone());
+    if let Some(cached) = session
+        .idempotency_cache
+        .get(&frame.idempotency_key)
+        .cloned()
+    {
+        session.ack_client_seq(frame.client_seq);
+        let mut response = cached;
+        response.ack_client_seq = session.ack_client_seq;
+        return Ok(response);
+    }
+
     session.ack_client_seq(frame.client_seq);
     let server_seq = session.next_server_seq();
 
-    Ok(ServerFrame {
+    let response = ServerFrame {
         session_id: frame.session_id,
         request_id: frame.request_id,
         server_seq,
         ack_client_seq: session.ack_client_seq,
-        payload: if is_duplicate {
-            b"duplicate".to_vec()
-        } else {
-            frame.payload
-        },
+        payload: frame.payload,
         trace_id: frame.trace_id,
-    })
+    };
+    session
+        .idempotency_cache
+        .insert(frame.idempotency_key, response.clone());
+
+    Ok(response)
 }
 
 #[cfg(test)]
@@ -324,13 +357,13 @@ mod tests {
             .into_inner();
 
         assert_eq!(heartbeat.ack_client_seq, 7);
-        assert!(heartbeat.server_seq >= 1);
+        assert!(heartbeat.server_seq > open.server_seq);
     }
 
     #[test]
-    fn duplicate_duplex_frame_returns_duplicate_payload() {
+    fn duplicate_duplex_frame_returns_cached_response() {
         let mut state = AgentState::default();
-        let session = state.create_session(0);
+        let (session, _) = state.create_session(0);
         let frame = ClientFrame {
             session_id: session.session_id.clone(),
             request_id: "r1".to_string(),
@@ -345,7 +378,17 @@ mod tests {
         let second = build_server_frame(&mut state, frame).expect("second frame should work");
 
         assert_eq!(first.payload, b"payload");
-        assert_eq!(second.payload, b"duplicate");
+        assert_eq!(second.payload, b"payload");
+        assert_eq!(second.server_seq, first.server_seq);
         assert_eq!(second.ack_client_seq, 1);
+    }
+
+    #[test]
+    fn service_exposes_noise_responder_config_when_material_is_loaded() {
+        let material = super::super::noise_material::generate_pairing_material()
+            .expect("pairing material should generate");
+        let service = WslLinkAgentService::with_noise_material(material.agent);
+
+        assert!(service.noise_responder_config().is_some());
     }
 }

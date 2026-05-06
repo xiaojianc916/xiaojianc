@@ -4,6 +4,7 @@ import RunSidebarConfigsSection from '@/components/workbench/run-sidebar/RunSide
 import RunSidebarHistorySection from '@/components/workbench/run-sidebar/RunSidebarHistorySection.vue';
 import RunSidebarQuickSection from '@/components/workbench/run-sidebar/RunSidebarQuickSection.vue';
 import RunSidebarTemplatesSection from '@/components/workbench/run-sidebar/RunSidebarTemplatesSection.vue';
+import RunSidebarWslLinkSection from '@/components/workbench/run-sidebar/RunSidebarWslLinkSection.vue';
 import type {
     IConfigRow,
     IQuickRow,
@@ -362,6 +363,8 @@ viewBox="0 0 16 16" class="run-sidebar-icon run-sidebar-icon-sm" fill="none" str
 :collapsed="collapsedSections.configs" :rows="filteredConfigRows as IConfigRow[]"
                 :has-query="Boolean(normalizedSearchQuery)" :active-elapsed-label="activeElapsedLabel"
                 @toggle="toggleSection('configs')" @action="(row) => void handleConfigAction(row as IConfigRow)" />
+
+            <RunSidebarWslLinkSection :is-desktop-runtime="props.isDesktopRuntime" />
 
             <RunSidebarQuickSection
 :collapsed="collapsedSections.quick" :rows="filteredQuickRows as IQuickRow[]"

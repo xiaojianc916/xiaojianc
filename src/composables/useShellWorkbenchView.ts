@@ -2,7 +2,7 @@ import { useShellWorkbenchAiBridge } from '@/composables/useShellWorkbenchAiBrid
 import { useShellWorkbenchViewportState } from '@/composables/useShellWorkbenchViewportState';
 import { useWorkbench } from '@/composables/useWorkbench';
 import { useGitStore } from '@/store/git';
-import type { TWorkbenchSidebarView } from '@/types/app';
+import type { TWorkbenchPrimaryMode, TWorkbenchSidebarView } from '@/types/app';
 import type {
   IAnalyzeScriptPayload,
   ICommandTemplate,
@@ -26,7 +26,6 @@ export type TEditorExpose = {
   rerunDiagnostics: () => void;
   layoutEditor: () => void;
 };
-type TWorkbenchPrimaryMode = 'editor' | 'ai';
 
 const READY_PAINT_FALLBACK_TIMEOUT_MS = 96;
 const MAX_DOCUMENT_NAV_HISTORY = 120;
@@ -91,13 +90,14 @@ export const useShellWorkbenchView = (onReady: () => void) => {
   const isSidebarVisible = ref(true);
   const aiPanelWidth = ref(AI_PANEL_DEFAULT_WIDTH);
   const isDiagnosticsPanelVisible = ref(false);
-  const activePrimaryMode = ref<TWorkbenchPrimaryMode>('editor');
+  const activePrimaryMode = ref<TWorkbenchPrimaryMode>(workbench.appStore.workbenchPrimaryMode);
   const terminalHeight = ref(236);
   const terminalHeightBeforeMaximize = ref(236);
   const isTerminalMaximized = ref(false);
   const activeSidebarView = ref<TWorkbenchSidebarView>('explorer');
   const startupWorkspaceRoot = ref<IWorkspaceDirectoryPayload | null>(null);
   const hasEmittedReady = ref(false);
+  const isRestoringWorkbenchSession = ref(false);
   const documentBackStack = ref<string[]>([]);
   const documentForwardStack = ref<string[]>([]);
   let isApplyingDocumentNavigation = false;
@@ -314,12 +314,38 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     isDiagnosticsPanelVisible.value = false;
   };
 
+  const applyPrimaryMode = (mode: TWorkbenchPrimaryMode): void => {
+    if (mode === 'ai') {
+      isSidebarVisible.value = true;
+      isTerminalVisible.value = false;
+      activePrimaryMode.value = 'ai';
+      closeDiagnosticsPanel();
+      return;
+    }
+
+    activePrimaryMode.value = 'editor';
+  };
+
+  const persistPrimaryMode = (mode: TWorkbenchPrimaryMode): void => {
+    if (workbench.appStore.workbenchPrimaryMode !== mode) {
+      workbench.appStore.setWorkbenchPrimaryMode(mode);
+    }
+  };
+
+  watch(
+    () => workbench.appStore.workbenchPrimaryMode,
+    (nextMode) => {
+      applyPrimaryMode(nextMode);
+    },
+    { immediate: true },
+  );
+
   const openDiagnosticsPanel = async (): Promise<void> => {
     if (!canToggleDiagnosticsPanel.value || isDiagnosticsPanelVisible.value) {
       return;
     }
 
-    activePrimaryMode.value = 'editor';
+    openEditorMode();
     isDiagnosticsPanelVisible.value = true;
   };
 
@@ -332,14 +358,13 @@ export const useShellWorkbenchView = (onReady: () => void) => {
   };
 
   const openEditorMode = (): void => {
-    activePrimaryMode.value = 'editor';
+    applyPrimaryMode('editor');
+    persistPrimaryMode('editor');
   };
 
   const openAiMode = (): void => {
-    isSidebarVisible.value = true;
-    isTerminalVisible.value = false;
-    activePrimaryMode.value = 'ai';
-    closeDiagnosticsPanel();
+    applyPrimaryMode('ai');
+    persistPrimaryMode('ai');
   };
 
   const handleTerminalHeightChange = (value: number): void => {
@@ -375,11 +400,6 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     terminalHeightBeforeMaximize.value = terminalHeight.value;
     isTerminalMaximized.value = true;
     terminalHeight.value = 100000;
-  };
-
-  const toggleSidebar = (): void => {
-    isSidebarVisible.value = !isSidebarVisible.value;
-    scheduleEditorLayoutAfterSidebarChange();
   };
 
   const scheduleEditorLayoutAfterSidebarChange = (): void => {
@@ -458,11 +478,6 @@ export const useShellWorkbenchView = (onReady: () => void) => {
       return;
     }
 
-    if (activeSidebarView.value === view) {
-      toggleSidebar();
-      return;
-    }
-
     showSidebarView(view);
   };
 
@@ -491,6 +506,7 @@ export const useShellWorkbenchView = (onReady: () => void) => {
   };
 
   const restoreWorkbenchSession = async (): Promise<void> => {
+    isRestoringWorkbenchSession.value = true;
     try {
       await workbench.restoreSession();
     } catch (error) {
@@ -503,6 +519,8 @@ export const useShellWorkbenchView = (onReady: () => void) => {
         '恢复会话失败',
         error instanceof Error ? error.message : String(error),
       );
+    } finally {
+      isRestoringWorkbenchSession.value = false;
     }
   };
 
@@ -591,7 +609,9 @@ export const useShellWorkbenchView = (onReady: () => void) => {
         return;
       }
 
-      openEditorMode();
+      if (!isRestoringWorkbenchSession.value) {
+        openEditorMode();
+      }
 
       if (isApplyingDocumentNavigation) {
         isApplyingDocumentNavigation = false;

@@ -3,11 +3,13 @@ import {
   RADIUS_PRESETS,
   THEME_PREFERENCES,
   UI_DENSITIES,
+  WORKBENCH_PRIMARY_MODES,
   type TAccentColor,
   type TRadiusPreset,
   type TThemeMode,
   type TThemePreference,
   type TUiDensity,
+  type TWorkbenchPrimaryMode,
 } from '@/types/app';
 import {
   createDefaultAppSettings,
@@ -45,6 +47,7 @@ const RANGE_AI_PANEL_WIDTH = [350, 550] as const satisfies TNumberRange;
 const DEFAULT_AI_PANEL_WIDTH = 450;
 const RANGE_TERMINAL_PANEL_HEIGHT = [140, 2000] as const satisfies TNumberRange;
 const DEFAULT_TERMINAL_PANEL_HEIGHT = 236;
+const DEFAULT_WORKBENCH_PRIMARY_MODE: TWorkbenchPrimaryMode = 'ai';
 
 const MAX_COMPLETION_TRIGGERS = 12;
 const MAX_IGNORED_RULES = 16;
@@ -69,6 +72,7 @@ const isKnownThemePreference = createTupleGuard<TThemePreference>(THEME_PREFEREN
 const isKnownAccentColor = createTupleGuard<TAccentColor>(ACCENT_COLORS);
 const isKnownUiDensity = createTupleGuard<TUiDensity>(UI_DENSITIES);
 const isKnownRadiusPreset = createTupleGuard<TRadiusPreset>(RADIUS_PRESETS);
+const isKnownWorkbenchPrimaryMode = createTupleGuard<TWorkbenchPrimaryMode>(WORKBENCH_PRIMARY_MODES);
 
 /** value 通过 guard 时返回自身,否则回退 fallback。 */
 const coerceEnum = <T>(
@@ -105,6 +109,7 @@ interface IAppStorePersistShape {
   settings: IAppSettings;
   aiPanelWidth?: number;
   terminalPanelHeight?: number;
+  workbenchPrimaryMode?: TWorkbenchPrimaryMode;
 }
 
 /**
@@ -227,6 +232,7 @@ export const useAppStore = defineStore(
     const settings = ref<IAppSettings>(createDefaultAppSettings());
     const aiPanelWidth = ref(DEFAULT_AI_PANEL_WIDTH);
     const terminalPanelHeight = ref(DEFAULT_TERMINAL_PANEL_HEIGHT);
+    const workbenchPrimaryMode = ref<TWorkbenchPrimaryMode>(DEFAULT_WORKBENCH_PRIMARY_MODE);
     const systemTheme = ref<TThemeMode>(resolveSystemTheme());
 
     const themePreference = computed(() => settings.value.appearance.themePreference);
@@ -275,6 +281,12 @@ export const useAppStore = defineStore(
       terminalPanelHeight.value = clampNumber(value, RANGE_TERMINAL_PANEL_HEIGHT);
     };
 
+    const setWorkbenchPrimaryMode = (value: TWorkbenchPrimaryMode): void => {
+      workbenchPrimaryMode.value = isKnownWorkbenchPrimaryMode(value)
+        ? value
+        : DEFAULT_WORKBENCH_PRIMARY_MODE;
+    };
+
     // 用泛型把 section 收紧到具体字面量 key,两侧都成为 IAppSettings[K],
     // 避免 union key 索引赋值时 TS 取交集导致 ts(2322) "不能分配"。
     const resetSettingsSection = <K extends TAppSettingsSectionKey>(section: K): void => {
@@ -285,6 +297,7 @@ export const useAppStore = defineStore(
       settings,
       aiPanelWidth,
       terminalPanelHeight,
+      workbenchPrimaryMode,
       systemTheme,
       themePreference,
       theme,
@@ -296,6 +309,7 @@ export const useAppStore = defineStore(
       replaceSettings,
       setAiPanelWidth,
       setTerminalPanelHeight,
+      setWorkbenchPrimaryMode,
       resetSettingsSection,
     };
   },
@@ -303,7 +317,7 @@ export const useAppStore = defineStore(
     persist: {
       key: APP_STORE_KEY,
       // 只持久化用户设置与工作台布局偏好,排除派生状态(systemTheme 来自系统,不需持久化)
-      pick: ['settings', 'aiPanelWidth', 'terminalPanelHeight'],
+      pick: ['settings', 'aiPanelWidth', 'terminalPanelHeight', 'workbenchPrimaryMode'],
       // hydrate 完成后 normalize 确保存储数据合法
       afterHydrate(ctx) {
         // ctx.store 是 pinia 通用 Store<...> 类型,缺少 settings 字段;
@@ -316,6 +330,9 @@ export const useAppStore = defineStore(
         store.terminalPanelHeight = typeof store.terminalPanelHeight === 'number'
           ? clampNumber(store.terminalPanelHeight, RANGE_TERMINAL_PANEL_HEIGHT)
           : DEFAULT_TERMINAL_PANEL_HEIGHT;
+        store.workbenchPrimaryMode = isKnownWorkbenchPrimaryMode(store.workbenchPrimaryMode)
+          ? store.workbenchPrimaryMode
+          : DEFAULT_WORKBENCH_PRIMARY_MODE;
       },
     },
   },

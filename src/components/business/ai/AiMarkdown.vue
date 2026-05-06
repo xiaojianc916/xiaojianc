@@ -277,6 +277,7 @@ onBeforeUnmount(() => {
 }
 
 .ai-markdown :global(.table-node-wrapper) {
+  width: 100%;
   max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
@@ -290,13 +291,40 @@ onBeforeUnmount(() => {
 }
 
 .ai-markdown :global(.table-node) {
+  width: auto;
+  min-width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
   border-color: var(--shell-divider);
   box-shadow: none;
 }
 
 .ai-markdown :global(.table-node th),
 .ai-markdown :global(.table-node td) {
+  max-width: clamp(16ch, 48vw, 64ch);
   border-color: var(--shell-divider);
+  overflow-wrap: anywhere;
+}
+
+.ai-markdown :global(.table-node :is(td, th) *) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.ai-markdown :global(.table-node :is(td, th) code) {
+  white-space: pre-wrap;
+}
+
+.ai-markdown :global(.table-node :is(td, th) pre) {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.ai-markdown :global(.table-node :is(td, th) pre code) {
+  white-space: inherit;
+  overflow-wrap: normal;
 }
 
 @media (prefers-reduced-motion: reduce) {

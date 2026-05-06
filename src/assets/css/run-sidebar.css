@@ -404,6 +404,158 @@
     animation: run-sidebar-pulse 1.6s ease-in-out infinite;
 }
 
+.wsl-link-section-body {
+    padding: 2px 8px 8px;
+}
+
+.wsl-link-status-strip {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 7px;
+    min-height: 30px;
+    border: 1px solid color-mix(in srgb, var(--shell-divider) 82%, transparent);
+    border-radius: 7px;
+    padding: 5px 8px;
+    background: color-mix(in srgb, var(--panel-bg) 82%, transparent);
+}
+
+.wsl-link-status-strip.is-ready {
+    border-color: color-mix(in srgb, var(--success) 28%, var(--shell-divider));
+    background: color-mix(in srgb, var(--success) 8%, var(--panel-bg));
+}
+
+.wsl-link-status-strip.is-warning {
+    border-color: color-mix(in srgb, var(--warning) 28%, var(--shell-divider));
+    background: color-mix(in srgb, var(--warning) 8%, var(--panel-bg));
+}
+
+.wsl-link-status-strip.is-error {
+    border-color: color-mix(in srgb, var(--danger) 30%, var(--shell-divider));
+    background: color-mix(in srgb, var(--danger) 8%, var(--panel-bg));
+}
+
+.wsl-link-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--text-quaternary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-quaternary) 14%, transparent);
+    flex-shrink: 0;
+}
+
+.wsl-link-status-strip.is-ready .wsl-link-status-dot {
+    background: var(--success);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+.wsl-link-status-strip.is-warning .wsl-link-status-dot {
+    background: var(--warning);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 14%, transparent);
+}
+
+.wsl-link-status-strip.is-error .wsl-link-status-dot {
+    background: var(--danger);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.wsl-link-status-main {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wsl-link-status-meta {
+    margin-left: auto;
+    color: var(--text-tertiary);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.wsl-link-metrics {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 1px 0;
+    color: var(--text-quaternary);
+    font-size: 10.5px;
+}
+
+.wsl-link-metrics span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wsl-link-last-message {
+    margin: 6px 1px 0;
+    overflow: hidden;
+    color: var(--text-quaternary);
+    font-size: 10.5px;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wsl-link-actions {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.wsl-link-action {
+    display: inline-flex;
+    min-width: 0;
+    height: 26px;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border: 1px solid color-mix(in srgb, var(--shell-divider) 84%, transparent);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    transition:
+        border-color 120ms ease,
+        background-color 120ms ease,
+        color 120ms ease,
+        opacity 120ms ease;
+}
+
+.wsl-link-action:hover {
+    border-color: color-mix(in srgb, var(--accent-strong) 26%, var(--shell-divider));
+    background: color-mix(in srgb, var(--surface-hover) 100%, transparent);
+    color: var(--text-primary);
+}
+
+.wsl-link-action.is-primary {
+    border-color: color-mix(in srgb, var(--accent-strong) 34%, var(--shell-divider));
+    color: var(--accent-strong);
+}
+
+.wsl-link-action:disabled {
+    opacity: 0.48;
+    cursor: default;
+}
+
+.wsl-link-action:disabled:hover {
+    border-color: color-mix(in srgb, var(--shell-divider) 84%, transparent);
+    background: transparent;
+    color: var(--text-secondary);
+}
+
+.wsl-link-action-icon {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+}
+
 @keyframes run-sidebar-progress-slide {
     0% {
         transform: translateX(-100%);

@@ -693,6 +693,48 @@ describe('AiAssistantPanel', () => {
         expect(wrapper.find('[data-testid="plan-mode-panel"]').exists()).toBe(false);
     });
 
+    it('wires prompt mode updates into the real panel state', async () => {
+        const assistantMock = createAssistantMock([]);
+        assistantMock.activeMode.value = 'agent';
+        assistantMock.agentPlan.store.hasPlan = true;
+        assistantMock.agentPlan.store.activeGoal = '切到 plan 后显示真实计划面板';
+        assistantMock.agentPlan.store.steps = [createPlanStep('plan-step-1', '展示计划')];
+        useAiAssistantMock.mockReturnValue(assistantMock);
+
+        const wrapper = mount(AiAssistantPanel, {
+            props: {
+                document: createDocument(),
+                activeRun: null as IActiveRunSummary | null,
+                analysis: createAnalysis(),
+                selection: null as IEditorSelectionSummary | null,
+                gitStatus: createGitStatus(),
+                workspaceRootPath: 'd:/com.xiaojianc/my_desktop_app',
+            },
+            global: {
+                stubs: {
+                    AiChatThread: { template: '<div />' },
+                    AiContextChips: { template: '<div />' },
+                    AiPatchPreview: { template: '<div />' },
+                    AiPromptInput: {
+                        emits: ['update:activeMode'],
+                        template: '<button data-testid="switch-plan" @click="$emit(\'update:activeMode\', \'plan\')">切到 Plan</button>',
+                    },
+                    AiProviderSettings: { template: '<div />' },
+                    AiPlanModePanel: { template: '<div data-testid="plan-mode-panel" />' },
+                    teleport: true,
+                },
+            },
+        });
+
+        expect(wrapper.find('[data-testid="plan-mode-panel"]').exists()).toBe(false);
+
+        await wrapper.get('[data-testid="switch-plan"]').trigger('click');
+        await nextTick();
+
+        expect(assistantMock.activeMode.value).toBe('plan');
+        expect(wrapper.find('[data-testid="plan-mode-panel"]').exists()).toBe(true);
+    });
+
     it('简单工具确认不再冒充计划面板', () => {
         const assistantMock = createAssistantMock([]);
         assistantMock.activeMode.value = 'agent';

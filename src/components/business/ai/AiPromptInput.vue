@@ -165,7 +165,7 @@ const handleStop = (): void => {
 
                     <Select :model-value="activeMode" :disabled="disabled" @update:model-value="handleModeChange">
                         <SelectTrigger aria-label="选择模式"
-                            class="!h-auto !min-h-0 !w-auto !border-0 !bg-transparent !text-slate-400 hover:!text-slate-500 !shadow-none !px-1 !py-0.5 !text-xs !font-medium !gap-1 !ring-0 focus:!ring-0 focus-visible:!ring-0 [&>svg]:!size-3 [&>svg]:!opacity-60">
+                            class="h-auto! min-h-0! w-auto! border-0! bg-transparent! text-slate-400! hover:text-slate-500! shadow-none! px-1! py-0.5! text-xs! font-medium! gap-1! ring-0! focus:ring-0! focus-visible:ring-0! [&>svg]:size-3! [&>svg]:opacity-60!">
                             <SelectValue placeholder="Chat" />
                         </SelectTrigger>
                         <SelectContent side="top" align="start" class="ai-mode-content">
@@ -252,17 +252,44 @@ const handleStop = (): void => {
 }
 
 .ai-prompt-textarea {
+    --ai-prompt-line-box: 20.4px;
+    --ai-prompt-scrollbar-thumb: color-mix(in srgb, var(--text-primary) 12%, transparent);
     min-height: 60px;
+    max-height: 116px;
     border: 0;
     background: #ffffff;
     padding: 12px 16px 2px;
     color: var(--text-primary);
     font-size: 15px;
-    line-height: 1.36;
+    line-height: var(--ai-prompt-line-box);
     box-shadow: none;
     outline: none;
     resize: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ai-prompt-scrollbar-thumb) transparent;
     text-align: left;
+}
+
+.ai-prompt-textarea::-webkit-scrollbar {
+    width: 6px;
+}
+
+.ai-prompt-textarea::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.ai-prompt-textarea::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: var(--ai-prompt-scrollbar-thumb);
+    background-clip: content-box;
+}
+
+.ai-prompt-textarea::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--text-primary) 18%, transparent);
+    background-clip: content-box;
 }
 
 .ai-prompt-textarea::placeholder {

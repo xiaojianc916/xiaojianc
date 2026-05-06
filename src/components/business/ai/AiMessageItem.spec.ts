@@ -515,6 +515,104 @@ describe('AiMessageItem', () => {
     expect(successMock).toHaveBeenCalledWith('已复制对话内容');
   });
 
+  it('用户消息的复制按钮保留 hover 显示模式', () => {
+    const wrapper = mount(AiMessageItem, {
+      props: {
+        message: createMessage({
+          id: 'user-message',
+          role: 'user',
+          content: '把这段命令复制给我',
+        }),
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
+      },
+      global: {
+        stubs: {
+          AiMarkdown: { template: '<div class="markdown-stub">把这段命令复制给我</div>' },
+        },
+      },
+    });
+
+    const toolbar = wrapper.find('.ai-message-toolbar');
+
+    expect(toolbar.exists()).toBe(true);
+    expect(toolbar.classes()).toContain('is-copy-mode-hover');
+  });
+
+  it('AI 回复流式进行中不会显示复制按钮', () => {
+    const wrapper = mount(AiMessageItem, {
+      props: {
+        message: createMessage({
+          content: '这是还没结束的回复',
+          stream: {
+            status: 'streaming',
+          },
+        }),
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
+      },
+      global: {
+        stubs: {
+          AiMarkdown: { template: '<div class="markdown-stub">这是还没结束的回复</div>' },
+        },
+      },
+    });
+
+    expect(wrapper.find('.ai-message-copy-button').exists()).toBe(false);
+  });
+
+  it('AI 回复完成后直接显示复制按钮', () => {
+    const wrapper = mount(AiMessageItem, {
+      props: {
+        message: createMessage({
+          content: '这是已经完成的回复',
+          stream: {
+            status: 'completed',
+          },
+        }),
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
+      },
+      global: {
+        stubs: {
+          AiMarkdown: { template: '<div class="markdown-stub">这是已经完成的回复</div>' },
+        },
+      },
+    });
+
+    const toolbar = wrapper.find('.ai-message-toolbar');
+
+    expect(toolbar.exists()).toBe(true);
+    expect(toolbar.classes()).toContain('is-copy-mode-ready');
+    expect(wrapper.find('.ai-message-copy-button').exists()).toBe(true);
+  });
+
+  it('AI 回复被取消后也会显示复制按钮', () => {
+    const wrapper = mount(AiMessageItem, {
+      props: {
+        message: createMessage({
+          content: '这是被取消前已经生成的内容',
+          stream: {
+            status: 'cancelled',
+          },
+        }),
+        platformId: 'deepseek',
+        providerLabel: 'DeepSeek',
+      },
+      global: {
+        stubs: {
+          AiMarkdown: { template: '<div class="markdown-stub">这是被取消前已经生成的内容</div>' },
+        },
+      },
+    });
+
+    const toolbar = wrapper.find('.ai-message-toolbar');
+
+    expect(toolbar.exists()).toBe(true);
+    expect(toolbar.classes()).toContain('is-copy-mode-ready');
+    expect(wrapper.find('.ai-message-copy-button').exists()).toBe(true);
+  });
+
   it('助手消息不再渲染聊天区头像，并以内联内容形式平铺展示', () => {
     const wrapper = mount(AiMessageItem, {
       props: {
@@ -536,14 +634,14 @@ describe('AiMessageItem', () => {
     expect(wrapper.find('.markdown-stub').exists()).toBe(true);
   });
 
-  it('复制流式代码块时直接保留当前 Markdown 内容', async () => {
+  it('AI 回复被取消后复制时仍会保留当前 Markdown 内容', async () => {
     const content = '可以这样写：\n\n```bash\necho hello';
     const wrapper = mount(AiMessageItem, {
       props: {
         message: createMessage({
           content,
           stream: {
-            status: 'streaming',
+            status: 'cancelled',
           },
         }),
         platformId: 'deepseek',

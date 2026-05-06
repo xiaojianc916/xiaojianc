@@ -24,57 +24,17 @@
         <div v-else-if="!root" class="explorer-empty-state">正在准备资源树...</div>
 
         <template v-else>
-          <button type="button" class="explorer-root-row w-full text-left" :class="{ 'is-open': isRootOpen }"
-            @click="toggleRoot" @contextmenu.prevent.stop="handleRootContextMenu">
-            <span class="explorer-chevron">
-              <svg viewBox="0 0 12 12" class="h-3 w-3 transition-transform" :class="isRootOpen ? 'rotate-90' : ''"
-                fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 2.5 8 6 4 9.5" />
-              </svg>
-            </span>
-
-            <ExplorerEntryIcon kind="directory" :path="root.rootPath" :expanded="isRootOpen" class="h-4 w-4 shrink-0" />
-
-            <span class="explorer-tree-name">{{ rootLabel }}</span>
-          </button>
-
-          <div v-if="isRootOpen" class="explorer-tree-children">
-            <div v-if="rootLoading" class="explorer-helper-text explorer-helper-text-padded">
-              正在读取资源目录...
-            </div>
-
-            <div v-else-if="hasExplorerSearch && !hasVisibleRootEntries" class="explorer-empty-state is-inline">
-              未找到匹配的文件
-            </div>
-
-            <div v-else-if="!hasExplorerSearch && filteredRootEntries.length === 0"
-              class="explorer-empty-state is-inline">
-              当前目录暂无文件。
-            </div>
-
-            <div v-if="showRootInlineCreateDraft" class="explorer-tree-row explorer-tree-inline-create"
-              style="padding-left: 18px">
-              <span class="explorer-chevron is-placeholder"></span>
-
-              <ExplorerEntryIcon :kind="inlineCreateDraft.kind === 'directory' ? 'directory' : 'file'"
-                :path="root.rootPath" class="h-4 w-4 shrink-0" />
-
-              <input ref="rootInlineCreateInputRef" class="explorer-inline-create-input"
-                :value="inlineCreateDraft.value" :placeholder="inlineCreateDraft.placeholder"
-                @input="handleInlineCreateInput" @blur="handleInlineCreateBlur"
-                @keydown.enter.prevent.stop="void confirmInlineCreateWorkspaceEntry()"
-                @keydown.esc.prevent.stop="cancelInlineCreateWorkspaceEntry" />
-            </div>
-
-            <WorkspaceTreeNode v-for="entry in filteredRootEntries" :key="entry.path" :entry="entry" :level="0"
-              :children-map="childrenMap" :expanded-paths="expandedPaths" :loading-paths="loadingPaths"
-              :active-path="document.path" :active-dirty="document.isDirty" :search-query="explorerSearchQuery"
-              :root-path="root.rootPath" :inline-create-draft="inlineCreateDraft" @toggle-directory="toggleDirectory"
-              @open-file="handleOpenFile" @context-menu="handleEntryContextMenu"
+          <FileTree class="explorer-file-tree" :expanded="effectiveExplorerExpandedPaths"
+            :selected-path="selectedExplorerPath" @expanded-change="void handleExplorerExpandedChange($event)"
+            @update:selected-path="handleExplorerSelection">
+            <WorkspaceTreeNode v-if="rootEntry" :entry="rootEntry" :level="0" :is-root="true"
+              :children-map="childrenMap" :loading-paths="loadingPaths" :active-path="document.path"
+              :active-dirty="document.isDirty" :search-query="explorerSearchQuery"
+              :inline-create-draft="inlineCreateDraft" @context-menu="handleEntryContextMenu"
               @inline-create-input="handleInlineCreateInputValue" @inline-create-blur="handleInlineCreateBlur"
               @inline-create-confirm="void confirmInlineCreateWorkspaceEntry()"
               @inline-create-cancel="cancelInlineCreateWorkspaceEntry" />
-          </div>
+          </FileTree>
         </template>
       </div>
 
@@ -161,10 +121,10 @@
 </template>
 
 <script setup lang="ts">
+import { FileTree } from '@/components/ai-elements/file-tree';
 import type { ILinearContextMenuGroup, ILinearContextMenuItem } from '@/components/common/linear-context-menu.types';
 import LinearContextMenu from '@/components/common/LinearContextMenu.vue';
 import { Button } from '@/components/ui/button';
-import ExplorerEntryIcon from '@/components/workbench/ExplorerEntryIcon.vue';
 import RunSidebarPanel from '@/components/workbench/RunSidebarPanel.vue';
 import SearchSidebarPanel from '@/components/workbench/SearchSidebarPanel.vue';
 import SourceControlPanel from '@/components/workbench/SourceControlPanel.vue';
@@ -188,7 +148,7 @@ import type { IGitDiffPreviewRequest } from '@/types/git';
 import { writeFileSystemPathToClipboard } from '@/utils/clipboard';
 import { toErrorMessage } from '@/utils/error';
 import {
-  filterWorkspaceEntriesByQuery,
+  collectWorkspaceExpandedPathsByQuery,
   resolveWorkspaceKey,
   resolveWorkspaceRootPayload,
 } from '@/utils/workspace';
@@ -223,12 +183,11 @@ const message = useMessage();
 const dialog = useDialog();
 const appStore = useAppStore();
 const root = ref<IWorkspaceDirectoryPayload | null>(null);
-const rootExpanded = ref(true);
 const rootLoading = ref(false);
 const loadError = ref('');
 const explorerSearchQuery = ref('');
 const childrenMap = reactive<Record<string, IWorkspaceEntry[]>>({});
-const expandedPaths = reactive<Record<string, boolean>>({});
+const manualExpandedPaths = ref<Set<string>>(new Set());
 const loadingPaths = reactive<Record<string, boolean>>({});
 const loadedWorkspaceKey = ref<string | null>(null);
 let rootRequestId = 0;
@@ -259,7 +218,6 @@ const explorerContextMenu = reactive({
   y: 0,
 });
 const explorerContextTarget = ref<IExplorerContextTarget | null>(null);
-const rootInlineCreateInputRef = ref<HTMLInputElement | null>(null);
 const inlineCreateDraft = reactive({
   open: false,
   parentPath: null as string | null,
@@ -438,41 +396,72 @@ const normalizedExplorerSearchQuery = computed(() =>
   explorerSearchQuery.value.trim().toLowerCase(),
 );
 const hasExplorerSearch = computed(() => normalizedExplorerSearchQuery.value.length > 0);
-const isRootOpen = computed(() => rootExpanded.value || hasExplorerSearch.value);
 
-const rootEntries = computed(() => {
+const rootEntry = computed<IWorkspaceEntry | null>(() => {
   if (!root.value) {
-    return [];
+    return null;
   }
 
-  return childrenMap[root.value.rootPath] ?? [];
+  const rootEntries = childrenMap[root.value.rootPath] ?? root.value.entries;
+
+  return {
+    path: root.value.rootPath,
+    name: root.value.rootName,
+    kind: 'directory',
+    hasChildren: rootEntries.length > 0,
+  };
 });
 
-const rootLabel = computed(() => root.value?.rootName ?? 'workspace');
+const selectedExplorerPath = computed(() => props.document.path ?? undefined);
 
-const filteredRootEntries = computed(() => {
-  return filterWorkspaceEntriesByQuery(
-    rootEntries.value,
+const searchExpandedPaths = computed(() => {
+  if (!root.value || !hasExplorerSearch.value) {
+    return new Set<string>();
+  }
+
+  const nextExpandedPaths = collectWorkspaceExpandedPathsByQuery(
+    childrenMap[root.value.rootPath] ?? root.value.entries,
     normalizedExplorerSearchQuery.value,
     childrenMap,
   );
+  nextExpandedPaths.add(root.value.rootPath);
+  return nextExpandedPaths;
 });
 
-const hasVisibleRootEntries = computed(() => filteredRootEntries.value.length > 0);
-const showRootInlineCreateDraft = computed(
-  () => inlineCreateDraft.open && inlineCreateDraft.parentPath === root.value?.rootPath,
-);
+const effectiveExplorerExpandedPaths = computed(() => {
+  const nextExpandedPaths = new Set(manualExpandedPaths.value);
+
+  searchExpandedPaths.value.forEach((path) => {
+    nextExpandedPaths.add(path);
+  });
+
+  return nextExpandedPaths;
+});
+
+const loadedExplorerEntries = computed(() => {
+  const entryMap = new Map<string, IWorkspaceEntry>();
+
+  if (rootEntry.value) {
+    entryMap.set(rootEntry.value.path, rootEntry.value);
+  }
+
+  Object.values(childrenMap).forEach((entries) => {
+    entries.forEach((entry) => {
+      entryMap.set(entry.path, entry);
+    });
+  });
+
+  return entryMap;
+});
 
 const clearTreeState = (): void => {
   Object.keys(childrenMap).forEach((path) => {
     delete childrenMap[path];
   });
-  Object.keys(expandedPaths).forEach((path) => {
-    delete expandedPaths[path];
-  });
   Object.keys(loadingPaths).forEach((path) => {
     delete loadingPaths[path];
   });
+  manualExpandedPaths.value = new Set();
 };
 
 const applyWorkspaceRootPayload = (
@@ -486,7 +475,7 @@ const applyWorkspaceRootPayload = (
   loadedWorkspaceKey.value = workspaceKey;
   clearTreeState();
   childrenMap[payload.rootPath] = payload.entries;
-  rootExpanded.value = true;
+  manualExpandedPaths.value = new Set([payload.rootPath]);
 };
 
 const loadWorkspaceRoot = async (workspaceKey: string): Promise<void> => {
@@ -556,8 +545,64 @@ const loadDirectoryEntries = async (path: string): Promise<void> => {
   }
 };
 
-const toggleRoot = (): void => {
-  rootExpanded.value = !rootExpanded.value;
+const expandExplorerPath = async (path: string): Promise<void> => {
+  if (!root.value) {
+    return;
+  }
+
+  if (!manualExpandedPaths.value.has(path)) {
+    const nextExpandedPaths = new Set(manualExpandedPaths.value);
+    nextExpandedPaths.add(path);
+    manualExpandedPaths.value = nextExpandedPaths;
+  }
+
+  if (path !== root.value.rootPath && childrenMap[path] === undefined) {
+    await loadDirectoryEntries(path);
+  }
+};
+
+const toggleExplorerPath = async (path: string): Promise<void> => {
+  if (hasExplorerSearch.value && searchExpandedPaths.value.has(path)) {
+    return;
+  }
+
+  if (effectiveExplorerExpandedPaths.value.has(path)) {
+    const nextExpandedPaths = new Set(manualExpandedPaths.value);
+    nextExpandedPaths.delete(path);
+    manualExpandedPaths.value = nextExpandedPaths;
+    return;
+  }
+
+  await expandExplorerPath(path);
+};
+
+const handleExplorerExpandedChange = async (nextExpanded: Set<string>): Promise<void> => {
+  const previousExpanded = new Set(effectiveExplorerExpandedPaths.value);
+  const nextManualExpanded = new Set(nextExpanded);
+
+  if (hasExplorerSearch.value) {
+    searchExpandedPaths.value.forEach((path) => {
+      nextManualExpanded.delete(path);
+    });
+  }
+
+  manualExpandedPaths.value = nextManualExpanded;
+
+  if (!root.value) {
+    return;
+  }
+
+  const pendingLoads = [...nextExpanded].filter((path) => {
+    if (previousExpanded.has(path) || path === root.value?.rootPath) {
+      return false;
+    }
+
+    return childrenMap[path] === undefined;
+  });
+
+  for (const path of pendingLoads) {
+    await loadDirectoryEntries(path);
+  }
 };
 
 const closeExplorerContextMenu = (): void => {
@@ -575,41 +620,25 @@ const openExplorerContextMenu = (
   explorerContextMenu.open = true;
 };
 
-const handleRootContextMenu = (event: MouseEvent): void => {
-  if (!root.value) {
-    return;
-  }
-
-  openExplorerContextMenu(event, {
-    path: root.value.rootPath,
-    name: root.value.rootName,
-    kind: 'directory',
-    isRoot: true,
-  });
-};
-
 const handleEntryContextMenu = (payload: { event: MouseEvent; entry: IWorkspaceEntry }): void => {
   openExplorerContextMenu(payload.event, {
     path: payload.entry.path,
     name: payload.entry.name,
     kind: payload.entry.kind,
-    isRoot: false,
+    isRoot: payload.entry.path === root.value?.rootPath,
   });
-};
-
-const toggleDirectory = async (path: string): Promise<void> => {
-  const nextExpanded = !expandedPaths[path];
-  expandedPaths[path] = nextExpanded;
-
-  if (!nextExpanded || childrenMap[path] !== undefined) {
-    return;
-  }
-
-  await loadDirectoryEntries(path);
 };
 
 const handleOpenFile = (path: string): void => {
   emit('open-file', path);
+};
+
+const handleExplorerSelection = (path: string): void => {
+  const entry = loadedExplorerEntries.value.get(path);
+
+  if (entry?.kind === 'file') {
+    handleOpenFile(entry.path);
+  }
 };
 
 const handleOpenGitDiff = (payload: IGitDiffPreviewRequest): void => {
@@ -635,12 +664,6 @@ const closeInlineCreateDraft = (): void => {
 const focusInlineCreateInput = async (): Promise<void> => {
   await nextTick();
 
-  if (showRootInlineCreateDraft.value) {
-    rootInlineCreateInputRef.value?.focus();
-    rootInlineCreateInputRef.value?.select();
-    return;
-  }
-
   const input = document.querySelector('.explorer-inline-create-input') as HTMLInputElement | null;
   input?.focus();
   input?.select();
@@ -661,12 +684,7 @@ const openInlineCreateDraft = async (
     return;
   }
 
-  if (parentPath !== root.value.rootPath) {
-    expandedPaths[parentPath] = true;
-    if (childrenMap[parentPath] === undefined) {
-      await loadDirectoryEntries(parentPath);
-    }
-  }
+  await expandExplorerPath(parentPath);
 
   inlineCreateDraft.open = true;
   inlineCreateDraft.parentPath = parentPath;
@@ -675,15 +693,6 @@ const openInlineCreateDraft = async (
   inlineCreateDraft.placeholder = '';
 
   await focusInlineCreateInput();
-};
-
-const handleInlineCreateInput = (event: Event): void => {
-  const target = event.target;
-  if (!(target instanceof HTMLInputElement)) {
-    return;
-  }
-
-  inlineCreateDraft.value = target.value;
 };
 
 const handleInlineCreateInputValue = (value: string): void => {
@@ -901,12 +910,8 @@ const handleExplorerContextMenuSelect = async (
   switch (actionItem.action) {
     case 'open':
       if (!target) return;
-      if (target.isRoot) {
-        toggleRoot();
-        return;
-      }
       if (target.kind === 'directory') {
-        await toggleDirectory(target.path);
+        await toggleExplorerPath(target.path);
         return;
       }
       handleOpenFile(target.path);
@@ -1008,6 +1013,16 @@ watch(
 </script>
 
 <style scoped>
+:deep(.explorer-file-tree[data-slot='file-tree']) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:deep(.explorer-file-tree[data-slot='file-tree'] > div) {
+  padding: 0;
+}
+
 .explorer-tree-inline-create {
   display: flex;
   align-items: center;

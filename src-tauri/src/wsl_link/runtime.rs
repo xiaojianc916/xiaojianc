@@ -4,6 +4,7 @@ use serde::Serialize;
 
 use super::{
     circuit_breaker::CircuitBreakerState,
+    config::WslLinkTransportConfig,
     manager::WslLinkManager,
     state_machine::WslLinkConnectionState,
     types::{WslLinkMetrics, WslLinkTransportKind, DEFAULT_PROTOCOL_VERSION},
@@ -43,6 +44,40 @@ pub struct WslLinkStatusPayload {
 }
 
 impl WslLinkRuntimeState {
+    pub fn begin_connect_attempt(&self) -> Result<WslLinkTransportConfig, String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        inner
+            .manager
+            .begin_manual_connect_attempt()
+            .map_err(|error| error.to_string())?;
+        Ok(inner.manager.config())
+    }
+
+    pub fn record_connect_success(&self, transport: WslLinkTransportKind) -> Result<(), String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        inner
+            .manager
+            .record_handshake_ok(transport)
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn record_connect_failure(&self, error_message: String) -> Result<(), String> {
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        inner
+            .manager
+            .record_connect_error(error_message)
+            .map_err(|error| error.to_string())
+    }
+
     pub fn snapshot(&self) -> WslLinkStatusPayload {
         let inner = self
             .inner
@@ -61,7 +96,7 @@ impl WslLinkRuntimeState {
             mirrored_quic_port: config.mirrored_quic_port,
             circuit_breaker: inner.manager.circuit_breaker_state(),
             metrics,
-            note: "WSL Link 已接入 gRPC/QUIC 协议生成、keepalive 配置、hedged 连接管理与 adapter 边界；WSL agent 和真实 AF_HYPERV/AF_VSOCK socket 尚未切流。",
+            note: "WSL Link 已接入 gRPC/QUIC 协议生成、keepalive 配置、hedged 连接管理、WSL agent 服务、agent Noise 配置启动校验、agent 用户态分发命令计划、payload 执行器、显式确认安装/后台启动命令、Windows AF_HYPERV 地址/GUID 解析、非阻塞 connect、tonic Channel connector 与 OpenSession 握手执行器、QUIC bi-stream 骨架、Noise_KKpsk2 安全帧、桌面 keyring 密钥材料接口和只读环境自检；真机握手矩阵、UI 安装入口和终端切流尚未启用。",
         }
     }
 }

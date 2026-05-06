@@ -167,6 +167,24 @@ const copyableContent = computed(() => {
 
 const canCopyContent = computed(() => copyableContent.value.trim().length > 0);
 
+const copyButtonVisibilityMode = computed(() => {
+  if (!canCopyContent.value) {
+    return 'hidden';
+  }
+
+  if (props.message.role === 'user') {
+    return 'hover';
+  }
+
+  if (props.message.role === 'assistant') {
+    return props.message.stream?.status === 'streaming' ? 'hidden' : 'ready';
+  }
+
+  return 'hidden';
+});
+
+const shouldRenderCopyButton = computed(() => copyButtonVisibilityMode.value !== 'hidden');
+
 const inlineLoaderLabel = computed(
   () => props.message.stream?.activityText?.trim() || 'AI 正在生成回答',
 );
@@ -268,7 +286,8 @@ onBeforeUnmount(() => {
         {{ action.label }}
       </MessageAction>
     </MessageActions>
-    <MessageToolbar v-if="canCopyContent" class="ai-message-toolbar">
+    <MessageToolbar v-if="shouldRenderCopyButton" class="ai-message-toolbar"
+      :class="[`is-copy-mode-${copyButtonVisibilityMode}`]">
       <MessageActions class="ai-message-actions">
         <MessageAction class="ai-message-copy-button" :class="{ 'is-copied': isCopied }"
           :label="isCopied ? '已复制对话内容' : '复制对话内容'" :tooltip="isCopied ? '已复制' : '复制对话内容'"
@@ -509,8 +528,14 @@ onBeforeUnmount(() => {
     color 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.ai-message:hover .ai-message-copy-button,
-.ai-message:focus-within .ai-message-copy-button {
+.ai-message-toolbar.is-copy-mode-ready .ai-message-copy-button {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.ai-message.is-user:hover .ai-message-copy-button,
+.ai-message.is-user:focus-within .ai-message-copy-button {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);

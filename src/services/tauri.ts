@@ -652,6 +652,41 @@ const getWslLinkStatusIpc = defineContractIpc(
   { idempotent: true, timeoutMs: 5_000 },
 );
 
+const checkWslLinkEnvironmentIpc = defineContractIpc(
+  'check_wsl_link_environment',
+  '检测 WSL Link 运行环境',
+  tauriContracts.checkWslLinkEnvironment,
+  { idempotent: true, timeoutMs: 8_000 },
+);
+
+const getWslLinkAgentArtifactStatusIpc = defineContractIpc(
+  'get_wsl_link_agent_artifact_status',
+  '读取 WSL Link agent 构建产物状态',
+  tauriContracts.getWslLinkAgentArtifactStatus,
+  { idempotent: true, timeoutMs: 5_000 },
+);
+
+const installWslLinkAgentIpc = definePayloadIpc(
+  'install_wsl_link_agent',
+  '安装 WSL Link agent',
+  tauriContracts.installWslLinkAgent,
+  { idempotent: false, audit: 'sensitive', timeoutMs: 90_000 },
+);
+
+const startWslLinkAgentIpc = definePayloadIpc(
+  'start_wsl_link_agent',
+  '启动 WSL Link agent',
+  tauriContracts.startWslLinkAgent,
+  { idempotent: false, audit: 'sensitive', timeoutMs: 20_000 },
+);
+
+const probeWslLinkPrimaryIpc = defineContractIpc(
+  'probe_wsl_link_primary',
+  '探测 WSL Link 主通道',
+  tauriContracts.probeWslLinkPrimary,
+  { idempotent: false, audit: 'sensitive', timeoutMs: 8_000 },
+);
+
 const listWorkspaceEntriesIpc = defineContractIpc(
   'list_workspace_entries',
   '读取工作区目录',
@@ -1260,6 +1295,16 @@ export const tauriService: ITauriService & {
   detectEnvironment: () => detectEnvironmentIpc(undefined),
 
   getWslLinkStatus: () => getWslLinkStatusIpc(undefined),
+
+  checkWslLinkEnvironment: () => checkWslLinkEnvironmentIpc(undefined),
+
+  getWslLinkAgentArtifactStatus: () => getWslLinkAgentArtifactStatusIpc(undefined),
+
+  installWslLinkAgent: (payload) => installWslLinkAgentIpc(payload),
+
+  startWslLinkAgent: (payload) => startWslLinkAgentIpc(payload),
+
+  probeWslLinkPrimary: () => probeWslLinkPrimaryIpc(undefined),
 
   listWorkspaceEntries(path, rootPath) {
     return listWorkspaceEntriesIpc({ path, rootPath });

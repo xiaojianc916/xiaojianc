@@ -39,6 +39,9 @@
     "targets": [
       "nsis"
     ],
+    "resources": [
+      "binaries/wsl-link/*"
+    ],
     "publisher": "xiaojianc",
     "copyright": "© 2026 xiaojianc",
     "category": "DeveloperTool",

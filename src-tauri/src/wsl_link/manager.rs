@@ -96,6 +96,27 @@ impl WslLinkManager {
         Ok(())
     }
 
+    pub fn begin_manual_connect_attempt(&mut self) -> Result<(), WslLinkManagerError> {
+        match self.state() {
+            WslLinkConnectionState::Idle | WslLinkConnectionState::Closed => {
+                self.state_machine.transition(WslLinkEvent::Start)?;
+            }
+            WslLinkConnectionState::Backoff => {
+                self.state_machine
+                    .transition(WslLinkEvent::BackoffElapsed)?;
+            }
+            WslLinkConnectionState::Degraded => {
+                self.state_machine.transition(WslLinkEvent::HeartbeatDead)?;
+            }
+            WslLinkConnectionState::Ready
+            | WslLinkConnectionState::Connecting
+            | WslLinkConnectionState::Reconnecting
+            | WslLinkConnectionState::Resuming => {}
+        }
+        self.connect_started_at = Some(Instant::now());
+        Ok(())
+    }
+
     pub fn connect_plan(&mut self, now_unix_ms: u64) -> WslLinkConnectPlan {
         let should_probe_primary =
             self.circuit_breaker.before_call(now_unix_ms) == CircuitBreakerDecision::Allow;
@@ -301,5 +322,20 @@ mod tests {
         let plan = manager.connect_plan(now_unix_ms());
 
         assert!(plan.next_backoff_ms >= 1);
+    }
+
+    #[test]
+    fn manager_manual_attempt_retries_from_backoff() {
+        let mut manager = WslLinkManager::default();
+        manager.start_connecting().expect("start should work");
+        manager
+            .record_connect_error("connect failed")
+            .expect("error should record");
+
+        manager
+            .begin_manual_connect_attempt()
+            .expect("manual retry should work");
+
+        assert_eq!(manager.state(), WslLinkConnectionState::Connecting);
     }
 }

@@ -10,6 +10,7 @@ const {
     saveDocumentMock,
     setAiPanelWidthMock,
     setTerminalPanelHeightMock,
+    setWorkbenchPrimaryModeMock,
     appStoreState,
     waitForDesktopRuntimeMock,
     shortcutState,
@@ -25,9 +26,13 @@ const {
         setTerminalPanelHeightMock: vi.fn((value: number) => {
             appStoreState.terminalPanelHeight = value;
         }),
+        setWorkbenchPrimaryModeMock: vi.fn((value: 'editor' | 'ai') => {
+            appStoreState.workbenchPrimaryMode = value;
+        }),
         appStoreState: {
             aiPanelWidth: 450,
             terminalPanelHeight: 236,
+            workbenchPrimaryMode: 'editor' as 'editor' | 'ai',
         },
         waitForDesktopRuntimeMock: vi.fn(),
         shortcutState: {
@@ -50,8 +55,12 @@ vi.mock('@/composables/useWorkbench', () => ({
             get terminalPanelHeight() {
                 return appStoreState.terminalPanelHeight;
             },
+            get workbenchPrimaryMode() {
+                return appStoreState.workbenchPrimaryMode;
+            },
             setAiPanelWidth: setAiPanelWidthMock,
             setTerminalPanelHeight: setTerminalPanelHeightMock,
+            setWorkbenchPrimaryMode: setWorkbenchPrimaryModeMock,
         },
         editorStore: {
             hasActiveDocument: false,
@@ -200,8 +209,10 @@ describe('useShellWorkbenchView', () => {
         waitForDesktopRuntimeMock.mockReset();
         setAiPanelWidthMock.mockClear();
         setTerminalPanelHeightMock.mockClear();
+        setWorkbenchPrimaryModeMock.mockClear();
         appStoreState.aiPanelWidth = 450;
         appStoreState.terminalPanelHeight = 236;
+        appStoreState.workbenchPrimaryMode = 'editor';
         shortcutState.canSave = false;
         shortcutState.isDesktopRuntime = true;
 
@@ -328,7 +339,7 @@ describe('useShellWorkbenchView', () => {
         wrapper.unmount();
     });
 
-    it('重复点击源代码管理会收起左侧边栏', async () => {
+    it('重复点击源代码管理会保持左侧边栏显示', async () => {
         const wrapper = mount(TestHost, {
             props: { onReady: vi.fn() },
         });
@@ -339,7 +350,8 @@ describe('useShellWorkbenchView', () => {
         expect(wrapper.vm.isSidebarVisible).toBe(true);
 
         await wrapper.vm.handleSelectSidebarView('source-control');
-        expect(wrapper.vm.isSidebarVisible).toBe(false);
+        expect(wrapper.vm.activeSidebarView).toBe('source-control');
+        expect(wrapper.vm.isSidebarVisible).toBe(true);
 
         wrapper.unmount();
     });
@@ -389,6 +401,36 @@ describe('useShellWorkbenchView', () => {
         await wrapper.vm.openTerminal();
 
         expect(wrapper.vm.isTerminalVisible).toBe(true);
+
+        wrapper.unmount();
+    });
+
+    it('会恢复上次主界面模式，并在切换时写回 store', async () => {
+        appStoreState.workbenchPrimaryMode = 'ai';
+
+        const wrapper = mount(TestHost, {
+            props: { onReady: vi.fn() },
+        });
+        await flushPromises();
+
+        expect(wrapper.vm.isEditorMode).toBe(false);
+        expect(wrapper.vm.isAiMode).toBe(true);
+        expect(wrapper.vm.isTerminalVisible).toBe(false);
+
+        wrapper.vm.openEditorMode();
+        await flushPromises();
+
+        expect(wrapper.vm.isEditorMode).toBe(true);
+        expect(wrapper.vm.isAiMode).toBe(false);
+        expect(setWorkbenchPrimaryModeMock).toHaveBeenLastCalledWith('editor');
+        expect(appStoreState.workbenchPrimaryMode).toBe('editor');
+
+        await wrapper.vm.handleSelectSidebarView('ai');
+
+        expect(wrapper.vm.isAiMode).toBe(true);
+        expect(wrapper.vm.isTerminalVisible).toBe(false);
+        expect(setWorkbenchPrimaryModeMock).toHaveBeenLastCalledWith('ai');
+        expect(appStoreState.workbenchPrimaryMode).toBe('ai');
 
         wrapper.unmount();
     });

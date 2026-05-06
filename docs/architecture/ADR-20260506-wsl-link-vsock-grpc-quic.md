@@ -34,9 +34,9 @@
 5. **协议契约**：新增 `proto/wsl-link/v1/wsl_link.proto`，所有跨 VM 消息必须带 session / seq / ack / trace 字段。
 6. **状态权威**：Rust 侧维护 `Idle / Connecting / Ready / Degraded / Reconnecting / Resuming / Backoff / Closed` 状态机，前端只镜像状态和指标。
 7. **观测指标**：登记 `wsl_link_rtt_ms`、`wsl_link_reconnects_total`、`wsl_link_inflight_requests`、`wsl_link_outbox_depth`、`wsl_link_active_transport`。
-8. **安全边界**：vsock 和 localhost QUIC 都必须完成应用层握手。正式启用前必须接入 mTLS、Noise 或 HMAC token 中的一种；token 不得进入前端 store。
+8. **安全边界**：vsock 和 localhost QUIC 都必须完成应用层握手。安全方案选定为 `Noise_KKpsk2_25519_ChaChaPoly_BLAKE2s`，PSK 位置固定为 2；静态密钥和 PSK 不得进入前端 store。桌面端密钥材料使用系统 keyring 保存，PSK 使用 OS CSPRNG 生成，agent 端材料后续必须通过受控配置分发进入 WSL。
 
-第一阶段先落地可编译、可测试的可靠性核心与协议骨架：状态机、退避抖动、熔断器、WAL outbox、seq/ack/resume 类型和 hedged 策略。随后在桌面端接入 `tonic` / `prost` / `quinn` / `windows-sys` / target-specific `tokio-vsock` 的协议生成、keepalive 配置和 adapter 边界，并新增 WSL agent gRPC 服务实现。具体 socket 切流必须等 WSL VM GUID 解析、握手认证和真机矩阵完成后再启用，避免把未验证的 hvsock / vsock 平台差异扩散到现有终端链路。
+第一阶段先落地可编译、可测试的可靠性核心与协议骨架：状态机、退避抖动、熔断器、WAL outbox、seq/ack/resume 类型和 hedged 策略。随后在桌面端接入 `tonic` / `prost` / `quinn` / `windows-sys` / target-specific `tokio-vsock` 的协议生成、keepalive 配置和 adapter 边界，并新增 WSL agent gRPC 服务实现。QUIC fallback 已先补齐 Prost 帧编解码、bi-stream 请求/响应包装、connection / endpoint 服务循环骨架，以及 Noise transport 下的 ClientFrame / ServerFrame 加密包装；Noise 密钥生命周期已补齐成对材料生成、桌面侧 keyring 存储接口、版本化 JSON 编码、agent 配置解析、Linux 0600 权限校验和 agent 私钥不落桌面侧存储的校验。WSL agent 入口已支持默认 `/etc/calamex/wsl-link/agent-noise.json`、`CALAMEX_WSL_LINK_AGENT_NOISE_CONFIG` 环境变量和 `--noise-config` 参数，并在启动 listener 前加载 Noise agent 材料。agent 用户态分发计划已完成本地可测实现：使用 `~/.local/share/calamex/wsl-link` 与 `~/.config/calamex/wsl-link`，生成 prepare / 写 agent binary / 写 Noise config / verify / 后台 start 五类 `wsl.exe -- sh -lc` 命令规格，stdin payload 类型化区分 agent binary 与 Noise config，执行器会校验 payload、设置超时、超时 kill 子进程，并对非 0 exit 显式报错。`install_wsl_link_agent` 与 `start_wsl_link_agent` 命令已接入 Rust 与前端 service facade，必须分别由调用方传入 `confirmInstall=true` / `confirmStart=true`；安装依赖 `CALAMEX_WSL_LINK_AGENT_BINARY` 或应用旁路 Linux agent artifact，四步全部成功后才保存桌面 keyring，失败不会写入“已配对”的桌面密钥状态。Windows `AF_HYPERV` 主通道已完成 Linux guest vsock port 到 `<port>-facb-11e6-bd58-64006a7986d3` Service GUID 的映射、`SOCKADDR_HV` 构造、VM GUID 文本解析、`hcsdiag list` 输出中的运行中 WSL VM GUID 解析、WinSock 非阻塞 connect、timeout、Tokio stream 转换、tonic Channel connector，以及 OpenSession 请求/响应校验和执行器；`probe_wsl_link_primary` 已接入 Rust 与前端 service facade，会实际发起 AF_HYPERV + tonic OpenSession 握手，并将 runtime 状态推进到 Ready 或 Backoff。tonic 0.14 自定义 IO 需要 `hyper-util` 的 `TokioIo` 桥接，故将既有传递依赖登记为直接运行时依赖。只读环境自检已覆盖 WSL 版本、默认发行版、发行版列表、`vmcompute` 服务与用户级 `.wslconfig` mirrored networking 配置。具体切流必须等 WSL 真机安装验证、QUIC TLS 配置分发、真实握手矩阵和终端 feature flag 完成后再启用，避免把未验证的平台差异扩散到现有终端链路。
 
 ## 考虑的备选
 
@@ -56,9 +56,9 @@
   - session / seq / ack / outbox 让休眠、WSL 重启、前端重载后可恢复未确认消息。
   - hedged 与熔断能把单通道故障转换为可观测的降级状态。
 - **负面影响 / 代价**：
-  - 新增 Rust 运行时依赖：`tonic`、`tonic-prost`、`prost`、`quinn`、`windows-sys`，以及 Linux target-specific `tokio-vsock`；build 依赖 `tonic-prost-build` 与 `protoc-bin-vendored` 用于可复现 proto 生成。
+  - 新增 Rust 运行时依赖：`tonic`、`tonic-prost`、`prost`、`quinn`、`snow`、`getrandom`、`windows-sys`、`hyper-util`，以及 Linux target-specific `tokio-vsock`；复用既有 `keyring` 保存桌面侧密钥材料；build 依赖 `tonic-prost-build` 与 `protoc-bin-vendored` 用于可复现 proto 生成。
   - 当前 WAL 使用 JSONL；如后续升级为 `redb` / SQLite，必须单独评估容量、压缩和迁移策略。
-  - 已新增 WSL agent binary 入口；仍需要补构建分发、启动自检和 WSL 内真机验证。
+  - 已新增 WSL agent binary 入口、用户态分发命令计划、显式确认安装 / 后台启动命令和主通道握手探测命令；仍需要补 Linux target 构建产物分发、UI 安装入口和 WSL 内真机验证。
   - 安全边界变复杂，必须做握手认证、日志脱敏和 capability 审查。
   - 需要维护 NAT / mirrored / vsock 三类环境的兼容性矩阵。
 - **关联规则**：R-0.2、R-1.2、R-7.4、R-7.7、R-7.10、R-9.3、R-14、R-20.4、R-20.9
@@ -76,10 +76,10 @@
 
 1. **P0 可靠性核心**：新增状态机、退避抖动、熔断、WAL outbox、hedged 策略、proto 契约；不替换现有终端链路。已完成。
 2. **P1 协议与连接管理骨架**：接入 `tonic` / `prost` generated proto、HTTP/2 keepalive、`quinn` transport config、hedged manager、平台 adapter 边界和状态查询。已完成。
-3. **P2 WSL agent**：新增 Rust WSL agent 二进制，支持 gRPC 服务、心跳、resume、ack 和 Duplex 幂等回显。已完成服务实现，待 WSL2 真机验证与分发。
-4. **P3 主备传输**：Windows 接入 `AF_HYPERV` adapter；Linux agent 接入 `AF_VSOCK` 真机 listener；降级接入 mirrored localhost QUIC。
+3. **P2 WSL agent**：新增 Rust WSL agent 二进制，支持 gRPC 服务、心跳、resume、ack、Duplex 幂等缓存响应，以及 Noise agent 配置启动校验。已完成服务实现和启动参数解析，待 WSL2 真机验证与分发。
+4. **P3 主备传输**：Windows 接入 `AF_HYPERV` adapter；Linux agent 接入 `AF_VSOCK` 真机 listener；降级接入 mirrored localhost QUIC。QUIC fallback 已完成帧编解码、bi-stream handler、endpoint 服务循环骨架和 Noise 加密帧包装；Noise 生命周期已完成成对材料生成、桌面 keyring 存储接口、agent 配置加载入口、用户态分发命令计划、`install_wsl_link_agent` 显式确认入口和 `start_wsl_link_agent` 后台启动入口；Windows `AF_HYPERV` 已完成 Service GUID / `SOCKADDR_HV` / HCS VM GUID 解析、WinSock 非阻塞 connect、timeout、Tokio stream 转换、tonic Channel connector、OpenSession 执行器和 `probe_wsl_link_primary` 握手探测入口；环境自检命令已完成只读探测，待 UI 面板、Linux target 构建产物分发、TLS 配置、真实握手矩阵和真机切流。
 5. **P4 终端 / 脚本切流**：把终端和脚本执行入口迁移到 WSL Link，旧 `wsl.exe` 链路保留 feature flag 回滚。
-6. **P5 观测与安全**：接入握手认证、指标面板、压力测试和断线恢复 E2E。
+6. **P5 观测与安全**：接入 Noise 密钥生命周期、日志脱敏、指标面板、压力测试和断线恢复 E2E。
 
 ---
 

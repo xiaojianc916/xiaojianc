@@ -120,7 +120,16 @@ import type {
   ITerminalSessionPayload,
   IWriteTerminalInputRequest,
 } from './terminal';
-import type { IWslLinkStatusPayload } from './wsl-link';
+import type {
+  IInstallWslLinkAgentPayload,
+  IInstallWslLinkAgentRequest,
+  IProbeWslLinkPrimaryPayload,
+  IStartWslLinkAgentPayload,
+  IStartWslLinkAgentRequest,
+  IWslLinkAgentArtifactPayload,
+  IWslLinkEnvironmentReport,
+  IWslLinkStatusPayload,
+} from './wsl-link';
 
 export interface ISshConnectionTestRequest {
   host: string;
@@ -232,6 +241,11 @@ export interface ITauriService {
   saveScript(payload: ISaveScriptRequest): Promise<IScriptFilePayload>;
   detectEnvironment(): Promise<IExecutionEnvironment>;
   getWslLinkStatus(): Promise<IWslLinkStatusPayload>;
+  checkWslLinkEnvironment(): Promise<IWslLinkEnvironmentReport>;
+  getWslLinkAgentArtifactStatus(): Promise<IWslLinkAgentArtifactPayload>;
+  installWslLinkAgent(payload: IInstallWslLinkAgentRequest): Promise<IInstallWslLinkAgentPayload>;
+  startWslLinkAgent(payload: IStartWslLinkAgentRequest): Promise<IStartWslLinkAgentPayload>;
+  probeWslLinkPrimary(): Promise<IProbeWslLinkPrimaryPayload>;
   listWorkspaceEntries(path?: string, rootPath?: string): Promise<IWorkspaceDirectoryPayload>;
   createWorkspacePath(payload: IWorkspacePathCreateRequest): Promise<IWorkspacePathCreatePayload>;
   renameWorkspacePath(payload: IWorkspacePathRenameRequest): Promise<IWorkspacePathRenamePayload>;

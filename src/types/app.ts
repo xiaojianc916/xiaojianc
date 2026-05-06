@@ -37,6 +37,13 @@ export const RADIUS_PRESETS = [
     'rounded',
 ] as const satisfies ReadonlyArray<TRadiusPreset>;
 
+export type TWorkbenchPrimaryMode = 'editor' | 'ai';
+
+export const WORKBENCH_PRIMARY_MODES = [
+    'editor',
+    'ai',
+] as const satisfies ReadonlyArray<TWorkbenchPrimaryMode>;
+
 export type TWorkbenchSidebarView =
     | 'explorer'
     | 'search'
