@@ -3,7 +3,6 @@
 mod agent_sidecar;
 mod ai;
 mod ai_agent;
-mod ai_context;
 mod ai_edit;
 mod ai_index;
 mod ai_patch;
