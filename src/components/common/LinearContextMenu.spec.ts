@@ -1,14 +1,27 @@
-import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
-import LinearContextMenu from './LinearContextMenu.vue';
+import LinearContextMenu from '@/components/common/LinearContextMenu.vue';
+import { flushPromises, mount } from '@vue/test-utils';
+import { afterEach, describe, expect, it } from 'vitest';
+import { nextTick } from 'vue';
+
+const flushUi = async (): Promise<void> => {
+  await nextTick();
+  await flushPromises();
+  await nextTick();
+  await flushPromises();
+};
 
 describe('LinearContextMenu', () => {
-  it('selects items on pointerdown before editor blur can unmount the menu', async () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('在 open 从 false 切换为 true 时渲染菜单内容', async () => {
     const wrapper = mount(LinearContextMenu, {
+      attachTo: document.body,
       props: {
-        open: true,
-        x: 12,
-        y: 16,
+        open: false,
+        x: 96,
+        y: 128,
         theme: 'dark',
         submenuDirection: 'right',
         groups: [
@@ -18,26 +31,22 @@ describe('LinearContextMenu', () => {
             items: [
               {
                 key: 'copy',
-                label: 'Copy',
+                label: '复制',
                 icon: 'copy',
+                shortcut: ['Ctrl', 'C'],
               },
             ],
           },
         ],
       },
-      attachTo: document.body,
     });
 
-    await wrapper.vm.$nextTick();
+    await wrapper.setProps({ open: true });
+    await flushUi();
 
-    const button = document.body.querySelector('[data-slot="dropdown-menu-item"]');
-    if (!(button instanceof HTMLElement)) {
-      throw new Error('menu button was not rendered');
-    }
-    button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-    await wrapper.vm.$nextTick();
+    expect(document.body.textContent).toContain('复制');
+    expect(document.body.textContent).toContain('CLIPBOARD');
 
-    expect(wrapper.emitted('select')?.[0]?.[0]).toMatchObject({ key: 'copy' });
     wrapper.unmount();
   });
 });

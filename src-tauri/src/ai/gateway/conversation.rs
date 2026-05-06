@@ -70,7 +70,8 @@ pub async fn generate_conversation_title(
     ]);
     let base_url = resolve_model_endpoint_base_url(narrator_config)?;
     let api_key = get_api_key_for_model_endpoint(narrator_config, AiResolvedModelRole::Narrator)?;
-    let response = connection::chat_with_litellm_fallback(base_url, &api_key, model, request).await?;
+    let response =
+        connection::chat_with_litellm_fallback(base_url, &api_key, model, request).await?;
     let title = normalize_conversation_title(&response.content);
 
     if title.chars().count() < MIN_GENERATED_TITLE_CHARS {
@@ -246,7 +247,8 @@ pub async fn inline_complete(
         .as_deref()
         .unwrap_or(DEFAULT_LITELLM_MODEL);
 
-    let response = connection::chat_with_litellm_fallback(base_url, &api_key, model, request).await?;
+    let response =
+        connection::chat_with_litellm_fallback(base_url, &api_key, model, request).await?;
 
     Ok(AiInlineCompletionResult {
         insert_text: response.content,
@@ -290,7 +292,8 @@ pub async fn code_action(payload: AiCodeActionRequest) -> Result<AiCodeActionPay
         .as_deref()
         .unwrap_or(DEFAULT_LITELLM_MODEL);
 
-    let response = connection::chat_with_litellm_fallback(base_url, &api_key, model, request).await?;
+    let response =
+        connection::chat_with_litellm_fallback(base_url, &api_key, model, request).await?;
 
     Ok(AiCodeActionPayload {
         explanation: response.content,
@@ -461,7 +464,11 @@ fn build_context_block(references: &[AiContextReferencePayload]) -> String {
 
         let preview = sanitize_fenced_text(&preview);
 
-        let redacted_label = if reference.redacted { "，已脱敏" } else { "" };
+        let redacted_label = if reference.redacted {
+            "，已脱敏"
+        } else {
+            ""
+        };
 
         block.push_str(&format!(
             "\n[{}] {} ({path}, {range}{redacted_label})\n```text\n{preview}\n```\n",
@@ -529,7 +536,10 @@ fn clip_title_source(value: &str) -> String {
     value.trim().chars().take(MAX_TITLE_SOURCE_CHARS).collect()
 }
 
-pub(super) fn build_conversation_title_prompt(user_message: &str, assistant_message: &str) -> String {
+pub(super) fn build_conversation_title_prompt(
+    user_message: &str,
+    assistant_message: &str,
+) -> String {
     format!(
         "请只依据下面第一轮问答生成中文会话标题。\n规则：\n- 只输出标题本身，不要解释、引号或标点\n- 标题必须为 5 到 10 个中文字符\n- 不要使用后续对话，因为后续对话未提供\n\n用户第一句：\n```text\n{}\n```\n\nAI 第一句：\n```text\n{}\n```",
         sanitize_fenced_text(user_message),

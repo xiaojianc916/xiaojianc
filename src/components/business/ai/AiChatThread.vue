@@ -49,6 +49,9 @@ const hasInlineProgressMessage = computed(() => {
 const shouldRenderStandaloneTyping = computed(
   () => props.isTyping && !hasInlineProgressMessage.value,
 );
+const shouldRenderEmptyState = computed(
+  () => props.messages.length === 0 && !shouldRenderStandaloneTyping.value,
+);
 
 const lastAssistantMessageId = computed(() => {
   for (let index = props.messages.length - 1; index >= 0; index -= 1) {
@@ -85,7 +88,14 @@ const handleMessageAction = (messageId: string, actionId: TAiChatMessageActionId
         </div>
       </article>
     </ConversationContent>
-    
+    <slot v-else-if="shouldRenderEmptyState" name="empty">
+      <ConversationEmptyState
+        class="ai-chat-empty-state"
+        title="还没有对话"
+        description="选择一个提示词，或直接输入你的问题。"
+      />
+    </slot>
+    <ConversationScrollButton v-if="messages.length > 0" class="ai-chat-scroll-button" />
   </Conversation>
 </template>
 

@@ -4,8 +4,8 @@ use super::{
 };
 use chrono::{TimeZone, Utc};
 use git2::{
-    build::CheckoutBuilder, Branch, BranchType, ErrorCode, ObjectType, Repository, Status,
-    StatusEntry, StatusOptions, StashFlags,
+    build::CheckoutBuilder, Branch, BranchType, ErrorCode, ObjectType, Repository, StashFlags,
+    Status, StatusEntry, StatusOptions,
 };
 use serde::{Deserialize, Serialize};
 use std::{

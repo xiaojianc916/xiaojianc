@@ -111,7 +111,11 @@ where
     }
 }
 
-pub(super) fn should_try_direct_upstream_fallback(base_url: &str, model: &str, error: &str) -> bool {
+pub(super) fn should_try_direct_upstream_fallback(
+    base_url: &str,
+    model: &str,
+    error: &str,
+) -> bool {
     is_default_litellm_proxy_url(base_url)
         && resolve_direct_upstream_endpoint(base_url, model).is_some()
         && is_transport_connect_error(error)

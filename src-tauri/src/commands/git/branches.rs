@@ -1,7 +1,9 @@
 use super::*;
 
 #[tauri::command]
-pub fn list_git_branches(payload: GitRepositoryRootRequest) -> Result<GitBranchListPayload, String> {
+pub fn list_git_branches(
+    payload: GitRepositoryRootRequest,
+) -> Result<GitBranchListPayload, String> {
     let repository = open_repository_from_root(&payload.repository_root_path)?;
     let mut branches = Vec::new();
     let iterator = repository
@@ -86,13 +88,15 @@ pub fn create_git_branch(
 
     let head_commit = resolve_head_commit(&repository)?
         .ok_or_else(|| "当前仓库还没有提交记录，无法创建分支。".to_string())?;
-    let branch = repository.branch(branch_name, &head_commit, false).map_err(|error| {
-        if error.code() == ErrorCode::Exists {
-            format!("Git 分支已存在：{branch_name}")
-        } else {
-            format!("创建 Git 分支失败：{error}")
-        }
-    })?;
+    let branch = repository
+        .branch(branch_name, &head_commit, false)
+        .map_err(|error| {
+            if error.code() == ErrorCode::Exists {
+                format!("Git 分支已存在：{branch_name}")
+            } else {
+                format!("创建 Git 分支失败：{error}")
+            }
+        })?;
 
     if payload.checkout {
         checkout_branch_reference(&repository, &branch)?;

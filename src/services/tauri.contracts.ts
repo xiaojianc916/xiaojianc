@@ -52,6 +52,8 @@ import {
   aiProviderProfilePayloadSchema,
   aiProviderTestPayloadSchema,
   aiProviderTypeSchema,
+  aiSuggestionPoolPayloadSchema,
+  aiSuggestionPoolRequestSchema,
   aiToolDefinitionPayloadSchema,
   aiWebFetchInputSchema,
   aiWebFetchPayloadSchema,
@@ -742,6 +744,14 @@ export const tauriContracts = {
   aiGenerateConversationTitle: {
     inSchema: aiConversationTitleRequestSchema,
     outSchema: aiConversationTitlePayloadSchema,
+  },
+  aiGetSuggestionPoolCache: {
+    inSchema: z.void(),
+    outSchema: aiSuggestionPoolPayloadSchema.nullable(),
+  },
+  aiGenerateSuggestionPool: {
+    inSchema: aiSuggestionPoolRequestSchema,
+    outSchema: aiSuggestionPoolPayloadSchema,
   },
   aiNarrateActivity: {
     inSchema: aiNarratorRequestSchema,

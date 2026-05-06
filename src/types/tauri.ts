@@ -44,6 +44,8 @@ import type {
   IAiQueryIndexRequest,
   IAiSaveConfigRequest,
   IAiSaveCredentialsRequest,
+  IAiSuggestionPoolPayload,
+  IAiSuggestionPoolRequest,
   IAiToolDefinitionPayload,
   IAiWebFetchInput,
   IAiWebFetchPayload,
@@ -286,6 +288,8 @@ export interface ITauriService {
   aiGenerateConversationTitle(
     payload: IAiConversationTitleRequest,
   ): Promise<IAiConversationTitlePayload>;
+  aiGetSuggestionPoolCache(): Promise<IAiSuggestionPoolPayload | null>;
+  aiGenerateSuggestionPool(payload: IAiSuggestionPoolRequest): Promise<IAiSuggestionPoolPayload>;
   aiNarrateActivity(payload: IAiNarratorRequest): Promise<IAiNarratorResponse>;
   aiNarrateActivityStream(payload: IAiNarratorRequest): Promise<IAiNarratorStreamPayload>;
   aiChatStream(payload: IAiChatRequest): Promise<IAiChatStreamPayload>;

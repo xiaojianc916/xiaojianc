@@ -26,7 +26,8 @@ export type TLinearContextMenuIcon =
 export interface ILinearContextMenuItem {
   key: string;
   label: string;
-  icon: TLinearContextMenuIcon;
+  icon?: TLinearContextMenuIcon;
+  inset?: boolean;
   shortcut?: string[];
   disabled?: boolean;
   variant?: 'default' | 'destructive';
@@ -35,6 +36,6 @@ export interface ILinearContextMenuItem {
 
 export interface ILinearContextMenuGroup<TItem extends ILinearContextMenuItem = ILinearContextMenuItem> {
   key: string;
-  title: string;
+  title?: string;
   items: TItem[];
 }

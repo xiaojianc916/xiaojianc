@@ -479,6 +479,22 @@ pub struct AiConversationTitlePayload {
     pub(crate) model: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiSuggestionPoolRequest {
+    pub(crate) count: usize,
+    pub(crate) locale: String,
+    pub(crate) topics: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiSuggestionPoolPayload {
+    pub(crate) suggestions: Vec<String>,
+    pub(crate) model: String,
+    pub(crate) generated_at: String,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiNarratorChangedFilePayload {

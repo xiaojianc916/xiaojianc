@@ -25,9 +25,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { computed, nextTick, ref } from 'vue';
 
 const useAiAssistantMock = vi.hoisted(() => vi.fn());
+const useAiSuggestionPoolMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/composables/useAiAssistant', () => ({
     useAiAssistant: useAiAssistantMock,
+}));
+
+vi.mock('@/composables/useAiSuggestionPool', () => ({
+    useAiSuggestionPool: useAiSuggestionPoolMock,
 }));
 
 interface IAiConversationThreadMock {
@@ -279,6 +284,13 @@ const createGitStatus = (): IGitRepositoryStatusPayload => ({
 describe('AiAssistantPanel', () => {
     beforeEach(() => {
         setActivePinia(createPinia());
+        useAiSuggestionPoolMock.mockReturnValue({
+            suggestions: ref(['讲一个科学小知识']),
+            isRefreshing: ref(false),
+            refreshErrorMessage: ref(''),
+            rotateBatch: vi.fn(),
+            refreshPool: vi.fn(),
+        });
     });
 
     it('顶部保留 AI 图标和模型名称，但不再渲染 Chat Agent Plan 模式选择入口', () => {
@@ -318,6 +330,54 @@ describe('AiAssistantPanel', () => {
         expect(wrapper.find('.ai-model-button').exists()).toBe(false);
         expect(wrapper.find('.ai-mode-menu').exists()).toBe(false);
         expect(wrapper.findAll('.ai-panel-actions .ai-icon-button')).toHaveLength(3);
+    });
+
+    it('点击空态提示词会直接发送给 AI', async () => {
+        const assistantMock = createAssistantMock([]);
+        useAiAssistantMock.mockReturnValue(assistantMock);
+
+        const wrapper = mount(AiAssistantPanel, {
+            props: {
+                document: createDocument(),
+                activeRun: null as IActiveRunSummary | null,
+                analysis: createAnalysis(),
+                selection: null as IEditorSelectionSummary | null,
+                gitStatus: createGitStatus(),
+                workspaceRootPath: 'd:/com.xiaojianc/my_desktop_app',
+            },
+            global: {
+                stubs: {
+                    AiChatThread: { template: '<section><slot name="empty" /></section>' },
+                    AiFloatingSuggestions: {
+                        props: ['suggestions', 'disabled'],
+                        emits: ['select'],
+                        template: `
+                            <button
+                                type="button"
+                                data-testid="suggestion"
+                                :disabled="disabled"
+                                @click="$emit('select', '讲一个科学小知识')"
+                            >
+                                提示词
+                            </button>
+                        `,
+                    },
+                    AiContextChips: { template: '<div />' },
+                    AiPatchPreview: { template: '<div />' },
+                    AiPromptInput: { template: '<div />' },
+                    AiProviderSettings: { template: '<div />' },
+                    AiPlanModePanel: { template: '<div />' },
+                    AiWebSourcesPanel: { template: '<div />' },
+                    AiToolConfirmationCard: { template: '<div />' },
+                    teleport: true,
+                },
+            },
+        });
+
+        await wrapper.get('[data-testid="suggestion"]').trigger('click');
+
+        expect(assistantMock.draft.value).toBe('讲一个科学小知识');
+        expect(assistantMock.sendMessage).toHaveBeenCalledTimes(1);
     });
 
     it('在带 checkpoint 的消息后渲染恢复入口并触发 restore', async () => {

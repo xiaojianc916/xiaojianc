@@ -28,7 +28,8 @@ pub async fn narrate_activity(
         AiProviderMessage::system(build_narrator_system_prompt()),
         AiProviderMessage::user(build_narrator_user_prompt(&payload.facts)),
     ]);
-    let response = connection::chat_with_litellm_fallback(base_url, &api_key, model, request).await?;
+    let response =
+        connection::chat_with_litellm_fallback(base_url, &api_key, model, request).await?;
     let parsed = parse_narrator_response(&response.content)
         .unwrap_or_else(|| fallback_narrator_response_payload(&payload, &payload.facts));
 
@@ -93,8 +94,10 @@ pub async fn narrate_activity_stream(
 
         let result = async {
             let base_url = resolve_model_endpoint_base_url(&task_narrator_config)?.to_string();
-            let api_key =
-                get_api_key_for_model_endpoint(&task_narrator_config, AiResolvedModelRole::Narrator)?;
+            let api_key = get_api_key_for_model_endpoint(
+                &task_narrator_config,
+                AiResolvedModelRole::Narrator,
+            )?;
             let request = AiProviderChatRequest::new(vec![
                 conversation::build_identity_system_message(&task_model),
                 AiProviderMessage::system(build_narrator_stream_system_prompt()),
@@ -286,7 +289,9 @@ fn build_narrator_user_prompt(facts: &AiNarratorFactsPayload) -> String {
             .take(6)
             .map(|file| {
                 let diff = match (file.additions, file.deletions) {
-                    (Some(additions), Some(deletions)) => format!(" (+{} -{})", additions, deletions),
+                    (Some(additions), Some(deletions)) => {
+                        format!(" (+{} -{})", additions, deletions)
+                    }
                     (Some(additions), None) => format!(" (+{})", additions),
                     (None, Some(deletions)) => format!(" (-{})", deletions),
                     (None, None) => String::new(),
@@ -305,7 +310,11 @@ fn build_narrator_user_prompt(facts: &AiNarratorFactsPayload) -> String {
             .take(6)
             .map(|file| match file.range.as_deref() {
                 Some(range) if !range.trim().is_empty() => {
-                    format!("- {} ({})", sanitize_fenced_text(&file.path), sanitize_fenced_text(range))
+                    format!(
+                        "- {} ({})",
+                        sanitize_fenced_text(&file.path),
+                        sanitize_fenced_text(range)
+                    )
                 }
                 _ => format!("- {}", sanitize_fenced_text(&file.path)),
             })
@@ -327,7 +336,11 @@ fn build_narrator_user_prompt(facts: &AiNarratorFactsPayload) -> String {
         .search_summary
         .as_ref()
         .map(|item| match item.result_count {
-            Some(result_count) => format!("{}（{} 条）", sanitize_fenced_text(&item.query), result_count),
+            Some(result_count) => format!(
+                "{}（{} 条）",
+                sanitize_fenced_text(&item.query),
+                result_count
+            ),
             None => sanitize_fenced_text(&item.query),
         })
         .unwrap_or_else(|| "无".to_string());
@@ -370,7 +383,9 @@ fn parse_narrator_response(value: &str) -> Option<ParsedNarratorResponse> {
                 .filter(|item| !item.is_empty())
                 .take(6)
                 .collect(),
-            confidence: parsed.confidence.map(|item| normalize_narrator_confidence(&item)),
+            confidence: parsed
+                .confidence
+                .map(|item| normalize_narrator_confidence(&item)),
         })
 }
 
@@ -489,7 +504,9 @@ fn infer_fallback_narrator_tone(trigger: &str, facts: &AiNarratorFactsPayload) -
                 "progress".to_string()
             }
         }
-        "context_checked" | "search_done" | "files_read" | "web_search_done" => "progress".to_string(),
+        "context_checked" | "search_done" | "files_read" | "web_search_done" => {
+            "progress".to_string()
+        }
         "time_checked" | "verification_started" => "progress".to_string(),
         _ => "progress".to_string(),
     }

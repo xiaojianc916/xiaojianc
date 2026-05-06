@@ -8,11 +8,12 @@ use super::stream_manager;
 use crate::ai_agent::planner::AgentPlanner;
 use crate::commands::contracts::{
     AiAgentClassifyTaskPayload, AiAgentClassifyTaskRequest, AiChatRequest, AiCodeActionPayload,
-    AiCodeActionRequest, AiConfigPayload, AiContextReferencePayload,
-    AiConversationTitlePayload, AiConversationTitleRequest, AiInlineCompletionRangePayload,
-    AiInlineCompletionRequest, AiInlineCompletionResult, AiModelEndpointConfigPayload,
-    AiNarratorFactsPayload, AiNarratorRequest, AiNarratorResponsePayload,
-    AiProviderProfileDetailPayload, AiProviderProfilePayload, AiProviderProfileSwitchRequest,
+    AiCodeActionRequest, AiConfigPayload, AiContextReferencePayload, AiConversationTitlePayload,
+    AiConversationTitleRequest, AiInlineCompletionRangePayload, AiInlineCompletionRequest,
+    AiInlineCompletionResult, AiModelEndpointConfigPayload, AiNarratorFactsPayload,
+    AiNarratorRequest, AiNarratorResponsePayload, AiProviderProfileDetailPayload,
+    AiProviderProfilePayload, AiProviderProfileSwitchRequest, AiSuggestionPoolPayload,
+    AiSuggestionPoolRequest,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -27,6 +28,7 @@ mod config;
 mod connection;
 mod conversation;
 mod narrator;
+mod suggestions;
 
 #[cfg(test)]
 mod tests;
@@ -40,6 +42,7 @@ pub use conversation::{
     chat, chat_stream, classify_task, code_action, generate_conversation_title, inline_complete,
 };
 pub use narrator::{narrate_activity, narrate_activity_stream};
+pub use suggestions::{generate_suggestion_pool, get_suggestion_pool_cache};
 
 const MAX_AI_MESSAGES: usize = 32;
 const MAX_MESSAGE_CHARS: usize = 16_000;

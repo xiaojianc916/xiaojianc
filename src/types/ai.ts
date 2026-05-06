@@ -234,6 +234,18 @@ export interface IAiConversationTitlePayload {
   model: string;
 }
 
+export interface IAiSuggestionPoolRequest {
+  count: number;
+  locale: string;
+  topics: string[];
+}
+
+export interface IAiSuggestionPoolPayload {
+  suggestions: string[];
+  model: string;
+  generatedAt: string;
+}
+
 export interface IAiNarratorChangedFile {
   path: string;
   additions?: number;

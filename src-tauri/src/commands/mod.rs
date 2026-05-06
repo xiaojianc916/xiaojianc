@@ -24,11 +24,11 @@ pub use ai::{
     ai_edit_create_snapshot, ai_edit_get_auth_level, ai_edit_get_diff, ai_edit_list_timeline,
     ai_edit_restore_snapshot, ai_edit_revert_file, ai_edit_revert_hunk, ai_edit_revert_task,
     ai_edit_set_auth_level, ai_edit_undo_operation, ai_generate_conversation_title,
-    ai_get_config, ai_get_provider_profile_detail, ai_inline_complete, ai_list_provider_profiles,
-    ai_list_tools, ai_propose_patch, ai_query_index, ai_save_config, ai_save_credentials,
-    ai_switch_provider_profile, ai_test_provider, ai_test_provider_config, ai_web_fetch,
-    ai_web_search,
-    ai_narrate_activity, ai_narrate_activity_stream,
+    ai_generate_suggestion_pool, ai_get_config, ai_get_provider_profile_detail,
+    ai_get_suggestion_pool_cache, ai_inline_complete, ai_list_provider_profiles, ai_list_tools,
+    ai_narrate_activity, ai_narrate_activity_stream, ai_propose_patch, ai_query_index,
+    ai_save_config, ai_save_credentials, ai_switch_provider_profile, ai_test_provider,
+    ai_test_provider_config, ai_web_fetch, ai_web_search,
 };
 pub use contracts::{
     AnalyzeScriptPayload, AnalyzeScriptRequest, ExecutionEnvironment, ExecutionOption,
@@ -43,11 +43,10 @@ pub use contracts::{
     WorkspacePathRenamePayload, WorkspacePathRenameRequest,
 };
 pub use git::{
-    apply_git_stash, checkout_git_branch, commit_git_index, create_git_branch,
-    discard_git_paths, drop_git_stash, get_git_diff_preview, get_git_file_baseline,
-    get_git_pull_request_support, get_git_repository_status, init_git_repository,
-    list_git_branches, list_git_commit_history, list_git_stashes, save_git_stash,
-    stage_git_paths, unstage_git_paths,
+    apply_git_stash, checkout_git_branch, commit_git_index, create_git_branch, discard_git_paths,
+    drop_git_stash, get_git_diff_preview, get_git_file_baseline, get_git_pull_request_support,
+    get_git_repository_status, init_git_repository, list_git_branches, list_git_commit_history,
+    list_git_stashes, save_git_stash, stage_git_paths, unstage_git_paths,
 };
 pub use script_run::detect_execution_environment;
 pub(crate) use script_run::{create_temp_script, find_command_path, line_count};

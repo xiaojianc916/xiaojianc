@@ -12,6 +12,13 @@ const MENU_WIDTH = 224;
 const SUBMENU_SAFE_WIDTH = 224;
 const VIEWPORT_PADDING = 12;
 const MENU_ROOT_SELECTOR = '.linear-context-menu-root';
+const RECENT_OPEN_GUARD_MS = 250;
+const RECENT_OPEN_DISTANCE_PX = 4;
+
+type TEditorContextMenuPosition = {
+  lineNumber: number;
+  column: number;
+} | null | undefined;
 
 const resolveShortcutModifierLabels = (): {
   primary: string;
@@ -78,9 +85,8 @@ const clampMenuPosition = (clientX: number, clientY: number) => ({
 
 const updateSelectionForContextMenu = (
   editor: monaco.editor.IStandaloneCodeEditor,
-  event: monaco.editor.IEditorMouseEvent,
+  targetPosition: TEditorContextMenuPosition,
 ): void => {
-  const targetPosition = event.target.position;
   if (!targetPosition) {
     return;
   }
@@ -275,6 +281,27 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
   });
   const groups = ref<IEditorContextMenuGroup[]>([]);
   const submenuDirection = ref<'left' | 'right'>('right');
+  let lastOpenAt = 0;
+  let lastOpenX = -1;
+  let lastOpenY = -1;
+
+  const rememberOpenPosition = (browserEvent: MouseEvent): void => {
+    lastOpenAt = Date.now();
+    lastOpenX = browserEvent.clientX;
+    lastOpenY = browserEvent.clientY;
+  };
+
+  const isRecentOpenAtSamePoint = (browserEvent: MouseEvent): boolean => {
+    if (lastOpenAt === 0) {
+      return false;
+    }
+
+    return (
+      Date.now() - lastOpenAt <= RECENT_OPEN_GUARD_MS &&
+      Math.abs(browserEvent.clientX - lastOpenX) <= RECENT_OPEN_DISTANCE_PX &&
+      Math.abs(browserEvent.clientY - lastOpenY) <= RECENT_OPEN_DISTANCE_PX
+    );
+  };
 
   const closeMenu = (): void => {
     state.open = false;
@@ -478,32 +505,47 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
 
   const openMenu = (
     editor: monaco.editor.IStandaloneCodeEditor,
-    event: monaco.editor.IEditorMouseEvent,
+    browserEvent: MouseEvent,
   ): void => {
-    const browserEvent = event.event.browserEvent;
     const nextPosition = clampMenuPosition(browserEvent.clientX, browserEvent.clientY);
 
     groups.value = buildMenuGroups(editor);
     state.x = nextPosition.x;
     state.y = nextPosition.y;
     state.open = true;
+    rememberOpenPosition(browserEvent);
     submenuDirection.value =
       nextPosition.x + MENU_WIDTH + SUBMENU_SAFE_WIDTH + VIEWPORT_PADDING > window.innerWidth
         ? 'left'
         : 'right';
   };
 
+  const handleEditorMouseDown = (event: monaco.editor.IEditorMouseEvent): void => {
+    if (!event.event.rightButton) {
+      return;
+    }
+
+    handleBrowserContextMenu(event.event.browserEvent, event.target.position);
+  };
+
   const handleEditorContextMenu = (event: monaco.editor.IEditorMouseEvent): void => {
+    handleBrowserContextMenu(event.event.browserEvent, event.target.position);
+  };
+
+  const handleBrowserContextMenu = (
+    browserEvent: MouseEvent,
+    targetPosition?: TEditorContextMenuPosition,
+  ): void => {
     const editor = options.getEditor();
     if (!editor) {
       return;
     }
 
-    event.event.browserEvent.preventDefault();
-    event.event.browserEvent.stopPropagation();
-    updateSelectionForContextMenu(editor, event);
+    browserEvent.preventDefault();
+    browserEvent.stopPropagation();
+    updateSelectionForContextMenu(editor, targetPosition);
     editor.focus();
-    openMenu(editor, event);
+    openMenu(editor, browserEvent);
   };
 
   const executeItem = async (item: IEditorContextMenuItem): Promise<void> => {
@@ -592,6 +634,11 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
   };
 
   const handleWindowContextMenu = (event: MouseEvent): void => {
+    if (isRecentOpenAtSamePoint(event)) {
+      event.preventDefault();
+      return;
+    }
+
     if (!state.open || isTargetInsideMenu(event.target)) {
       return;
     }
@@ -635,6 +682,8 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
     submenuDirection,
     closeContextMenu: closeMenu,
     executeContextMenuItem: executeItem,
+    handleBrowserContextMenu,
+    handleEditorMouseDown,
     handleEditorContextMenu,
   };
 };

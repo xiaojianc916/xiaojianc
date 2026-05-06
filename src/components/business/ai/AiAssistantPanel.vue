@@ -4,6 +4,7 @@ import CheckpointIcon from '@/components/ai-elements/checkpoint/CheckpointIcon.v
 import CheckpointTrigger from '@/components/ai-elements/checkpoint/CheckpointTrigger.vue';
 import { Loader } from '@/components/ai-elements/loader';
 import AiChatThread from '@/components/business/ai/AiChatThread.vue';
+import AiFloatingSuggestions from '@/components/business/ai/AiFloatingSuggestions.vue';
 import AiPatchPreview from '@/components/business/ai/AiPatchPreview.vue';
 import AiPlanModePanel from '@/components/business/ai/AiPlanModePanel.vue';
 import AiPromptInput from '@/components/business/ai/AiPromptInput.vue';
@@ -14,6 +15,7 @@ import AiWebSourcesPanel from '@/components/business/ai/AiWebSourcesPanel.vue';
 import { useAiAgentNetwork } from '@/composables/useAiAgentNetwork';
 import { useAiAgentRun } from '@/composables/useAiAgentRun';
 import { useAiAssistant, type IAiConversationCheckpoint } from '@/composables/useAiAssistant';
+import { useAiSuggestionPool } from '@/composables/useAiSuggestionPool';
 import { useAiWebSources } from '@/composables/useAiWebSources';
 import { findAiServicePlatformByModel } from '@/constants/ai-providers';
 import type {
@@ -77,6 +79,9 @@ const assistant = useAiAssistant({
 const agentRun = useAiAgentRun();
 const agentNetwork = useAiAgentNetwork();
 const webSources = useAiWebSources();
+const suggestionPool = useAiSuggestionPool({
+  isRefreshEnabled: computed(() => assistant.config.value.narrator.isConfigured),
+});
 const settingsDraft = ref<IAiConfigPayload>(cloneAiConfigPayload(assistant.config.value));
 const settingsApiKey = ref('');
 const isAgentRunActionPending = ref(false);
@@ -420,6 +425,15 @@ const openHistoryThread = (threadId: string): void => {
 
 const selectMode = (mode: TAiAssistantViewMode): void => {
   assistant.activeMode.value = mode;
+};
+
+const handleSuggestionSelect = async (suggestion: string): Promise<void> => {
+  if (assistant.isSending.value) {
+    return;
+  }
+
+  assistant.draft.value = suggestion;
+  await assistant.sendMessage();
 };
 
 const getHistoryTimeLabel = (timestampText: string): string => {
@@ -768,6 +782,13 @@ onBeforeUnmount(() => {
 
     <AiChatThread :messages="threadMessages" :is-typing="assistant.isSending.value" :platform-id="aiIconPlatformId"
       :provider-label="aiIconTitle">
+      <template #empty>
+        <AiFloatingSuggestions
+          :suggestions="suggestionPool.suggestions.value"
+          :disabled="assistant.isSending.value"
+          @select="handleSuggestionSelect"
+        />
+      </template>
       <template #after-message="{ message }">
         <Checkpoint v-if="getConversationCheckpoint(message.id)" class="ai-conversation-checkpoint">
           <CheckpointTrigger class="ai-conversation-checkpoint__trigger" :disabled="isConversationCheckpointDisabled"

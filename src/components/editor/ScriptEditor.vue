@@ -19,8 +19,7 @@
         </p>
       </template>
     </section>
-    <EditorContextMenu
-:open="contextMenuState.open" :x="contextMenuState.x" :y="contextMenuState.y"
+    <EditorContextMenu :open="contextMenuState.open" :x="contextMenuState.x" :y="contextMenuState.y"
       :groups="contextMenuGroups" :theme="props.theme" :submenu-direction="submenuDirection"
       @select="handleContextMenuItemSelect" />
   </div>
@@ -102,6 +101,8 @@ const {
   submenuDirection,
   closeContextMenu,
   executeContextMenuItem,
+  handleBrowserContextMenu,
+  handleEditorMouseDown,
   handleEditorContextMenu,
 } = useEditorContextMenu({
   getEditor: () => editorInstance,
@@ -550,6 +551,16 @@ const applyEditorSettings = (): void => {
   scheduleEditorLayout();
 };
 
+const handleContainerContextMenu = (browserEvent: MouseEvent): void => {
+  const editor = editorInstance;
+  if (!editor) {
+    return;
+  }
+
+  const target = editor.getTargetAtClientPoint(browserEvent.clientX, browserEvent.clientY);
+  handleBrowserContextMenu(browserEvent, target?.position);
+};
+
 const createEditor = async (): Promise<void> => {
   if (!containerRef.value) {
     return;
@@ -610,14 +621,10 @@ const createEditor = async (): Promise<void> => {
   editorInstance.onContextMenu((event) => {
     handleEditorContextMenu(event);
   });
-
-  editorInstance.onDidBlurEditorText(() => {
-    closeContextMenu();
+  editorInstance.onMouseDown((event) => {
+    handleEditorMouseDown(event);
   });
-
-  editorInstance.onDidBlurEditorWidget(() => {
-    closeContextMenu();
-  });
+  containerRef.value.addEventListener('contextmenu', handleContainerContextMenu);
 
   editorInstance.onDidChangeModelContent(() => {
     if (!editorInstance || suppressModelValueEmit) {
@@ -758,6 +765,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  containerRef.value?.removeEventListener('contextmenu', handleContainerContextMenu);
   window.removeEventListener(SHELL_WINDOW_RESIZE_START_EVENT, handleShellWindowResizeStart);
   window.removeEventListener(SHELL_WINDOW_RESIZE_END_EVENT, handleShellWindowResizeEnd);
   window.removeEventListener(SHELL_WINDOW_RESIZE_SETTLED_EVENT, handleShellWindowResizeSettled);

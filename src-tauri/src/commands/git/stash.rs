@@ -36,8 +36,14 @@ pub fn save_git_stash(payload: GitStashSaveRequest) -> Result<GitRepositoryStatu
     let signature = repository.signature().map_err(|error| {
         format!("读取 Git 贮藏身份失败：{error}。请先配置 user.name 和 user.email。")
     })?;
-    let message = payload.message.as_deref().map(str::trim).filter(|value| !value.is_empty());
-    let flags = payload.include_untracked.then_some(StashFlags::INCLUDE_UNTRACKED);
+    let message = payload
+        .message
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let flags = payload
+        .include_untracked
+        .then_some(StashFlags::INCLUDE_UNTRACKED);
     repository
         .stash_save2(&signature, message, flags)
         .map_err(|error| format!("保存 Git 贮藏失败：{error}"))?;
@@ -52,7 +58,11 @@ pub fn apply_git_stash(
     let mut repository = open_repository_from_root(&payload.repository_root_path)?;
     super::branches::assert_repository_is_clean_for_switch(
         &repository,
-        if payload.pop { "应用并移除贮藏" } else { "应用贮藏" },
+        if payload.pop {
+            "应用并移除贮藏"
+        } else {
+            "应用贮藏"
+        },
     )?;
 
     if payload.pop {

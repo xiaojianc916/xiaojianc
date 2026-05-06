@@ -60,8 +60,8 @@ fn commit_worktree_file(
     let tree = repository
         .find_tree(tree_id)
         .map_err(|error| error.to_string())?;
-    let signature = Signature::now("Calamex Test", "test@example.com")
-        .map_err(|error| error.to_string())?;
+    let signature =
+        Signature::now("Calamex Test", "test@example.com").map_err(|error| error.to_string())?;
     let parent_commit = resolve_head_commit(repository)?;
     let parents = parent_commit.iter().collect::<Vec<_>>();
 
@@ -403,7 +403,10 @@ fn get_git_pull_request_support_parses_github_remote() -> Result<(), String> {
 
     assert!(payload.available);
     assert_eq!(payload.provider, "github");
-    assert_eq!(payload.repository_url.as_deref(), Some("https://github.com/owner/repo"));
+    assert_eq!(
+        payload.repository_url.as_deref(),
+        Some("https://github.com/owner/repo")
+    );
     assert_eq!(
         payload.pull_requests_url.as_deref(),
         Some("https://github.com/owner/repo/pulls")

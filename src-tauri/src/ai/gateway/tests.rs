@@ -3,6 +3,7 @@ use super::conversation::{
     build_conversation_title_prompt, build_identity_system_prompt,
     normalize_conversation_title, with_identity_system_message,
 };
+use super::suggestions::{normalize_suggestion_text, parse_suggestion_pool_response};
 use super::{
     default_base_url, default_model, validate_provider, AiModelEndpointRuntimeConfig,
     AiRuntimeConfig, DEFAULT_LITELLM_BASE_URL, DEFAULT_LITELLM_MODEL, DEFAULT_NARRATOR_MODEL,
@@ -136,4 +137,46 @@ fn conversation_title_generation_prefers_narrator_model() {
 
     assert_eq!(model, "zhipu/glm-4-flash");
     assert_ne!(model, config.selected_model.as_deref().unwrap_or(DEFAULT_LITELLM_MODEL));
+}
+
+#[test]
+fn suggestion_pool_parser_accepts_wrapped_json_object() {
+    let suggestions = (1..=9)
+        .map(|index| format!("\"提示词{index}测试\""))
+        .collect::<Vec<_>>()
+        .join(",");
+    let raw = format!("```json\n{{\"suggestions\":[{suggestions}]}}\n```");
+
+    let parsed = parse_suggestion_pool_response(&raw, 9);
+
+    assert_eq!(parsed.len(), 9);
+    assert_eq!(parsed[0], "提示词1测试");
+}
+
+#[test]
+fn suggestion_pool_parser_normalizes_numbered_lines() {
+    let raw = [
+        "1. “解释潮汐变化”",
+        "2. 给我一个睡前放松建议",
+        "3. 推荐一本短篇小说",
+        "4. 讲一个数学冷知识",
+        "5. 帮我拆解今天的任务",
+        "6. 介绍一个天文现象",
+        "7. 用类比解释 DNA",
+        "8. 给我一个沟通练习",
+        "9. 讲讲古诗词意象",
+    ]
+    .join("\n");
+
+    let parsed = parse_suggestion_pool_response(&raw, 9);
+
+    assert_eq!(parsed.len(), 9);
+    assert_eq!(parsed[0], "解释潮汐变化");
+}
+
+#[test]
+fn suggestion_text_normalization_rejects_overlong_items() {
+    let value = "这是一条明显超过字符上限的提示词，内容冗长到已经不适合作为首页按钮文案展示，也不利于快速扫描";
+
+    assert_eq!(normalize_suggestion_text(value), None);
 }

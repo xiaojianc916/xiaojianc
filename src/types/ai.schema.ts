@@ -221,6 +221,18 @@ export const aiConversationTitlePayloadSchema = z.object({
   model: z.string().min(1),
 });
 
+export const aiSuggestionPoolRequestSchema = z.object({
+  count: z.number().int().min(9).max(90),
+  locale: z.string().min(1),
+  topics: z.array(z.string().min(1)).min(1).max(24),
+});
+
+export const aiSuggestionPoolPayloadSchema = z.object({
+  suggestions: z.array(z.string().min(1)).min(9).max(90),
+  model: z.string().min(1),
+  generatedAt: z.string().min(1),
+});
+
 export const aiNarratorChangedFileSchema = z.object({
   path: z.string().min(1),
   additions: z.number().int().nonnegative().optional(),

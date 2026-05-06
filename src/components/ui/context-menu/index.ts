@@ -1,10 +1,15 @@
-export { default as ContextMenu } from '@/components/ui/dropdown-menu/DropdownMenu.vue';
-export { default as ContextMenuContent } from '@/components/ui/dropdown-menu/DropdownMenuContent.vue';
-export { default as ContextMenuItem } from '@/components/ui/dropdown-menu/DropdownMenuItem.vue';
-export { default as ContextMenuLabel } from '@/components/ui/dropdown-menu/DropdownMenuLabel.vue';
-export { default as ContextMenuSeparator } from '@/components/ui/dropdown-menu/DropdownMenuSeparator.vue';
-export { default as ContextMenuShortcut } from '@/components/ui/dropdown-menu/DropdownMenuShortcut.vue';
-export { default as ContextMenuSub } from '@/components/ui/dropdown-menu/DropdownMenuSub.vue';
-export { default as ContextMenuSubContent } from '@/components/ui/dropdown-menu/DropdownMenuSubContent.vue';
-export { default as ContextMenuSubTrigger } from '@/components/ui/dropdown-menu/DropdownMenuSubTrigger.vue';
-export { default as ContextMenuTrigger } from '@/components/ui/dropdown-menu/DropdownMenuTrigger.vue';
+export { default as ContextMenu } from '@/components/ui/context-menu/ContextMenu.vue';
+export { default as ContextMenuCheckboxItem } from '@/components/ui/context-menu/ContextMenuCheckboxItem.vue';
+export { default as ContextMenuContent } from '@/components/ui/context-menu/ContextMenuContent.vue';
+export { default as ContextMenuGroup } from '@/components/ui/context-menu/ContextMenuGroup.vue';
+export { default as ContextMenuItem } from '@/components/ui/context-menu/ContextMenuItem.vue';
+export { default as ContextMenuLabel } from '@/components/ui/context-menu/ContextMenuLabel.vue';
+export { default as ContextMenuRadioGroup } from '@/components/ui/context-menu/ContextMenuRadioGroup.vue';
+export { default as ContextMenuRadioItem } from '@/components/ui/context-menu/ContextMenuRadioItem.vue';
+export { default as ContextMenuSeparator } from '@/components/ui/context-menu/ContextMenuSeparator.vue';
+export { default as ContextMenuShortcut } from '@/components/ui/context-menu/ContextMenuShortcut.vue';
+export { default as ContextMenuSub } from '@/components/ui/context-menu/ContextMenuSub.vue';
+export { default as ContextMenuSubContent } from '@/components/ui/context-menu/ContextMenuSubContent.vue';
+export { default as ContextMenuSubTrigger } from '@/components/ui/context-menu/ContextMenuSubTrigger.vue';
+export { default as ContextMenuTrigger } from '@/components/ui/context-menu/ContextMenuTrigger.vue';
+

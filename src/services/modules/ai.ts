@@ -45,6 +45,8 @@ import type {
   IAiQueryIndexRequest,
   IAiSaveConfigRequest,
   IAiSaveCredentialsRequest,
+  IAiSuggestionPoolPayload,
+  IAiSuggestionPoolRequest,
   IAiToolDefinitionPayload,
   IAiWebFetchInput,
   IAiWebFetchPayload,
@@ -123,6 +125,12 @@ export const aiService = {
     payload: IAiConversationTitleRequest,
   ): Promise<IAiConversationTitlePayload> {
     return tauriService.aiGenerateConversationTitle(payload);
+  },
+  getSuggestionPoolCache(): Promise<IAiSuggestionPoolPayload | null> {
+    return tauriService.aiGetSuggestionPoolCache();
+  },
+  generateSuggestionPool(payload: IAiSuggestionPoolRequest): Promise<IAiSuggestionPoolPayload> {
+    return tauriService.aiGenerateSuggestionPool(payload);
   },
   narrateActivity(payload: IAiNarratorRequest): Promise<IAiNarratorResponse> {
     return tauriService.aiNarrateActivity(payload);

@@ -153,8 +153,8 @@ const handleStop = (): void => {
                 <div v-if="attachments.length" class="ai-attachments">
                     <PromptInputAttachmentsDisplay :attachments="attachments" @remove="handleRemoveAttachment" />
                 </div>
-                <InputGroupTextarea v-model="modelValue" class="ai-prompt-textarea" placeholder="Ask, Search or Chat..."
-                    aria-label="输入消息" :disabled="disabled" @keydown="handleKeyDown" @paste="handlePaste"
+                <InputGroupTextarea v-model="modelValue" class="ai-prompt-textarea" placeholder="输入消息" aria-label="输入消息"
+                    :disabled="disabled" @keydown="handleKeyDown" @paste="handlePaste"
                     @compositionstart="isComposing = true" @compositionend="isComposing = false" />
                 <InputGroupAddon align="block-end" class="ai-toolbar-row">
                     <InputGroupButton type="button" variant="outline" class="ai-attachment-button rounded-full"

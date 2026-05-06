@@ -15,8 +15,9 @@ use super::contracts::{
     AiProposePatchRequest, AiProviderConnectionPayload, AiProviderConnectionRequest,
     AiProviderProfileDetailPayload, AiProviderProfilePayload, AiProviderProfileSwitchRequest,
     AiProviderTestPayload, AiQueryIndexPayload, AiQueryIndexRequest, AiSaveConfigRequest,
-    AiSaveCredentialsRequest, AiToolDefinitionPayload, AiWebFetchInput, AiWebFetchPayload,
-    AiWebSearchInput, AiWebSearchPayload,
+    AiSaveCredentialsRequest, AiSuggestionPoolPayload, AiSuggestionPoolRequest,
+    AiToolDefinitionPayload, AiWebFetchInput, AiWebFetchPayload, AiWebSearchInput,
+    AiWebSearchPayload,
 };
 use crate::ai::audit::{self, AiAuditEventKind};
 use crate::ai::gateway;
@@ -186,6 +187,18 @@ pub async fn ai_generate_conversation_title(
     payload: AiConversationTitleRequest,
 ) -> Result<AiConversationTitlePayload, String> {
     gateway::generate_conversation_title(payload).await
+}
+
+#[tauri::command]
+pub fn ai_get_suggestion_pool_cache() -> Result<Option<AiSuggestionPoolPayload>, String> {
+    gateway::get_suggestion_pool_cache()
+}
+
+#[tauri::command]
+pub async fn ai_generate_suggestion_pool(
+    payload: AiSuggestionPoolRequest,
+) -> Result<AiSuggestionPoolPayload, String> {
+    gateway::generate_suggestion_pool(payload).await
 }
 
 #[tauri::command]

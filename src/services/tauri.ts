@@ -946,6 +946,20 @@ const aiGenerateConversationTitleIpc = definePayloadIpc(
   { audit: 'sensitive', timeoutMs: 30_000, measureInput: buildPayloadMetrics },
 );
 
+const aiGetSuggestionPoolCacheIpc = defineContractIpc(
+  'ai_get_suggestion_pool_cache',
+  '读取 AI 提示词池缓存',
+  tauriContracts.aiGetSuggestionPoolCache,
+  { idempotent: true, audit: 'none', timeoutMs: 5_000 },
+);
+
+const aiGenerateSuggestionPoolIpc = definePayloadIpc(
+  'ai_generate_suggestion_pool',
+  '生成 AI 提示词池',
+  tauriContracts.aiGenerateSuggestionPool,
+  { audit: 'info', timeoutMs: 30_000, measureInput: buildPayloadMetrics },
+);
+
 const aiNarrateActivityIpc = definePayloadIpc(
   'ai_narrate_activity',
   '生成 AI 活动旁白',
@@ -1343,6 +1357,10 @@ export const tauriService: ITauriService & {
   },
 
   aiGenerateConversationTitle: aiGenerateConversationTitleIpc,
+
+  aiGetSuggestionPoolCache: () => aiGetSuggestionPoolCacheIpc(undefined),
+
+  aiGenerateSuggestionPool: aiGenerateSuggestionPoolIpc,
 
   aiNarrateActivity: aiNarrateActivityIpc,
 

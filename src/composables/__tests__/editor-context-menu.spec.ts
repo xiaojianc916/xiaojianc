@@ -126,6 +126,54 @@ describe('useEditorContextMenu', () => {
         vi.clearAllMocks();
     });
 
+    it('Monaco 右键按下事件也能打开编辑器菜单', () => {
+        const { api, wrapper } = mountContextMenu();
+        const browserEvent = new MouseEvent('mousedown', {
+            bubbles: true,
+            cancelable: true,
+            button: 2,
+            clientX: 40,
+            clientY: 56,
+        });
+
+        api.handleEditorMouseDown({
+            target: {
+                position: { lineNumber: 1, column: 4 },
+            },
+            event: {
+                rightButton: true,
+                browserEvent,
+            },
+        } as never);
+
+        expect(browserEvent.defaultPrevented).toBe(true);
+        expect(api.contextMenuState.open).toBe(true);
+        expect(api.contextMenuGroups.value.length).toBeGreaterThan(0);
+
+        wrapper.unmount();
+    });
+
+    it('浏览器原生右键事件也能打开编辑器菜单', () => {
+        const { api, wrapper } = mountContextMenu();
+        const browserEvent = new MouseEvent('contextmenu', {
+            bubbles: true,
+            cancelable: true,
+            clientX: 48,
+            clientY: 64,
+        });
+
+        api.handleBrowserContextMenu(browserEvent, {
+            lineNumber: 1,
+            column: 4,
+        });
+
+        expect(browserEvent.defaultPrevented).toBe(true);
+        expect(api.contextMenuState.open).toBe(true);
+        expect(api.contextMenuGroups.value.length).toBeGreaterThan(0);
+
+        wrapper.unmount();
+    });
+
     it('将 AI 动作整合为单个二级菜单入口', () => {
         const { api, wrapper } = mountContextMenu();
         const browserEvent = new MouseEvent('contextmenu', {
