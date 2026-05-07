@@ -2,14 +2,12 @@ use std::sync::{OnceLock, RwLock};
 
 use super::{
     event_bus::EventBus,
-    interactive_pty::InteractivePty,
     types::{Geometry, RunHandle, TerminalState},
 };
 
 pub struct Registry {
     pub geometry: RwLock<Geometry>,
     pub state: RwLock<TerminalState>,
-    pub interactive: RwLock<Option<InteractivePty>>,
     pub active_run: RwLock<Option<RunHandle>>,
     pub event_bus: EventBus,
 }
@@ -20,7 +18,6 @@ impl Registry {
         REGISTRY.get_or_init(|| Self {
             geometry: RwLock::new(Geometry::default()),
             state: RwLock::new(TerminalState::Booting),
-            interactive: RwLock::new(None),
             active_run: RwLock::new(None),
             event_bus: EventBus::default(),
         })

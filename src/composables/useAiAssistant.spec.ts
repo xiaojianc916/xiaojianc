@@ -1677,6 +1677,7 @@ describe('useAiAssistant streaming integration', () => {
         const replaceMessagesSpy = vi.spyOn(conversationStore, 'replaceMessages');
         const sidecarGate = createDeferred<void>();
         const queuedFrames = new Map<number, FrameRequestCallback>();
+        const expectedLiveText = '第一段实时回答，第二段实时回答';
         let nextFrameId = 0;
 
         vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
@@ -1714,7 +1715,7 @@ describe('useAiAssistant streaming integration', () => {
                 seq: 2,
                 event: {
                     type: 'message_delta',
-                    text: '第二段实时回答',
+                    text: expectedLiveText,
                     phase: 'final',
                 },
             });
@@ -1770,18 +1771,96 @@ describe('useAiAssistant streaming integration', () => {
 
         await flushMicrotasks();
 
-        expect(replaceMessagesSpy).toHaveBeenCalledTimes(replaceCallCountBeforeFrame + 1);
-        expect(assistant.messages.value[1]?.content).toContain('第二段实时回答');
+        expect(replaceMessagesSpy).toHaveBeenCalledTimes(replaceCallCountBeforeFrame);
+        expect(assistant.messages.value[1]?.content).toBe('');
         expect(assistant.messages.value[1]?.toolCalls?.[0]).toMatchObject({
             name: 'search_project_files',
             status: 'running',
         });
+        expect(queuedFrames.size).toBe(1);
+
+        const smoothFrame = [...queuedFrames.entries()][0];
+        if (!smoothFrame) {
+            throw new Error('缺少 sidecar 回答平滑帧');
+        }
+
+        queuedFrames.delete(smoothFrame[0]);
+        smoothFrame[1](32);
+        await flushMicrotasks();
+
+        const streamingContent = assistant.messages.value[1]?.content ?? '';
+        expect(streamingContent).toBe(expectedLiveText);
 
         sidecarGate.resolve(undefined);
+
+        let isSendSettled = false;
+        void sendPromise.then(() => {
+            isSendSettled = true;
+        });
+
+        for (let attempt = 0; attempt < 16 && !isSendSettled; attempt += 1) {
+            const frame = [...queuedFrames.entries()][0];
+
+            if (!frame) {
+                await flushMicrotasks();
+                continue;
+            }
+
+            queuedFrames.delete(frame[0]);
+            frame[1](64 + attempt * 16);
+            await flushMicrotasks();
+        }
+
         await sendPromise;
 
         expect(assistant.messages.value[1]?.content).toBe('批量刷新完成');
         expect(assistant.messages.value[1]?.stream?.status).toBe('completed');
+        expect(replaceMessagesSpy.mock.calls.length).toBeGreaterThan(replaceCallCountBeforeFrame);
+    });
+
+    it('没有实时回答 delta 时直接提交 sidecar 最终结果，避免长文本被慢放', async () => {
+        const { assistant } = createAssistantHarnessContext();
+        const sidecarGate = createDeferred<void>();
+        const queuedFrames = new Map<number, FrameRequestCallback>();
+        const finalText = '这是一段没有提前收到实时 delta 的最终回答。'.repeat(20);
+        let nextFrameId = 0;
+
+        vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
+            nextFrameId += 1;
+            queuedFrames.set(nextFrameId, callback);
+            return nextFrameId;
+        });
+        vi.stubGlobal('cancelAnimationFrame', (frameId: number): void => {
+            queuedFrames.delete(frameId);
+        });
+
+        aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
+            const sessionId = payload.sessionId ?? 'sidecar-final-only-session';
+
+            await sidecarGate.promise;
+
+            return {
+                sessionId,
+                events: [
+                    {
+                        type: 'done',
+                        result: finalText,
+                    },
+                ],
+                result: finalText,
+            };
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '测试最终结果直接提交';
+
+        const sendPromise = assistant.sendMessage();
+        sidecarGate.resolve(undefined);
+        await sendPromise;
+
+        expect(assistant.messages.value[1]?.content).toBe(finalText);
+        expect(assistant.messages.value[1]?.stream?.status).toBe('completed');
+        expect(queuedFrames.size).toBe(0);
     });
 
     it('收到空的 sidecar message_delta 时清空非最终阶段说明，等待后续最终回答流', async () => {

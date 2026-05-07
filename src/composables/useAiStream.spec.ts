@@ -60,11 +60,8 @@ describe('useAiStream', () => {
     vi.unstubAllGlobals();
   });
 
-  it('按帧释放 burst delta，而不是一次性写入响应式文本', () => {
-    const { stream, scope } = createStreamHarness({
-      targetBufferedMs: 1,
-      maxGraphemesPerFrame: 2,
-    });
+  it('按帧合并 burst delta，不拆分真实到达的内容', () => {
+    const { stream, scope } = createStreamHarness();
 
     stream.start();
     stream.append('abcdef');
@@ -75,13 +72,9 @@ describe('useAiStream', () => {
     expect(queuedFrames.size).toBe(1);
 
     runNextFrame(16);
-    expect(stream.content.value).toBe('ab');
-    expect(stream.bufferedGraphemeCount.value).toBe(4);
+    expect(stream.content.value).toBe('abcdef');
+    expect(stream.bufferedGraphemeCount.value).toBe(0);
     expect(stream.maxBufferedGraphemeCount.value).toBe(6);
-
-    runNextFrame(32);
-    expect(stream.content.value).toBe('abcd');
-    expect(stream.bufferedGraphemeCount.value).toBe(2);
 
     stream.complete();
     expect(stream.content.value).toBe('abcdef');
@@ -107,6 +100,20 @@ describe('useAiStream', () => {
     scope.stop();
   });
 
+  it('完成时不会慢放剩余内容，避免伪流式拖慢真实输出', () => {
+    const { stream, scope } = createStreamHarness();
+
+    stream.start();
+    stream.append('abcdef');
+    stream.complete();
+
+    expect(stream.content.value).toBe('abcdef');
+    expect(stream.status.value).toBe('completed');
+    expect(queuedFrames.size).toBe(0);
+
+    scope.stop();
+  });
+
   it('取消时保留已经到达的内容，并忽略后续迟到 delta', () => {
     const { stream, scope } = createStreamHarness();
 
@@ -122,11 +129,8 @@ describe('useAiStream', () => {
     scope.stop();
   });
 
-  it('跨 delta 保留 emoji ZWJ 字符簇完整性', () => {
-    const { stream, scope } = createStreamHarness({
-      targetBufferedMs: 1,
-      maxGraphemesPerFrame: 1,
-    });
+  it('同一帧内合并跨 delta 的 emoji ZWJ 字符簇', () => {
+    const { stream, scope } = createStreamHarness();
     const family = '👨‍👩‍👧‍👦';
 
     stream.start();
@@ -135,8 +139,7 @@ describe('useAiStream', () => {
 
     runNextFrame(16);
 
-    expect(stream.content.value).toBe(family);
-    expect(stream.maxBufferedGraphemeCount.value).toBe(3);
+    expect(stream.content.value).toBe(`${family}完成`);
     expect(stream.content.value).not.toContain('�');
 
     stream.complete();

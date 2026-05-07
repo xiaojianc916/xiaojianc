@@ -81,72 +81,37 @@ watch(
 <template>
     <aside class="workbench-dashboard-sidebar flex h-full min-h-0 flex-col overflow-hidden bg-(--sidebar-bg)">
         <div class="workbench-dashboard-sidebar__brand-slot">
-            <button
-                type="button"
-                class="workbench-dashboard-sidebar__brand-button app-tooltip-target"
-                :title="props.isAiMode ? '切换到编辑区' : '切换到 AI 界面'"
-                :aria-label="props.isAiMode ? '切换到编辑区' : '切换到 AI 界面'"
-                :data-tooltip="props.isAiMode ? '切换到编辑区' : '切换到 AI 界面'"
-                data-tooltip-placement="bottom"
-                data-tooltip-lock-placement="true"
-                @click="emit('toggle-primary-mode')"
-            >
+            <button type="button" class="workbench-dashboard-sidebar__brand-button app-tooltip-target"
+                :title="props.isAiMode ? '切换到编辑区' : '切换到 AI 界面'" :aria-label="props.isAiMode ? '切换到编辑区' : '切换到 AI 界面'"
+                :data-tooltip="props.isAiMode ? '切换到编辑区' : '切换到 AI 界面'" data-tooltip-placement="bottom"
+                data-tooltip-lock-placement="true" @click="emit('toggle-primary-mode')">
                 <img class="workbench-dashboard-sidebar__brand-icon" :src="appBrandIcon" alt="软件图标">
             </button>
         </div>
 
         <header class="workbench-dashboard-sidebar__toolbar-shell border-b border-(--shell-divider) px-3 py-3">
             <nav class="workbench-dashboard-sidebar__toolbar" aria-label="工作台侧边栏切换">
-                <button
-                    v-for="item in sidebarTabs"
-                    :key="item.view"
-                    type="button"
+                <button v-for="item in sidebarTabs" :key="item.view" type="button"
                     class="workbench-dashboard-sidebar__toolbar-button app-tooltip-target"
-                    :class="{ 'is-active': props.activeView === item.view }"
-                    :title="item.label"
-                    :aria-label="item.label"
-                    :aria-pressed="props.activeView === item.view"
-                    :data-tooltip="item.label"
-                    data-tooltip-placement="bottom"
-                    data-tooltip-lock-placement="true"
-                    @click="emit('select-view', item.view)"
-                >
+                    :class="{ 'is-active': props.activeView === item.view }" :title="item.label"
+                    :aria-label="item.label" :aria-pressed="props.activeView === item.view" :data-tooltip="item.label"
+                    data-tooltip-placement="bottom" data-tooltip-lock-placement="true"
+                    @click="emit('select-view', item.view)">
                     <span class="workbench-dashboard-sidebar__toolbar-icon" aria-hidden="true">
-                        <svg
-                            v-if="item.view === 'explorer'"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.7"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        >
+                        <svg v-if="item.view === 'explorer'" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
                             <path d="M14 3v5h5" />
                         </svg>
 
-                        <svg
-                            v-else-if="item.view === 'search'"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.7"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        >
+                        <svg v-else-if="item.view === 'search'" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="11" cy="11" r="6.5" />
                             <path d="M20 20l-3.5-3.5" />
                         </svg>
 
-                        <svg
-                            v-else-if="item.view === 'source-control'"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.7"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        >
+                        <svg v-else-if="item.view === 'source-control'" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="6" cy="6" r="2.5" />
                             <circle cx="18" cy="4" r="2.5" />
                             <circle cx="18" cy="18" r="2.5" />
@@ -154,29 +119,15 @@ watch(
                             <path d="M15.5 6.5V9" />
                         </svg>
 
-                        <svg
-                            v-else-if="item.view === 'run'"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.7"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        >
+                        <svg v-else-if="item.view === 'run'" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3.5" y="5" width="17" height="14" rx="2" />
                             <path d="M7 9l3 3-3 3" />
                             <path d="M12.5 15h4.5" />
                         </svg>
 
-                        <svg
-                            v-else
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.7"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        >
+                        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                            stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3.5" y="4" width="17" height="16" rx="2.5" />
                             <path d="M8 9l4 4-4 4" />
                             <path d="M13.5 17h2.5" />
@@ -192,33 +143,18 @@ watch(
             </nav>
         </header>
 
-        <div
-            class="workbench-dashboard-sidebar__panel-host min-h-0 flex-1 overflow-hidden"
-            :data-switch-direction="switchDirection"
-        >
+        <div class="workbench-dashboard-sidebar__panel-host min-h-0 flex-1 overflow-hidden"
+            :data-switch-direction="switchDirection">
             <Transition name="workbench-sidebar-panel">
-                <AppSidebar
-                    :key="props.activeView"
-                    :document="props.document"
-                    :view="props.activeView"
-                    :is-desktop-runtime="props.isDesktopRuntime"
-                    :workspace-root-path="props.workspaceRootPath"
-                    :preloaded-workspace-root="props.preloadedWorkspaceRoot"
-                    :can-run="props.canRun"
-                    :is-running="props.isRunning"
-                    :has-run-artifacts="props.hasRunArtifacts"
-                    :active-run="props.activeRun"
-                    :run-history="props.runHistory"
-                    :command-templates="props.commandTemplates"
-                    :executor="props.executor"
-                    @open-file="emit('open-file', $event)"
-                    @open-git-diff="emit('open-git-diff', $event)"
-                    @run="emit('run')"
-                    @create-document="emit('create-document')"
-                    @open-terminal="emit('open-terminal')"
-                    @insert-template="emit('insert-template', $event)"
-                    @clear-run-history="emit('clear-run-history')"
-                />
+                <AppSidebar :key="props.activeView" :document="props.document" :view="props.activeView"
+                    :is-desktop-runtime="props.isDesktopRuntime" :workspace-root-path="props.workspaceRootPath"
+                    :preloaded-workspace-root="props.preloadedWorkspaceRoot" :can-run="props.canRun"
+                    :is-running="props.isRunning" :has-run-artifacts="props.hasRunArtifacts"
+                    :active-run="props.activeRun" :run-history="props.runHistory"
+                    :command-templates="props.commandTemplates" :executor="props.executor"
+                    @open-file="emit('open-file', $event)" @open-git-diff="emit('open-git-diff', $event)"
+                    @run="emit('run')" @create-document="emit('create-document')" @open-terminal="emit('open-terminal')"
+                    @insert-template="emit('insert-template', $event)" @clear-run-history="emit('clear-run-history')" />
             </Transition>
         </div>
     </aside>
@@ -298,15 +234,19 @@ watch(
 .workbench-dashboard-sidebar__toolbar-button {
     position: relative;
     display: inline-flex;
+    align-self: center;
     min-width: 38px;
-    height: 38px;
+    height: 28px;
     align-items: center;
     justify-content: center;
     gap: 0;
     overflow: hidden;
     border-radius: 999px;
+    border: none;
+    background: color-mix(in srgb, var(--shell-divider) 8%, transparent);
     padding: 0 10px;
     color: var(--text-secondary);
+    line-height: 1;
     white-space: nowrap;
     transition:
         background-color var(--sidebar-pill-state-duration) ease,
@@ -316,48 +256,53 @@ watch(
 
 @media (hover: hover) and (pointer: fine) {
     .workbench-dashboard-sidebar__toolbar-button:hover {
-        background: color-mix(in srgb, var(--shell-divider) 12%, transparent);
+        background: color-mix(in srgb, var(--shell-divider) 22%, transparent);
         color: var(--text-primary);
     }
 }
 
 .workbench-dashboard-sidebar__toolbar-button.is-active {
-    gap: 8px;
-    background: color-mix(in srgb, var(--shell-divider) 18%, transparent);
+    gap: 6px;
+    background: color-mix(in srgb, var(--shell-divider) 34%, transparent);
     color: var(--text-primary);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--shell-divider) 66%, transparent);
+    box-shadow: none;
 }
 
 .workbench-dashboard-sidebar__toolbar-button:active {
-    background: color-mix(in srgb, var(--shell-divider) 24%, transparent);
+    background: color-mix(in srgb, var(--shell-divider) 40%, transparent);
 }
 
 .workbench-dashboard-sidebar__toolbar-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     flex-shrink: 0;
+    transform: translateY(0.5px);
 }
 
 .workbench-dashboard-sidebar__toolbar-icon svg {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
 }
 
 .workbench-dashboard-sidebar__toolbar-label-wrap {
     display: grid;
+    align-items: center;
     grid-template-columns: 0fr;
     transition: grid-template-columns var(--sidebar-pill-duration) var(--sidebar-pill-ease);
 }
 
 .workbench-dashboard-sidebar__toolbar-label {
+    display: inline-flex;
+    align-items: center;
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
     font-size: 13px;
     font-weight: 500;
+    line-height: 1;
     opacity: 0;
     transform: translateX(-3px);
     transition:
@@ -436,6 +381,7 @@ watch(
 }
 
 @media (prefers-reduced-motion: reduce) {
+
     .workbench-dashboard-sidebar__toolbar-button,
     .workbench-dashboard-sidebar__toolbar-label,
     .workbench-dashboard-sidebar__toolbar-label-wrap,

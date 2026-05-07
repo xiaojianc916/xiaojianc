@@ -34,7 +34,7 @@ const stateLabelMap: Record<TTerminalRuntimeState, string> = {
 };
 
 const routeLabelMap = {
-  interactive: 'iPTY',
+  interactive: 'WSL Link PTY',
   run: 'WSL Link',
   buffered: '缓冲',
   dropped: '丢弃',
@@ -272,15 +272,15 @@ const handleToggleDeepDiagnostics = (): void => {
               class="terminal-flow-section-meta"
               :class="{ 'is-ready': interactiveReady }"
             >
-              {{ interactiveReady ? 'iPTY ready' : 'iPTY pending' }}
+              {{ interactiveReady ? 'WSL Link PTY ready' : 'WSL Link PTY pending' }}
             </span>
           </div>
 
           <div class="terminal-flow-route-map">
             <div class="terminal-flow-route-node" :class="{ 'is-active': state === 'idle_interactive' }">
               <span class="terminal-flow-route-kicker">idle</span>
-              <strong>iPTY</strong>
-              <span>交互 shell 输入输出</span>
+              <strong>WSL Link PTY</strong>
+              <span>agent 交互 shell 流</span>
             </div>
             <div class="terminal-flow-route-arrow" aria-hidden="true">→</div>
             <div class="terminal-flow-route-node" :class="{ 'is-active': state === 'running' }">

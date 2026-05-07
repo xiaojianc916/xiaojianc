@@ -456,7 +456,7 @@ export const useBrowserContextMenu = () => {
     if (target.isTerminalSurface) {
       nextGroups.push({
         key: 'terminal-clipboard',
-        title: 'CLIPBOARD',
+
         items: [
           {
             key: 'copy',
@@ -517,7 +517,7 @@ export const useBrowserContextMenu = () => {
 
     nextGroups.push({
       key: 'clipboard-actions',
-      title: 'CLIPBOARD',
+      
       items: [
         {
           key: 'cut',

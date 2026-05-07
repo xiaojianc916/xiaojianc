@@ -44,7 +44,7 @@ router.beforeEach((to) => {
   return true;
 });
 
-router.afterEach((to) => {
+router.afterEach(() => {
   applyDocumentTheme(getThemeManager().getMode());
 });
 

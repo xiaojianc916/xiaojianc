@@ -67,7 +67,8 @@ provide(FileTreeKey, {
 </script>
 
 <template>
-    <div :class="cn('rounded-lg border bg-background font-mono text-sm', props.class)" data-slot="file-tree" role="tree"
+    <div
+:class="cn('rounded-lg border bg-background font-mono text-sm', props.class)" data-slot="file-tree" role="tree"
         v-bind="$attrs">
         <div class="p-2">
             <slot />

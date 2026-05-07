@@ -624,7 +624,7 @@ const createEditor = async (): Promise<void> => {
   editorInstance.onMouseDown((event) => {
     handleEditorMouseDown(event);
   });
-  containerRef.value.addEventListener('contextmenu', handleContainerContextMenu);
+  containerRef.value.addEventListener('contextmenu', handleContainerContextMenu, true);
 
   editorInstance.onDidChangeModelContent(() => {
     if (!editorInstance || suppressModelValueEmit) {
@@ -765,7 +765,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  containerRef.value?.removeEventListener('contextmenu', handleContainerContextMenu);
+  containerRef.value?.removeEventListener('contextmenu', handleContainerContextMenu, true);
   window.removeEventListener(SHELL_WINDOW_RESIZE_START_EVENT, handleShellWindowResizeStart);
   window.removeEventListener(SHELL_WINDOW_RESIZE_END_EVENT, handleShellWindowResizeEnd);
   window.removeEventListener(SHELL_WINDOW_RESIZE_SETTLED_EVENT, handleShellWindowResizeSettled);

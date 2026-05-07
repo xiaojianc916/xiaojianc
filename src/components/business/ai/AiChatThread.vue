@@ -86,7 +86,8 @@ const handleMessageAction = (messageId: string, actionId: TAiChatMessageActionId
         <slot name="before-messages" />
         <template v-for="message in messages" :key="message.id">
           <slot v-if="message.id === lastAssistantMessageId" name="before-last-assistant" :message="message" />
-          <AiMessageItem :message="message" :platform-id="platformId" :provider-label="providerLabel"
+          <AiMessageItem
+:message="message" :platform-id="platformId" :provider-label="providerLabel"
             @message-action="handleMessageAction" />
           <slot name="after-message" :message="message" />
         </template>

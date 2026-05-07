@@ -7,7 +7,8 @@ const props = defineProps<{ class?: HTMLAttributes['class'] }>()
 </script>
 
 <template>
-  <CollapsibleContent :class="cn(
+  <CollapsibleContent
+:class="cn(
     'overflow-hidden text-popover-foreground outline-none',
     'data-[state=closed]:animate-out data-[state=open]:animate-in',
     'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',

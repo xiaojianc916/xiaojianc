@@ -304,7 +304,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="code-block-container ai-code-block" :class="{
+  <div
+class="code-block-container ai-code-block" :class="{
     'is-loading': loading,
     'is-light-surface': !isDark,
     'is-collapsed': !isExpanded,
@@ -318,7 +319,8 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="code-header-actions ai-code-block__actions">
-        <button type="button" class="code-action-btn ai-code-block__icon-button ai-code-block__toggle"
+        <button
+type="button" class="code-action-btn ai-code-block__icon-button ai-code-block__toggle"
           :aria-label="isExpanded ? '折叠代码块' : '展开代码块'" :title="isExpanded ? '折叠代码块' : '展开代码块'"
           :aria-expanded="isExpanded" :aria-controls="codeBlockBodyId" @click="toggleExpanded">
           <svg v-if="isExpanded" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
@@ -329,7 +331,8 @@ onBeforeUnmount(() => {
           </svg>
         </button>
 
-        <button type="button" class="code-action-btn ai-code-block__icon-button ai-code-block__copy"
+        <button
+type="button" class="code-action-btn ai-code-block__icon-button ai-code-block__copy"
           :aria-label="isCopied ? '已复制代码' : '复制代码'" :title="isCopied ? '已复制代码' : '复制代码'" :disabled="!canCopy"
           @click="handleCopy">
           <svg v-if="isCopied" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">

@@ -1,9 +1,15 @@
 use std::{
     collections::HashMap,
+    io::{Read, Write},
     process::Stdio,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+    thread,
 };
 
+use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tonic::{Request, Response, Status};
 
@@ -20,15 +26,28 @@ use super::{
     },
     terminal_exec::{
         decode_terminal_client_payload, encode_terminal_server_payload,
-        resolve_agent_working_directory, WslLinkTerminalClientPayload, WslLinkTerminalRunChunk,
+        resolve_agent_working_directory, WslLinkTerminalClientPayload,
+        WslLinkTerminalInteractiveAck, WslLinkTerminalInteractiveClose,
+        WslLinkTerminalInteractiveClosed, WslLinkTerminalInteractiveData,
+        WslLinkTerminalInteractiveError, WslLinkTerminalInteractiveInput,
+        WslLinkTerminalInteractiveOpened, WslLinkTerminalInteractiveResize,
+        WslLinkTerminalOpenInteractiveRequest, WslLinkTerminalRunChunk,
         WslLinkTerminalRunCompleted, WslLinkTerminalRunError, WslLinkTerminalRunScriptRequest,
-        WslLinkTerminalRunStarted, WslLinkTerminalServerPayload, WslLinkUtf8ChunkDecoder,
+        WslLinkTerminalRunStarted, WslLinkTerminalServerPayload, WslLinkTerminalSignalProcess,
+        WslLinkUtf8ChunkDecoder,
     },
     types::{noise_server_proof_payload, now_unix_ms, DEFAULT_PROTOCOL_VERSION},
 };
 
 type DuplexStream =
     tonic::codegen::tokio_stream::wrappers::ReceiverStream<Result<ServerFrame, Status>>;
+
+const AGENT_INTERACTIVE_SHELL: &str = "/bin/bash";
+const AGENT_INTERACTIVE_SHELL_LOGIN_ARG: &str = "-il";
+const AGENT_INTERACTIVE_TERM: &str = "xterm-256color";
+const AGENT_INTERACTIVE_COLORTERM: &str = "truecolor";
+const AGENT_INTERACTIVE_LOCALE: &str = "C.UTF-8";
+const AGENT_PROCESS_SIGNAL_COMMAND: &str = "/bin/kill";
 
 #[derive(Debug, Clone)]
 struct AgentSession {
@@ -59,10 +78,60 @@ impl AgentSession {
     }
 }
 
-#[derive(Debug, Default)]
+struct AgentInteractivePty {
+    terminal_session_id: String,
+    working_directory: String,
+    master: Mutex<Box<dyn MasterPty + Send>>,
+    writer: Mutex<Box<dyn Write + Send>>,
+    killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
+    is_alive: AtomicBool,
+}
+
+impl AgentInteractivePty {
+    fn write_input(&self, data: &str) -> Result<(), Status> {
+        if !self.is_alive.load(Ordering::SeqCst) {
+            return Err(Status::failed_precondition("交互终端已退出。"));
+        }
+        let mut writer = self
+            .writer
+            .lock()
+            .map_err(|_| Status::internal("交互终端写入通道已损坏。"))?;
+        writer
+            .write_all(data.as_bytes())
+            .and_then(|_| writer.flush())
+            .map_err(|error| Status::internal(format!("写入交互终端失败：{error}")))
+    }
+
+    fn resize(&self, cols: u16, rows: u16) -> Result<(), Status> {
+        if !self.is_alive.load(Ordering::SeqCst) {
+            return Err(Status::failed_precondition("交互终端已退出。"));
+        }
+        let master = self
+            .master
+            .lock()
+            .map_err(|_| Status::internal("交互终端尺寸通道已损坏。"))?;
+        master
+            .resize(agent_pty_size(cols, rows))
+            .map_err(|error| Status::internal(format!("同步交互终端尺寸失败：{error}")))
+    }
+
+    fn terminate(&self) -> Result<(), Status> {
+        self.is_alive.store(false, Ordering::SeqCst);
+        let mut killer = self
+            .killer
+            .lock()
+            .map_err(|_| Status::internal("交互终端结束通道已损坏。"))?;
+        killer
+            .kill()
+            .map_err(|error| Status::internal(format!("关闭交互终端失败：{error}")))
+    }
+}
+
+#[derive(Default)]
 struct AgentState {
     next_session_seq: u64,
     sessions: HashMap<String, AgentSession>,
+    interactive_sessions: HashMap<String, Arc<AgentInteractivePty>>,
 }
 
 impl AgentState {
@@ -80,7 +149,7 @@ impl AgentState {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct WslLinkAgentService {
     state: Arc<Mutex<AgentState>>,
     noise_material: Option<Arc<WslLinkAgentNoiseMaterial>>,
@@ -384,6 +453,41 @@ async fn handle_terminal_duplex_frame(
             }
             true
         }
+        WslLinkTerminalClientPayload::OpenInteractive(request) => {
+            let result = open_interactive_terminal_frame(state, frame, request, tx).await;
+            if let Err(error) = result {
+                let _ = tx.send(Err(error)).await;
+            }
+            true
+        }
+        WslLinkTerminalClientPayload::InteractiveInput(request) => {
+            let result = write_interactive_terminal_frame(state, frame, request, tx).await;
+            if let Err(error) = result {
+                let _ = tx.send(Err(error)).await;
+            }
+            true
+        }
+        WslLinkTerminalClientPayload::InteractiveResize(request) => {
+            let result = resize_interactive_terminal_frame(state, frame, request, tx).await;
+            if let Err(error) = result {
+                let _ = tx.send(Err(error)).await;
+            }
+            true
+        }
+        WslLinkTerminalClientPayload::InteractiveClose(request) => {
+            let result = close_interactive_terminal_frame(state, frame, request, tx).await;
+            if let Err(error) = result {
+                let _ = tx.send(Err(error)).await;
+            }
+            true
+        }
+        WslLinkTerminalClientPayload::SignalProcess(request) => {
+            let result = signal_process_frame(state, frame, request, tx).await;
+            if let Err(error) = result {
+                let _ = tx.send(Err(error)).await;
+            }
+            true
+        }
     }
 }
 
@@ -513,6 +617,242 @@ async fn run_terminal_script_frame(
     .await
 }
 
+async fn open_interactive_terminal_frame(
+    state: &Arc<Mutex<AgentState>>,
+    frame: ClientFrame,
+    request: WslLinkTerminalOpenInteractiveRequest,
+    tx: &tokio::sync::mpsc::Sender<Result<ServerFrame, Status>>,
+) -> Result<(), Status> {
+    request
+        .validate()
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+    let session_id = frame.session_id.clone();
+    let client_seq = frame.client_seq;
+    let meta = begin_terminal_control_frame(state, frame)?;
+    let Some(meta) = meta else {
+        return replay_cached_terminal_frames(state, &session_id, client_seq, tx).await;
+    };
+
+    let key = terminal_session_key(&meta.session_id, &request.session_id);
+    let working_directory = resolve_agent_working_directory(&request.working_directory)
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+    let pty_system = native_pty_system();
+    let pty_pair = pty_system
+        .openpty(agent_pty_size(request.cols, request.rows))
+        .map_err(|error| Status::internal(format!("创建 WSL Link 交互 PTY 失败：{error}")))?;
+
+    let mut command = CommandBuilder::new(AGENT_INTERACTIVE_SHELL);
+    command.arg(AGENT_INTERACTIVE_SHELL_LOGIN_ARG);
+    command.cwd(&working_directory);
+    command.env("TERM", AGENT_INTERACTIVE_TERM);
+    command.env("COLORTERM", AGENT_INTERACTIVE_COLORTERM);
+    command.env("LANG", AGENT_INTERACTIVE_LOCALE);
+    command.env("LC_ALL", AGENT_INTERACTIVE_LOCALE);
+
+    let child = pty_pair
+        .slave
+        .spawn_command(command)
+        .map_err(|error| Status::internal(format!("启动 WSL Link 交互终端失败：{error}")))?;
+    let pid = child.process_id().unwrap_or(0);
+    let killer = child.clone_killer();
+    drop(pty_pair.slave);
+
+    let reader = pty_pair
+        .master
+        .try_clone_reader()
+        .map_err(|error| Status::internal(format!("初始化交互终端读通道失败：{error}")))?;
+    let writer = pty_pair
+        .master
+        .take_writer()
+        .map_err(|error| Status::internal(format!("初始化交互终端写通道失败：{error}")))?;
+
+    let pty = Arc::new(AgentInteractivePty {
+        terminal_session_id: request.session_id.clone(),
+        working_directory: request.working_directory.clone(),
+        master: Mutex::new(pty_pair.master),
+        writer: Mutex::new(writer),
+        killer: Mutex::new(killer),
+        is_alive: AtomicBool::new(true),
+    });
+
+    {
+        let mut state_guard = state
+            .lock()
+            .map_err(|_| Status::internal("WSL Link agent 状态锁已损坏。"))?;
+        if let Some(existing) = state_guard.interactive_sessions.remove(&key) {
+            let _ = existing.terminate();
+        }
+        state_guard
+            .interactive_sessions
+            .insert(key.clone(), Arc::clone(&pty));
+    }
+
+    send_terminal_event(
+        state,
+        &meta,
+        WslLinkTerminalServerPayload::InteractiveOpened(WslLinkTerminalInteractiveOpened {
+            session_id: request.session_id.clone(),
+            cwd: request.working_directory.clone(),
+            pid,
+            opened_at_unix_ms: now_unix_ms_i64(),
+        }),
+        tx,
+    )
+    .await?;
+
+    spawn_interactive_reader(
+        Arc::clone(state),
+        meta.clone(),
+        request.session_id.clone(),
+        reader,
+        tx.clone(),
+    );
+    spawn_interactive_waiter(state, meta, key, request.session_id, child, pty, tx.clone());
+
+    Ok(())
+}
+
+async fn write_interactive_terminal_frame(
+    state: &Arc<Mutex<AgentState>>,
+    frame: ClientFrame,
+    request: WslLinkTerminalInteractiveInput,
+    tx: &tokio::sync::mpsc::Sender<Result<ServerFrame, Status>>,
+) -> Result<(), Status> {
+    request
+        .validate()
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+    let session_id = frame.session_id.clone();
+    let client_seq = frame.client_seq;
+    let meta = begin_terminal_control_frame(state, frame)?;
+    let Some(meta) = meta else {
+        return replay_cached_terminal_frames(state, &session_id, client_seq, tx).await;
+    };
+    let pty = get_interactive_pty(state, &meta.session_id, &request.session_id)?;
+    pty.write_input(&request.data)?;
+    send_terminal_event(
+        state,
+        &meta,
+        WslLinkTerminalServerPayload::InteractiveAck(WslLinkTerminalInteractiveAck {
+            session_id: Some(request.session_id),
+            action: "input".to_string(),
+        }),
+        tx,
+    )
+    .await
+}
+
+async fn resize_interactive_terminal_frame(
+    state: &Arc<Mutex<AgentState>>,
+    frame: ClientFrame,
+    request: WslLinkTerminalInteractiveResize,
+    tx: &tokio::sync::mpsc::Sender<Result<ServerFrame, Status>>,
+) -> Result<(), Status> {
+    request
+        .validate()
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+    let session_id = frame.session_id.clone();
+    let client_seq = frame.client_seq;
+    let meta = begin_terminal_control_frame(state, frame)?;
+    let Some(meta) = meta else {
+        return replay_cached_terminal_frames(state, &session_id, client_seq, tx).await;
+    };
+    let pty = get_interactive_pty(state, &meta.session_id, &request.session_id)?;
+    pty.resize(request.cols, request.rows)?;
+    send_terminal_event(
+        state,
+        &meta,
+        WslLinkTerminalServerPayload::InteractiveAck(WslLinkTerminalInteractiveAck {
+            session_id: Some(request.session_id),
+            action: "resize".to_string(),
+        }),
+        tx,
+    )
+    .await
+}
+
+async fn close_interactive_terminal_frame(
+    state: &Arc<Mutex<AgentState>>,
+    frame: ClientFrame,
+    request: WslLinkTerminalInteractiveClose,
+    tx: &tokio::sync::mpsc::Sender<Result<ServerFrame, Status>>,
+) -> Result<(), Status> {
+    request
+        .validate()
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+    let session_id = frame.session_id.clone();
+    let client_seq = frame.client_seq;
+    let meta = begin_terminal_control_frame(state, frame)?;
+    let Some(meta) = meta else {
+        return replay_cached_terminal_frames(state, &session_id, client_seq, tx).await;
+    };
+    let key = terminal_session_key(&meta.session_id, &request.session_id);
+    let pty = {
+        let mut state_guard = state
+            .lock()
+            .map_err(|_| Status::internal("WSL Link agent 状态锁已损坏。"))?;
+        state_guard.interactive_sessions.remove(&key)
+    };
+    if let Some(pty) = pty {
+        let _ = pty.terminate();
+    }
+    send_terminal_event(
+        state,
+        &meta,
+        WslLinkTerminalServerPayload::InteractiveAck(WslLinkTerminalInteractiveAck {
+            session_id: Some(request.session_id),
+            action: "close".to_string(),
+        }),
+        tx,
+    )
+    .await
+}
+
+async fn signal_process_frame(
+    state: &Arc<Mutex<AgentState>>,
+    frame: ClientFrame,
+    request: WslLinkTerminalSignalProcess,
+    tx: &tokio::sync::mpsc::Sender<Result<ServerFrame, Status>>,
+) -> Result<(), Status> {
+    request
+        .validate()
+        .map_err(|error| Status::invalid_argument(error.to_string()))?;
+    let session_id = frame.session_id.clone();
+    let client_seq = frame.client_seq;
+    let meta = begin_terminal_control_frame(state, frame)?;
+    let Some(meta) = meta else {
+        return replay_cached_terminal_frames(state, &session_id, client_seq, tx).await;
+    };
+    let signal = if request.mode == "kill" {
+        "KILL"
+    } else {
+        "TERM"
+    };
+    let target = format!("-{}", request.pid);
+    let status = tokio::process::Command::new(AGENT_PROCESS_SIGNAL_COMMAND)
+        .arg(format!("-{signal}"))
+        .arg("--")
+        .arg(target)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .status()
+        .await
+        .map_err(|error| Status::internal(format!("发送进程信号失败：{error}")))?;
+    if !status.success() {
+        return Err(Status::internal("发送进程信号失败。"));
+    }
+    send_terminal_event(
+        state,
+        &meta,
+        WslLinkTerminalServerPayload::InteractiveAck(WslLinkTerminalInteractiveAck {
+            session_id: None,
+            action: "signal_process".to_string(),
+        }),
+        tx,
+    )
+    .await
+}
+
 fn begin_terminal_run_frame(
     state: &Arc<Mutex<AgentState>>,
     frame: ClientFrame,
@@ -521,6 +861,47 @@ fn begin_terminal_run_frame(
     request
         .validate()
         .map_err(|error| Status::invalid_argument(error.to_string()))?;
+    if frame.session_id.trim().is_empty() {
+        return Err(Status::invalid_argument("session_id 不能为空。"));
+    }
+    if frame.request_id.trim().is_empty() {
+        return Err(Status::invalid_argument("request_id 不能为空。"));
+    }
+    if frame.client_seq == 0 {
+        return Err(Status::invalid_argument("client_seq 必须从 1 开始。"));
+    }
+
+    let mut state = state
+        .lock()
+        .map_err(|_| Status::internal("WSL Link agent 状态锁已损坏。"))?;
+    let Some(session) = state.get_session_mut(&frame.session_id) else {
+        return Err(Status::not_found("session 不存在。"));
+    };
+    if session
+        .response_cache_by_client_seq
+        .contains_key(&frame.client_seq)
+    {
+        session.ack_client_seq(frame.client_seq);
+        return Ok(None);
+    }
+
+    session.ack_client_seq(frame.client_seq);
+    session
+        .response_cache_by_client_seq
+        .insert(frame.client_seq, Vec::new());
+
+    Ok(Some(TerminalFrameMeta {
+        session_id: frame.session_id,
+        request_id: frame.request_id,
+        trace_id: frame.trace_id,
+        client_seq: frame.client_seq,
+    }))
+}
+
+fn begin_terminal_control_frame(
+    state: &Arc<Mutex<AgentState>>,
+    frame: ClientFrame,
+) -> Result<Option<TerminalFrameMeta>, Status> {
     if frame.session_id.trim().is_empty() {
         return Err(Status::invalid_argument("session_id 不能为空。"));
     }
@@ -625,6 +1006,181 @@ fn build_terminal_server_frame(
         .or_default()
         .push(frame.clone());
     Ok(frame)
+}
+
+fn build_terminal_server_frame_uncached(
+    state: &Arc<Mutex<AgentState>>,
+    meta: &TerminalFrameMeta,
+    request_id: impl Into<String>,
+    payload: WslLinkTerminalServerPayload,
+) -> Result<ServerFrame, Status> {
+    let mut state = state
+        .lock()
+        .map_err(|_| Status::internal("WSL Link agent 状态锁已损坏。"))?;
+    let Some(session) = state.get_session_mut(&meta.session_id) else {
+        return Err(Status::not_found("session 不存在。"));
+    };
+    let server_seq = session.next_server_seq();
+    Ok(ServerFrame {
+        session_id: meta.session_id.clone(),
+        request_id: request_id.into(),
+        server_seq,
+        ack_client_seq: session.ack_client_seq,
+        payload: encode_terminal_server_payload(&payload)
+            .map_err(|error| Status::internal(error.to_string()))?,
+        trace_id: meta.trace_id.clone(),
+    })
+}
+
+fn send_terminal_event_uncached_blocking(
+    state: &Arc<Mutex<AgentState>>,
+    meta: &TerminalFrameMeta,
+    request_id: impl Into<String>,
+    payload: WslLinkTerminalServerPayload,
+    tx: &tokio::sync::mpsc::Sender<Result<ServerFrame, Status>>,
+) -> bool {
+    let frame = match build_terminal_server_frame_uncached(state, meta, request_id, payload) {
+        Ok(frame) => frame,
+        Err(error) => return tx.blocking_send(Err(error)).is_ok(),
+    };
+    tx.blocking_send(Ok(frame)).is_ok()
+}
+
+fn get_interactive_pty(
+    state: &Arc<Mutex<AgentState>>,
+    wsl_link_session_id: &str,
+    terminal_session_id: &str,
+) -> Result<Arc<AgentInteractivePty>, Status> {
+    let key = terminal_session_key(wsl_link_session_id, terminal_session_id);
+    let state = state
+        .lock()
+        .map_err(|_| Status::internal("WSL Link agent 状态锁已损坏。"))?;
+    state
+        .interactive_sessions
+        .get(&key)
+        .cloned()
+        .ok_or_else(|| Status::not_found("交互终端 session 不存在。"))
+}
+
+fn terminal_session_key(wsl_link_session_id: &str, terminal_session_id: &str) -> String {
+    format!("{wsl_link_session_id}:{terminal_session_id}")
+}
+
+fn agent_pty_size(cols: u16, rows: u16) -> PtySize {
+    PtySize {
+        cols: cols.max(2),
+        rows: rows.max(1),
+        pixel_width: 0,
+        pixel_height: 0,
+    }
+}
+
+fn spawn_interactive_reader(
+    state: Arc<Mutex<AgentState>>,
+    meta: TerminalFrameMeta,
+    terminal_session_id: String,
+    mut reader: Box<dyn Read + Send>,
+    tx: tokio::sync::mpsc::Sender<Result<ServerFrame, Status>>,
+) {
+    thread::spawn(move || {
+        let mut buffer = [0_u8; 16 * 1024];
+        let mut decoder = WslLinkUtf8ChunkDecoder::default();
+        let mut output = String::new();
+
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(size) => {
+                    output.clear();
+                    decoder.decode_into(&buffer[..size], &mut output, false);
+                    if output.is_empty() {
+                        continue;
+                    }
+                    let request_id = format!("interactive-data-{terminal_session_id}");
+                    let sent = send_terminal_event_uncached_blocking(
+                        &state,
+                        &meta,
+                        request_id,
+                        WslLinkTerminalServerPayload::InteractiveData(
+                            WslLinkTerminalInteractiveData {
+                                session_id: terminal_session_id.clone(),
+                                data: output.clone(),
+                            },
+                        ),
+                        &tx,
+                    );
+                    if !sent {
+                        break;
+                    }
+                }
+                Err(error) => {
+                    let _ = send_terminal_event_uncached_blocking(
+                        &state,
+                        &meta,
+                        format!("interactive-error-{terminal_session_id}"),
+                        WslLinkTerminalServerPayload::InteractiveError(
+                            WslLinkTerminalInteractiveError {
+                                session_id: Some(terminal_session_id.clone()),
+                                message: format!("读取交互终端输出失败：{error}"),
+                                exit_code: None,
+                                finished_at_unix_ms: now_unix_ms_i64(),
+                            },
+                        ),
+                        &tx,
+                    );
+                    break;
+                }
+            }
+        }
+
+        output.clear();
+        decoder.decode_into(&[], &mut output, true);
+        if !output.is_empty() {
+            let _ = send_terminal_event_uncached_blocking(
+                &state,
+                &meta,
+                format!("interactive-data-{terminal_session_id}"),
+                WslLinkTerminalServerPayload::InteractiveData(WslLinkTerminalInteractiveData {
+                    session_id: terminal_session_id,
+                    data: output,
+                }),
+                &tx,
+            );
+        }
+    });
+}
+
+fn spawn_interactive_waiter(
+    state: &Arc<Mutex<AgentState>>,
+    meta: TerminalFrameMeta,
+    key: String,
+    terminal_session_id: String,
+    mut child: Box<dyn Child + Send + Sync>,
+    pty: Arc<AgentInteractivePty>,
+    tx: tokio::sync::mpsc::Sender<Result<ServerFrame, Status>>,
+) {
+    let state = Arc::clone(state);
+    thread::spawn(move || {
+        let exit_code = child
+            .wait()
+            .ok()
+            .and_then(|status| i32::try_from(status.exit_code()).ok());
+        pty.is_alive.store(false, Ordering::SeqCst);
+        if let Ok(mut state_guard) = state.lock() {
+            state_guard.interactive_sessions.remove(&key);
+        }
+        let _ = send_terminal_event_uncached_blocking(
+            &state,
+            &meta,
+            format!("interactive-closed-{terminal_session_id}"),
+            WslLinkTerminalServerPayload::InteractiveClosed(WslLinkTerminalInteractiveClosed {
+                session_id: terminal_session_id,
+                exit_code,
+                finished_at_unix_ms: now_unix_ms_i64(),
+            }),
+            &tx,
+        );
+    });
 }
 
 enum TerminalProcessEvent {

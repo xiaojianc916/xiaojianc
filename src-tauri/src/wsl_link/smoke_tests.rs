@@ -5,10 +5,16 @@ use super::{
     },
     noise_material::{KeyringWslLinkNoiseMaterialStore, WslLinkNoiseMaterialStore},
     primary_supervisor::WslLinkPrimarySupervisor,
-    terminal_client::run_terminal_script_over_wsl_link,
-    terminal_exec::{WslLinkTerminalRunScriptRequest, WslLinkTerminalServerPayload},
+    terminal_client::{open_interactive_terminal_over_wsl_link, run_terminal_script_over_wsl_link},
+    terminal_exec::{
+        WslLinkTerminalOpenInteractiveRequest, WslLinkTerminalRunScriptRequest,
+        WslLinkTerminalServerPayload,
+    },
     types::now_unix_ms,
 };
+
+use std::sync::{Arc, Mutex};
+use tokio::time::{sleep, timeout, Duration};
 
 #[tokio::test]
 #[ignore = "需要本机 WSL2、Linux agent artifact 和 Windows 凭据容器；仅手动运行。"]
@@ -90,6 +96,11 @@ async fn real_wsl_agent_install_start_and_probe_primary() {
                 exit_code = error.exit_code;
             }
             WslLinkTerminalServerPayload::RunStarted(_) => {}
+            WslLinkTerminalServerPayload::InteractiveOpened(_)
+            | WslLinkTerminalServerPayload::InteractiveData(_)
+            | WslLinkTerminalServerPayload::InteractiveClosed(_)
+            | WslLinkTerminalServerPayload::InteractiveAck(_)
+            | WslLinkTerminalServerPayload::InteractiveError(_) => {}
         },
     )
     .await
@@ -98,5 +109,68 @@ async fn real_wsl_agent_install_start_and_probe_primary() {
     println!("terminal output={output:?} exit_code={exit_code:?}");
     assert_eq!(exit_code, Some(7), "{output}");
     assert!(output.contains("__WSL_LINK_TERMINAL_OK__"), "{output}");
+    assert!(output.contains("你好"), "{output}");
+
+    let interactive_output = Arc::new(Mutex::new(String::new()));
+    let interactive_exit = Arc::new(Mutex::new(None));
+    let output_ref = Arc::clone(&interactive_output);
+    let exit_ref = Arc::clone(&interactive_exit);
+    let interactive = open_interactive_terminal_over_wsl_link(
+        &desktop_material,
+        WslLinkTerminalOpenInteractiveRequest {
+            session_id: "wsl-link-interactive-smoke".to_string(),
+            working_directory: "/tmp".to_string(),
+            cols: 120,
+            rows: 40,
+        },
+        move |event| match event {
+            WslLinkTerminalServerPayload::InteractiveData(chunk) => {
+                output_ref
+                    .lock()
+                    .expect("output lock")
+                    .push_str(&chunk.data);
+            }
+            WslLinkTerminalServerPayload::InteractiveClosed(closed) => {
+                *exit_ref.lock().expect("exit lock") = closed.exit_code;
+            }
+            WslLinkTerminalServerPayload::InteractiveError(error) => {
+                output_ref
+                    .lock()
+                    .expect("output lock")
+                    .push_str(&error.message);
+                *exit_ref.lock().expect("exit lock") = error.exit_code;
+            }
+            WslLinkTerminalServerPayload::InteractiveOpened(_)
+            | WslLinkTerminalServerPayload::InteractiveAck(_)
+            | WslLinkTerminalServerPayload::RunStarted(_)
+            | WslLinkTerminalServerPayload::RunChunk(_)
+            | WslLinkTerminalServerPayload::RunCompleted(_)
+            | WslLinkTerminalServerPayload::RunError(_) => {}
+        },
+    )
+    .await
+    .expect("WSL Link interactive terminal 应能打开");
+    interactive
+        .write_input("printf '__WSL_LINK_INTERACTIVE_OK__\\n你好\\n'\nexit 9\n".to_string())
+        .expect("interactive input 应能发送");
+
+    timeout(Duration::from_secs(8), async {
+        loop {
+            let output = interactive_output.lock().expect("output lock").clone();
+            let exit_code = *interactive_exit.lock().expect("exit lock");
+            if output.contains("__WSL_LINK_INTERACTIVE_OK__") && exit_code == Some(9) {
+                break;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("WSL Link interactive terminal 应返回输出和退出码");
+
+    let output = interactive_output.lock().expect("output lock").clone();
+    let exit_code = *interactive_exit.lock().expect("exit lock");
+    println!("interactive output={output:?} exit_code={exit_code:?}");
+    assert_eq!(exit_code, Some(9), "{output}");
+    assert!(output.contains("__WSL_LINK_INTERACTIVE_OK__"), "{output}");
     assert!(output.contains("你好"), "{output}");
 }

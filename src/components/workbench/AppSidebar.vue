@@ -27,11 +27,13 @@
           <FileTree class="explorer-file-tree" :expanded="effectiveExplorerExpandedPaths"
             :selected-path="selectedExplorerPath" @expanded-change="void handleExplorerExpandedChange($event)"
             @update:selected-path="handleExplorerSelection">
-            <WorkspaceTreeNode v-if="rootEntry" :entry="rootEntry" :level="0" :is-root="true"
-              :children-map="childrenMap" :loading-paths="loadingPaths" :active-path="document.path"
-              :active-dirty="document.isDirty" :search-query="explorerSearchQuery"
-              :inline-create-draft="inlineCreateDraft" @context-menu="handleEntryContextMenu"
-              @inline-create-input="handleInlineCreateInputValue" @inline-create-blur="handleInlineCreateBlur"
+            <WorkspaceTreeNode v-if="rootEntry" :entry="rootEntry" :level="0" :children-map="childrenMap"
+              :expanded-paths="effectiveExplorerExpandedPaths" :loading-paths="loadingPaths"
+              :active-path="document.path" :active-dirty="document.isDirty" :search-query="explorerSearchQuery"
+              :inline-create-draft="inlineCreateDraft" :root-path="root.rootPath"
+              @toggle-directory="void toggleExplorerPath($event)" @open-file="handleOpenFile"
+              @context-menu="handleEntryContextMenu" @inline-create-input="handleInlineCreateInputValue"
+              @inline-create-blur="handleInlineCreateBlur"
               @inline-create-confirm="void confirmInlineCreateWorkspaceEntry()"
               @inline-create-cancel="cancelInlineCreateWorkspaceEntry" />
           </FileTree>
@@ -147,6 +149,7 @@ import type {
 import type { IGitDiffPreviewRequest } from '@/types/git';
 import { writeFileSystemPathToClipboard } from '@/utils/clipboard';
 import { toErrorMessage } from '@/utils/error';
+import { formatFileSystemPathForDisplay, getPathBaseName } from '@/utils/path';
 import {
   collectWorkspaceExpandedPathsByQuery,
   resolveWorkspaceKey,
@@ -244,7 +247,6 @@ const explorerContextMenuGroups = computed<ILinearContextMenuGroup<IExplorerCont
   return [
     {
       key: 'primary',
-      title: 'EXPLORER',
       items: [
         {
           key: 'open',
@@ -282,7 +284,6 @@ const explorerContextMenuGroups = computed<ILinearContextMenuGroup<IExplorerCont
     },
     {
       key: 'secondary',
-      title: 'ACTIONS',
       items: [
         {
           key: 'delete',
@@ -403,10 +404,12 @@ const rootEntry = computed<IWorkspaceEntry | null>(() => {
   }
 
   const rootEntries = childrenMap[root.value.rootPath] ?? root.value.entries;
+  const displayRootPath = formatFileSystemPathForDisplay(root.value.rootName || root.value.rootPath);
+  const displayRootName = getPathBaseName(displayRootPath) || displayRootPath;
 
   return {
     path: root.value.rootPath,
-    name: root.value.rootName,
+    name: displayRootName,
     kind: 'directory',
     hasChildren: rootEntries.length > 0,
   };

@@ -12,6 +12,7 @@ const MENU_WIDTH = 224;
 const SUBMENU_SAFE_WIDTH = 224;
 const VIEWPORT_PADDING = 12;
 const MENU_ROOT_SELECTOR = '.linear-context-menu-root';
+const MENU_TRIGGER_SELECTOR = '.linear-context-menu-trigger';
 const RECENT_OPEN_GUARD_MS = 250;
 const RECENT_OPEN_DISTANCE_PX = 4;
 
@@ -76,7 +77,8 @@ interface IEditorContextMenuState {
 }
 
 const isTargetInsideMenu = (target: EventTarget | null): boolean =>
-  target instanceof Element && target.closest(MENU_ROOT_SELECTOR) !== null;
+  target instanceof Element &&
+  (target.closest(MENU_ROOT_SELECTOR) !== null || target.closest(MENU_TRIGGER_SELECTOR) !== null);
 
 const clampMenuPosition = (clientX: number, clientY: number) => ({
   x: Math.min(clientX, Math.max(VIEWPORT_PADDING, window.innerWidth - MENU_WIDTH - VIEWPORT_PADDING)),
@@ -393,7 +395,7 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
     return [
       {
         key: 'run-actions',
-        title: 'RUN',
+
         items: [
           {
             key: 'run-current-script',
@@ -407,7 +409,7 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
       },
       {
         key: 'history-actions',
-        title: 'EDIT',
+
         items: [
           {
             key: 'undo',
@@ -429,7 +431,7 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
       },
       {
         key: 'code-actions',
-        title: 'EDITOR ACTIONS',
+
         items: [
           {
             key: 'ai-tools',
@@ -452,19 +454,11 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
             children: navigationChildren,
             disabled: navigationChildren.every((item) => item.disabled),
           },
-          {
-            key: 'quick-command',
-            label: '命令面板',
-            icon: 'command',
-            shortcut: SHORTCUT_MAP['quick-command'],
-            action: 'quick-command',
-            disabled: false,
-          },
         ],
       },
       {
         key: 'edit-actions',
-        title: 'CLIPBOARD',
+
         items: [
           {
             key: 'cut',
@@ -489,14 +483,6 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
             shortcut: SHORTCUT_MAP.paste,
             action: 'paste',
             disabled: isReadOnly || !hasModel,
-          },
-          {
-            key: 'select-all',
-            label: '全选',
-            icon: 'select-all',
-            shortcut: SHORTCUT_MAP['select-all'],
-            action: 'select-all',
-            disabled: !hasModel,
           },
         ],
       },
@@ -634,7 +620,14 @@ export const useEditorContextMenu = (options: IUseEditorContextMenuOptions) => {
   };
 
   const handleWindowContextMenu = (event: MouseEvent): void => {
-    if (isRecentOpenAtSamePoint(event)) {
+    if (!event.isTrusted) {
+      return;
+    }
+
+    // LinearContextMenu opens Reka ContextMenu by dispatching a synthetic contextmenu event.
+    // Reka Trigger ignores events that are already defaultPrevented, so we only suppress
+    // duplicated native events from real user interaction.
+    if (isRecentOpenAtSamePoint(event) && event.isTrusted) {
       event.preventDefault();
       return;
     }

@@ -256,15 +256,18 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Message v-if="shouldRenderMessage" :from="message.role" class="ai-message"
+  <Message
+v-if="shouldRenderMessage" :from="message.role" class="ai-message"
     :class="[`is-${message.role}`, { 'is-inline-loading': shouldShowInlineLoader }]">
     <div v-if="shouldShowInlineLoader" class="ai-message-status-line" role="status" aria-live="polite">
       <Loader class="ai-message-status-icon" :size="13" />
       <span>{{ inlineLoaderLabel }}</span>
     </div>
-    <AiAgentRuntimeTimeline v-if="shouldShowRuntimeTimeline" :events="message.stream?.runtimeEvents ?? []"
+    <AiAgentRuntimeTimeline
+v-if="shouldShowRuntimeTimeline" :events="message.stream?.runtimeEvents ?? []"
       :is-streaming="message.stream?.status === 'streaming'" />
-    <AiToolActivityInline v-if="shouldShowActivityTimeline" :tool-calls="message.toolCalls ?? []"
+    <AiToolActivityInline
+v-if="shouldShowActivityTimeline" :tool-calls="message.toolCalls ?? []"
       :activity-text="message.stream?.activityText" :activity-trail="message.stream?.activityTrail"
       :activity-notes="message.stream?.activityNotes" :activities="message.stream?.activities"
       :activity-events="message.stream?.activityEvents" />
@@ -275,21 +278,25 @@ onBeforeUnmount(() => {
         <span>{{ resolveAttachmentLabel(reference) }}</span>
       </span>
     </div>
-    <MessageContent v-if="shouldShowMessageBubble" class="ai-message-bubble"
+    <MessageContent
+v-if="shouldShowMessageBubble" class="ai-message-bubble"
       :class="{ 'is-assistant-flat': message.role !== 'user' }">
       <AiMarkdown :message-id="message.id" :content="message.content" :stream-status="message.stream?.status" />
     </MessageContent>
     <MessageActions v-if="hasMessageActions" class="ai-message-options" aria-label="AI 选项">
-      <MessageAction v-for="action in message.actions" :key="`${message.id}:${action.id}`"
+      <MessageAction
+v-for="action in message.actions" :key="`${message.id}:${action.id}`"
         class="ai-message-option-button" :disabled="action.disabled" :label="action.label" size="sm"
         :tooltip="action.label" variant="outline" @click.stop="emit('messageAction', message.id, action.id)">
         {{ action.label }}
       </MessageAction>
     </MessageActions>
-    <MessageToolbar v-if="shouldRenderCopyButton" class="ai-message-toolbar"
+    <MessageToolbar
+v-if="shouldRenderCopyButton" class="ai-message-toolbar"
       :class="[`is-copy-mode-${copyButtonVisibilityMode}`]">
       <MessageActions class="ai-message-actions">
-        <MessageAction class="ai-message-copy-button" :class="{ 'is-copied': isCopied }"
+        <MessageAction
+class="ai-message-copy-button" :class="{ 'is-copied': isCopied }"
           :label="isCopied ? '已复制对话内容' : '复制对话内容'" :tooltip="isCopied ? '已复制' : '复制对话内容'"
           @click.stop="copyMessageContent">
           <Check v-if="isCopied" aria-hidden="true" />

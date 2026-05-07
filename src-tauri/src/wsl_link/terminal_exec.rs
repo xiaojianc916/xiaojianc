@@ -8,6 +8,16 @@ pub const TERMINAL_RUN_STARTED_KIND: &str = "terminal.runStarted.v1";
 pub const TERMINAL_RUN_CHUNK_KIND: &str = "terminal.runChunk.v1";
 pub const TERMINAL_RUN_COMPLETED_KIND: &str = "terminal.runCompleted.v1";
 pub const TERMINAL_RUN_ERROR_KIND: &str = "terminal.runError.v1";
+pub const TERMINAL_OPEN_INTERACTIVE_KIND: &str = "terminal.openInteractive.v1";
+pub const TERMINAL_INTERACTIVE_OPENED_KIND: &str = "terminal.interactiveOpened.v1";
+pub const TERMINAL_INTERACTIVE_INPUT_KIND: &str = "terminal.interactiveInput.v1";
+pub const TERMINAL_INTERACTIVE_RESIZE_KIND: &str = "terminal.interactiveResize.v1";
+pub const TERMINAL_INTERACTIVE_CLOSE_KIND: &str = "terminal.interactiveClose.v1";
+pub const TERMINAL_INTERACTIVE_SIGNAL_PROCESS_KIND: &str = "terminal.signalProcess.v1";
+pub const TERMINAL_INTERACTIVE_DATA_KIND: &str = "terminal.interactiveData.v1";
+pub const TERMINAL_INTERACTIVE_CLOSED_KIND: &str = "terminal.interactiveClosed.v1";
+pub const TERMINAL_INTERACTIVE_ACK_KIND: &str = "terminal.interactiveAck.v1";
+pub const TERMINAL_INTERACTIVE_ERROR_KIND: &str = "terminal.interactiveError.v1";
 
 #[derive(Debug, Error)]
 pub enum WslLinkTerminalExecError {
@@ -59,6 +69,109 @@ impl WslLinkTerminalRunScriptRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WslLinkTerminalOpenInteractiveRequest {
+    pub session_id: String,
+    pub working_directory: String,
+    pub cols: u16,
+    pub rows: u16,
+}
+
+impl WslLinkTerminalOpenInteractiveRequest {
+    pub fn validate(&self) -> Result<(), WslLinkTerminalExecError> {
+        if self.session_id.trim().is_empty() {
+            return Err(WslLinkTerminalExecError::Payload(
+                "session_id 不能为空。".to_string(),
+            ));
+        }
+        if self.working_directory.trim().is_empty() {
+            return Err(WslLinkTerminalExecError::Payload(
+                "working_directory 不能为空。".to_string(),
+            ));
+        }
+        validate_terminal_size(self.cols, self.rows)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WslLinkTerminalInteractiveInput {
+    pub session_id: String,
+    pub data: String,
+}
+
+impl WslLinkTerminalInteractiveInput {
+    pub fn validate(&self) -> Result<(), WslLinkTerminalExecError> {
+        if self.session_id.trim().is_empty() {
+            return Err(WslLinkTerminalExecError::Payload(
+                "session_id 不能为空。".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WslLinkTerminalInteractiveResize {
+    pub session_id: String,
+    pub cols: u16,
+    pub rows: u16,
+}
+
+impl WslLinkTerminalInteractiveResize {
+    pub fn validate(&self) -> Result<(), WslLinkTerminalExecError> {
+        if self.session_id.trim().is_empty() {
+            return Err(WslLinkTerminalExecError::Payload(
+                "session_id 不能为空。".to_string(),
+            ));
+        }
+        validate_terminal_size(self.cols, self.rows)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WslLinkTerminalInteractiveClose {
+    pub session_id: String,
+}
+
+impl WslLinkTerminalInteractiveClose {
+    pub fn validate(&self) -> Result<(), WslLinkTerminalExecError> {
+        if self.session_id.trim().is_empty() {
+            return Err(WslLinkTerminalExecError::Payload(
+                "session_id 不能为空。".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WslLinkTerminalSignalProcess {
+    pub pid: u32,
+    pub mode: String,
+}
+
+impl WslLinkTerminalSignalProcess {
+    pub fn validate(&self) -> Result<(), WslLinkTerminalExecError> {
+        if self.pid == 0 {
+            return Err(WslLinkTerminalExecError::Payload(
+                "pid 必须有效。".to_string(),
+            ));
+        }
+        let mode = self.mode.trim();
+        if mode != "graceful" && mode != "kill" {
+            return Err(WslLinkTerminalExecError::Payload(
+                "mode 只能是 graceful 或 kill。".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WslLinkTerminalRunStarted {
     pub run_id: String,
     pub pid: u32,
@@ -90,10 +203,60 @@ pub struct WslLinkTerminalRunError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WslLinkTerminalInteractiveOpened {
+    pub session_id: String,
+    pub cwd: String,
+    pub pid: u32,
+    pub opened_at_unix_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WslLinkTerminalInteractiveData {
+    pub session_id: String,
+    pub data: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WslLinkTerminalInteractiveClosed {
+    pub session_id: String,
+    pub exit_code: Option<i32>,
+    pub finished_at_unix_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WslLinkTerminalInteractiveAck {
+    pub session_id: Option<String>,
+    pub action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WslLinkTerminalInteractiveError {
+    pub session_id: Option<String>,
+    pub message: String,
+    pub exit_code: Option<i32>,
+    pub finished_at_unix_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload")]
 pub enum WslLinkTerminalClientPayload {
     #[serde(rename = "terminal.runScript.v1")]
     RunScript(WslLinkTerminalRunScriptRequest),
+    #[serde(rename = "terminal.openInteractive.v1")]
+    OpenInteractive(WslLinkTerminalOpenInteractiveRequest),
+    #[serde(rename = "terminal.interactiveInput.v1")]
+    InteractiveInput(WslLinkTerminalInteractiveInput),
+    #[serde(rename = "terminal.interactiveResize.v1")]
+    InteractiveResize(WslLinkTerminalInteractiveResize),
+    #[serde(rename = "terminal.interactiveClose.v1")]
+    InteractiveClose(WslLinkTerminalInteractiveClose),
+    #[serde(rename = "terminal.signalProcess.v1")]
+    SignalProcess(WslLinkTerminalSignalProcess),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -107,6 +270,16 @@ pub enum WslLinkTerminalServerPayload {
     RunCompleted(WslLinkTerminalRunCompleted),
     #[serde(rename = "terminal.runError.v1")]
     RunError(WslLinkTerminalRunError),
+    #[serde(rename = "terminal.interactiveOpened.v1")]
+    InteractiveOpened(WslLinkTerminalInteractiveOpened),
+    #[serde(rename = "terminal.interactiveData.v1")]
+    InteractiveData(WslLinkTerminalInteractiveData),
+    #[serde(rename = "terminal.interactiveClosed.v1")]
+    InteractiveClosed(WslLinkTerminalInteractiveClosed),
+    #[serde(rename = "terminal.interactiveAck.v1")]
+    InteractiveAck(WslLinkTerminalInteractiveAck),
+    #[serde(rename = "terminal.interactiveError.v1")]
+    InteractiveError(WslLinkTerminalInteractiveError),
 }
 
 pub fn encode_terminal_client_payload(
@@ -149,6 +322,15 @@ fn home_directory() -> Result<PathBuf, WslLinkTerminalExecError> {
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .ok_or_else(|| WslLinkTerminalExecError::InvalidWorkingDirectory("HOME 未设置。".into()))
+}
+
+fn validate_terminal_size(cols: u16, rows: u16) -> Result<(), WslLinkTerminalExecError> {
+    if cols < 2 || rows < 1 {
+        return Err(WslLinkTerminalExecError::Payload(
+            "终端尺寸必须有效。".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Default)]
@@ -216,6 +398,20 @@ mod tests {
             cols: 120,
             rows: 40,
         });
+
+        let encoded = encode_terminal_client_payload(&payload).expect("payload should encode");
+        let decoded = decode_terminal_client_payload(&encoded).expect("payload should decode");
+
+        assert_eq!(decoded, payload);
+    }
+
+    #[test]
+    fn interactive_payload_roundtrips_multilingual_input() {
+        let payload =
+            WslLinkTerminalClientPayload::InteractiveInput(WslLinkTerminalInteractiveInput {
+                session_id: "main-terminal".to_string(),
+                data: "printf '你好 🌟'\n".to_string(),
+            });
 
         let encoded = encode_terminal_client_payload(&payload).expect("payload should encode");
         let decoded = decode_terminal_client_payload(&encoded).expect("payload should decode");

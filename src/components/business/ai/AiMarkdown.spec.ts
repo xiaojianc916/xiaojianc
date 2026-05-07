@@ -1,5 +1,6 @@
 import AiMarkdown from '@/components/business/ai/AiMarkdown.vue';
 import { flushPromises, mount } from '@vue/test-utils';
+import MarkdownRender from 'markstream-vue';
 import { describe, expect, it } from 'vitest';
 import { nextTick } from 'vue';
 
@@ -51,6 +52,37 @@ describe('AiMarkdown rendering', () => {
 
     expect(wrapper.text()).toContain('后文');
     expect(wrapper.text()).toContain('done');
+  });
+
+  it('keeps markstream incremental placeholders disabled while streaming', async () => {
+    const wrapper = mount(AiMarkdown, {
+      props: {
+        messageId: 'm-typewriter',
+        content: '正在输出一段中文内容',
+        streamStatus: 'streaming',
+      },
+    });
+
+    await nextTick();
+
+    const streamingRenderer = wrapper.getComponent(MarkdownRender);
+    expect(streamingRenderer.props('typewriter')).toBe(false);
+    expect(streamingRenderer.props('maxLiveNodes')).toBe(320);
+    expect(streamingRenderer.props('initialRenderBatchSize')).toBe(64);
+    expect(streamingRenderer.props('renderBatchSize')).toBe(96);
+    expect(streamingRenderer.props('renderBatchDelay')).toBe(0);
+
+    await wrapper.setProps({
+      streamStatus: 'completed',
+    });
+    await nextTick();
+
+    const finalRenderer = wrapper.getComponent(MarkdownRender);
+    expect(finalRenderer.props('typewriter')).toBe(false);
+    expect(finalRenderer.props('maxLiveNodes')).toBe(320);
+    expect(finalRenderer.props('initialRenderBatchSize')).toBe(64);
+    expect(finalRenderer.props('renderBatchSize')).toBe(96);
+    expect(finalRenderer.props('renderBatchDelay')).toBe(0);
   });
 
   it('renders custom code blocks with copy actions and code content', async () => {

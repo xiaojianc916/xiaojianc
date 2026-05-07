@@ -562,7 +562,7 @@ describe('useWorkbench 特征化快照', () => {
       expect(mockTauriService.dispatchScriptToTerminal).toHaveBeenCalledOnce();
     });
 
-    it('派发脚本时携带工作区根目录，确保 run cwd 不继承 iPTY 当前目录', async () => {
+    it('派发脚本时携带工作区根目录，确保 run cwd 不继承交互终端当前目录', async () => {
       editorStore.workspaceRootPath = '/workspace';
       editorStore.openDocumentTab({
         path: '/workspace/scripts/hello.sh',

@@ -2,7 +2,8 @@
     <div class="app-surface h-screen" :style="shellThemeStyle">
         <div class="app-window-shell relative flex h-full flex-col overflow-hidden border border-(--shell-divider)">
             <template v-if="isDesktopRuntime">
-                <div v-for="handle in resizeHandles" :key="handle.direction" class="window-resize-handle"
+                <div
+v-for="handle in resizeHandles" :key="handle.direction" class="window-resize-handle"
                     :class="handle.className" @mousedown.prevent.stop="startWindowResize(handle.direction, $event)" />
             </template>
 

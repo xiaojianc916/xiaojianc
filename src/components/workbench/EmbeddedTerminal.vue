@@ -1,28 +1,16 @@
 <template>
   <div class="embedded-terminal-shell" @mousedown="handleShellMouseDown">
-    <div
-      ref="hostRef"
-      class="embedded-terminal-host"
-      :class="{ 'is-hidden-by-overlay': showOverlay }"
-    />
+    <div ref="hostRef" class="embedded-terminal-host" :class="{ 'is-hidden-by-overlay': showOverlay }" />
 
-    <div
-      v-if="showOverlay"
-      class="embedded-terminal-overlay"
-      :class="{ 'is-error': isUnavailable }"
-    >
+    <div v-if="showOverlay" class="embedded-terminal-overlay" :class="{ 'is-error': isUnavailable }">
       <div class="embedded-terminal-overlay-body">
-        <section class="embedded-terminal-skeleton-layout" aria-hidden="true">
-          <div class="embedded-terminal-skeleton-divider" />
-
-          <div class="embedded-terminal-skeleton-lines">
-            <Skeleton
-              v-for="row in loadingRows"
-              :key="row"
-              class="embedded-terminal-skeleton-row"
-              :class="row"
-            />
-          </div>
+        <section v-if="!isUnavailable" class="embedded-terminal-loading" aria-live="polite">
+          <p class="embedded-terminal-loading-title">终端加载中</p>
+          <span class="embedded-terminal-loading-dots" aria-hidden="true">
+            <span class="embedded-terminal-loading-dot" />
+            <span class="embedded-terminal-loading-dot" />
+            <span class="embedded-terminal-loading-dot" />
+          </span>
         </section>
 
         <div v-if="isUnavailable" class="embedded-terminal-overlay-caption">
@@ -35,11 +23,7 @@
             </p>
           </div>
 
-          <button
-            type="button"
-            class="linear-button embedded-terminal-retry"
-            @click.stop="retry"
-          >
+          <button type="button" class="linear-button embedded-terminal-retry" @click.stop="retry">
             重新连接
           </button>
         </div>
@@ -49,14 +33,13 @@
 </template>
 
 <script setup lang="ts">
-import { Skeleton } from '@/components/ui/skeleton';
 import { useIntegratedTerminal } from '@/composables/useIntegratedTerminal';
 import type { TThemeMode } from '@/types/app';
 import type { ITerminalSettings } from '@/types/settings';
 import type {
-    ITerminalRunCompletedPayload,
-    ITerminalRunChunkPayload,
-    ITerminalStatusChangePayload,
+  ITerminalRunChunkPayload,
+  ITerminalRunCompletedPayload,
+  ITerminalStatusChangePayload,
 } from '@/types/terminal';
 import '@xterm/xterm/css/xterm.css';
 import { computed } from 'vue';
@@ -76,8 +59,6 @@ const emit = defineEmits<{
 const visible = computed(() => props.visible);
 const theme = computed(() => props.theme);
 const terminalSettings = computed(() => props.terminalSettings);
-const loadingRows = ['is-w100', 'is-w85', 'is-w70', 'is-w92', 'is-w60'] as const;
-
 const { hostRef, status, statusMessage, retry, focusTerminal } = useIntegratedTerminal({
   visible,
   theme,

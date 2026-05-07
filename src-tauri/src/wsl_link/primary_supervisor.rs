@@ -126,6 +126,11 @@ impl WslLinkPrimarySupervisor {
         self.last_client_seq = self.last_client_seq.max(ack.ack_client_seq);
         self.last_ack_server_seq = self.last_ack_server_seq.max(ack.server_seq);
     }
+
+    pub fn apply_server_frame_ack(&mut self, server_seq: u64, ack_client_seq: u64) {
+        self.last_client_seq = self.last_client_seq.max(ack_client_seq);
+        self.last_ack_server_seq = self.last_ack_server_seq.max(server_seq);
+    }
 }
 
 impl Default for WslLinkPrimarySupervisor {

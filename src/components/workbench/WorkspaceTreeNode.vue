@@ -51,7 +51,7 @@
   </div>
 </template>
 
-  <script setup lang="ts">
+<script setup lang="ts">
 import ExplorerEntryIcon from '@/components/workbench/ExplorerEntryIcon.vue';
 import type { IWorkspaceEntry } from '@/types/editor';
 import { areFileSystemPathsEqual } from '@/utils/path';
@@ -67,7 +67,7 @@ const props = defineProps<{
   entry: IWorkspaceEntry;
   level: number;
   childrenMap: Record<string, IWorkspaceEntry[]>;
-  expandedPaths: Record<string, boolean>;
+  expandedPaths: Set<string>;
   loadingPaths: Record<string, boolean>;
   activePath: string | null;
   activeDirty: boolean;
@@ -93,7 +93,7 @@ const emit = defineEmits<{
 }>();
 
 const isDirectory = computed(() => props.entry.kind === 'directory');
-const isExpanded = computed(() => Boolean(props.expandedPaths[props.entry.path]));
+const isExpanded = computed(() => props.expandedPaths.has(props.entry.path));
 const isLoading = computed(() => Boolean(props.loadingPaths[props.entry.path]));
 const childEntries = computed(() => props.childrenMap[props.entry.path] ?? []);
 const isActive = computed(
@@ -158,30 +158,30 @@ const handleInlineCreateInput = (event: Event): void => {
 };
 </script>
 
-  <style scoped>
-    .explorer-inline-create-input {
-      width: 100%;
-      min-width: 0;
-      height: 28px;
-      border: 1px solid color-mix(in srgb, var(--shell-divider) 82%, transparent);
-      border-radius: 6px;
-      background: color-mix(in srgb, var(--bg-3) 96%, transparent);
-      color: var(--text-primary);
-      font-size: 12.5px;
-      padding: 0 10px;
-      outline: none;
-      transition:
-        border-color 120ms ease,
-        box-shadow 120ms ease,
-        background-color 120ms ease;
-    }
+<style scoped>
+.explorer-inline-create-input {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, var(--shell-divider) 82%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-3) 96%, transparent);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  padding: 0 10px;
+  outline: none;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background-color 120ms ease;
+}
 
-    .explorer-inline-create-input:hover {
-      border-color: color-mix(in srgb, var(--accent-strong) 38%, var(--shell-divider));
-    }
+.explorer-inline-create-input:hover {
+  border-color: color-mix(in srgb, var(--accent-strong) 38%, var(--shell-divider));
+}
 
-    .explorer-inline-create-input:focus {
-      border-color: color-mix(in srgb, var(--accent-strong) 70%, transparent);
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-strong) 28%, transparent);
-    }
-  </style>
+.explorer-inline-create-input:focus {
+  border-color: color-mix(in srgb, var(--accent-strong) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-strong) 28%, transparent);
+}
+</style>

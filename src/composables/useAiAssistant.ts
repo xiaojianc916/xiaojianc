@@ -527,6 +527,23 @@ interface ISidecarLiveEventBuffer {
   dispose: () => void;
 }
 
+interface ISidecarAnswerStreamMetadata {
+  messageId: string;
+  toolCalls: IAiChatMessage['toolCalls'];
+  streamStatus: NonNullable<IAiChatMessage['stream']>['status'];
+  activityText: string | undefined;
+  activityTrail: string[] | undefined;
+  activityNotes: IActivityNote[] | undefined;
+  activities: IAgentActivity[] | undefined;
+  activityEvents: NonNullable<IAiChatMessage['stream']>['activityEvents'] | undefined;
+  runtimeEvents: NonNullable<IAiChatMessage['stream']>['runtimeEvents'] | undefined;
+  finalAnswerStarted: boolean | undefined;
+}
+
+interface ISidecarAnswerStreamState extends ISidecarAnswerStreamMetadata {
+  sourceText: string;
+}
+
 const getLatestSidecarLiveEvents = (
   events: readonly TAgentUiEvent[],
 ): ILatestSidecarLiveEvents => {
@@ -695,20 +712,6 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const conversationStore = useAiConversationStore();
 
   const config = ref<IAiConfigPayload>(createDefaultAiConfigPayload());
-
-  const messages = computed<IAiChatMessage[]>({
-    get: () => unref(conversationStore.activeMessages),
-    set: (nextMessages: IAiChatMessage[]) => {
-      conversationStore.replaceMessages(nextMessages);
-    },
-  });
-
-  const historyThreads = computed(() => unref(conversationStore.historyThreads));
-  const activeConversationId = computed(() => unref(conversationStore.activeThreadId));
-  const conversationCheckpoints = computed<IAiConversationCheckpoint[]>(() =>
-    buildConversationCheckpoints(messages.value),
-  );
-
   const draft = ref('');
   const isSending = ref(false);
   const errorMessage = ref('');
@@ -732,12 +735,57 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const activeAssistantMessage = ref<IAiChatMessage | null>(null);
   const activeAssistantBaseMessages = shallowRef<IAiChatMessage[]>([]);
   const activeSidecarAgentSession = ref<ISidecarAgentSession | null>(null);
+  const displayMessages = shallowRef<IAiChatMessage[]>(unref(conversationStore.activeMessages));
   const pendingTitleThreadIds = new Set<string>();
   const activityNarratorStates = new Map<string, IActivityNarratorRunState>();
 
+  const isConversationWriteBuffered = (): boolean =>
+    isSending.value ||
+    activeStreamId.value !== null ||
+    activeAgentMessageId.value !== null ||
+    activeAssistantMessage.value !== null ||
+    activeSidecarAgentSession.value !== null ||
+    restoringCheckpointId.value !== null;
+
+  const commitDisplayMessagesToStore = (): void => {
+    conversationStore.replaceMessages(displayMessages.value);
+  };
+
+  const messages = computed<IAiChatMessage[]>({
+    get: () => displayMessages.value,
+    set: (nextMessages: IAiChatMessage[]) => {
+      displayMessages.value = nextMessages;
+
+      if (!isConversationWriteBuffered()) {
+        commitDisplayMessagesToStore();
+      }
+    },
+  });
+
+  watch(
+    () => unref(conversationStore.activeMessages),
+    (nextMessages) => {
+      if (isConversationWriteBuffered()) {
+        return;
+      }
+
+      displayMessages.value = nextMessages;
+    },
+    { flush: 'sync' },
+  );
+
+  const historyThreads = computed(() => unref(conversationStore.historyThreads));
+  const activeConversationId = computed(() => unref(conversationStore.activeThreadId));
+  const conversationCheckpoints = computed<IAiConversationCheckpoint[]>(() =>
+    buildConversationCheckpoints(messages.value),
+  );
+
   const aiStream = useAiStream();
+  const sidecarAnswerStream = useAiStream();
   const agentPlan = useAiAgentPlan();
   const { refreshSidecarChangedDocuments } = useSidecarChangedDocumentRefresh();
+  let sidecarAnswerStreamState: ISidecarAnswerStreamState | null = null;
+  let isSidecarAnswerStreamSyncSuppressed = false;
 
   const syncActiveAssistantMessage = (): void => {
     const current = activeAssistantMessage.value;
@@ -1163,6 +1211,213 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       };
     });
   };
+
+  const assignSidecarAnswerStreamMetadata = (
+    state: ISidecarAnswerStreamState,
+    metadata: ISidecarAnswerStreamMetadata,
+  ): void => {
+    state.messageId = metadata.messageId;
+    state.toolCalls = metadata.toolCalls;
+    state.streamStatus = metadata.streamStatus;
+    state.activityText = metadata.activityText;
+    state.activityTrail = metadata.activityTrail;
+    state.activityNotes = metadata.activityNotes;
+    state.activities = metadata.activities;
+    state.activityEvents = metadata.activityEvents;
+    state.runtimeEvents = metadata.runtimeEvents;
+    state.finalAnswerStarted = metadata.finalAnswerStarted;
+  };
+
+  const resolveSidecarAnswerDisplayStatus = (
+    metadata: ISidecarAnswerStreamMetadata,
+  ): NonNullable<IAiChatMessage['stream']>['status'] => {
+    const hasActiveSource = sidecarAnswerStreamState?.messageId === metadata.messageId
+      && sidecarAnswerStreamState.sourceText.length > 0;
+
+    return metadata.streamStatus === 'completed'
+      && hasActiveSource
+      && sidecarAnswerStream.status.value !== 'completed'
+      ? 'streaming'
+      : metadata.streamStatus;
+  };
+
+  const syncSidecarAnswerStreamMessage = (): void => {
+    if (isSidecarAnswerStreamSyncSuppressed) {
+      return;
+    }
+
+    const state = sidecarAnswerStreamState;
+
+    if (!state) {
+      return;
+    }
+
+    updateAgentExecutionMessage(
+      state.messageId,
+      sidecarAnswerStream.content.value,
+      state.toolCalls,
+      resolveSidecarAnswerDisplayStatus(state),
+      state.activityText,
+      state.activityTrail,
+      state.activityNotes,
+      state.activities,
+      state.activityEvents,
+      state.runtimeEvents,
+      state.finalAnswerStarted,
+    );
+    state.runtimeEvents = undefined;
+
+    if (state.streamStatus === 'completed' && sidecarAnswerStream.status.value === 'completed') {
+      sidecarAnswerStreamState = null;
+    }
+  };
+
+  const runWithSuppressedSidecarAnswerSync = <T>(runner: () => T): T => {
+    const wasSuppressed = isSidecarAnswerStreamSyncSuppressed;
+    isSidecarAnswerStreamSyncSuppressed = true;
+
+    try {
+      return runner();
+    } finally {
+      isSidecarAnswerStreamSyncSuppressed = wasSuppressed;
+    }
+  };
+
+  const ensureSidecarAnswerStreamState = (
+    metadata: ISidecarAnswerStreamMetadata,
+  ): ISidecarAnswerStreamState => {
+    if (!sidecarAnswerStreamState || sidecarAnswerStreamState.messageId !== metadata.messageId) {
+      sidecarAnswerStreamState = {
+        ...metadata,
+        sourceText: '',
+      };
+      runWithSuppressedSidecarAnswerSync(() => {
+        sidecarAnswerStream.start({ messageId: metadata.messageId });
+      });
+
+      return sidecarAnswerStreamState;
+    }
+
+    assignSidecarAnswerStreamMetadata(sidecarAnswerStreamState, metadata);
+
+    return sidecarAnswerStreamState;
+  };
+
+  const resetSidecarAnswerStreamContent = (
+    metadata: ISidecarAnswerStreamMetadata,
+  ): string => {
+    const state = ensureSidecarAnswerStreamState(metadata);
+    state.sourceText = '';
+    runWithSuppressedSidecarAnswerSync(() => {
+      sidecarAnswerStream.start({ messageId: metadata.messageId });
+    });
+
+    return sidecarAnswerStream.content.value;
+  };
+
+  const updateSidecarAnswerStreamContent = (
+    sourceText: string,
+    metadata: ISidecarAnswerStreamMetadata,
+  ): string => {
+    const state = ensureSidecarAnswerStreamState(metadata);
+
+    if (!sourceText) {
+      state.sourceText = '';
+      runWithSuppressedSidecarAnswerSync(() => {
+        sidecarAnswerStream.start({ messageId: metadata.messageId });
+      });
+
+      return sidecarAnswerStream.content.value;
+    }
+
+    if (sourceText === state.sourceText) {
+      return sidecarAnswerStream.content.value;
+    }
+
+    if (sourceText.startsWith(state.sourceText)) {
+      const delta = sourceText.slice(state.sourceText.length);
+      state.sourceText = sourceText;
+      runWithSuppressedSidecarAnswerSync(() => {
+        sidecarAnswerStream.append(delta);
+      });
+
+      return sidecarAnswerStream.content.value;
+    }
+
+    state.sourceText = '';
+    runWithSuppressedSidecarAnswerSync(() => {
+      sidecarAnswerStream.start({ messageId: metadata.messageId });
+    });
+    state.sourceText = sourceText;
+    runWithSuppressedSidecarAnswerSync(() => {
+      sidecarAnswerStream.append(sourceText);
+    });
+
+    return sidecarAnswerStream.content.value;
+  };
+
+  const disposeSidecarAnswerStream = (messageId?: string): void => {
+    const state = sidecarAnswerStreamState;
+
+    if (!state || (messageId && state.messageId !== messageId)) {
+      return;
+    }
+
+    sidecarAnswerStreamState = null;
+    sidecarAnswerStream.stop();
+  };
+
+  const hasActiveSidecarAnswerStreamSource = (messageId: string): boolean =>
+    sidecarAnswerStreamState?.messageId === messageId
+    && sidecarAnswerStreamState.sourceText.length > 0;
+
+  const completeSidecarAnswerStream = (
+    finalText: string,
+    metadata: ISidecarAnswerStreamMetadata,
+  ): string => {
+    if (!hasActiveSidecarAnswerStreamSource(metadata.messageId)) {
+      disposeSidecarAnswerStream(metadata.messageId);
+      return finalText;
+    }
+
+    updateSidecarAnswerStreamContent(finalText, metadata);
+    sidecarAnswerStream.complete();
+
+    return sidecarAnswerStream.content.value;
+  };
+
+  const waitForSidecarAnswerStreamCompletion = (messageId: string): Promise<void> => {
+    if (
+      !sidecarAnswerStreamState ||
+      sidecarAnswerStreamState.messageId !== messageId ||
+      sidecarAnswerStream.status.value === 'completed'
+    ) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      const stop = watch(
+        () => [sidecarAnswerStream.status.value, sidecarAnswerStreamState?.messageId] as const,
+        ([status, activeMessageId]) => {
+          if (status !== 'completed' && activeMessageId === messageId) {
+            return;
+          }
+
+          stop();
+          resolve();
+        },
+        { flush: 'sync' },
+      );
+    });
+  };
+
+  watch(
+    () => [sidecarAnswerStream.content.value, sidecarAnswerStream.status.value] as const,
+    () => {
+      syncSidecarAnswerStreamMessage();
+    },
+    { flush: 'sync' },
+  );
 
   const ensureActivityNarratorState = (
     assistantMessageId: string,
@@ -1595,6 +1850,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       hasError: Boolean(errorEvent),
       currentActivityEvents,
     });
+    const runtimeEvents = extractNewVisibleRuntimeEvents(events);
 
     for (const toolCall of activityProjection.toolCalls) {
       updateAgentStep(
@@ -1604,17 +1860,50 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       );
     }
 
+    const streamMetadata: ISidecarAnswerStreamMetadata = {
+      messageId: assistantMessageId,
+      toolCalls: activityProjection.toolCalls,
+      streamStatus,
+      activityText: activityProjection.activityText,
+      activityTrail: activityProjection.activityTrail,
+      activityNotes: undefined,
+      activities: activityProjection.activities,
+      activityEvents: activityProjection.activityEvents,
+      runtimeEvents,
+      finalAnswerStarted,
+    };
+    const displayContent = (() => {
+      if (errorEvent) {
+        disposeSidecarAnswerStream(assistantMessageId);
+        return content;
+      }
+
+      if (doneResult) {
+        return completeSidecarAnswerStream(doneResult, streamMetadata);
+      }
+
+      if (finalMessageEvent) {
+        return updateSidecarAnswerStreamContent(finalMessageEvent.text, streamMetadata);
+      }
+
+      if (messageEvent?.text === '') {
+        return resetSidecarAnswerStreamContent(streamMetadata);
+      }
+
+      return content;
+    })();
+
     updateAgentExecutionMessage(
       assistantMessageId,
-      content,
+      displayContent,
       activityProjection.toolCalls,
-      streamStatus,
+      resolveSidecarAnswerDisplayStatus(streamMetadata),
       activityProjection.activityText,
       activityProjection.activityTrail,
       undefined,
       activityProjection.activities,
       activityProjection.activityEvents,
-      extractNewVisibleRuntimeEvents(events),
+      runtimeEvents,
       finalAnswerStarted,
     );
 
@@ -1772,6 +2061,28 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         hasError: Boolean(projection.errorMessage),
         currentActivityEvents,
       });
+      const streamMetadata: ISidecarAnswerStreamMetadata = {
+        messageId: assistantMessageId,
+        toolCalls: activityProjection.toolCalls,
+        streamStatus: 'completed',
+        activityText: activityProjection.activityText,
+        activityTrail: activityProjection.activityTrail,
+        activityNotes: undefined,
+        activities: activityProjection.activities,
+        activityEvents: activityProjection.activityEvents,
+        runtimeEvents: extractVisibleAgentRuntimeEvents(payload.events),
+        finalAnswerStarted: hasMeaningfulAssistantText(projection.assistantContent),
+      };
+      if (projection.errorMessage) {
+        disposeSidecarAnswerStream(assistantMessageId);
+      }
+
+      const displayContent = projection.errorMessage
+        ? projection.assistantContent
+        : completeSidecarAnswerStream(projection.assistantContent, streamMetadata);
+      const sidecarAnswerCompletion = projection.errorMessage || projection.pendingConfirmation
+        ? Promise.resolve()
+        : waitForSidecarAnswerStreamCompletion(assistantMessageId);
 
       for (const toolCall of activityProjection.toolCalls) {
         updateAgentStep(
@@ -1783,15 +2094,16 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
       updateAgentExecutionMessage(
         assistantMessageId,
-        projection.assistantContent,
+        displayContent,
         activityProjection.toolCalls,
-        'completed',
+        projection.errorMessage ? 'completed' : resolveSidecarAnswerDisplayStatus(streamMetadata),
         activityProjection.activityText,
         activityProjection.activityTrail,
         undefined,
         activityProjection.activities,
         activityProjection.activityEvents,
-        extractVisibleAgentRuntimeEvents(payload.events),
+        streamMetadata.runtimeEvents,
+        streamMetadata.finalAnswerStarted,
       );
 
       maybeRequestActivityNarration({
@@ -1811,6 +2123,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         projection.changedFilePaths,
         projection.hasFileMutations,
       );
+      await sidecarAnswerCompletion;
 
       if (projection.pendingConfirmation) {
         activeSidecarAgentSession.value = {
@@ -1835,6 +2148,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     } catch (error) {
       const wasAborted = activeAbortController.value?.signal.aborted;
       markActivityNarratorCancelled(assistantMessageId);
+      disposeSidecarAnswerStream(assistantMessageId);
 
       if (!wasAborted) {
         const message = toErrorMessage(error, MSG_CALL_FAILED);
@@ -1851,6 +2165,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       unlistenSidecarStream?.();
       activeAbortController.value = null;
       activeAgentMessageId.value = null;
+      commitDisplayMessagesToStore();
       isSending.value = false;
     }
   };
@@ -1923,18 +2238,41 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         hasError: Boolean(projection.errorMessage),
         currentActivityEvents,
       });
+      const streamMetadata: ISidecarAnswerStreamMetadata = {
+        messageId: session.assistantMessageId,
+        toolCalls: activityProjection.toolCalls,
+        streamStatus: 'completed',
+        activityText: activityProjection.activityText,
+        activityTrail: activityProjection.activityTrail,
+        activityNotes: undefined,
+        activities: activityProjection.activities,
+        activityEvents: activityProjection.activityEvents,
+        runtimeEvents: extractVisibleAgentRuntimeEvents(payload.events),
+        finalAnswerStarted: hasMeaningfulAssistantText(projection.assistantContent),
+      };
+      if (projection.errorMessage) {
+        disposeSidecarAnswerStream(session.assistantMessageId);
+      }
+
+      const displayContent = projection.errorMessage
+        ? projection.assistantContent
+        : completeSidecarAnswerStream(projection.assistantContent, streamMetadata);
+      const sidecarAnswerCompletion = projection.errorMessage || projection.pendingConfirmation
+        ? Promise.resolve()
+        : waitForSidecarAnswerStreamCompletion(session.assistantMessageId);
 
       updateAgentExecutionMessage(
         session.assistantMessageId,
-        projection.assistantContent,
+        displayContent,
         activityProjection.toolCalls,
-        'completed',
+        projection.errorMessage ? 'completed' : resolveSidecarAnswerDisplayStatus(streamMetadata),
         activityProjection.activityText,
         activityProjection.activityTrail,
         undefined,
         activityProjection.activities,
         activityProjection.activityEvents,
-        extractVisibleAgentRuntimeEvents(payload.events),
+        streamMetadata.runtimeEvents,
+        streamMetadata.finalAnswerStarted,
       );
 
       maybeRequestActivityNarration({
@@ -1954,6 +2292,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         projection.changedFilePaths,
         projection.hasFileMutations,
       );
+      await sidecarAnswerCompletion;
 
       if (projection.pendingConfirmation) {
         activeSidecarAgentSession.value = {
@@ -1971,6 +2310,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       }
     } catch (error) {
       const message = toErrorMessage(error, '处理 Agent 工具确认失败。');
+      disposeSidecarAnswerStream(session.assistantMessageId);
       updateAgentExecutionMessage(
         session.assistantMessageId,
         `Agent 执行失败：${message}`,
@@ -1982,6 +2322,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       liveEventBuffer.dispose();
       unlistenSidecarStream?.();
       activeAgentMessageId.value = null;
+      commitDisplayMessagesToStore();
       isSending.value = false;
     }
   };
@@ -2556,6 +2897,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       });
     } finally {
       pipeline.flushBufferedText();
+      commitDisplayMessagesToStore();
       unlisten?.();
 
       activeStreamResolve.value = null;
@@ -2654,6 +2996,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     } finally {
       liveEventBuffer.dispose();
       unlistenSidecarStream?.();
+      commitDisplayMessagesToStore();
       restoringCheckpointId.value = null;
     }
   };
@@ -2711,6 +3054,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
           references: [],
         },
       ];
+      commitDisplayMessagesToStore();
       isSending.value = false;
       return;
     }
@@ -2771,6 +3115,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
           },
         ];
 
+        commitDisplayMessagesToStore();
         isSending.value = false;
         void maybeGenerateConversationTitle(titleThreadId);
         return;
@@ -2788,6 +3133,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
             references: [],
           },
         ];
+        commitDisplayMessagesToStore();
         isSending.value = false;
         return;
       }
@@ -2827,6 +3173,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     activeAssistantBaseMessages.value = [];
     activeAgentMessageId.value = null;
     activeSidecarAgentSession.value = null;
+    disposeSidecarAnswerStream();
     activityNarratorStates.clear();
     agentPlan.store.clearPendingToolConfirmation();
     isClearDialogOpen.value = false;
@@ -2971,6 +3318,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     activeStreamResolve.value = null;
 
     aiStream.stop();
+    disposeSidecarAnswerStream(activeAgentMessageId.value ?? undefined);
 
     if (activeAssistantMessage.value) {
       activeAssistantMessage.value.stream = {
@@ -2997,6 +3345,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
     activeSidecarAgentSession.value = null;
     agentPlan.store.clearPendingToolConfirmation();
+    commitDisplayMessagesToStore();
     isSending.value = false;
     errorMessage.value = '';
   };

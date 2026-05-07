@@ -18,7 +18,8 @@ const forwardedProps = useForwardProps(delegatedProps);
 </script>
 
 <template>
-    <SelectItem data-slot="model-selector-item" v-bind="forwardedProps" :class="cn(
+    <SelectItem
+data-slot="model-selector-item" v-bind="forwardedProps" :class="cn(
         'relative flex w-full cursor-default items-start gap-3 rounded-xl px-3 py-2.5 pr-8 text-left outline-none select-none transition-colors focus:bg-[var(--surface-soft)] data-[state=checked]:bg-[var(--surface-soft)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         props.class,
     )">

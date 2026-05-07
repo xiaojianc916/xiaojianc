@@ -6,29 +6,32 @@
           :style="anchorStyle" />
       </ContextMenuTrigger>
 
-      <ContextMenuContent class="linear-context-menu-root w-52">
+      <ContextMenuContent class="linear-context-menu-root w-52 border border-[#e8e8e8] bg-[#ffffff] text-[#1f1f1f]">
         <template v-for="(group, groupIndex) in props.groups" :key="group.key">
-          <ContextMenuLabel v-if="group.title">
+          <ContextMenuLabel v-if="group.title" class="text-[#4a4a4a]">
             {{ group.title }}
           </ContextMenuLabel>
 
           <template v-for="item in group.items" :key="item.key">
             <ContextMenuSub v-if="item.children?.length">
-              <ContextMenuSubTrigger :disabled="item.disabled" :inset="resolveItemInset(item)">
+              <ContextMenuSubTrigger :disabled="item.disabled" :inset="resolveItemInset(item)"
+                class="text-[#1f1f1f] focus:bg-[#f5f5f5] focus:text-[#1f1f1f] data-[highlighted]:bg-[#f5f5f5] data-[highlighted]:text-[#1f1f1f] data-[state=open]:bg-[#f5f5f5] data-[state=open]:text-[#1f1f1f]">
                 <LinearContextMenuIcon v-if="item.icon" :icon="item.icon" class="size-4" />
                 <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
-                <ContextMenuShortcut v-if="item.shortcut?.length">
+                <ContextMenuShortcut v-if="item.shortcut?.length" class="text-[#666666]">
                   {{ formatShortcut(item.shortcut) }}
                 </ContextMenuShortcut>
               </ContextMenuSubTrigger>
 
-              <ContextMenuSubContent :side="submenuSide" :side-offset="4" class="linear-context-menu-root w-44">
+              <ContextMenuSubContent :side="submenuSide" :side-offset="4"
+                class="linear-context-menu-root w-44 border border-[#e8e8e8] bg-[#ffffff] text-[#1f1f1f]">
                 <ContextMenuItem v-for="child in item.children" :key="child.key" :disabled="child.disabled"
                   :inset="resolveItemInset(child)" :variant="child.variant ?? 'default'"
+                  class="text-[#1f1f1f] focus:bg-[#f5f5f5] focus:text-[#1f1f1f] data-[highlighted]:bg-[#f5f5f5] data-[highlighted]:text-[#1f1f1f]"
                   @select.prevent="handleItemSelect(child)" @pointerdown.prevent.stop="handleItemPointerDown(child)">
                   <LinearContextMenuIcon v-if="child.icon" :icon="child.icon" class="size-4" />
                   <span class="min-w-0 flex-1 truncate">{{ child.label }}</span>
-                  <ContextMenuShortcut v-if="child.shortcut?.length">
+                  <ContextMenuShortcut v-if="child.shortcut?.length" class="text-[#666666]">
                     {{ formatShortcut(child.shortcut) }}
                   </ContextMenuShortcut>
                 </ContextMenuItem>
@@ -36,17 +39,18 @@
             </ContextMenuSub>
 
             <ContextMenuItem v-else :disabled="item.disabled" :inset="resolveItemInset(item)"
-              :variant="item.variant ?? 'default'" @select.prevent="handleItemSelect(item)"
-              @pointerdown.prevent.stop="handleItemPointerDown(item)">
+              :variant="item.variant ?? 'default'"
+              class="text-[#1f1f1f] focus:bg-[#f5f5f5] focus:text-[#1f1f1f] data-[highlighted]:bg-[#f5f5f5] data-[highlighted]:text-[#1f1f1f]"
+              @select.prevent="handleItemSelect(item)" @pointerdown.prevent.stop="handleItemPointerDown(item)">
               <LinearContextMenuIcon v-if="item.icon" :icon="item.icon" class="size-4" />
               <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
-              <ContextMenuShortcut v-if="item.shortcut?.length">
+              <ContextMenuShortcut v-if="item.shortcut?.length" class="text-[#666666]">
                 {{ formatShortcut(item.shortcut) }}
               </ContextMenuShortcut>
             </ContextMenuItem>
           </template>
 
-          <ContextMenuSeparator v-if="groupIndex < props.groups.length - 1" />
+          <ContextMenuSeparator v-if="groupIndex < props.groups.length - 1" class="bg-[#eeeeee]" />
         </template>
       </ContextMenuContent>
     </ContextMenu>

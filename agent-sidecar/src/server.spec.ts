@@ -21,20 +21,23 @@ import {
 } from './server.js';
 
 const unsupportedRuntimeResponse = async (
-  ..._args: Parameters<IAgentSidecarRuntime['chat']>
+  ...args: Parameters<IAgentSidecarRuntime['chat']>
 ): Promise<Awaited<ReturnType<IAgentSidecarRuntime['chat']>>> => {
+  void args;
   throw new Error('Not implemented in test runtime.');
 };
 
 const unsupportedApprovalResolution = async (
-  ..._args: Parameters<IAgentSidecarRuntime['resolveApproval']>
+  ...args: Parameters<IAgentSidecarRuntime['resolveApproval']>
 ): Promise<Awaited<ReturnType<IAgentSidecarRuntime['resolveApproval']>>> => {
+  void args;
   throw new Error('Not implemented in test runtime.');
 };
 
 const unsupportedRollbackRestore = async (
-  ..._args: Parameters<IAgentSidecarRuntime['restoreCheckpoint']>
+  ...args: Parameters<IAgentSidecarRuntime['restoreCheckpoint']>
 ): Promise<Awaited<ReturnType<IAgentSidecarRuntime['restoreCheckpoint']>>> => {
+  void args;
   throw new Error('Not implemented in test runtime.');
 };
 

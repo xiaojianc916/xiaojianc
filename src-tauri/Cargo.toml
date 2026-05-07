@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "面向 Windows 的 Linux Shell 脚本编辑器"
 edition = "2021"
 build = "build.rs"
+default-run = "calamex"
 
 [build-dependencies]
 tauri-build = { version = "2.5.6", features = [], optional = true }
@@ -35,7 +36,7 @@ desktop = [
   "dep:tree-sitter",
   "dep:tree-sitter-bash",
 ]
-wsl-link-agent = []
+wsl-link-agent = ["dep:portable-pty"]
 
 [dependencies]
 base64 = "0.22.1"

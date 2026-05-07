@@ -1,16 +1,11 @@
-use super::{configure_std_command_for_background, find_command_path};
 use chrono::Utc;
-use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, MasterPty};
 use std::{
     collections::HashMap,
-    io::{Read, Write},
     path::PathBuf,
-    process::{Command as StdCommand, Stdio},
     sync::{
         atomic::{AtomicU64, Ordering as AtomicOrdering},
-        mpsc, Arc, Mutex,
+        Arc, Mutex,
     },
-    thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -22,8 +17,6 @@ use crate::terminal::{
         TerminalResizeRequest, TerminalSessionPayload,
     },
     dispatch::{build_terminal_run_command_for_wsl_link, TerminalDispatchCommand},
-    prompt::{build_terminal_prompt_fallback, resolve_wsl_home_directory},
-    pty::normalize_pty_size,
     snapshot::{
         contains_alt_screen_switch, is_likely_interactive_resize_repaint_frame,
         resolve_alt_screen_state_after_data, trim_terminal_snapshot,
@@ -37,7 +30,6 @@ use crate::terminal::{
         TerminalRunCompletedEvent, TerminalRunStartedEvent, TerminalStateChangedEvent,
     },
     types::TerminalState,
-    utf8_decoder::Utf8ChunkDecoder,
     visual::{
         build_terminal_ansi_reset, build_terminal_run_separator, current_visual_tracker,
         extract_prompt_from_terminal_snapshot, next_visual_run_seq,
@@ -49,23 +41,24 @@ use crate::wsl_link::{
     noise_material::{
         KeyringWslLinkNoiseMaterialStore, WslLinkDesktopNoiseMaterial, WslLinkNoiseMaterialStore,
     },
-    terminal_client::run_terminal_script_over_wsl_link,
-    terminal_exec::{WslLinkTerminalRunScriptRequest, WslLinkTerminalServerPayload},
+    terminal_client::{
+        open_interactive_terminal_over_wsl_link, run_terminal_script_over_wsl_link,
+        signal_terminal_process_over_wsl_link, WslLinkInteractiveTerminalHandle,
+    },
+    terminal_exec::{
+        WslLinkTerminalOpenInteractiveRequest, WslLinkTerminalRunScriptRequest,
+        WslLinkTerminalServerPayload, WslLinkTerminalSignalProcess,
+    },
 };
 
-const TERMINAL_READ_BUFFER_SIZE: usize = 64 * 1024;
-const TERMINAL_EVENT_FLUSH_INTERVAL: Duration = Duration::from_millis(16);
-const TERMINAL_EVENT_FLUSH_THRESHOLD: usize = 64 * 1024;
 const TERMINAL_RESIZE_REPAINT_SUPPRESSION: Duration = Duration::from_millis(240);
+const DEFAULT_WSL_INTERACTIVE_CWD: &str = "~";
 static TERMINAL_DATA_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static TERMINAL_RUN_CHUNK_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static TERMINAL_RUN_VISUAL_SEQUENCE: AtomicU64 = AtomicU64::new(1);
-static WSL_COMMAND_PATH_CACHE: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 struct TerminalSession {
-    master: Mutex<Box<dyn MasterPty + Send>>,
-    writer: Mutex<Box<dyn Write + Send>>,
-    killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
+    handle: WslLinkInteractiveTerminalHandle,
     working_directory: String,
 }
 
@@ -96,11 +89,6 @@ impl Drop for TerminalActiveRunGuard {
     }
 }
 
-enum TerminalEmitterMessage {
-    VisibleOutput(String),
-    Close,
-}
-
 #[derive(Clone, Default)]
 pub struct TerminalSessionState {
     sessions: Arc<Mutex<HashMap<String, Arc<TerminalSession>>>>,
@@ -118,7 +106,7 @@ pub fn ensure_terminal_session(
 ) -> Result<TerminalSessionPayload, String> {
     let terminal_state = state.inner().clone();
     update_terminal_geometry(payload.cols, payload.rows);
-    let (child, reader, terminal_cwd) = {
+    let terminal_cwd = {
         let _creation_guard = terminal_state
             .creation_guard
             .lock()
@@ -132,7 +120,10 @@ pub fn ensure_terminal_session(
                 remove_terminal_snapshot(&terminal_state, &payload.session_id)?;
                 terminate_terminal_session(existing_session.as_ref())?;
             } else {
-                resize_session_master(existing_session.as_ref(), payload.cols, payload.rows)?;
+                existing_session
+                    .handle
+                    .resize(payload.cols, payload.rows)
+                    .map_err(|error| error.to_string())?;
                 mark_terminal_resize_repaint_suppression(&terminal_state, &payload.session_id);
                 let initial_output = get_terminal_snapshot(&terminal_state, &payload.session_id)?;
                 mark_terminal_interactive_ready(&app);
@@ -147,48 +138,42 @@ pub fn ensure_terminal_session(
             }
         }
 
-        let wsl_command_path = resolve_wsl_command_path()?;
         let working_directory = resolve_terminal_start_directory(payload.cwd.as_deref())?;
         let terminal_cwd = working_directory
             .as_ref()
             .map(|path| to_wsl_path(path.as_path()))
             .transpose()?
-            .or_else(|| resolve_wsl_home_directory(&wsl_command_path))
-            .unwrap_or_else(|| "~".to_string());
-        let pty_system = native_pty_system();
-        let pty_pair = pty_system
-            .openpty(normalize_pty_size(payload.cols, payload.rows))
-            .map_err(|error| format!("创建终端会话失败：{error}"))?;
-
-        let mut command = CommandBuilder::new(wsl_command_path.to_string_lossy().as_ref());
-        command.arg("--cd");
-        command.arg(&terminal_cwd);
-        command.arg("--");
-        command.arg("/bin/bash");
-        command.arg("-il");
-        command.env("TERM", "xterm-256color");
-        command.env("COLORTERM", "truecolor");
-
-        let child = pty_pair
-            .slave
-            .spawn_command(command)
-            .map_err(|error| format!("启动 WSL2 终端失败：{error}"))?;
-        let killer = child.clone_killer();
-        drop(pty_pair.slave);
-
-        let reader = pty_pair
-            .master
-            .try_clone_reader()
-            .map_err(|error| format!("初始化终端读通道失败：{error}"))?;
-        let writer = pty_pair
-            .master
-            .take_writer()
-            .map_err(|error| format!("初始化终端写通道失败：{error}"))?;
+            .unwrap_or_else(|| DEFAULT_WSL_INTERACTIVE_CWD.to_string());
+        let desktop_material = KeyringWslLinkNoiseMaterialStore
+            .load_desktop_material()
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| {
+                "WSL Link Noise 桌面密钥材料不存在，请先安装并启动 WSL Link agent。".to_string()
+            })?;
+        let event_app = app.clone();
+        let event_state = terminal_state.clone();
+        let event_session_id = payload.session_id.clone();
+        let handle = tauri::async_runtime::block_on(open_interactive_terminal_over_wsl_link(
+            &desktop_material,
+            WslLinkTerminalOpenInteractiveRequest {
+                session_id: payload.session_id.clone(),
+                working_directory: terminal_cwd.clone(),
+                cols: payload.cols,
+                rows: payload.rows,
+            },
+            move |event| {
+                handle_wsl_link_interactive_terminal_event(
+                    &event_app,
+                    &event_state,
+                    &event_session_id,
+                    event,
+                );
+            },
+        ))
+        .map_err(|error| error.to_string())?;
 
         let session = Arc::new(TerminalSession {
-            master: Mutex::new(pty_pair.master),
-            writer: Mutex::new(writer),
-            killer: Mutex::new(killer),
+            handle,
             working_directory: terminal_cwd.clone(),
         });
 
@@ -200,21 +185,8 @@ pub fn ensure_terminal_session(
         set_terminal_snapshot(&terminal_state, &payload.session_id, String::new())?;
         remove_terminal_interactive_visual_state(&terminal_state, &payload.session_id)?;
 
-        (child, reader, terminal_cwd)
+        terminal_cwd
     };
-
-    spawn_terminal_reader(
-        app.clone(),
-        terminal_state.clone(),
-        payload.session_id.clone(),
-        reader,
-    );
-    spawn_terminal_waiter(
-        app.clone(),
-        terminal_state,
-        payload.session_id.clone(),
-        child,
-    );
     mark_terminal_interactive_ready(&app);
 
     Ok(TerminalSessionPayload {
@@ -241,15 +213,10 @@ pub fn write_terminal_input(
 
     let session = get_terminal_session(&terminal_state, &payload.session_id)?
         .ok_or_else(|| "目标终端会话不存在。".to_string())?;
-    let mut writer = session
-        .writer
-        .lock()
-        .map_err(|_| "终端写入通道已损坏。".to_string())?;
-
-    writer
-        .write_all(payload.data.as_bytes())
-        .and_then(|_| writer.flush())
-        .map_err(|error| format!("写入终端输入失败：{error}"))
+    session
+        .handle
+        .write_input(payload.data)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -262,7 +229,10 @@ pub fn resize_terminal_session(
     let session = get_terminal_session(&terminal_state, &payload.session_id)?
         .ok_or_else(|| "目标终端会话不存在。".to_string())?;
 
-    resize_session_master(session.as_ref(), payload.cols, payload.rows)?;
+    session
+        .handle
+        .resize(payload.cols, payload.rows)
+        .map_err(|error| error.to_string())?;
     mark_terminal_resize_repaint_suppression(&terminal_state, &payload.session_id);
     Ok(())
 }
@@ -321,11 +291,7 @@ pub fn dispatch_script_to_terminal(
     let command_line = command.display_command.clone();
     let used_temp_file = command.used_temp_file;
     let prompt_snapshot = get_terminal_snapshot(&terminal_state, &payload.session_id)?;
-    let prompt = extract_prompt_from_terminal_snapshot(&prompt_snapshot).or_else(|| {
-        resolve_wsl_command_path()
-            .ok()
-            .and_then(|path| build_terminal_prompt_fallback(&path, &session.working_directory))
-    });
+    let prompt = extract_prompt_from_terminal_snapshot(&prompt_snapshot);
     try_mark_active_terminal_run(&terminal_state, &payload.run_id)?;
     if let Err(error) = transition_terminal_state(&app, TerminalState::SwitchingToRun) {
         clear_active_terminal_run(&terminal_state, &payload.run_id);
@@ -359,7 +325,20 @@ pub fn cancel_terminal_run(
     let terminal_state = state.inner().clone();
     let mode = payload.mode.as_deref().unwrap_or("graceful");
     if let Some(pid) = get_active_terminal_run_wsl_link_pid(&terminal_state, &payload.run_id)? {
-        return signal_wsl_link_terminal_run(pid, mode);
+        let desktop_material = KeyringWslLinkNoiseMaterialStore
+            .load_desktop_material()
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| {
+                "WSL Link Noise 桌面密钥材料不存在，请先安装并启动 WSL Link agent。".to_string()
+            })?;
+        return tauri::async_runtime::block_on(signal_terminal_process_over_wsl_link(
+            &desktop_material,
+            WslLinkTerminalSignalProcess {
+                pid,
+                mode: mode.to_string(),
+            },
+        ))
+        .map_err(|error| error.to_string());
     }
     Err(format!("未找到正在运行的脚本：{}", payload.run_id))
 }
@@ -572,17 +551,6 @@ fn should_skip_snapshot_for_interactive_resize_repaint(
     is_likely_interactive_resize_repaint_frame(chunk)
 }
 
-fn resize_session_master(session: &TerminalSession, cols: u16, rows: u16) -> Result<(), String> {
-    let master = session
-        .master
-        .lock()
-        .map_err(|_| "终端尺寸通道已损坏。".to_string())?;
-
-    master
-        .resize(normalize_pty_size(cols, rows))
-        .map_err(|error| format!("同步终端尺寸失败：{error}"))
-}
-
 fn should_recreate_terminal_session(session: &TerminalSession) -> bool {
     let cwd = session.working_directory.trim();
     cwd.is_empty()
@@ -592,21 +560,7 @@ fn should_recreate_terminal_session(session: &TerminalSession) -> bool {
 }
 
 fn terminate_terminal_session(session: &TerminalSession) -> Result<(), String> {
-    let mut killer = session
-        .killer
-        .lock()
-        .map_err(|_| "终端结束通道已损坏。".to_string())?;
-    match killer.kill() {
-        Ok(()) => Ok(()),
-        Err(error) => {
-            let message = error.to_string();
-            if message.contains("os error 0") {
-                Ok(())
-            } else {
-                Err(format!("关闭 WSL2 终端失败：{error}"))
-            }
-        }
-    }
+    session.handle.close().map_err(|error| error.to_string())
 }
 
 fn resolve_terminal_start_directory(path: Option<&str>) -> Result<Option<PathBuf>, String> {
@@ -623,25 +577,6 @@ fn resolve_terminal_start_directory(path: Option<&str>) -> Result<Option<PathBuf
     }
 
     Ok(None)
-}
-
-fn resolve_wsl_command_path() -> Result<PathBuf, String> {
-    {
-        let cached_path = WSL_COMMAND_PATH_CACHE
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some(path) = cached_path.as_ref().filter(|path| path.exists()) {
-            return Ok(path.clone());
-        }
-    }
-
-    let resolved_path = find_command_path("wsl.exe", &["C:\\Windows\\System32\\wsl.exe"])
-        .ok_or_else(|| "当前系统未发现可用的 wsl.exe，请先安装或启用 WSL2。".to_string())?;
-    let mut cached_path = WSL_COMMAND_PATH_CACHE
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    *cached_path = Some(resolved_path.clone());
-    Ok(resolved_path)
 }
 
 pub(crate) fn build_temp_file_suffix() -> Result<String, String> {
@@ -839,17 +774,15 @@ fn emit_terminal_run_visual_completion(
     );
 }
 
-fn flush_terminal_data_buffer(
+fn emit_terminal_interactive_output(
     app: &AppHandle,
     state: &TerminalSessionState,
     session_id: &str,
-    buffer: &mut String,
+    chunk: String,
 ) {
-    if buffer.is_empty() {
+    if chunk.is_empty() {
         return;
     }
-
-    let chunk = std::mem::take(buffer);
     if !should_skip_snapshot_for_interactive_resize_repaint(state, session_id, &chunk) {
         let _ = append_terminal_snapshot(state, session_id, &chunk);
     }
@@ -867,142 +800,66 @@ fn flush_terminal_data_buffer(
     );
 }
 
-fn spawn_terminal_event_emitter(
-    app: AppHandle,
-    state: TerminalSessionState,
-    session_id: String,
-    receiver: mpsc::Receiver<TerminalEmitterMessage>,
+fn handle_wsl_link_interactive_terminal_event(
+    app: &AppHandle,
+    state: &TerminalSessionState,
+    session_id: &str,
+    event: WslLinkTerminalServerPayload,
 ) {
-    thread::spawn(move || {
-        let mut visible_output_buffer = String::new();
-
-        loop {
-            match receiver.recv_timeout(TERMINAL_EVENT_FLUSH_INTERVAL) {
-                Ok(TerminalEmitterMessage::VisibleOutput(chunk)) => {
-                    visible_output_buffer.push_str(&chunk);
-                    if visible_output_buffer.len() >= TERMINAL_EVENT_FLUSH_THRESHOLD {
-                        flush_terminal_data_buffer(
-                            &app,
-                            &state,
-                            &session_id,
-                            &mut visible_output_buffer,
-                        );
-                    }
-                }
-                Ok(TerminalEmitterMessage::Close) => break,
-                Err(mpsc::RecvTimeoutError::Timeout) => {
-                    flush_terminal_data_buffer(
-                        &app,
-                        &state,
-                        &session_id,
-                        &mut visible_output_buffer,
+    match event {
+        WslLinkTerminalServerPayload::InteractiveOpened(_) => {
+            mark_terminal_interactive_ready(app);
+        }
+        WslLinkTerminalServerPayload::InteractiveData(payload) => {
+            emit_terminal_interactive_output(app, state, session_id, payload.data);
+        }
+        WslLinkTerminalServerPayload::InteractiveClosed(payload) => {
+            remove_interactive_terminal_after_exit(state, session_id);
+            mark_terminal_interactive_exited(
+                app,
+                TerminalExitEvent {
+                    session_id: session_id.to_string(),
+                    exit_code: payload.exit_code,
+                },
+            );
+        }
+        WslLinkTerminalServerPayload::InteractiveError(payload) => {
+            if let Some(message_session_id) = payload.session_id.as_ref() {
+                if message_session_id == &session_id {
+                    emit_terminal_interactive_output(
+                        app,
+                        state,
+                        session_id,
+                        format!("{}\n", payload.message),
                     );
                 }
-                Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
+            remove_interactive_terminal_after_exit(state, session_id);
+            mark_terminal_interactive_exited(
+                app,
+                TerminalExitEvent {
+                    session_id: session_id.to_string(),
+                    exit_code: payload.exit_code,
+                },
+            );
         }
-
-        flush_terminal_data_buffer(&app, &state, &session_id, &mut visible_output_buffer);
-    });
-}
-
-fn spawn_terminal_reader(
-    app: AppHandle,
-    state: TerminalSessionState,
-    session_id: String,
-    mut reader: Box<dyn Read + Send>,
-) {
-    let (sender, receiver) = mpsc::channel::<TerminalEmitterMessage>();
-    spawn_terminal_event_emitter(app, state, session_id, receiver);
-
-    thread::spawn(move || {
-        let mut buffer = [0_u8; TERMINAL_READ_BUFFER_SIZE];
-        let mut decoded_chunk = String::new();
-        let mut decoder = Utf8ChunkDecoder::default();
-
-        loop {
-            match reader.read(&mut buffer) {
-                Ok(0) => break,
-                Ok(size) => {
-                    decoded_chunk.clear();
-                    decoder.decode_into(&buffer[..size], &mut decoded_chunk, false);
-                    if decoded_chunk.is_empty() {
-                        continue;
-                    }
-
-                    let _ =
-                        sender.send(TerminalEmitterMessage::VisibleOutput(decoded_chunk.clone()));
-                }
-                Err(_) => break,
-            }
-        }
-
-        decoded_chunk.clear();
-        decoder.decode_into(&[], &mut decoded_chunk, true);
-        if !decoded_chunk.is_empty() {
-            let _ = sender.send(TerminalEmitterMessage::VisibleOutput(decoded_chunk));
-        }
-
-        let _ = sender.send(TerminalEmitterMessage::Close);
-    });
-}
-
-fn spawn_terminal_waiter(
-    app: AppHandle,
-    state: TerminalSessionState,
-    session_id: String,
-    mut child: Box<dyn Child + Send + Sync>,
-) {
-    thread::spawn(move || {
-        let exit_code = child
-            .wait()
-            .ok()
-            .and_then(|status| i32::try_from(status.exit_code()).ok());
-
-        if let Ok(mut sessions) = state.sessions.lock() {
-            sessions.remove(&session_id);
-        }
-        if let Ok(mut snapshots) = state.snapshots.lock() {
-            snapshots.remove(&session_id);
-        }
-        if let Ok(mut visual_states) = state.interactive_visual.lock() {
-            visual_states.remove(&session_id);
-        }
-
-        mark_terminal_interactive_exited(
-            &app,
-            TerminalExitEvent {
-                session_id,
-                exit_code,
-            },
-        );
-    });
-}
-
-fn signal_wsl_link_terminal_run(pid: u32, mode: &str) -> Result<(), String> {
-    if pid == 0 {
-        return Err("WSL Link 运行任务 pid 无效。".to_string());
+        WslLinkTerminalServerPayload::InteractiveAck(_) => {}
+        WslLinkTerminalServerPayload::RunStarted(_)
+        | WslLinkTerminalServerPayload::RunChunk(_)
+        | WslLinkTerminalServerPayload::RunCompleted(_)
+        | WslLinkTerminalServerPayload::RunError(_) => {}
     }
-    let signal = if mode == "kill" { "KILL" } else { "TERM" };
-    let command_line = format!("/bin/kill -{} -- -{}", signal, pid);
-    let mut command = StdCommand::new(resolve_wsl_command_path()?);
-    configure_std_command_for_background(&mut command);
-    let output = command
-        .args(["--", "sh", "-lc", &command_line])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .output()
-        .map_err(|error| format!("取消 WSL Link 脚本失败：{error}"))?;
-    if output.status.success() {
-        return Ok(());
-    }
+}
 
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if stderr.is_empty() {
-        Err("取消 WSL Link 脚本失败。".to_string())
-    } else {
-        Err(format!("取消 WSL Link 脚本失败：{stderr}"))
+fn remove_interactive_terminal_after_exit(state: &TerminalSessionState, session_id: &str) {
+    if let Ok(mut sessions) = state.sessions.lock() {
+        sessions.remove(session_id);
+    }
+    if let Ok(mut snapshots) = state.snapshots.lock() {
+        snapshots.remove(session_id);
+    }
+    if let Ok(mut visual_states) = state.interactive_visual.lock() {
+        visual_states.remove(session_id);
     }
 }
 
@@ -1077,6 +934,11 @@ fn spawn_wsl_link_terminal_run(
                     exit_code = payload.exit_code.or(Some(127));
                     completed = true;
                 }
+                WslLinkTerminalServerPayload::InteractiveOpened(_)
+                | WslLinkTerminalServerPayload::InteractiveData(_)
+                | WslLinkTerminalServerPayload::InteractiveClosed(_)
+                | WslLinkTerminalServerPayload::InteractiveAck(_)
+                | WslLinkTerminalServerPayload::InteractiveError(_) => {}
             })
             .await;
 
@@ -1292,21 +1154,6 @@ mod tests {
             session_id,
             "\x1b[?25l\x1b[Hvim repaint\x1b[K"
         ));
-    }
-
-    #[test]
-    fn terminal_prompt_fallback_builds_visible_prompt() {
-        let _guard = crate::terminal::test_support::wsl_test_guard();
-        let wsl_command_path = resolve_wsl_command_path().expect("wsl should resolve");
-        let terminal_cwd =
-            resolve_wsl_home_directory(&wsl_command_path).unwrap_or_else(|| "~".to_string());
-
-        let prompt = build_terminal_prompt_fallback(&wsl_command_path, &terminal_cwd)
-            .expect("prompt fallback should build");
-
-        assert!(prompt.starts_with('['));
-        assert!(prompt.ends_with("$ ") || prompt.ends_with("# "));
-        assert!(prompt.contains('@'));
     }
 
     #[test]

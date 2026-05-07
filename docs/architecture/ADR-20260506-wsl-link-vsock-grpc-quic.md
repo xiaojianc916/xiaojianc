@@ -37,7 +37,7 @@
 - 双通道 hedged；
 - 围绕 fallback 的熔断降级。
 
-当前已完成：协议生成、WSL agent gRPC 服务、Noise 配对材料与 keyring 存储、agent 用户态安装 / 启动、Linux artifact 构建、Windows `AF_HYPERV` 地址 / VM GUID 解析、WinSock 非阻塞 connect、tonic Channel connector、`OpenNoiseSession` server proof 校验、`probe_wsl_link_primary` 主通道握手 + heartbeat 探测、主通道 supervisor 后台 loop、状态事件推送、前端连接 / 停止入口、脚本执行 Duplex 通路默认切到 WSL Link、旧 `wsl.exe` per-run rPTY 执行器删除，以及本机默认 WSL2 发行版 smoke。
+当前已完成：协议生成、WSL agent gRPC 服务、Noise 配对材料与 keyring 存储、agent 用户态安装 / 启动、Linux artifact 构建、Windows `AF_HYPERV` 地址 / VM GUID 解析、WinSock 非阻塞 connect、tonic Channel connector、`OpenNoiseSession` server proof 校验、`probe_wsl_link_primary` 主通道握手 + heartbeat 探测、主通道 supervisor 后台 loop、状态事件推送、前端连接 / 停止入口、交互终端与脚本执行 Duplex 通路默认切到 WSL Link、旧 `wsl.exe` per-run rPTY 执行器和桌面端 `wsl.exe + portable_pty` iPTY 模块删除，以及本机默认 WSL2 发行版 smoke。
 
 ## 考虑的备选
 
@@ -71,7 +71,7 @@
 3. **P2 WSL agent**：新增 Rust WSL agent 二进制，支持 `OpenSession / OpenNoiseSession / ResumeSession / Heartbeat / Duplex`，并按 `(session_id, client_seq)` 去重。已完成服务实现、启动参数解析、Linux artifact 构建、用户态安装和本机 `AF_VSOCK` listener smoke。
 4. **P3 主通道真机化**：Windows 接入 `AF_HYPERV` adapter；Linux agent 接入 `AF_VSOCK` listener；主通道 Noise + OpenSession 探测命令接入运行侧栏。已完成本机默认 WSL2 smoke，待补多发行版、休眠恢复、WSL 重启和并发压测矩阵。
 5. **P4 重连管理**：主通道 supervisor 已接入后台运行 loop，能保留握手后的 tonic client、维护 `last_client_seq / last_ack_server_seq`、发送 session heartbeat RPC、应用 ack、计算指数退避 delay、推送 `wsl-link:state-changed` 状态事件，并支持显式停止清理。已完成，待补休眠恢复、WSL 重启和并发压测矩阵。
-6. **P5 终端 / 脚本切流**：脚本执行入口已默认通过 `Duplex(ClientFrame/ServerFrame)` 发送 `terminal.runScript.v1` payload，由 WSL agent 在 Linux 内写临时脚本并流式返回 started / chunk / completed。旧 `wsl.exe` per-run rPTY 执行器、临时脚本写入分支和 feature flag 已删除；交互终端长期 PTY session 尚未切流。
+6. **P5 终端 / 脚本切流**：脚本执行入口已默认通过 `Duplex(ClientFrame/ServerFrame)` 发送 `terminal.runScript.v1` payload，由 WSL agent 在 Linux 内写临时脚本并流式返回 started / chunk / completed。交互终端入口已默认通过 `terminal.openInteractive.v1 / terminal.interactiveInput.v1 / terminal.interactiveResize.v1 / terminal.interactiveClose.v1` payload 连接 agent 侧长期 PTY。脚本取消已改为 `terminal.signalProcess.v1`，由 agent 在 Linux 内发送进程组信号。旧 `wsl.exe` per-run rPTY 执行器、桌面端 `wsl.exe + portable_pty` iPTY 模块、临时脚本写入分支和 feature flag 已删除。
 7. **P6 观测与安全**：接入日志脱敏、指标面板、压力测试和断线恢复 E2E。
 
 ## 相关链接

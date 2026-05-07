@@ -269,7 +269,7 @@ impl WslLinkRuntimeState {
             last_heartbeat_at_unix_ms: inner.last_heartbeat_at_unix_ms,
             next_retry_in_ms: inner.next_retry_in_ms,
             metrics,
-            note: "WSL Link 当前收敛为单通道：AF_HYPERV/AF_VSOCK + tonic gRPC + HTTP/2 keepalive + Noise_KKpsk2 握手。已接入 WSL agent、用户态安装/启动、主通道探测、后台 supervisor 重连 loop、默认脚本执行和默认 WSL2 smoke；交互终端切流仍需验证。",
+            note: "WSL Link 当前收敛为单通道：AF_HYPERV/AF_VSOCK + tonic gRPC + HTTP/2 keepalive + Noise_KKpsk2 握手。已接入 WSL agent、用户态安装/启动、主通道探测、后台 supervisor 重连 loop、默认交互终端、默认脚本执行和默认 WSL2 smoke。",
         }
     }
 

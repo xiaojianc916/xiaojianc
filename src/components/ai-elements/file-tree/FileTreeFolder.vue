@@ -40,13 +40,16 @@ provide(FileTreeFolderKey, {
     <Collapsible :open="isExpanded" @update:open="() => togglePath(props.path)">
         <div :class="cn('', props.class)" data-slot="file-tree-folder" role="treeitem" tabindex="0" v-bind="$attrs">
             <CollapsibleTrigger as-child>
-                <button :class="cn(
+                <button
+:class="cn(
                     'flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50',
                     isSelected && 'bg-muted',
                 )" data-slot="file-tree-folder-trigger" type="button" @click="() => onSelect(props.path)">
-                    <slot name="content" :is-expanded="isExpanded" :is-selected="isSelected" :name="props.name"
+                    <slot
+name="content" :is-expanded="isExpanded" :is-selected="isSelected" :folder-name="props.name"
                         :path="props.path">
-                        <ChevronRightIcon :class="cn(
+                        <ChevronRightIcon
+:class="cn(
                             'size-4 shrink-0 text-muted-foreground transition-transform',
                             isExpanded && 'rotate-90',
                         )" />

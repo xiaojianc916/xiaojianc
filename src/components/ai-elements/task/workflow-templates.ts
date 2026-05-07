@@ -930,7 +930,7 @@ const resolveToolTarget = (tool: IMcpToolTaskInput, definition: IToolCopyDefinit
     const candidates = [
         tool.targetPreview,
         stripTargetNoise(tool.summary ?? ''),
-        ...(tool.detailItems ?? []).map((item) => item.split(/[:：]/u).slice(1).join('：') || item),
+        ...(tool.detailItems ?? []).map((item) => item.replace(FILE_REFERENCE_PREFIX_PATTERN, '')),
     ]
 
     for (const candidate of candidates) {
@@ -981,7 +981,7 @@ const resolveDetailLines = (
 
     return [...new Set((tool.detailItems ?? []).map((item) => normalizeTaskLine(item)).filter(Boolean))]
         .filter((item) => !TOOL_SUMMARY_NOISE_PATTERNS.some((pattern) => pattern.test(item)))
-        .filter((item) => normalizeTaskLine(item) !== normalizeTaskLine(summaryLine).toLowerCase())
+        .filter((item) => normalizeTaskLine(item).toLowerCase() !== normalizeTaskLine(summaryLine).toLowerCase())
         .filter((item) => !fileKeys.has(sanitizePathCandidate(item).toLowerCase()))
         .slice(0, MAX_TOOL_DETAIL_ITEMS)
 }

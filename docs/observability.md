@@ -57,6 +57,7 @@
 | WSL Link inflight 请求数 | `wsl_link_inflight_requests`，用于识别阻塞和背压 |
 | WSL Link 当前通道 | `wsl_link_active_transport`，当前固定为 `vsockGrpc` |
 | WSL Link supervisor 状态 | `wsl-link:state-changed`，包含 `supervisorRunning`、`sessionId`、`lastHeartbeatAtUnixMs`、`nextRetryInMs` |
+| WSL Link 交互终端 | 默认复用 `terminal:data` / `terminal:interactive-ready` / `terminal:interactive-exited`，由 agent 回传 opened / data / closed |
 | WSL Link 脚本执行 | 默认复用 `terminal:run-started` / `terminal:run-chunk` / `terminal:run-completed`，由 agent 回传 started / chunk / completed |
 
 ---

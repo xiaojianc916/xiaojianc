@@ -146,43 +146,49 @@ const handleStop = (): void => {
 
 <template>
     <footer class="ai-composer">
-        <p v-if="errorMessage" v-text="errorMessage" class="ai-error" />
+        <p v-if="errorMessage" class="ai-error" v-text="errorMessage" />
         <form class="ai-composer-surface" @submit.prevent="handleSubmit">
             <input ref="fileInputRef" type="file" class="hidden" multiple @change="handleFileChange" />
             <InputGroup class="ai-prompt-shell">
                 <div v-if="attachments.length" class="ai-attachments">
                     <PromptInputAttachmentsDisplay :attachments="attachments" @remove="handleRemoveAttachment" />
                 </div>
-                <InputGroupTextarea v-model="modelValue" class="ai-prompt-textarea" placeholder="输入消息" aria-label="输入消息"
+                <InputGroupTextarea
+v-model="modelValue" class="ai-prompt-textarea" placeholder="输入消息" aria-label="输入消息"
                     :disabled="disabled" @keydown="handleKeyDown" @paste="handlePaste"
                     @compositionstart="isComposing = true" @compositionend="isComposing = false" />
                 <InputGroupAddon align="block-end" class="ai-toolbar-row">
-                    <InputGroupButton type="button" variant="outline" class="ai-attachment-button rounded-full"
+                    <InputGroupButton
+type="button" variant="outline" class="ai-attachment-button rounded-full"
                         size="icon-xs" :disabled="disabled" aria-label="添加附件" title="添加附件"
                         @click="handleOpenFileDialog">
                         <PlusIcon class="size-4" />
                     </InputGroupButton>
 
                     <Select :model-value="activeMode" :disabled="disabled" @update:model-value="handleModeChange">
-                        <SelectTrigger aria-label="选择模式"
+                        <SelectTrigger
+aria-label="选择模式"
                             class="h-auto! min-h-0! w-auto! border-0! bg-transparent! text-slate-400! hover:text-slate-500! shadow-none! px-1! py-0.5! text-xs! font-medium! gap-1! ring-0! focus:ring-0! focus-visible:ring-0! [&>svg]:size-3! [&>svg]:opacity-60!">
                             <SelectValue placeholder="Chat" />
                         </SelectTrigger>
                         <SelectContent side="top" align="start" class="ai-mode-content">
                             <SelectGroup>
-                                <SelectItem v-for="option in modeOptions" :key="option.key" :value="option.key"
-                                    v-text="option.label" />
+                                <SelectItem v-for="option in modeOptions" :key="option.key" :value="option.key">
+                                    {{ option.label }}
+                                </SelectItem>
                             </SelectGroup>
                         </SelectContent>
                     </Select>
 
-                    <InputGroupButton v-if="disabled" type="button" variant="outline"
+                    <InputGroupButton
+v-if="disabled" type="button" variant="outline"
                         class="ai-send-button rounded-full ml-auto" size="icon-xs" aria-label="停止" title="停止"
                         @click="handleStop">
                         <SquareIcon class="size-4" />
                         <span class="sr-only">Stop</span>
                     </InputGroupButton>
-                    <InputGroupButton v-else type="submit" variant="default" class="ai-send-button rounded-full ml-auto"
+                    <InputGroupButton
+v-else type="submit" variant="default" class="ai-send-button rounded-full ml-auto"
                         size="icon-xs" :disabled="!canSubmit" :aria-label="submitLabel" :title="submitLabel">
                         <ArrowUpIcon class="size-4" />
                         <span class="sr-only">Send</span>

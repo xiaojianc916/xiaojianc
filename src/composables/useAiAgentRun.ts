@@ -271,6 +271,7 @@ export const useAiAgentRun = () => {
     steps: IAiTaskPlanStep[],
     _context: IAiContextReference[] = [],
   ): Promise<IAiAgentRun> => {
+    void _context;
     try {
       const now = new Date().toISOString();
       const run: IAiAgentRun = {

@@ -211,6 +211,43 @@ fn decode_sidecar_stream_line(
     })
 }
 
+fn decode_sidecar_stream_line_bytes(
+    mut line_bytes: Vec<u8>,
+    endpoint: &str,
+) -> Result<String, String> {
+    if line_bytes.ends_with(b"\n") {
+        line_bytes.pop();
+    }
+
+    if line_bytes.ends_with(b"\r") {
+        line_bytes.pop();
+    }
+
+    String::from_utf8(line_bytes).map_err(|error| {
+        format!("AGENT_SIDECAR_CONTRACT_ERROR: sidecar 流式响应包含非法 UTF-8({endpoint})：{error}")
+    })
+}
+
+fn drain_complete_sidecar_stream_lines(
+    buffer: &mut Vec<u8>,
+    endpoint: &str,
+) -> Result<Vec<String>, String> {
+    let mut lines = Vec::new();
+
+    while let Some(line_end) = buffer.iter().position(|byte| *byte == b'\n') {
+        let line_bytes = buffer.drain(..=line_end).collect::<Vec<u8>>();
+        lines.push(decode_sidecar_stream_line_bytes(line_bytes, endpoint)?);
+    }
+
+    Ok(lines)
+}
+
+fn has_non_whitespace_bytes(bytes: &[u8]) -> bool {
+    bytes
+        .iter()
+        .any(|byte| !matches!(*byte, b' ' | b'\t' | b'\r' | b'\n'))
+}
+
 fn consume_sidecar_stream_line(
     app: &AppHandle,
     session_id: &str,
@@ -267,19 +304,16 @@ where
         return decode_response(response, stream_endpoint).await;
     }
 
-    let mut buffer = String::new();
+    let mut buffer: Vec<u8> = Vec::new();
     let mut seq = 0_u64;
     let mut final_response: Option<AgentSidecarResponsePayload> = None;
 
     while let Some(chunk) = response.chunk().await.map_err(|error| {
         format!("AGENT_SIDECAR_READ_ERROR: 读取 sidecar 流式响应失败({stream_endpoint})：{error}")
     })? {
-        buffer.push_str(&String::from_utf8_lossy(&chunk));
+        buffer.extend_from_slice(&chunk);
 
-        while let Some(newline_index) = buffer.find('\n') {
-            let line = buffer[..newline_index].to_string();
-            buffer = buffer[newline_index + 1..].to_string();
-
+        for line in drain_complete_sidecar_stream_lines(&mut buffer, stream_endpoint)? {
             if let Some(response) =
                 consume_sidecar_stream_line(app, session_id, &mut seq, &line, stream_endpoint)?
             {
@@ -288,9 +322,11 @@ where
         }
     }
 
-    if !buffer.trim().is_empty() {
+    if has_non_whitespace_bytes(&buffer) {
+        let line = decode_sidecar_stream_line_bytes(std::mem::take(&mut buffer), stream_endpoint)?;
+
         if let Some(response) =
-            consume_sidecar_stream_line(app, session_id, &mut seq, &buffer, stream_endpoint)?
+            consume_sidecar_stream_line(app, session_id, &mut seq, &line, stream_endpoint)?
         {
             final_response = Some(response);
         }
@@ -770,8 +806,9 @@ pub async fn restore_checkpoint(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_sidecar_url, classify_sidecar_health, is_default_local_sidecar_url,
-        normalize_base_url, parse_netstat_listening_pids, strip_litellm_model_provider_prefix,
+        build_sidecar_url, classify_sidecar_health, drain_complete_sidecar_stream_lines,
+        has_non_whitespace_bytes, is_default_local_sidecar_url, normalize_base_url,
+        parse_netstat_listening_pids, strip_litellm_model_provider_prefix,
         SidecarHealthProbePayload, SidecarHealthStatus, DEFAULT_SIDECAR_URL,
     };
 
@@ -815,6 +852,34 @@ mod tests {
 "#;
 
         assert_eq!(parse_netstat_listening_pids(output, 39871), vec![1234]);
+    }
+
+    #[test]
+    fn sidecar_stream_line_buffer_waits_for_complete_utf8_line() {
+        let line =
+            "{\"type\":\"event\",\"event\":{\"type\":\"message_delta\",\"text\":\"你好🙂\"}}\n";
+        let split_at = line.find('你').expect("line should contain chinese") + 2;
+        let bytes = line.as_bytes();
+        let mut buffer = Vec::new();
+
+        buffer.extend_from_slice(&bytes[..split_at]);
+        let lines = drain_complete_sidecar_stream_lines(&mut buffer, "/agent/chat/stream")
+            .expect("partial chunk should not decode incomplete utf8");
+        assert!(lines.is_empty());
+
+        buffer.extend_from_slice(&bytes[split_at..]);
+        let lines = drain_complete_sidecar_stream_lines(&mut buffer, "/agent/chat/stream")
+            .expect("complete line should decode");
+
+        assert_eq!(lines, vec![line.trim_end_matches('\n').to_string()]);
+        assert!(!lines[0].contains('�'));
+        assert!(buffer.is_empty());
+    }
+
+    #[test]
+    fn sidecar_stream_line_buffer_ignores_whitespace_tail() {
+        assert!(!has_non_whitespace_bytes(b"\r\n\t "));
+        assert!(has_non_whitespace_bytes(b"\n{}"));
     }
 
     #[test]

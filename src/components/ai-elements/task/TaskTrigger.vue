@@ -38,11 +38,13 @@ const statusMap: Record<
 <template>
   <CollapsibleTrigger as-child :class="cn('group w-full', props.class)">
     <slot :status="props.status" :title="props.title">
-      <button type="button" class="flex w-full cursor-pointer items-center gap-2 text-sm
+      <button
+type="button" class="flex w-full cursor-pointer items-center gap-2 text-sm
                text-muted-foreground transition-colors hover:text-foreground">
         <component :is="statusMap[props.status].icon" :class="['size-4 shrink-0', statusMap[props.status].class]" />
         <span class="truncate text-foreground">{{ props.title }}</span>
-        <ChevronDown class="ml-auto size-4 shrink-0 transition-transform
+        <ChevronDown
+class="ml-auto size-4 shrink-0 transition-transform
                  group-data-[state=open]:rotate-180" />
       </button>
     </slot>
