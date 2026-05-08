@@ -22,6 +22,7 @@ const DEFAULT_PORT = 39871;
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
 const DEFAULT_RUNTIME_TIMEOUT_MS = 30 * 60 * 1000;
 export const SIDECAR_PROTOCOL_VERSION = '5';
+export const SIDECAR_IMPLEMENTATION_VERSION = 'deepseek-reasoning-transport-v4-workspace-tools';
 
 const agentModeSchema = z.enum(['ask', 'plan', 'agent', 'patch', 'review']);
 
@@ -298,6 +299,7 @@ export const createAgentSidecarServer = (
         engine: runtime.name,
         version: runtime.version ?? null,
         protocolVersion: SIDECAR_PROTOCOL_VERSION,
+        implementationVersion: SIDECAR_IMPLEMENTATION_VERSION,
         mcp: getMcpRuntimeStatus(),
       });
       return;

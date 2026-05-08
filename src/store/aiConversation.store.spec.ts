@@ -118,6 +118,27 @@ describe('useAiConversationStore', () => {
         expect(store.activeThread?.titleStatus).toBe('generated');
     });
 
+    it('按线程回写消息时同步标题与更新时间', () => {
+        const store = useAiConversationStore();
+
+        store.replaceMessages([createMessage(1)]);
+        const firstThreadId = store.activeThreadId;
+        store.startNewThread();
+
+        const nextMessage = {
+            ...createMessage(2),
+            role: 'user' as const,
+            content: '切换后回写原会话',
+        };
+
+        store.replaceThreadMessages(firstThreadId ?? '', [nextMessage]);
+
+        const firstThread = store.threads.find((thread) => thread.id === firstThreadId);
+        expect(firstThread?.title).toBe('切换后回写原会话');
+        expect(firstThread?.updatedAt).toBe(nextMessage.createdAt);
+        expect(store.activeMessages).toHaveLength(0);
+    });
+
     it('只提取第一轮问答用于后台标题生成', () => {
         const store = useAiConversationStore();
 

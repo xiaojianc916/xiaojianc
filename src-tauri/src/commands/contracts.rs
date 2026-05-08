@@ -1412,6 +1412,7 @@ pub struct AgentSidecarHealthPayload {
     pub(crate) engine: String,
     pub(crate) version: Option<String>,
     pub(crate) protocol_version: Option<String>,
+    pub(crate) implementation_version: Option<String>,
     pub(crate) mcp: AgentSidecarMcpHealthPayload,
 }
 

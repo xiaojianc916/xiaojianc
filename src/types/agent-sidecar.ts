@@ -305,6 +305,7 @@ export interface IAgentSidecarHealthPayload {
   engine: string;
   version: string | null;
   protocolVersion?: string | null;
+  implementationVersion?: string | null;
   mcp: {
     configuredServers: number;
     serverNames: string[];

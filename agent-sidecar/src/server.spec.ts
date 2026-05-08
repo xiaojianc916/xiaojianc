@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
-import type { OpenAICompatibleConfig } from '@mastra/core/llm';
+import type { MastraModelConfig } from '@mastra/core/llm';
+import { createWorkspaceTools, WORKSPACE_TOOLS, type AnyWorkspace } from '@mastra/core/workspace';
 
 import { buildSystemPrompt, extractVisibleAgentResultText } from './engines/agent-runtime-helpers.js';
 import { MastraRuntime } from './engines/mastra-runtime.js';
@@ -125,6 +129,8 @@ const parseNdjsonFrames = (body: string): unknown[] => body
   .split('\n')
   .filter((line) => line.length > 0)
   .map((line) => JSON.parse(line));
+
+const createTemporaryWorkspace = (): string => mkdtempSync(join(tmpdir(), 'mastra-workspace-'));
 
 describe('Agent sidecar request schema', () => {
   it('normalizes nullable optional fields from old Tauri clients', () => {
@@ -326,7 +332,7 @@ describe('Mastra runtime chat', () => {
   it('maps Mastra text chunks to cumulative message_delta events without changing the sidecar contract', async () => {
     let capturedMessages: unknown;
     let capturedStreamOptions: unknown;
-    let capturedModel: OpenAICompatibleConfig | null = null;
+    let capturedModel: MastraModelConfig | null = null;
     let disconnectCalls = 0;
     const runtime = new MastraRuntime({
       readModelConfig: () => ({
@@ -425,11 +431,9 @@ describe('Mastra runtime chat', () => {
       },
     });
 
-    assert.deepEqual(capturedModel, {
-      id: 'deepseek/deepseek-chat',
-      url: 'https://example.com/v1',
-      apiKey: 'test-key',
-    });
+    assert.equal(typeof capturedModel, 'object');
+    assert.equal((capturedModel as { provider?: unknown } | null)?.provider, 'deepseek.chat');
+    assert.equal((capturedModel as { modelId?: unknown } | null)?.modelId, 'deepseek-chat');
     assert.deepEqual(capturedMessages, [
       { role: 'assistant', content: '你好，我可以帮你做什么？' },
       { role: 'user', content: '请打招呼' },
@@ -463,6 +467,96 @@ describe('Mastra runtime chat', () => {
     });
     assert.match(response.sessionId, /^mastra-chat-/u);
     assert.equal(disconnectCalls, 1);
+  });
+
+  it('enables Mastra workspace AST edit and LSP inspect tools for workspace-backed chats', async () => {
+    const workspaceRoot = createTemporaryWorkspace();
+    let capturedWorkspace: AnyWorkspace | undefined;
+    let capturedWorkspaceHasLsp = false;
+    let capturedToolsConfig: ReturnType<AnyWorkspace['getToolsConfig']> | undefined;
+    let capturedWorkspaceToolNames: string[] = [];
+    let capturedStreamOptions: unknown;
+    let disconnectCalls = 0;
+    const runtime = new MastraRuntime({
+      readModelConfig: () => ({
+        apiKey: 'test-key',
+        baseUrl: 'https://example.com/v1',
+        model: 'deepseek-chat',
+      }),
+      createMcpClientBundle: async () => ({
+        clients: [],
+        configs: [],
+        errors: [],
+        tools: [],
+        disconnectAll: async () => {
+          disconnectCalls += 1;
+        },
+      }),
+      createAgent: (config) => {
+        capturedWorkspace = config.workspace;
+        capturedWorkspaceHasLsp = Boolean(config.workspace?.lsp);
+        capturedToolsConfig = config.workspace?.getToolsConfig();
+
+        return {
+          stream: async (_messages, streamOptions) => {
+            capturedStreamOptions = streamOptions;
+            capturedWorkspaceToolNames = config.workspace
+              ? Object.keys(await createWorkspaceTools(config.workspace))
+              : [];
+
+            return {
+              fullStream: (async function* () {
+                yield {
+                  type: 'text-delta',
+                  runId: 'workspace-run-1',
+                  payload: {
+                    id: 'workspace-text-1',
+                    text: 'Workspace tools ready.',
+                  },
+                };
+              })(),
+            };
+          },
+          generate: async () => {
+            throw new Error('generate should not be used in workspace chat test');
+          },
+        };
+      },
+    });
+
+    try {
+      const response = await runtime.chat({
+        mode: 'ask',
+        goal: '检查 workspace tools',
+        messages: [{ role: 'user', content: '检查 workspace tools' }],
+        workspaceRootPath: workspaceRoot,
+        context: [],
+      });
+
+      assert.equal(response.result, 'Workspace tools ready.');
+      assert.equal(capturedWorkspace?.status, 'destroyed');
+      assert.equal(capturedWorkspaceHasLsp, true);
+      assert.equal(capturedToolsConfig?.enabled, false);
+      assert.equal(capturedToolsConfig?.[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]?.enabled, true);
+      assert.equal(capturedToolsConfig?.[WORKSPACE_TOOLS.FILESYSTEM.GREP]?.enabled, true);
+      assert.equal(capturedToolsConfig?.[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT]?.enabled, true);
+      assert.equal(
+        capturedToolsConfig?.[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT]?.requireReadBeforeWrite,
+        true,
+      );
+      assert.equal(capturedToolsConfig?.[WORKSPACE_TOOLS.LSP.LSP_INSPECT]?.enabled, true);
+      assert.equal(capturedWorkspaceToolNames.includes(WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT), true);
+      assert.equal(capturedWorkspaceToolNames.includes(WORKSPACE_TOOLS.LSP.LSP_INSPECT), true);
+      assert.equal(capturedWorkspaceToolNames.includes(WORKSPACE_TOOLS.FILESYSTEM.DELETE), false);
+      assert.equal(capturedWorkspaceToolNames.includes(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND), false);
+      assert.deepEqual(capturedStreamOptions, {
+        maxSteps: 10,
+        toolChoice: 'auto',
+      });
+      assert.equal(disconnectCalls, 1);
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
   });
 
   it('routes Mastra reasoning chunks into agent runtime events instead of final text', async () => {
@@ -948,6 +1042,164 @@ describe('Mastra runtime execute', () => {
     assert.match(response.sessionId, /^mastra-execute-/u);
     assert.equal(disconnectCalls, 1);
   });
+
+  it('streams DeepSeek native reasoning_content and sends it back with the tool-call assistant message', async () => {
+    const encoder = new TextEncoder();
+    const capturedBodies: unknown[] = [];
+    let disconnectCalls = 0;
+    const createSseResponse = (chunks: readonly Record<string, unknown>[]): Response => new Response(
+      new ReadableStream<Uint8Array>({
+        start: (controller) => {
+          chunks.forEach((chunk) => {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+          });
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+        },
+      }),
+      {
+        headers: {
+          'content-type': 'text/event-stream',
+        },
+      },
+    );
+    const parseBody = (body: BodyInit | null | undefined): unknown => (
+      typeof body === 'string' ? JSON.parse(body) as unknown : null
+    );
+    const toRecordForTest = (value: unknown): Record<string, unknown> | null => (
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : null
+    );
+    const fetchMock: typeof fetch = async (_input, init) => {
+      capturedBodies.push(parseBody(init?.body));
+
+      if (capturedBodies.length === 1) {
+        return createSseResponse([
+          {
+            id: 'deepseek-step-1',
+            model: 'deepseek-v4-flash',
+            choices: [{ delta: { role: 'assistant' } }],
+          },
+          {
+            id: 'deepseek-step-1',
+            model: 'deepseek-v4-flash',
+            choices: [{ delta: { reasoning_content: '我需要调用时间工具。' } }],
+          },
+          {
+            id: 'deepseek-step-1',
+            model: 'deepseek-v4-flash',
+            choices: [{
+              delta: {
+                tool_calls: [{
+                  index: 0,
+                  id: 'call_time_1',
+                  type: 'function',
+                  function: {
+                    name: 'get_current_time',
+                    arguments: '{}',
+                  },
+                }],
+              },
+            }],
+          },
+          {
+            id: 'deepseek-step-1',
+            model: 'deepseek-v4-flash',
+            choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+          },
+        ]);
+      }
+
+      return createSseResponse([
+        {
+          id: 'deepseek-step-2',
+          model: 'deepseek-v4-flash',
+          choices: [{ delta: { content: '今天是星期五。' } }],
+        },
+        {
+          id: 'deepseek-step-2',
+          model: 'deepseek-v4-flash',
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+        },
+      ]);
+    };
+    const runtime = new MastraRuntime({
+      readModelConfig: () => ({
+        apiKey: 'test-key',
+        baseUrl: 'https://example.com/v1',
+        model: 'deepseek-v4-flash',
+      }),
+      fetch: fetchMock,
+      createMcpClientBundle: async () => ({
+        clients: [],
+        configs: [],
+        errors: [],
+        tools: [
+          {
+            name: 'get_current_time',
+            description: '获取当前时间',
+            toolSpec: {
+              inputSchema: {
+                type: 'object',
+                properties: {},
+                additionalProperties: false,
+              },
+            },
+            mcpClient: {
+              callTool: async () => ({
+                content: [{ type: 'text', text: '2026-05-08T20:00:00+08:00' }],
+                isError: false,
+              }),
+            },
+          },
+        ],
+        disconnectAll: async () => {
+          disconnectCalls += 1;
+        },
+      }),
+    });
+    const streamedEvents: unknown[] = [];
+
+    const response = await runtime.chat({
+      mode: 'ask',
+      goal: '今天是星期几',
+      messages: [{ role: 'user', content: '今天是星期几' }],
+      context: [],
+    }, {
+      onEvent: (event) => {
+        streamedEvents.push(event);
+      },
+    });
+    const secondBody = toRecordForTest(capturedBodies[1]);
+    const secondMessages = Array.isArray(secondBody?.messages) ? secondBody.messages : [];
+    const assistantToolMessage = secondMessages
+      .map((message) => toRecordForTest(message))
+      .find((message) => message?.role === 'assistant' && Array.isArray(message.tool_calls));
+    const separateReasoningMessage = secondMessages
+      .map((message) => toRecordForTest(message))
+      .find((message) =>
+        message?.role === 'assistant'
+        && !Array.isArray(message.tool_calls)
+        && message.reasoning_content === '我需要调用时间工具。');
+    const reasoningEvent = streamedEvents.find((event) =>
+      toRecordForTest(event)?.type === 'agent_event'
+      && toRecordForTest(toRecordForTest(event)?.event)?.type === 'agent.reasoning.delta');
+
+    assert.equal(capturedBodies.length, 2);
+    assert.equal(assistantToolMessage?.reasoning_content, '我需要调用时间工具。');
+    assert.equal(separateReasoningMessage, undefined);
+    assert.equal(
+      toRecordForTest(toRecordForTest(reasoningEvent)?.event)?.text,
+      '我需要调用时间工具。',
+    );
+    assert.equal(
+      response.events.some((event) => event.type === 'agent_event' && event.event.type === 'agent.text.delta'),
+      false,
+    );
+    assert.equal(response.result, '今天是星期五。');
+    assert.equal(disconnectCalls, 1);
+  });
 });
 
 describe('Mastra runtime approval resolution', () => {
@@ -1154,7 +1406,7 @@ describe('Mastra runtime plan', () => {
   it('keeps plan_ready plus done unchanged while exposing MCP tools to Mastra plan mode', async () => {
     let capturedMessages: unknown;
     let capturedGenerateOptions: unknown;
-    let capturedModel: OpenAICompatibleConfig | null = null;
+    let capturedModel: MastraModelConfig | null = null;
     let capturedToolNames: string[] = [];
     let disconnectCalls = 0;
     const plan = agentPlanSchema.parse({
@@ -1254,11 +1506,9 @@ describe('Mastra runtime plan', () => {
       },
     });
 
-    assert.deepEqual(capturedModel, {
-      id: 'deepseek/deepseek-chat',
-      url: 'https://example.com/v1',
-      apiKey: 'test-key',
-    });
+    assert.equal(typeof capturedModel, 'object');
+    assert.equal((capturedModel as { provider?: unknown } | null)?.provider, 'deepseek.chat');
+    assert.equal((capturedModel as { modelId?: unknown } | null)?.modelId, 'deepseek-chat');
     assert.deepEqual(capturedToolNames, ['read_file']);
     assert.deepEqual(capturedMessages, [
       { role: 'user', content: '目标：完成迁移\n给我一个迁移计划' },
@@ -1580,6 +1830,7 @@ describe('Agent sidecar protocol golden tests', () => {
       assert.equal(payload.engine, 'fake-runtime');
       assert.equal(payload.version, 'test-version');
       assert.equal(payload.protocolVersion, '5');
+      assert.equal(payload.implementationVersion, 'deepseek-reasoning-transport-v4-workspace-tools');
       assert.equal(typeof payload.mcp?.configuredServers, 'number');
       assert.equal(Array.isArray(payload.mcp?.serverNames), true);
       assert.equal(Array.isArray(payload.mcp?.errors), true);

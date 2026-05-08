@@ -1496,6 +1496,7 @@ describe('useAiAssistant streaming integration', () => {
 
     it('sidecar 首个事件到达前就显示上下文相关的运行状态', async () => {
         const { assistant } = createAssistantHarnessContext();
+        const conversationStore = useAiConversationStore();
         const sidecarGate = createDeferred<void>();
 
         aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
@@ -1533,6 +1534,14 @@ describe('useAiAssistant streaming integration', () => {
                 runtimeEvents: [],
             },
         });
+        expect(conversationStore.activeMessages[1]).toMatchObject({
+            role: 'assistant',
+            content: '',
+            stream: {
+                status: 'streaming',
+                runtimeEvents: [],
+            },
+        });
 
         sidecarGate.resolve(undefined);
         await sendPromise;
@@ -1544,6 +1553,7 @@ describe('useAiAssistant streaming integration', () => {
 
     it('streams sidecar tool activity into the assistant message before the final response resolves', async () => {
         const { assistant } = createAssistantHarnessContext();
+        const conversationStore = useAiConversationStore();
         const sidecarGate = createDeferred<void>();
 
         aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
@@ -1648,6 +1658,12 @@ describe('useAiAssistant streaming integration', () => {
                 toolName: 'search_project_files',
             }),
         ]));
+        expect(conversationStore.activeMessages[1]?.stream?.runtimeEvents).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                type: 'agent.tool.started',
+                toolName: 'search_project_files',
+            }),
+        ]));
         expect(assistant.runtimeTimelineEvents.value).toHaveLength(1);
         expect(assistant.runtimeTimelineEvents.value[0]).toMatchObject({
             type: 'agent.tool.started',
@@ -1669,10 +1685,10 @@ describe('useAiAssistant streaming integration', () => {
         ]));
     });
 
-    it('sidecar message_delta 即时冲刷，保持真实到达节奏且不改变最终结果', async () => {
+    it('sidecar message_delta 合帧刷新，避免长回答逐 token 卡住且不改变最终结果', async () => {
         const { assistant } = createAssistantHarnessContext();
         const conversationStore = useAiConversationStore();
-        const replaceMessagesSpy = vi.spyOn(conversationStore, 'replaceMessages');
+        const replaceThreadMessagesSpy = vi.spyOn(conversationStore, 'replaceThreadMessages');
         const sidecarGate = createDeferred<void>();
         const queuedFrames = new Map<number, FrameRequestCallback>();
         const expectedLiveText = '第一段实时回答，第二段实时回答';
@@ -1754,6 +1770,18 @@ describe('useAiAssistant streaming integration', () => {
             await Promise.resolve();
         }
 
+        expect(queuedFrames.size).toBe(1);
+        const queuedFrame = Array.from(queuedFrames.entries())[0];
+        expect(queuedFrame).toBeDefined();
+
+        if (!queuedFrame) {
+            throw new Error('expected queued animation frame');
+        }
+
+        queuedFrames.delete(queuedFrame[0]);
+        queuedFrame[1](performance.now());
+        await Promise.resolve();
+
         expect(queuedFrames.size).toBe(0);
         expect(assistant.messages.value[1]?.content).toBe(expectedLiveText);
         expect(assistant.messages.value[1]?.toolCalls?.[0]).toMatchObject({
@@ -1767,7 +1795,67 @@ describe('useAiAssistant streaming integration', () => {
 
         expect(assistant.messages.value[1]?.content).toBe('批量刷新完成');
         expect(assistant.messages.value[1]?.stream?.status).toBe('completed');
-        expect(replaceMessagesSpy.mock.calls.length).toBeGreaterThan(0);
+        expect(replaceThreadMessagesSpy.mock.calls.length).toBeGreaterThan(0);
+    });
+
+    it('sidecar 执行中切换会话仍回写发起会话，避免回来后内容清空', async () => {
+        const { assistant } = createAssistantHarnessContext();
+        const conversationStore = useAiConversationStore();
+        const sidecarGate = createDeferred<void>();
+        const finalText = '切换会话后仍然保留的 Agent 回复';
+
+        aiServiceMock.sidecarExecute.mockImplementationOnce(async (payload: IAgentSidecarExecuteRequest) => {
+            const sessionId = payload.sessionId ?? 'sidecar-thread-switch-session';
+
+            await sidecarGate.promise;
+
+            aiServiceMock.emitSidecar({
+                sessionId,
+                seq: 0,
+                event: {
+                    type: 'message_delta',
+                    text: finalText,
+                    phase: 'final',
+                },
+            });
+
+            return {
+                sessionId,
+                events: [
+                    {
+                        type: 'done',
+                        result: finalText,
+                    },
+                ],
+                result: finalText,
+            };
+        });
+
+        assistant.activeMode.value = 'agent';
+        assistant.draft.value = '测试执行中切换会话';
+        const sourceThreadId = conversationStore.activeThreadId;
+
+        const sendPromise = assistant.sendMessage();
+
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+            if (assistant.messages.value[1]) {
+                break;
+            }
+            await Promise.resolve();
+        }
+
+        conversationStore.startNewThread();
+        expect(conversationStore.activeThreadId).not.toBe(sourceThreadId);
+        expect(conversationStore.activeMessages).toHaveLength(0);
+
+        sidecarGate.resolve(undefined);
+        await sendPromise;
+
+        const sourceThread = conversationStore.threads.find((thread) => thread.id === sourceThreadId);
+        expect(sourceThread?.messages[1]?.content).toBe(finalText);
+        expect(sourceThread?.messages[1]?.stream?.status).toBe('completed');
+        expect(conversationStore.activeMessages).toHaveLength(0);
+        expect(assistant.messages.value).toHaveLength(0);
     });
 
     it('没有实时回答 delta 时直接提交 sidecar 最终结果，避免长文本被慢放', async () => {

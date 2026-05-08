@@ -297,6 +297,15 @@ export const useAiConversationStore = defineStore('ai-conversation', () => {
     }));
   };
 
+  const replaceThreadMessages = (threadId: string, messages: IAiChatMessage[]): void => {
+    patchThread(threadId, (thread) => ({
+      ...syncThreadMeta({
+        ...thread,
+        messages,
+      }),
+    }));
+  };
+
   const switchThread = (threadId: string): void => {
     if (!threads.value.some((thread) => thread.id === threadId)) return;
     activeThreadId.value = threadId;
@@ -377,6 +386,7 @@ export const useAiConversationStore = defineStore('ai-conversation', () => {
     hasMessages,
     appendMessage,
     replaceMessages,
+    replaceThreadMessages,
     switchThread,
     startNewThread,
     clearActiveThread,

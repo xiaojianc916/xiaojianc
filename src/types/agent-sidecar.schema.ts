@@ -165,6 +165,7 @@ export const agentSidecarHealthPayloadSchema = z.object({
   engine: z.string().min(1),
   version: z.string().min(1).nullable(),
   protocolVersion: z.string().min(1).nullable().optional(),
+  implementationVersion: z.string().min(1).nullable().optional(),
   mcp: z.object({
     configuredServers: z.number().int().nonnegative(),
     serverNames: z.array(z.string()),

@@ -24,6 +24,7 @@ const SIDECAR_STARTUP_TIMEOUT_SECONDS: u64 = 15;
 const SIDECAR_STARTUP_RETRY_MS: u64 = 250;
 const DEFAULT_DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com";
 const SIDECAR_PROTOCOL_VERSION: &str = "5";
+const SIDECAR_IMPLEMENTATION_VERSION: &str = "deepseek-reasoning-transport-v4-workspace-tools";
 const DEFAULT_SIDECAR_PORT: u16 = 39871;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,6 +41,7 @@ struct SidecarHealthProbePayload {
     #[serde(rename = "engine")]
     _engine: Option<String>,
     protocol_version: Option<String>,
+    implementation_version: Option<String>,
 }
 
 fn classify_sidecar_health(payload: &SidecarHealthProbePayload) -> SidecarHealthStatus {
@@ -47,7 +49,9 @@ fn classify_sidecar_health(payload: &SidecarHealthProbePayload) -> SidecarHealth
         return SidecarHealthStatus::Unavailable;
     }
 
-    if payload.protocol_version.as_deref() == Some(SIDECAR_PROTOCOL_VERSION) {
+    if payload.protocol_version.as_deref() == Some(SIDECAR_PROTOCOL_VERSION)
+        && payload.implementation_version.as_deref() == Some(SIDECAR_IMPLEMENTATION_VERSION)
+    {
         SidecarHealthStatus::Ready
     } else {
         SidecarHealthStatus::Stale
@@ -904,16 +908,19 @@ mod tests {
             ok: true,
             _engine: Some("mastra".to_string()),
             protocol_version: Some("5".to_string()),
+            implementation_version: Some("deepseek-reasoning-transport-v4-workspace-tools".to_string()),
         };
         let stale_payload = SidecarHealthProbePayload {
             ok: true,
             _engine: Some("custom-runtime".to_string()),
-            protocol_version: Some("4".to_string()),
+            protocol_version: Some("5".to_string()),
+            implementation_version: None,
         };
         let unavailable_payload = SidecarHealthProbePayload {
             ok: false,
             _engine: Some("legacy-runtime".to_string()),
             protocol_version: Some("5".to_string()),
+            implementation_version: Some("deepseek-reasoning-transport-v4-workspace-tools".to_string()),
         };
 
         assert_eq!(

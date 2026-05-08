@@ -82,6 +82,7 @@ interface IAiImageDimensions {
 interface ISidecarAgentSession {
   sessionId: string;
   assistantMessageId: string;
+  threadId: string | null;
   turnId: string | null;
   baseMessages: IAiChatMessage[];
   messageContent: string;
@@ -531,6 +532,7 @@ interface ISidecarLiveEventBuffer {
 
 interface ISidecarAnswerStreamMetadata {
   messageId: string;
+  threadId: string | null;
   toolCalls: IAiChatMessage['toolCalls'];
   streamStatus: NonNullable<IAiChatMessage['stream']>['status'];
   activityText: string | undefined;
@@ -648,6 +650,21 @@ const createSidecarLiveEventBuffer = (
     events.push(event);
   };
 
+  const retainPendingMessageDelta = (event: Extract<TAgentUiEvent, { type: 'message_delta' }>): void => {
+    const phase = event.phase ?? SIDECAR_MESSAGE_DELTA_PHASE_FALLBACK;
+    const existingIndex = pendingEvents.findIndex((pendingEvent) =>
+      pendingEvent.type === 'message_delta'
+      && (pendingEvent.phase ?? SIDECAR_MESSAGE_DELTA_PHASE_FALLBACK) === phase
+    );
+
+    if (existingIndex >= 0) {
+      pendingEvents[existingIndex] = event;
+      return;
+    }
+
+    pendingEvents.push(event);
+  };
+
   const flush = (): void => {
     scheduledFlush = null;
     isFlushScheduled = false;
@@ -668,11 +685,14 @@ const createSidecarLiveEventBuffer = (
     },
     push: (event) => {
       if (event.type === 'message_delta') {
-        pendingEvents.push(event);
-        cancelUiFlush(scheduledFlush);
-        scheduledFlush = null;
-        isFlushScheduled = false;
-        flush();
+        retainPendingMessageDelta(event);
+
+        if (isFlushScheduled) {
+          return;
+        }
+
+        isFlushScheduled = true;
+        scheduledFlush = scheduleUiFlush(flush);
         return;
       }
 
@@ -763,6 +783,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const activeAssistantMessage = ref<IAiChatMessage | null>(null);
   const activeAssistantBaseMessages = shallowRef<IAiChatMessage[]>([]);
   const activeSidecarAgentSession = ref<ISidecarAgentSession | null>(null);
+  const activeBufferedThreadId = ref<string | null>(null);
   const displayMessages = shallowRef<IAiChatMessage[]>(unref(conversationStore.activeMessages));
   const pendingTitleThreadIds = new Set<string>();
 
@@ -774,8 +795,27 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     activeSidecarAgentSession.value !== null ||
     restoringCheckpointId.value !== null;
 
-  const commitDisplayMessagesToStore = (): void => {
+  const commitDisplayMessagesToStore = (
+    threadId: string | null = unref(conversationStore.activeThreadId),
+  ): void => {
+    if (threadId) {
+      conversationStore.replaceThreadMessages(threadId, displayMessages.value);
+      return;
+    }
+
     conversationStore.replaceMessages(displayMessages.value);
+  };
+
+  const clearActiveBufferedThread = (threadId: string | null): void => {
+    if (activeBufferedThreadId.value === threadId) {
+      activeBufferedThreadId.value = null;
+    }
+  };
+
+  const syncDisplayMessagesFromActiveThread = (): void => {
+    if (!isConversationWriteBuffered()) {
+      displayMessages.value = unref(conversationStore.activeMessages);
+    }
   };
 
   const messages = computed<IAiChatMessage[]>({
@@ -1119,6 +1159,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       state.runtimeEvents,
       state.finalAnswerStarted,
     );
+    commitDisplayMessagesToStore(state.threadId);
     state.runtimeEvents = undefined;
 
     if (state.streamStatus === 'completed' && sidecarAnswerStream.status.value === 'completed') {
@@ -1382,6 +1423,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
   const applySidecarLiveEventsToAgentMessage = (
     assistantMessageId: string,
+    threadId: string | null,
     fallbackContent: string,
     events: readonly TAgentUiEvent[],
   ): void => {
@@ -1425,6 +1467,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
     const streamMetadata: ISidecarAnswerStreamMetadata = {
       messageId: assistantMessageId,
+      threadId,
       toolCalls: toolProjection.toolCalls,
       streamStatus,
       activityText: toolProjection.activityText,
@@ -1461,6 +1504,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       runtimeEvents,
       finalAnswerStarted,
     );
+    commitDisplayMessagesToStore(threadId);
   };
 
 
@@ -1471,19 +1515,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       return;
     }
 
-    const nextEvents = [...runtimeTimelineEvents.value];
-    const seenIds = new Set(nextEvents.map((event) => event.id));
-
-    for (const event of events) {
-      if (seenIds.has(event.id)) {
-        continue;
-      }
-
-      seenIds.add(event.id);
-      nextEvents.push(event);
-    }
-
-    runtimeTimelineEvents.value = nextEvents.slice(-AGENT_RUNTIME_TIMELINE_LIMIT);
+    runtimeTimelineEvents.value = mergeRuntimeEvents(runtimeTimelineEvents.value, events) ?? [];
   };
 
   const appendRuntimeTimelineEvents = (
@@ -1536,6 +1568,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     messageContent: string,
     references: IAiContextReference[],
     turnId: string,
+    threadId: string | null,
   ): Promise<void> => {
     errorMessage.value = '';
     isSending.value = true;
@@ -1545,6 +1578,8 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     activeSidecarAgentSession.value = null;
 
     const assistantMessageId = createMessageId('assistant');
+    const targetThreadId = threadId;
+    activeBufferedThreadId.value = targetThreadId;
     const initialActivityText = buildInitialAgentActivityText();
     const placeholderMessage: IAiChatMessage = {
       id: assistantMessageId,
@@ -1561,6 +1596,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     };
 
     messages.value = [...visibleMessages, placeholderMessage];
+    commitDisplayMessagesToStore(targetThreadId);
     activeAgentMessageId.value = assistantMessageId;
     activeAbortController.value = new AbortController();
     const sidecarSessionId = `sidecar:${assistantMessageId}`;
@@ -1568,6 +1604,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       appendVisibleRuntimeTimelineEvents(extractVisibleAgentRuntimeEvents(freshEvents));
       applySidecarLiveEventsToAgentMessage(
         assistantMessageId,
+        targetThreadId,
         '',
         events,
       );
@@ -1601,6 +1638,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       });
       const streamMetadata: ISidecarAnswerStreamMetadata = {
         messageId: assistantMessageId,
+        threadId: targetThreadId,
         toolCalls: toolProjection.toolCalls,
         streamStatus: 'completed',
         activityText: toolProjection.activityText,
@@ -1650,6 +1688,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         activeSidecarAgentSession.value = {
           sessionId: payload.sessionId,
           assistantMessageId,
+          threadId: targetThreadId,
           turnId,
           baseMessages: visibleMessages,
           messageContent,
@@ -1685,8 +1724,10 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       unlistenSidecarStream?.();
       activeAbortController.value = null;
       activeAgentMessageId.value = null;
-      commitDisplayMessagesToStore();
+      commitDisplayMessagesToStore(targetThreadId);
+      clearActiveBufferedThread(targetThreadId);
       isSending.value = false;
+      syncDisplayMessagesFromActiveThread();
     }
   };
 
@@ -1704,22 +1745,28 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     agentPlan.store.clearPendingToolConfirmation(confirmation.id);
 
     if (decision === 'stop' || decision === 'skip') {
-      activeSidecarAgentSession.value = null;
+      activeBufferedThreadId.value = session.threadId;
       updateAgentExecutionMessage(
         session.assistantMessageId,
         decision === 'stop' ? 'Agent 工具调用已停止。' : 'Agent 工具调用已跳过。',
         [],
         'completed',
       );
+      commitDisplayMessagesToStore(session.threadId);
+      activeSidecarAgentSession.value = null;
+      clearActiveBufferedThread(session.threadId);
+      syncDisplayMessagesFromActiveThread();
       return;
     }
 
     isSending.value = true;
     activeAgentMessageId.value = session.assistantMessageId;
+    activeBufferedThreadId.value = session.threadId;
     const liveEventBuffer = createSidecarLiveEventBuffer((events, freshEvents) => {
       appendVisibleRuntimeTimelineEvents(extractVisibleAgentRuntimeEvents(freshEvents));
       applySidecarLiveEventsToAgentMessage(
         session.assistantMessageId,
+        session.threadId,
         '',
         events,
       );
@@ -1751,6 +1798,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       });
       const streamMetadata: ISidecarAnswerStreamMetadata = {
         messageId: session.assistantMessageId,
+        threadId: session.threadId,
         toolCalls: toolProjection.toolCalls,
         streamStatus: 'completed',
         activityText: toolProjection.activityText,
@@ -1816,8 +1864,10 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       liveEventBuffer.dispose();
       unlistenSidecarStream?.();
       activeAgentMessageId.value = null;
-      commitDisplayMessagesToStore();
+      commitDisplayMessagesToStore(session.threadId);
+      clearActiveBufferedThread(session.threadId);
       isSending.value = false;
+      syncDisplayMessagesFromActiveThread();
     }
   };
   // -----------------------------------------------------------------------
@@ -2335,9 +2385,11 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     requestMessages: IAiChatMessage[],
     visibleMessages: IAiChatMessage[],
     references: IAiContextReference[],
+    threadId: string | null,
   ): Promise<void> => {
     errorMessage.value = '';
     isSending.value = true;
+    activeBufferedThreadId.value = threadId;
 
     const assistantMessage: IAiChatMessage = {
       id: createMessageId('assistant'),
@@ -2391,7 +2443,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       });
     } finally {
       pipeline.flushBufferedText();
-      commitDisplayMessagesToStore();
+      commitDisplayMessagesToStore(threadId);
       unlisten?.();
 
       activeStreamResolve.value = null;
@@ -2399,7 +2451,9 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       activeAbortController.value = null;
       activeAssistantMessage.value = null;
       activeAssistantBaseMessages.value = [];
+      clearActiveBufferedThread(threadId);
       isSending.value = false;
+      syncDisplayMessagesFromActiveThread();
     }
   };
 
@@ -2530,6 +2584,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     draft.value = '';
     errorMessage.value = '';
     isSending.value = true;
+    activeBufferedThreadId.value = titleThreadId;
 
     let references: IAiContextReference[];
 
@@ -2548,8 +2603,10 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
           references: [],
         },
       ];
-      commitDisplayMessagesToStore();
+      commitDisplayMessagesToStore(titleThreadId);
+      clearActiveBufferedThread(titleThreadId);
       isSending.value = false;
+      syncDisplayMessagesFromActiveThread();
       return;
     }
 
@@ -2572,6 +2629,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         messageContent,
         references,
         userMessage.id,
+        titleThreadId,
       );
 
       if (!errorMessage.value) {
@@ -2609,8 +2667,10 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
           },
         ];
 
-        commitDisplayMessagesToStore();
+        commitDisplayMessagesToStore(titleThreadId);
+        clearActiveBufferedThread(titleThreadId);
         isSending.value = false;
+        syncDisplayMessagesFromActiveThread();
         void maybeGenerateConversationTitle(titleThreadId);
         return;
       } catch (error) {
@@ -2627,8 +2687,10 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
             references: [],
           },
         ];
-        commitDisplayMessagesToStore();
+        commitDisplayMessagesToStore(titleThreadId);
+        clearActiveBufferedThread(titleThreadId);
         isSending.value = false;
+        syncDisplayMessagesFromActiveThread();
         return;
       }
     }
@@ -2638,6 +2700,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         nextMessages,
         nextMessages,
         references,
+        titleThreadId,
       );
       if (!errorMessage.value) {
         void maybeGenerateConversationTitle(titleThreadId);
@@ -2797,6 +2860,9 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   };
 
   const stopCurrentRequest = (): void => {
+    const targetThreadId = activeSidecarAgentSession.value?.threadId
+      ?? activeBufferedThreadId.value
+      ?? unref(conversationStore.activeThreadId);
     const streamId = activeStreamId.value;
 
     if (streamId) {
@@ -2837,8 +2903,10 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
 
     activeSidecarAgentSession.value = null;
     agentPlan.store.clearPendingToolConfirmation();
-    commitDisplayMessagesToStore();
+    commitDisplayMessagesToStore(targetThreadId);
+    clearActiveBufferedThread(targetThreadId);
     isSending.value = false;
+    syncDisplayMessagesFromActiveThread();
     errorMessage.value = '';
   };
 

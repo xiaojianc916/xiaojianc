@@ -313,6 +313,29 @@ describe('AiAgentRuntimeTimeline', () => {
         expect(wrapper.text()).toContain('Given the file extension is .sh');
     });
 
+    it('不会把最终正文 delta 当成活动树思考文字渲染', () => {
+        const wrapper = mount(AiAgentRuntimeTimeline, {
+            props: {
+                events: [
+                    createEvent({
+                        id: 'tool-completed-before-text',
+                        type: 'agent.tool.completed',
+                        toolName: 'web_search',
+                        ok: true,
+                    }),
+                    createEvent({
+                        id: 'visible-text-after-tool',
+                        type: 'agent.text.delta',
+                        text: '根据搜索结果，先整理上周的关键金融新闻。',
+                    }),
+                ],
+            },
+        });
+
+        expect(wrapper.findAll('.agent-line')).toHaveLength(0);
+        expect(wrapper.text()).not.toContain('根据搜索结果，先整理上周的关键金融新闻。');
+    });
+
     it('兼容累计快照式 reasoning，避免前缀重复堆叠', () => {
         const wrapper = mount(AiAgentRuntimeTimeline, {
             props: {
