@@ -238,7 +238,7 @@ describe('AiMessageItem', () => {
     expect(wrapper.find('.markdown-stub').exists()).toBe(false);
   });
 
-  it('有活动树数据时仍显示 runtime reasoning 面板，最终回答紧跟其后', () => {
+  it('有 runtime reasoning 面板时不再渲染旧活动树，最终回答紧跟其后', () => {
     const wrapper = mount(AiMessageItem, {
       props: {
         message: createMessage({
@@ -285,12 +285,13 @@ describe('AiMessageItem', () => {
     const runtimeTimeline = wrapper.find('.ai-runtime-timeline');
     const messageBubble = wrapper.find('.ai-message-bubble');
 
-    expect(activityTimeline.exists()).toBe(true);
+    expect(activityTimeline.exists()).toBe(false);
     expect(runtimeTimeline.exists()).toBe(true);
     expect(wrapper.text()).toContain('我先确认真实工具列表。');
-    expect(wrapper.text()).toContain('搜索 agent-sidecar');
+    expect(wrapper.text()).toContain('grep_search');
+    expect(wrapper.text()).toContain('agent-sidecar');
     expect(messageBubble.exists()).toBe(true);
-    expect(activityTimeline.element.compareDocumentPosition(messageBubble.element) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(runtimeTimeline.element.compareDocumentPosition(messageBubble.element) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
   });
 

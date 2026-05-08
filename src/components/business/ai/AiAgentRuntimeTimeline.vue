@@ -102,6 +102,13 @@ interface IToolIconMatcher {
   patterns: RegExp[];
 }
 
+type TInlineMarkdownTokenKind = 'text' | 'strong' | 'emphasis' | 'code';
+
+interface IInlineMarkdownToken {
+  kind: TInlineMarkdownTokenKind;
+  text: string;
+}
+
 const props = withDefaults(defineProps<{
   events: TAgentRuntimeEvent[];
   isStreaming?: boolean;
@@ -110,6 +117,7 @@ const props = withDefaults(defineProps<{
 });
 
 const collapsedReasoningMap = ref<Record<string, boolean>>({});
+const inlineMarkdownTokenCache = new Map<string, IInlineMarkdownToken[]>();
 
 const TOOL_ICON_MATCHERS: readonly IToolIconMatcher[] = [
   {
@@ -704,6 +712,100 @@ const getTaskStepStatus = (node: ITaskNodeItem): 'complete' | 'active' | 'pendin
 
 const shouldShowTaskStatus = (node: ITaskNodeItem): boolean =>
   node.status !== 'succeeded';
+
+const pushInlineMarkdownToken = (
+  tokens: IInlineMarkdownToken[],
+  kind: TInlineMarkdownTokenKind,
+  text: string,
+): void => {
+  if (!text) {
+    return;
+  }
+
+  const previous = tokens.at(-1);
+  if (previous?.kind === kind) {
+    previous.text += text;
+    return;
+  }
+
+  tokens.push({ kind, text });
+};
+
+const findNextSingleAsterisk = (value: string, startIndex: number): number => {
+  for (let index = startIndex; index < value.length; index += 1) {
+    if (value[index] !== '*') {
+      continue;
+    }
+
+    if (value[index - 1] === '*' || value[index + 1] === '*') {
+      continue;
+    }
+
+    return index;
+  }
+
+  return -1;
+};
+
+const tokenizeInlineMarkdown = (value: string): IInlineMarkdownToken[] => {
+  const cached = inlineMarkdownTokenCache.get(value);
+  if (cached) {
+    return cached;
+  }
+
+  const tokens: IInlineMarkdownToken[] = [];
+  let plainBuffer = '';
+  let index = 0;
+
+  const flushPlain = (): void => {
+    pushInlineMarkdownToken(tokens, 'text', plainBuffer);
+    plainBuffer = '';
+  };
+
+  while (index < value.length) {
+    if (value[index] === '`') {
+      const endIndex = value.indexOf('`', index + 1);
+      if (endIndex > index + 1) {
+        flushPlain();
+        pushInlineMarkdownToken(tokens, 'code', value.slice(index + 1, endIndex));
+        index = endIndex + 1;
+        continue;
+      }
+    }
+
+    if (value.startsWith('**', index)) {
+      const endIndex = value.indexOf('**', index + 2);
+      if (endIndex > index + 2) {
+        flushPlain();
+        pushInlineMarkdownToken(tokens, 'strong', value.slice(index + 2, endIndex));
+        index = endIndex + 2;
+        continue;
+      }
+    }
+
+    if (value[index] === '*' && value[index + 1] !== '*' && value[index - 1] !== '*') {
+      const endIndex = findNextSingleAsterisk(value, index + 1);
+      if (endIndex > index + 1) {
+        flushPlain();
+        pushInlineMarkdownToken(tokens, 'emphasis', value.slice(index + 1, endIndex));
+        index = endIndex + 1;
+        continue;
+      }
+    }
+
+    plainBuffer += value[index];
+    index += 1;
+  }
+
+  flushPlain();
+
+  if (inlineMarkdownTokenCache.size > 240) {
+    inlineMarkdownTokenCache.clear();
+  }
+
+  inlineMarkdownTokenCache.set(value, tokens);
+  return tokens;
+};
 </script>
 
 <template>
@@ -732,7 +834,15 @@ const shouldShowTaskStatus = (node: ITaskNodeItem): boolean =>
                 ? item.segments.slice(0, 1)
                 : item.segments
             )" :key="`${item.id}:segment:${segmentIndex}`" class="agent-line__segment">
-              {{ segment }}
+              <template
+                v-for="(token, tokenIndex) in tokenizeInlineMarkdown(segment)"
+                :key="`${item.id}:segment:${segmentIndex}:token:${tokenIndex}`"
+              >
+                <strong v-if="token.kind === 'strong'" class="agent-line__strong">{{ token.text }}</strong>
+                <em v-else-if="token.kind === 'emphasis'" class="agent-line__emphasis">{{ token.text }}</em>
+                <code v-else-if="token.kind === 'code'" class="agent-line__code">{{ token.text }}</code>
+                <span v-else>{{ token.text }}</span>
+              </template>
             </p>
 
             <button v-if="item.isLong" type="button" class="agent-line__toggle"
@@ -843,6 +953,26 @@ const shouldShowTaskStatus = (node: ITaskNodeItem): boolean =>
 
 .agent-line__segment+.agent-line__segment {
   margin-top: 6px;
+}
+
+.agent-line__strong {
+  color: inherit;
+  font-weight: 650;
+}
+
+.agent-line__emphasis {
+  color: inherit;
+  font-style: italic;
+}
+
+.agent-line__code {
+  border: 1px solid color-mix(in srgb, var(--shell-divider) 76%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-soft) 84%, transparent);
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 0 4px;
 }
 
 .agent-line__toggle {

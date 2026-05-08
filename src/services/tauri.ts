@@ -888,6 +888,13 @@ const uploadSshFileIpc = definePayloadIpc(
   { audit: 'sensitive', timeoutMs: 60_000 },
 );
 
+const readSshFileIpc = definePayloadIpc(
+  'read_ssh_file',
+  '读取 SSH 远端文件',
+  tauriContracts.readSshFile,
+  { idempotent: true, audit: 'sensitive', timeoutMs: 60_000 },
+);
+
 const deleteSshPathIpc = definePayloadIpc(
   'delete_ssh_path',
   '删除 SSH 远端路径',
@@ -1398,6 +1405,8 @@ export const tauriService: ITauriService & {
   downloadSshFile: downloadSshFileIpc,
 
   uploadSshFile: uploadSshFileIpc,
+
+  readSshFile: readSshFileIpc,
 
   deleteSshPath: deleteSshPathIpc,
 

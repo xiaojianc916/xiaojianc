@@ -1,49 +1,46 @@
 <template>
-  <DialogRoot :open="Boolean(dialogState)" @update:open="handleOpenChange">
-    <DialogPortal v-if="dialogState">
-      <DialogOverlay class="app-dialog-overlay" />
-      <DialogContent
-ref="dialogPanelRef" class="app-dialog-panel" role="alertdialog" aria-modal="true" tabindex="-1"
+  <AlertDialog :open="Boolean(dialogState)">
+    <AlertDialogPortal v-if="dialogState">
+      <AlertDialogContent ref="dialogPanelRef" class="app-dialog-panel" tabindex="-1"
         :data-variant="dialogState.variant" :aria-labelledby="titleId" :aria-describedby="descriptionId"
         @open-auto-focus="handleOpenAutoFocus">
         <div class="app-dialog-copy">
-          <DialogTitle :id="titleId" class="app-dialog-title">
+          <AlertDialogTitle :id="titleId" class="app-dialog-title">
             {{ dialogState.title }}
-          </DialogTitle>
-          <DialogDescription :id="descriptionId" class="app-dialog-description">
+          </AlertDialogTitle>
+          <AlertDialogDescription :id="descriptionId" class="app-dialog-description">
             {{ dialogState.description }}
-          </DialogDescription>
+          </AlertDialogDescription>
         </div>
         <div class="app-dialog-footer">
-          <Button
-variant="ghost" size="sm" class="app-dialog-button app-dialog-secondary-button"
-            @click="handleAction('cancel')">
-            {{ dialogState.cancelText }}
-          </Button>
-          <Button
-variant="ghost" size="sm" class="app-dialog-button app-dialog-secondary-button"
-            @click="handleAction('dismiss')">
-            {{ dialogState.dismissText }}
-          </Button>
-          <Button size="sm" class="app-dialog-button app-dialog-primary-button" @click="handleAction('confirm')">
-            {{ dialogState.confirmText }}
-          </Button>
+          <AlertDialogCancel as-child>
+            <Button variant="ghost" size="sm" class="app-dialog-button app-dialog-secondary-button"
+              @click="handleAction('cancel')">
+              {{ dialogState.cancelText }}
+            </Button>
+          </AlertDialogCancel>
+          <AlertDialogAction as-child>
+            <Button size="sm" class="app-dialog-button app-dialog-primary-button" @click="handleAction('confirm')">
+              {{ dialogState.confirmText }}
+            </Button>
+          </AlertDialogAction>
         </div>
-      </DialogContent>
-    </DialogPortal>
-  </DialogRoot>
+      </AlertDialogContent>
+    </AlertDialogPortal>
+  </AlertDialog>
 </template>
 
 <script setup lang="ts">
-import { Button } from '@/components/ui/button';
 import {
-  DialogContent,
-  DialogDescription,
-  DialogOverlay,
-  DialogPortal,
-  DialogRoot,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogPortal,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
 import {
   APP_DIALOG_DISMISS_EVENT,
   APP_DIALOG_EVENT,
@@ -133,12 +130,6 @@ const handleDialogDismissEvent = (event: Event): void => {
   handleAction(customEvent.detail?.action ?? 'dismiss');
 };
 
-const handleOpenChange = (open: boolean): void => {
-  if (!open && dialogState.value) {
-    handleAction('dismiss');
-  }
-};
-
 const handleOpenAutoFocus = (event: Event): void => {
   event.preventDefault();
   void focusDialogPanel();
@@ -191,16 +182,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.app-dialog-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1400;
-  background: transparent;
-  backdrop-filter: none;
-  opacity: 1;
-  transition: opacity 0.15s ease;
-}
-
 .app-dialog-panel {
   position: fixed;
   left: 50%;
@@ -208,12 +189,12 @@ onBeforeUnmount(() => {
   z-index: 1401;
   width: min(360px, calc(100vw - 32px));
   transform: translate(-50%, -50%);
-  border: 1px solid var(--overlay-border, var(--border-strong));
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
-  background: var(--overlay-bg, var(--bg-4));
+  background: #ffffff;
   box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.36),
-    0 0 0 0.5px rgba(255, 255, 255, 0.06);
+    0 2px 8px rgba(0, 0, 0, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.04);
   padding: 20px 20px 14px;
   outline: none;
   -webkit-font-smoothing: antialiased;
@@ -224,17 +205,13 @@ onBeforeUnmount(() => {
     opacity 0.15s ease;
 }
 
-.app-dialog-panel[data-variant='danger'] {
-  border-color: color-mix(in srgb, var(--danger) 38%, transparent);
-}
-
 .app-dialog-copy {
   margin-bottom: 18px;
 }
 
 .app-dialog-title {
   margin: 0 0 4px;
-  color: var(--text-primary);
+  color: #000000;
   font-size: 13.5px;
   font-weight: 500;
   letter-spacing: -0.01em;
@@ -242,7 +219,7 @@ onBeforeUnmount(() => {
 
 .app-dialog-description {
   margin: 0;
-  color: var(--text-tertiary);
+  color: #737373;
   font-size: 12.5px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -271,30 +248,34 @@ onBeforeUnmount(() => {
 }
 
 .app-dialog-secondary-button {
-  border-color: transparent;
-  background: transparent;
-  color: var(--text-tertiary);
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #374151;
 }
 
 .app-dialog-secondary-button:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
+  background: #f9fafb;
+  color: #111827;
 }
 
 .app-dialog-primary-button {
   border-color: transparent;
-  background: var(--primary, var(--settings-accent));
-  color: var(--primary-foreground, #f8fafc);
+  background: #009966;
+  color: #ffffff;
   font-weight: 500;
 }
 
 .app-dialog-primary-button:hover {
-  background: var(--accent-strong);
-  color: var(--primary-foreground, #f8fafc);
+  background: #00835a;
+  color: #ffffff;
 }
 
-.app-dialog-overlay[data-state='closed'] {
-  opacity: 0;
+.app-dialog-panel[data-variant='danger'] .app-dialog-primary-button {
+  background: #ec000b;
+}
+
+.app-dialog-panel[data-variant='danger'] .app-dialog-primary-button:hover {
+  background: #c90009;
 }
 
 .app-dialog-panel[data-state='closed'] {

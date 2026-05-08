@@ -139,6 +139,7 @@ export interface ISshConnectionTestRequest {
   username: string;
   authMode: 'key' | 'password';
   identityPath: string | null;
+  password: string | null;
 }
 
 export interface ISshConnectionTestPayload {
@@ -182,6 +183,16 @@ export interface ISshFileUploadRequest extends ISshConnectionTestRequest {
 export interface ISshFileUploadPayload {
   localPath: string;
   remotePath: string;
+  byteSize: number;
+}
+
+export interface ISshFileReadRequest extends ISshConnectionTestRequest {
+  remotePath: string;
+}
+
+export interface ISshFileReadPayload {
+  remotePath: string;
+  content: string;
   byteSize: number;
 }
 
@@ -290,6 +301,7 @@ export interface ITauriService {
   listSshDirectory(payload: ISshDirectoryListRequest): Promise<ISshDirectoryListPayload>;
   downloadSshFile(payload: ISshFileDownloadRequest): Promise<ISshFileDownloadPayload>;
   uploadSshFile(payload: ISshFileUploadRequest): Promise<ISshFileUploadPayload>;
+  readSshFile(payload: ISshFileReadRequest): Promise<ISshFileReadPayload>;
   deleteSshPath(payload: ISshPathDeleteRequest): Promise<ISshPathDeletePayload>;
   renameSshPath(payload: ISshPathRenameRequest): Promise<ISshPathRenamePayload>;
   createSshDirectory(payload: ISshDirectoryCreateRequest): Promise<ISshDirectoryCreatePayload>;

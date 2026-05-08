@@ -33,6 +33,25 @@ declare module 'monaco-editor/esm/vs/editor/standalone/browser/quickAccess/stand
 
 // ── 具名导入(本地视角是 any,由 monaco.ts 的 facade cast 收口)───────────────
 declare module 'monaco-editor/esm/vs/basic-languages/shell/shell.js';
+declare module 'monaco-editor/esm/vs/basic-languages/python/python.js';
+declare module 'monaco-editor/esm/vs/basic-languages/javascript/javascript.js';
+declare module 'monaco-editor/esm/vs/basic-languages/typescript/typescript.js';
+declare module 'monaco-editor/esm/vs/basic-languages/ruby/ruby.js';
+declare module 'monaco-editor/esm/vs/basic-languages/cpp/cpp.js';
+declare module 'monaco-editor/esm/vs/basic-languages/java/java.js';
+declare module 'monaco-editor/esm/vs/basic-languages/rust/rust.js';
+declare module 'monaco-editor/esm/vs/basic-languages/go/go.js';
+declare module 'monaco-editor/esm/vs/basic-languages/css/css.js';
+declare module 'monaco-editor/esm/vs/basic-languages/less/less.js';
+declare module 'monaco-editor/esm/vs/basic-languages/scss/scss.js';
+declare module 'monaco-editor/esm/vs/basic-languages/html/html.js';
+declare module 'monaco-editor/esm/vs/basic-languages/xml/xml.js';
+declare module 'monaco-editor/esm/vs/basic-languages/yaml/yaml.js';
+declare module 'monaco-editor/esm/vs/basic-languages/markdown/markdown.js';
+declare module 'monaco-editor/esm/vs/basic-languages/sql/sql.js';
+declare module 'monaco-editor/esm/vs/basic-languages/dockerfile/dockerfile.js';
+declare module 'monaco-editor/esm/vs/basic-languages/powershell/powershell.js';
+declare module 'monaco-editor/esm/vs/basic-languages/ini/ini.js';
 declare module 'monaco-editor/esm/vs/editor/common/core/range.js';
 declare module 'monaco-editor/esm/vs/editor/common/core/selection.js';
 declare module 'monaco-editor/esm/vs/editor/common/standalone/standaloneEnums.js';

@@ -1,94 +1,181 @@
 use super::{
-    configure_tokio_command_for_background, find_command_path, SshConfigHostPayload,
-    SshConnectionTestPayload, SshConnectionTestRequest, SshDirectoryCreatePayload,
-    SshDirectoryCreateRequest, SshDirectoryEntryPayload, SshDirectoryListPayload,
-    SshDirectoryListRequest, SshFileDownloadPayload, SshFileDownloadRequest, SshFileUploadPayload,
+    SshConfigHostPayload, SshConnectionTestPayload, SshConnectionTestRequest,
+    SshDirectoryCreatePayload, SshDirectoryCreateRequest, SshDirectoryEntryPayload,
+    SshDirectoryListPayload, SshDirectoryListRequest, SshFileDownloadPayload,
+    SshFileDownloadRequest, SshFileReadPayload, SshFileReadRequest, SshFileUploadPayload,
     SshFileUploadRequest, SshPathDeletePayload, SshPathDeleteRequest, SshPathRenamePayload,
     SshPathRenameRequest,
 };
-use std::{env, path::PathBuf, process::Stdio, time::Duration};
-use tokio::{fs, process::Command, time::timeout};
+use ssh2::{FileStat, OpenFlags, OpenType, Session, Sftp};
+use std::{
+    env, fs as std_fs,
+    io::{Read, Write},
+    net::{SocketAddr, TcpStream, ToSocketAddrs},
+    path::{Path, PathBuf},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+use tokio::{fs as tokio_fs, task, time::timeout};
 
+const SSH_CONNECT_TIMEOUT_SECONDS: u64 = 8;
 const SSH_TEST_TIMEOUT: Duration = Duration::from_secs(12);
-const SSH_OK_MARKER: &str = "__XIAOJIANC_SSH_OK__";
+const SSH_MUTATION_TIMEOUT: Duration = Duration::from_secs(30);
+const SSH_FILE_TRANSFER_TIMEOUT: Duration = Duration::from_secs(300);
+const SSH_FILE_PREVIEW_TIMEOUT: Duration = Duration::from_secs(60);
+const SSH_FILE_PREVIEW_MAX_BYTES: u64 = 2 * 1024 * 1024;
 const DEFAULT_SSH_PORT: u16 = 22;
 const SSH_CONFIG_IMPORTED_LABEL: &str = "SSH config";
+const SSH_DOWNLOAD_TEMP_SUFFIX: &str = "calamex-download";
+const S_IFMT: u32 = 0o170000;
+const S_IFDIR: u32 = 0o040000;
+
+#[derive(Debug, Clone)]
+struct SshConnectionParams {
+    host: String,
+    port: u16,
+    username: String,
+    auth_mode: String,
+    identity_path: Option<String>,
+    password: Option<String>,
+}
+
+impl SshConnectionParams {
+    fn from_test_request(payload: &SshConnectionTestRequest) -> Self {
+        Self {
+            host: payload.host.trim().into(),
+            port: payload.port,
+            username: payload.username.trim().into(),
+            auth_mode: payload.auth_mode.clone(),
+            identity_path: payload.identity_path.clone(),
+            password: payload.password.clone(),
+        }
+    }
+
+    fn from_directory_request(payload: &SshDirectoryListRequest) -> Self {
+        Self {
+            host: payload.host.trim().into(),
+            port: payload.port,
+            username: payload.username.trim().into(),
+            auth_mode: payload.auth_mode.clone(),
+            identity_path: payload.identity_path.clone(),
+            password: payload.password.clone(),
+        }
+    }
+
+    fn from_download_request(payload: &SshFileDownloadRequest) -> Self {
+        Self {
+            host: payload.host.trim().into(),
+            port: payload.port,
+            username: payload.username.trim().into(),
+            auth_mode: payload.auth_mode.clone(),
+            identity_path: payload.identity_path.clone(),
+            password: payload.password.clone(),
+        }
+    }
+
+    fn from_upload_request(payload: &SshFileUploadRequest) -> Self {
+        Self {
+            host: payload.host.trim().into(),
+            port: payload.port,
+            username: payload.username.trim().into(),
+            auth_mode: payload.auth_mode.clone(),
+            identity_path: payload.identity_path.clone(),
+            password: payload.password.clone(),
+        }
+    }
+
+    fn from_delete_request(payload: &SshPathDeleteRequest) -> Self {
+        Self {
+            host: payload.host.trim().into(),
+            port: payload.port,
+            username: payload.username.trim().into(),
+            auth_mode: payload.auth_mode.clone(),
+            identity_path: payload.identity_path.clone(),
+            password: payload.password.clone(),
+        }
+    }
+
+    fn from_rename_request(payload: &SshPathRenameRequest) -> Self {
+        Self {
+            host: payload.host.trim().into(),
+            port: payload.port,
+            username: payload.username.trim().into(),
+            auth_mode: payload.auth_mode.clone(),
+            identity_path: payload.identity_path.clone(),
+            password: payload.password.clone(),
+        }
+    }
+
+    fn from_create_directory_request(payload: &SshDirectoryCreateRequest) -> Self {
+        Self {
+            host: payload.host.trim().into(),
+            port: payload.port,
+            username: payload.username.trim().into(),
+            auth_mode: payload.auth_mode.clone(),
+            identity_path: payload.identity_path.clone(),
+            password: payload.password.clone(),
+        }
+    }
+
+    fn from_read_request(payload: &SshFileReadRequest) -> Self {
+        Self {
+            host: payload.host.trim().into(),
+            port: payload.port,
+            username: payload.username.trim().into(),
+            auth_mode: payload.auth_mode.clone(),
+            identity_path: payload.identity_path.clone(),
+            password: payload.password.clone(),
+        }
+    }
+}
 
 #[tauri::command]
 pub async fn test_ssh_connection(
     payload: SshConnectionTestRequest,
 ) -> Result<SshConnectionTestPayload, String> {
-    let host = payload.host.trim();
-    let username = payload.username.trim();
-    if host.is_empty() {
+    let params = SshConnectionParams::from_test_request(&payload);
+    if params.host.is_empty() {
         return Ok(failed("ssh/invalid-host", "请填写主机地址。"));
     }
-    if username.is_empty() {
+    if params.username.is_empty() {
         return Ok(failed("ssh/invalid-username", "请填写用户名。"));
     }
-    if payload.auth_mode != "key" && payload.auth_mode != "password" {
+    if let Err(message) = validate_ssh_endpoint(&params.host, &params.username) {
+        return Ok(failed("ssh/invalid-target", &message));
+    }
+    if params.auth_mode != "key" && params.auth_mode != "password" {
         return Ok(failed("ssh/invalid-auth-mode", "不支持的 SSH 认证方式。"));
     }
-
-    let Some(ssh_path) = resolve_ssh_command_path() else {
-        return Ok(failed(
-            "ssh/not-found",
-            "未找到 ssh 命令，请先安装 OpenSSH 客户端。",
-        ));
-    };
-
-    let mut command = Command::new(ssh_path);
-    configure_tokio_command_for_background(&mut command);
-    command
-        .arg("-o")
-        .arg("BatchMode=yes")
-        .arg("-o")
-        .arg("ConnectTimeout=8")
-        .arg("-o")
-        .arg("NumberOfPasswordPrompts=0")
-        .arg("-p")
-        .arg(payload.port.to_string());
-
-    if payload.auth_mode == "key" {
-        if let Some(identity_path) = payload.identity_path.as_deref().map(str::trim) {
-            if !identity_path.is_empty() {
-                command.arg("-i").arg(expand_local_path(identity_path));
-            }
-        }
+    if params.auth_mode == "password"
+        && params
+            .password
+            .as_deref()
+            .map(str::is_empty)
+            .unwrap_or(true)
+    {
+        return Ok(failed("ssh/password-missing", "请填写 SSH 登录密码。"));
     }
 
-    command
-        .arg(format!("{username}@{host}"))
-        .arg(format!("printf '%s' {SSH_OK_MARKER}"))
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    let output = match timeout(SSH_TEST_TIMEOUT, command.output()).await {
-        Ok(Ok(output)) => output,
-        Ok(Err(error)) => {
-            return Ok(failed(
-                "ssh/spawn-failed",
-                &format!("启动 ssh 命令失败：{error}"),
-            ))
-        }
-        Err(_) => return Ok(failed("ssh/timeout", "SSH 连接测试超时。")),
-    };
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    if output.status.success() && stdout.contains(SSH_OK_MARKER) {
-        return Ok(SshConnectionTestPayload {
+    match timeout(
+        SSH_TEST_TIMEOUT,
+        task::spawn_blocking(move || open_authenticated_session(&params).map(|_| ())),
+    )
+    .await
+    {
+        Ok(Ok(Ok(()))) => Ok(SshConnectionTestPayload {
             ok: true,
             code: "ssh/ok".into(),
             message: "SSH 连接验证成功。".into(),
-        });
+        }),
+        Ok(Ok(Err(error))) => Ok(failed(
+            &classify_ssh_error(&error),
+            &format_ssh_error_message(&error),
+        )),
+        Ok(Err(error)) => Ok(failed(
+            "ssh/spawn-failed",
+            &format!("启动 SSH 连接任务失败：{error}"),
+        )),
+        Err(_) => Ok(failed("ssh/timeout", "SSH 连接测试超时。")),
     }
-
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    Ok(failed(
-        &classify_ssh_error(&stderr),
-        &format_ssh_error_message(&stderr),
-    ))
 }
 
 #[tauri::command]
@@ -97,7 +184,7 @@ pub async fn list_ssh_config_hosts() -> Result<Vec<SshConfigHostPayload>, String
         return Ok(Vec::new());
     };
 
-    let content = match fs::read_to_string(&config_path).await {
+    let content = match tokio_fs::read_to_string(&config_path).await {
         Ok(content) => content,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(format!("读取 SSH 配置失败：{error}")),
@@ -110,136 +197,67 @@ pub async fn list_ssh_config_hosts() -> Result<Vec<SshConfigHostPayload>, String
 pub async fn list_ssh_directory(
     payload: SshDirectoryListRequest,
 ) -> Result<SshDirectoryListPayload, String> {
-    let host = payload.host.trim();
-    let username = payload.username.trim();
+    let params = SshConnectionParams::from_directory_request(&payload);
     let remote_path = normalize_remote_path(&payload.path);
-    if host.is_empty() {
+    if params.host.is_empty() {
         return Err("请填写主机地址。".into());
     }
-    if username.is_empty() {
+    if params.username.is_empty() {
         return Err("请填写用户名。".into());
     }
-    if payload.auth_mode == "password" {
-        return Err(
-            "密码认证暂不支持非交互式浏览远端文件，请使用已配置的密钥或 SSH agent。".into(),
-        );
+    validate_ssh_endpoint(&params.host, &params.username)?;
+    validate_remote_path(&remote_path)?;
+
+    match timeout(
+        SSH_TEST_TIMEOUT,
+        task::spawn_blocking(move || list_sftp_directory(&params, &remote_path)),
+    )
+    .await
+    {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => Err(format!("读取远端目录任务失败：{error}")),
+        Err(_) => Err("读取远端目录超时。".into()),
     }
-
-    let Some(ssh_path) = resolve_ssh_command_path() else {
-        return Err("未找到 ssh 命令，请先安装 OpenSSH 客户端。".into());
-    };
-
-    let mut command = Command::new(ssh_path);
-    configure_tokio_command_for_background(&mut command);
-    command
-        .arg("-o")
-        .arg("BatchMode=yes")
-        .arg("-o")
-        .arg("ConnectTimeout=8")
-        .arg("-o")
-        .arg("NumberOfPasswordPrompts=0")
-        .arg("-p")
-        .arg(payload.port.to_string());
-
-    if let Some(identity_path) = payload.identity_path.as_deref().map(str::trim) {
-        if !identity_path.is_empty() {
-            command.arg("-i").arg(expand_local_path(identity_path));
-        }
-    }
-
-    command
-        .arg(format!("{username}@{host}"))
-        .arg(build_remote_list_script(&remote_path))
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    let output = match timeout(SSH_TEST_TIMEOUT, command.output()).await {
-        Ok(Ok(output)) => output,
-        Ok(Err(error)) => return Err(format!("启动 ssh 命令失败：{error}")),
-        Err(_) => return Err("读取远端目录超时。".into()),
-    };
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(format_ssh_directory_error(&stderr));
-    }
-
-    Ok(SshDirectoryListPayload {
-        path: remote_path,
-        entries: parse_remote_directory_entries(&output.stdout, &payload.path),
-    })
 }
 
 #[tauri::command]
 pub async fn download_ssh_file(
     payload: SshFileDownloadRequest,
 ) -> Result<SshFileDownloadPayload, String> {
-    let host = payload.host.trim();
-    let username = payload.username.trim();
+    let params = SshConnectionParams::from_download_request(&payload);
     let remote_path = normalize_remote_path(&payload.remote_path);
     let local_path = payload.local_path.trim();
-    if host.is_empty() {
+    if params.host.is_empty() {
         return Err("请填写主机地址。".into());
     }
-    if username.is_empty() {
+    if params.username.is_empty() {
         return Err("请填写用户名。".into());
     }
+    validate_ssh_endpoint(&params.host, &params.username)?;
     if local_path.is_empty() {
         return Err("请选择本地保存路径。".into());
     }
-    if payload.auth_mode == "password" {
-        return Err("密码认证暂不支持非交互式下载文件，请使用已配置的密钥或 SSH agent。".into());
-    }
+    validate_remote_path(&remote_path)?;
+    let local_path_buf = validate_local_file_path(local_path, "请选择本地保存路径。")?;
 
-    let Some(ssh_path) = resolve_ssh_command_path() else {
-        return Err("未找到 ssh 命令，请先安装 OpenSSH 客户端。".into());
-    };
-
-    let mut command = Command::new(ssh_path);
-    configure_tokio_command_for_background(&mut command);
-    command
-        .arg("-o")
-        .arg("BatchMode=yes")
-        .arg("-o")
-        .arg("ConnectTimeout=8")
-        .arg("-o")
-        .arg("NumberOfPasswordPrompts=0")
-        .arg("-p")
-        .arg(payload.port.to_string());
-
-    if let Some(identity_path) = payload.identity_path.as_deref().map(str::trim) {
-        if !identity_path.is_empty() {
-            command.arg("-i").arg(expand_local_path(identity_path));
-        }
-    }
-
-    command
-        .arg(format!("{username}@{host}"))
-        .arg(build_remote_download_script(&remote_path))
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    let output = match timeout(SSH_TEST_TIMEOUT, command.output()).await {
-        Ok(Ok(output)) => output,
-        Ok(Err(error)) => return Err(format!("启动 ssh 命令失败：{error}")),
+    let byte_size = match timeout(
+        SSH_FILE_TRANSFER_TIMEOUT,
+        task::spawn_blocking({
+            let remote_path = remote_path.clone();
+            move || download_sftp_file(&params, &remote_path, &local_path_buf)
+        }),
+    )
+    .await
+    {
+        Ok(Ok(result)) => result?,
+        Ok(Err(error)) => return Err(format!("下载远端文件任务失败：{error}")),
         Err(_) => return Err("下载远端文件超时。".into()),
     };
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(format_ssh_download_error(&stderr));
-    }
-
-    fs::write(local_path, &output.stdout)
-        .await
-        .map_err(|error| format!("写入本地文件失败：{error}"))?;
 
     Ok(SshFileDownloadPayload {
         remote_path,
         local_path: local_path.into(),
-        byte_size: output.stdout.len() as u64,
+        byte_size,
     })
 }
 
@@ -247,79 +265,47 @@ pub async fn download_ssh_file(
 pub async fn upload_ssh_file(
     payload: SshFileUploadRequest,
 ) -> Result<SshFileUploadPayload, String> {
-    let host = payload.host.trim();
-    let username = payload.username.trim();
+    let params = SshConnectionParams::from_upload_request(&payload);
     let local_path = payload.local_path.trim();
     let remote_directory = normalize_remote_path(&payload.remote_directory);
-    if host.is_empty() {
+    if params.host.is_empty() {
         return Err("请填写主机地址。".into());
     }
-    if username.is_empty() {
+    if params.username.is_empty() {
         return Err("请填写用户名。".into());
     }
+    validate_ssh_endpoint(&params.host, &params.username)?;
     if local_path.is_empty() {
         return Err("请选择要上传的本地文件。".into());
     }
-    if payload.auth_mode == "password" {
-        return Err("密码认证暂不支持非交互式上传文件，请使用已配置的密钥或 SSH agent。".into());
-    }
+    validate_remote_path(&remote_directory)?;
 
-    let local_file_path = PathBuf::from(local_path);
+    let local_file_path = validate_local_file_path(local_path, "请选择要上传的本地文件。")?;
     let file_name = local_file_path
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| "无法识别本地文件名。".to_string())?;
-    let metadata = std::fs::metadata(&local_file_path)
+    let metadata = std_fs::metadata(&local_file_path)
         .map_err(|error| format!("读取本地文件信息失败：{error}"))?;
     if !metadata.is_file() {
         return Err("请选择一个本地文件，暂不支持上传目录。".into());
     }
 
-    let file = std::fs::File::open(&local_file_path)
-        .map_err(|error| format!("打开本地文件失败：{error}"))?;
     let remote_path = join_remote_path(&remote_directory, file_name);
+    validate_remote_path(&remote_path)?;
 
-    let Some(ssh_path) = resolve_ssh_command_path() else {
-        return Err("未找到 ssh 命令，请先安装 OpenSSH 客户端。".into());
-    };
-
-    let mut command = Command::new(ssh_path);
-    configure_tokio_command_for_background(&mut command);
-    command
-        .arg("-o")
-        .arg("BatchMode=yes")
-        .arg("-o")
-        .arg("ConnectTimeout=8")
-        .arg("-o")
-        .arg("NumberOfPasswordPrompts=0")
-        .arg("-p")
-        .arg(payload.port.to_string());
-
-    if let Some(identity_path) = payload.identity_path.as_deref().map(str::trim) {
-        if !identity_path.is_empty() {
-            command.arg("-i").arg(expand_local_path(identity_path));
-        }
-    }
-
-    command
-        .arg(format!("{username}@{host}"))
-        .arg(build_remote_upload_script(&remote_path))
-        .stdin(Stdio::from(file))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    let output = match timeout(SSH_TEST_TIMEOUT, command.output()).await {
-        Ok(Ok(output)) => output,
-        Ok(Err(error)) => return Err(format!("启动 ssh 命令失败：{error}")),
+    match timeout(
+        SSH_FILE_TRANSFER_TIMEOUT,
+        task::spawn_blocking({
+            let remote_path = remote_path.clone();
+            move || upload_sftp_file(&params, &local_file_path, &remote_path)
+        }),
+    )
+    .await
+    {
+        Ok(Ok(result)) => result?,
+        Ok(Err(error)) => return Err(format!("上传本地文件任务失败：{error}")),
         Err(_) => return Err("上传本地文件超时。".into()),
-    };
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        if output.status.code() == Some(4) {
-            return Err("远端已存在同名文件，已取消上传以避免覆盖。".into());
-        }
-        return Err(format_ssh_upload_error(&stderr));
     }
 
     Ok(SshFileUploadPayload {
@@ -330,31 +316,57 @@ pub async fn upload_ssh_file(
 }
 
 #[tauri::command]
+pub async fn read_ssh_file(payload: SshFileReadRequest) -> Result<SshFileReadPayload, String> {
+    let params = SshConnectionParams::from_read_request(&payload);
+    let remote_path = normalize_remote_path(&payload.remote_path);
+    if params.host.is_empty() {
+        return Err("请填写主机地址。".into());
+    }
+    if params.username.is_empty() {
+        return Err("请填写用户名。".into());
+    }
+    validate_ssh_endpoint(&params.host, &params.username)?;
+    validate_remote_path(&remote_path)?;
+
+    match timeout(
+        SSH_FILE_PREVIEW_TIMEOUT,
+        task::spawn_blocking({
+            let remote_path = remote_path.clone();
+            move || read_sftp_text_file(&params, &remote_path)
+        }),
+    )
+    .await
+    {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => Err(format!("读取远端文件任务失败：{error}")),
+        Err(_) => Err("读取远端文件超时。".into()),
+    }
+}
+
+#[tauri::command]
 pub async fn delete_ssh_path(
     payload: SshPathDeleteRequest,
 ) -> Result<SshPathDeletePayload, String> {
-    let host = payload.host.trim();
-    let username = payload.username.trim();
+    let params = SshConnectionParams::from_delete_request(&payload);
     let remote_path = normalize_remote_path(&payload.remote_path);
-    if host.is_empty() {
+    if params.host.is_empty() {
         return Err("请填写主机地址。".into());
     }
-    if username.is_empty() {
+    if params.username.is_empty() {
         return Err("请填写用户名。".into());
     }
-    if payload.auth_mode == "password" {
-        return Err("密码认证暂不支持非交互式删除，请使用已配置的密钥或 SSH agent。".into());
-    }
+    validate_ssh_endpoint(&params.host, &params.username)?;
     if remote_path == "." || remote_path == "/" || remote_path == "~" {
         return Err("拒绝删除远端根目录或当前目录。".into());
     }
+    validate_remote_path(&remote_path)?;
 
-    run_remote_mutation(
-        &payload.host,
-        payload.port,
-        &payload.username,
-        payload.identity_path.as_deref(),
-        build_remote_delete_script(&remote_path),
+    run_sftp_mutation(
+        params,
+        {
+            let remote_path = remote_path.clone();
+            move |sftp| delete_sftp_path(sftp, &remote_path)
+        },
         "删除远端路径",
     )
     .await?;
@@ -366,30 +378,30 @@ pub async fn delete_ssh_path(
 pub async fn rename_ssh_path(
     payload: SshPathRenameRequest,
 ) -> Result<SshPathRenamePayload, String> {
-    let host = payload.host.trim();
-    let username = payload.username.trim();
+    let params = SshConnectionParams::from_rename_request(&payload);
     let remote_path = normalize_remote_path(&payload.remote_path);
     let new_name = payload.new_name.trim();
-    if host.is_empty() {
+    if params.host.is_empty() {
         return Err("请填写主机地址。".into());
     }
-    if username.is_empty() {
+    if params.username.is_empty() {
         return Err("请填写用户名。".into());
     }
-    if payload.auth_mode == "password" {
-        return Err("密码认证暂不支持非交互式重命名，请使用已配置的密钥或 SSH agent。".into());
-    }
+    validate_ssh_endpoint(&params.host, &params.username)?;
     if !is_safe_file_name(new_name) {
         return Err("新名称不能为空，且不能包含路径分隔符。".into());
     }
+    validate_remote_path(&remote_path)?;
 
     let new_path = join_remote_path(&parent_remote_path(&remote_path), new_name);
-    run_remote_mutation(
-        &payload.host,
-        payload.port,
-        &payload.username,
-        payload.identity_path.as_deref(),
-        build_remote_rename_script(&remote_path, &new_path),
+    validate_remote_path(&new_path)?;
+    run_sftp_mutation(
+        params,
+        {
+            let remote_path = remote_path.clone();
+            let new_path = new_path.clone();
+            move |sftp| rename_sftp_path(sftp, &remote_path, &new_path)
+        },
         "重命名远端路径",
     )
     .await?;
@@ -404,30 +416,29 @@ pub async fn rename_ssh_path(
 pub async fn create_ssh_directory(
     payload: SshDirectoryCreateRequest,
 ) -> Result<SshDirectoryCreatePayload, String> {
-    let host = payload.host.trim();
-    let username = payload.username.trim();
+    let params = SshConnectionParams::from_create_directory_request(&payload);
     let remote_directory = normalize_remote_path(&payload.remote_directory);
     let name = payload.name.trim();
-    if host.is_empty() {
+    if params.host.is_empty() {
         return Err("请填写主机地址。".into());
     }
-    if username.is_empty() {
+    if params.username.is_empty() {
         return Err("请填写用户名。".into());
     }
-    if payload.auth_mode == "password" {
-        return Err("密码认证暂不支持非交互式创建目录，请使用已配置的密钥或 SSH agent。".into());
-    }
+    validate_ssh_endpoint(&params.host, &params.username)?;
     if !is_safe_file_name(name) {
         return Err("目录名称不能为空，且不能包含路径分隔符。".into());
     }
+    validate_remote_path(&remote_directory)?;
 
     let remote_path = join_remote_path(&remote_directory, name);
-    run_remote_mutation(
-        &payload.host,
-        payload.port,
-        &payload.username,
-        payload.identity_path.as_deref(),
-        build_remote_create_directory_script(&remote_path),
+    validate_remote_path(&remote_path)?;
+    run_sftp_mutation(
+        params,
+        {
+            let remote_path = remote_path.clone();
+            move |sftp| create_sftp_directory(sftp, &remote_path)
+        },
         "创建远端目录",
     )
     .await?;
@@ -435,69 +446,368 @@ pub async fn create_ssh_directory(
     Ok(SshDirectoryCreatePayload { remote_path })
 }
 
-async fn run_remote_mutation(
-    host: &str,
-    port: u16,
-    username: &str,
-    identity_path: Option<&str>,
-    script: String,
+async fn run_sftp_mutation<F>(
+    params: SshConnectionParams,
+    operation: F,
     action_label: &str,
-) -> Result<(), String> {
-    let Some(ssh_path) = resolve_ssh_command_path() else {
-        return Err("未找到 ssh 命令，请先安装 OpenSSH 客户端。".into());
-    };
+) -> Result<(), String>
+where
+    F: FnOnce(&Sftp) -> Result<(), String> + Send + 'static,
+{
+    let action_label = action_label.to_string();
+    match timeout(
+        SSH_MUTATION_TIMEOUT,
+        task::spawn_blocking(move || {
+            let session = open_authenticated_session(&params)?;
+            let sftp = session
+                .sftp()
+                .map_err(|error| format!("打开 SFTP 会话失败：{error}"))?;
+            operation(&sftp)
+        }),
+    )
+    .await
+    {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => Err(format!("{action_label}任务失败：{error}")),
+        Err(_) => Err(format!("{action_label}超时。")),
+    }
+}
 
-    let mut command = Command::new(ssh_path);
-    configure_tokio_command_for_background(&mut command);
-    command
-        .arg("-o")
-        .arg("BatchMode=yes")
-        .arg("-o")
-        .arg("ConnectTimeout=8")
-        .arg("-o")
-        .arg("NumberOfPasswordPrompts=0")
-        .arg("-p")
-        .arg(port.to_string());
+fn open_authenticated_session(params: &SshConnectionParams) -> Result<Session, String> {
+    validate_ssh_auth_payload(params)?;
+    let address = resolve_ssh_socket_address(&params.host, params.port)?;
+    let tcp =
+        TcpStream::connect_timeout(&address, Duration::from_secs(SSH_CONNECT_TIMEOUT_SECONDS))
+            .map_err(|error| format!("连接 SSH 主机失败：{error}"))?;
+    tcp.set_read_timeout(Some(SSH_FILE_TRANSFER_TIMEOUT))
+        .map_err(|error| format!("设置 SSH 读取超时失败：{error}"))?;
+    tcp.set_write_timeout(Some(SSH_FILE_TRANSFER_TIMEOUT))
+        .map_err(|error| format!("设置 SSH 写入超时失败：{error}"))?;
 
-    if let Some(identity_path) = identity_path.map(str::trim) {
-        if !identity_path.is_empty() {
-            command.arg("-i").arg(expand_local_path(identity_path));
-        }
+    let mut session = Session::new().map_err(|error| format!("创建 SSH 会话失败：{error}"))?;
+    session.set_tcp_stream(tcp);
+    session
+        .handshake()
+        .map_err(|error| format!("SSH 握手失败：{error}"))?;
+
+    authenticate_session(&session, params)?;
+    if !session.authenticated() {
+        return Err("SSH 认证失败。".into());
     }
 
-    command
-        .arg(format!("{}@{}", username.trim(), host.trim()))
-        .arg(script)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    Ok(session)
+}
 
-    let output = match timeout(SSH_TEST_TIMEOUT, command.output()).await {
-        Ok(Ok(output)) => output,
-        Ok(Err(error)) => return Err(format!("启动 ssh 命令失败：{error}")),
-        Err(_) => return Err(format!("{action_label}超时。")),
-    };
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        if output.status.code() == Some(4) {
-            return Err("远端目标已存在，已取消操作以避免覆盖。".into());
-        }
-        if stderr.trim().is_empty() {
-            return Err(format!("{action_label}失败。"));
-        }
-        return Err(format!("{action_label}失败：{}", stderr.trim()));
+fn validate_ssh_auth_payload(params: &SshConnectionParams) -> Result<(), String> {
+    if params.auth_mode != "key" && params.auth_mode != "password" {
+        return Err("不支持的 SSH 认证方式。".into());
+    }
+    if params.auth_mode == "password"
+        && params
+            .password
+            .as_deref()
+            .map(str::is_empty)
+            .unwrap_or(true)
+    {
+        return Err("请填写 SSH 登录密码。".into());
     }
 
     Ok(())
 }
 
-fn resolve_ssh_command_path() -> Option<PathBuf> {
-    if cfg!(windows) {
-        find_command_path("ssh.exe", &[r"C:\Windows\System32\OpenSSH\ssh.exe"])
-    } else {
-        find_command_path("ssh", &[])
+fn resolve_ssh_socket_address(host: &str, port: u16) -> Result<SocketAddr, String> {
+    (host, port)
+        .to_socket_addrs()
+        .map_err(|error| format!("解析 SSH 主机地址失败：{error}"))?
+        .next()
+        .ok_or_else(|| "解析 SSH 主机地址失败：未找到可用地址。".to_string())
+}
+
+fn authenticate_session(session: &Session, params: &SshConnectionParams) -> Result<(), String> {
+    if params.auth_mode == "password" {
+        let password = params.password.as_deref().unwrap_or_default();
+        return session
+            .userauth_password(&params.username, password)
+            .map_err(|error| format!("SSH 密码认证失败：{error}"));
     }
+
+    if let Some(identity_path) = params.identity_path.as_deref().map(str::trim) {
+        if !identity_path.is_empty() {
+            session
+                .userauth_pubkey_file(
+                    &params.username,
+                    None,
+                    &expand_local_path(identity_path),
+                    None,
+                )
+                .map_err(|error| format!("SSH 密钥认证失败：{error}"))?;
+            return Ok(());
+        }
+    }
+
+    let mut agent = session
+        .agent()
+        .map_err(|error| format!("连接 SSH agent 失败：{error}"))?;
+    agent
+        .connect()
+        .map_err(|error| format!("连接 SSH agent 失败：{error}"))?;
+    agent
+        .list_identities()
+        .map_err(|error| format!("读取 SSH agent 身份失败：{error}"))?;
+    for identity in agent
+        .identities()
+        .map_err(|error| format!("读取 SSH agent 身份失败：{error}"))?
+    {
+        if agent.userauth(&params.username, &identity).is_ok() {
+            return Ok(());
+        }
+    }
+
+    Err("SSH agent 中没有可用身份，请选择私钥或输入密码。".into())
+}
+
+fn list_sftp_directory(
+    params: &SshConnectionParams,
+    remote_path: &str,
+) -> Result<SshDirectoryListPayload, String> {
+    let session = open_authenticated_session(params)?;
+    let sftp = session
+        .sftp()
+        .map_err(|error| format!("打开 SFTP 会话失败：{error}"))?;
+    let entries = sftp
+        .readdir(Path::new(remote_path))
+        .map_err(|error| format_ssh_directory_error(&error.to_string()))?;
+    let mut payload_entries = entries
+        .into_iter()
+        .filter_map(|(path, stat)| sftp_entry_to_payload(remote_path, &path, &stat))
+        .collect::<Vec<_>>();
+    payload_entries.sort_by(|left, right| {
+        (left.kind.as_str() != "directory", left.name.to_lowercase()).cmp(&(
+            right.kind.as_str() != "directory",
+            right.name.to_lowercase(),
+        ))
+    });
+
+    Ok(SshDirectoryListPayload {
+        path: remote_path.into(),
+        entries: payload_entries,
+    })
+}
+
+fn sftp_entry_to_payload(
+    directory_path: &str,
+    path: &Path,
+    stat: &FileStat,
+) -> Option<SshDirectoryEntryPayload> {
+    let name = path.file_name()?.to_string_lossy().to_string();
+    if name == "." || name == ".." {
+        return None;
+    }
+    let kind = if is_directory_stat(stat) {
+        "directory"
+    } else {
+        "file"
+    };
+
+    Some(SshDirectoryEntryPayload {
+        name: name.clone(),
+        path: join_remote_path(directory_path, &name),
+        kind: kind.into(),
+        size: stat.size.unwrap_or(0),
+    })
+}
+
+fn download_sftp_file(
+    params: &SshConnectionParams,
+    remote_path: &str,
+    local_path: &Path,
+) -> Result<u64, String> {
+    let session = open_authenticated_session(params)?;
+    let sftp = session
+        .sftp()
+        .map_err(|error| format!("打开 SFTP 会话失败：{error}"))?;
+    let stat = sftp
+        .stat(Path::new(remote_path))
+        .map_err(|error| format_ssh_download_error(&error.to_string()))?;
+    if is_directory_stat(&stat) {
+        return Err("暂不支持下载目录，请选择一个文件。".into());
+    }
+
+    let mut remote_file = sftp
+        .open(Path::new(remote_path))
+        .map_err(|error| format_ssh_download_error(&error.to_string()))?;
+    let temp_path = temporary_download_path(local_path);
+    let result = (|| {
+        let mut local_file = std_fs::File::create(&temp_path)
+            .map_err(|error| format!("创建本地临时文件失败：{error}"))?;
+        let byte_size = std::io::copy(&mut remote_file, &mut local_file)
+            .map_err(|error| format!("写入本地临时文件失败：{error}"))?;
+        local_file
+            .flush()
+            .map_err(|error| format!("刷新本地临时文件失败：{error}"))?;
+        if local_path.exists() {
+            std_fs::remove_file(local_path)
+                .map_err(|error| format!("覆盖本地文件失败：{error}"))?;
+        }
+        std_fs::rename(&temp_path, local_path)
+            .map_err(|error| format!("保存本地文件失败：{error}"))?;
+        Ok::<u64, String>(byte_size)
+    })();
+    if result.is_err() {
+        let _ = std_fs::remove_file(&temp_path);
+    }
+
+    result
+}
+
+fn upload_sftp_file(
+    params: &SshConnectionParams,
+    local_path: &Path,
+    remote_path: &str,
+) -> Result<(), String> {
+    let session = open_authenticated_session(params)?;
+    let sftp = session
+        .sftp()
+        .map_err(|error| format!("打开 SFTP 会话失败：{error}"))?;
+    if sftp.stat(Path::new(remote_path)).is_ok() {
+        return Err("远端已存在同名文件，已取消上传以避免覆盖。".into());
+    }
+
+    let mut local_file =
+        std_fs::File::open(local_path).map_err(|error| format!("打开本地文件失败：{error}"))?;
+    let mut remote_file = sftp
+        .open_mode(
+            Path::new(remote_path),
+            OpenFlags::WRITE | OpenFlags::CREATE | OpenFlags::EXCLUSIVE,
+            0o644,
+            OpenType::File,
+        )
+        .map_err(|error| format_ssh_upload_error(&error.to_string()))?;
+    std::io::copy(&mut local_file, &mut remote_file)
+        .map_err(|error| format!("上传本地文件失败：{error}"))?;
+    remote_file
+        .flush()
+        .map_err(|error| format!("刷新远端文件失败：{error}"))?;
+
+    Ok(())
+}
+
+fn read_sftp_text_file(
+    params: &SshConnectionParams,
+    remote_path: &str,
+) -> Result<SshFileReadPayload, String> {
+    let session = open_authenticated_session(params)?;
+    let sftp = session
+        .sftp()
+        .map_err(|error| format!("打开 SFTP 会话失败：{error}"))?;
+    let stat = sftp
+        .stat(Path::new(remote_path))
+        .map_err(|error| format!("读取远端文件信息失败：{error}"))?;
+    if is_directory_stat(&stat) {
+        return Err("请选择一个文件查看。".into());
+    }
+    let byte_size = stat.size.unwrap_or(0);
+    if byte_size > SSH_FILE_PREVIEW_MAX_BYTES {
+        return Err(format!(
+            "远端文件超过 {} MB，请下载到本地查看。",
+            SSH_FILE_PREVIEW_MAX_BYTES / 1024 / 1024
+        ));
+    }
+
+    let mut remote_file = sftp
+        .open(Path::new(remote_path))
+        .map_err(|error| format!("打开远端文件失败：{error}"))?;
+    let mut buffer = Vec::new();
+    remote_file
+        .read_to_end(&mut buffer)
+        .map_err(|error| format!("读取远端文件失败：{error}"))?;
+    if buffer.contains(&0) {
+        return Err("暂不支持预览二进制文件，请下载到本地查看。".into());
+    }
+    let content =
+        String::from_utf8(buffer).map_err(|_| "远端文件不是有效 UTF-8 文本。".to_string())?;
+
+    Ok(SshFileReadPayload {
+        remote_path: remote_path.into(),
+        content,
+        byte_size,
+    })
+}
+
+fn delete_sftp_path(sftp: &Sftp, remote_path: &str) -> Result<(), String> {
+    let stat = sftp
+        .stat(Path::new(remote_path))
+        .map_err(|error| format!("远端路径不存在或无权访问：{error}"))?;
+    if is_directory_stat(&stat) {
+        delete_sftp_directory_recursive(sftp, remote_path)?;
+        return Ok(());
+    }
+
+    sftp.unlink(Path::new(remote_path))
+        .map_err(|error| format!("删除远端文件失败：{error}"))
+}
+
+fn delete_sftp_directory_recursive(sftp: &Sftp, remote_path: &str) -> Result<(), String> {
+    let entries = sftp
+        .readdir(Path::new(remote_path))
+        .map_err(|error| format!("读取待删除目录失败：{error}"))?;
+    for (path, stat) in entries {
+        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if name == "." || name == ".." {
+            continue;
+        }
+        let child_path = join_remote_path(remote_path, name);
+        if is_directory_stat(&stat) {
+            delete_sftp_directory_recursive(sftp, &child_path)?;
+        } else {
+            sftp.unlink(Path::new(&child_path))
+                .map_err(|error| format!("删除远端文件失败：{error}"))?;
+        }
+    }
+
+    sftp.rmdir(Path::new(remote_path))
+        .map_err(|error| format!("删除远端目录失败：{error}"))
+}
+
+fn rename_sftp_path(sftp: &Sftp, remote_path: &str, new_path: &str) -> Result<(), String> {
+    if sftp.stat(Path::new(new_path)).is_ok() {
+        return Err("远端目标已存在，已取消操作以避免覆盖。".into());
+    }
+    sftp.rename(Path::new(remote_path), Path::new(new_path), None)
+        .map_err(|error| format!("重命名远端路径失败：{error}"))
+}
+
+fn create_sftp_directory(sftp: &Sftp, remote_path: &str) -> Result<(), String> {
+    if sftp.stat(Path::new(remote_path)).is_ok() {
+        return Err("远端目标已存在，已取消操作以避免覆盖。".into());
+    }
+    sftp.mkdir(Path::new(remote_path), 0o755)
+        .map_err(|error| format!("创建远端目录失败：{error}"))
+}
+
+fn is_directory_stat(stat: &FileStat) -> bool {
+    stat.perm
+        .map(|perm| perm & S_IFMT == S_IFDIR)
+        .unwrap_or(false)
+}
+
+fn validate_ssh_endpoint(host: &str, username: &str) -> Result<(), String> {
+    if contains_ssh_target_separator(host) {
+        return Err("主机地址不能包含空白、换行符或 NUL 字符。".into());
+    }
+    if contains_ssh_target_separator(username) || username.contains('@') {
+        return Err("用户名不能包含空白、换行符、NUL 字符或 @。".into());
+    }
+
+    Ok(())
+}
+
+fn contains_ssh_target_separator(value: &str) -> bool {
+    value
+        .chars()
+        .any(|ch| ch == '\0' || ch == '\n' || ch == '\r' || ch.is_whitespace())
 }
 
 fn failed(code: &str, message: &str) -> SshConnectionTestPayload {
@@ -513,12 +823,16 @@ fn classify_ssh_error(stderr: &str) -> String {
     if normalized.contains("permission denied")
         || normalized.contains("publickey")
         || normalized.contains("authentication")
+        || normalized.contains("认证失败")
+        || normalized.contains("密码认证失败")
+        || normalized.contains("密钥认证失败")
     {
         return "ssh/auth-failed".into();
     }
     if normalized.contains("could not resolve hostname")
         || normalized.contains("name or service not known")
         || normalized.contains("nodename nor servname")
+        || normalized.contains("解析 ssh 主机地址失败")
     {
         return "ssh/host-unresolved".into();
     }
@@ -551,61 +865,52 @@ fn normalize_remote_path(path: &str) -> String {
     trimmed.into()
 }
 
-fn build_remote_list_script(path: &str) -> String {
-    format!(
-        "cd {} || exit 2; for p in .* *; do [ \"$p\" = \".\" ] && continue; [ \"$p\" = \"..\" ] && continue; [ -e \"$p\" ] || [ -L \"$p\" ] || continue; if [ -d \"$p\" ]; then k=directory; else k=file; fi; s=$(wc -c < \"$p\" 2>/dev/null | tr -d '[:space:]'); printf '%s\\0%s\\0%s\\0' \"$k\" \"${{s:-0}}\" \"$p\"; done",
-        quote_posix_shell(path)
-    )
+fn validate_remote_path(path: &str) -> Result<(), String> {
+    if path.contains('\0') || path.contains('\n') || path.contains('\r') {
+        return Err("远端路径不能包含换行符或 NUL 字符。".into());
+    }
+
+    Ok(())
 }
 
-fn build_remote_download_script(path: &str) -> String {
-    format!(
-        "test -f {} || exit 3; cat -- {}",
-        quote_posix_shell(path),
-        quote_posix_shell(path)
-    )
+fn validate_local_file_path(path: &str, empty_message: &str) -> Result<PathBuf, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err(empty_message.into());
+    }
+    if trimmed.contains('\0') {
+        return Err("本地路径不能包含 NUL 字符。".into());
+    }
+
+    Ok(PathBuf::from(trimmed))
 }
 
-fn build_remote_upload_script(path: &str) -> String {
-    format!(
-        "test ! -e {} || exit 4; cat > {}",
-        quote_posix_shell(path),
-        quote_posix_shell(path)
-    )
+fn temporary_download_path(local_path: &Path) -> PathBuf {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_nanos());
+    let file_name = local_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("download");
+    let temp_file_name = format!(
+        ".{file_name}.{SSH_DOWNLOAD_TEMP_SUFFIX}-{}-{timestamp}.tmp",
+        std::process::id()
+    );
+
+    match local_path.parent() {
+        Some(parent) => parent.join(temp_file_name),
+        None => PathBuf::from(temp_file_name),
+    }
 }
 
-fn build_remote_delete_script(path: &str) -> String {
-    format!(
-        "test -e {} || test -L {} || exit 5; rm -rf -- {}",
-        quote_posix_shell(path),
-        quote_posix_shell(path),
-        quote_posix_shell(path)
-    )
-}
-
-fn build_remote_rename_script(old_path: &str, new_path: &str) -> String {
-    format!(
-        "test -e {} || test -L {} || exit 5; test ! -e {} || exit 4; mv -- {} {}",
-        quote_posix_shell(old_path),
-        quote_posix_shell(old_path),
-        quote_posix_shell(new_path),
-        quote_posix_shell(old_path),
-        quote_posix_shell(new_path)
-    )
-}
-
-fn build_remote_create_directory_script(path: &str) -> String {
-    format!(
-        "test ! -e {} || exit 4; mkdir -- {}",
-        quote_posix_shell(path),
-        quote_posix_shell(path)
-    )
-}
-
+#[cfg(test)]
 fn quote_posix_shell(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
+#[cfg(test)]
 fn parse_remote_directory_entries(
     stdout: &[u8],
     current_path: &str,
@@ -671,7 +976,14 @@ fn parent_remote_path(path: &str) -> String {
 }
 
 fn is_safe_file_name(name: &str) -> bool {
-    !name.is_empty() && name != "." && name != ".." && !name.contains('/') && !name.contains('\\')
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && !name.contains('/')
+        && !name.contains('\\')
+        && !name.contains('\0')
+        && !name.contains('\n')
+        && !name.contains('\r')
 }
 
 fn format_ssh_directory_error(stderr: &str) -> String {
@@ -734,6 +1046,7 @@ struct SshConfigHostDraft {
     user: Option<String>,
     port: Option<u16>,
     identity_file: Option<String>,
+    should_use_config_alias: bool,
 }
 
 impl SshConfigHostDraft {
@@ -742,7 +1055,11 @@ impl SshConfigHostDraft {
             .into_iter()
             .filter(|alias| is_concrete_host_alias(alias))
             .map(|alias| {
-                let host = self.host_name.clone().unwrap_or_else(|| alias.clone());
+                let host = if self.should_use_config_alias {
+                    alias.clone()
+                } else {
+                    self.host_name.clone().unwrap_or_else(|| alias.clone())
+                };
                 let username = self.user.clone().unwrap_or_else(current_username);
                 SshConfigHostPayload {
                     id: format!("ssh-config-{alias}"),
@@ -795,6 +1112,8 @@ fn parse_ssh_config_hosts(content: &str) -> Vec<SshConfigHostPayload> {
             draft.port = value.parse::<u16>().ok();
         } else if keyword.eq_ignore_ascii_case("IdentityFile") {
             draft.identity_file = Some(value.to_string());
+        } else if is_ssh_config_resolution_option(keyword) {
+            draft.should_use_config_alias = true;
         }
     }
 
@@ -811,16 +1130,13 @@ fn parse_ssh_config_line(line: &str) -> Option<(&str, &str)> {
         return None;
     }
 
-    let without_comment = trimmed
-        .split_once('#')
-        .map_or(trimmed, |(prefix, _)| prefix)
-        .trim();
+    let without_comment = strip_ssh_config_comment(trimmed).trim();
     if without_comment.is_empty() {
         return None;
     }
 
     let (keyword, value) = split_ssh_config_keyword(without_comment)?;
-    let normalized_value = value.trim().trim_matches('"');
+    let normalized_value = unquote_ssh_config_value(value.trim());
     if keyword.trim().is_empty() || normalized_value.is_empty() {
         return None;
     }
@@ -837,6 +1153,47 @@ fn split_ssh_config_keyword(line: &str) -> Option<(&str, &str)> {
     Some(line.split_at(split_index))
 }
 
+fn strip_ssh_config_comment(line: &str) -> &str {
+    let mut is_in_quote = false;
+    let mut escaped = false;
+    for (index, ch) in line.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            escaped = true;
+            continue;
+        }
+        if ch == '"' {
+            is_in_quote = !is_in_quote;
+            continue;
+        }
+        if ch == '#' && !is_in_quote {
+            return &line[..index];
+        }
+    }
+
+    line
+}
+
+fn unquote_ssh_config_value(value: &str) -> &str {
+    value
+        .strip_prefix('"')
+        .and_then(|stripped| stripped.strip_suffix('"'))
+        .unwrap_or(value)
+}
+
+fn is_ssh_config_resolution_option(keyword: &str) -> bool {
+    keyword.eq_ignore_ascii_case("ProxyJump")
+        || keyword.eq_ignore_ascii_case("ProxyCommand")
+        || keyword.eq_ignore_ascii_case("HostKeyAlias")
+        || keyword.eq_ignore_ascii_case("CanonicalizeHostname")
+        || keyword.eq_ignore_ascii_case("CanonicalDomains")
+        || keyword.eq_ignore_ascii_case("CertificateFile")
+        || keyword.eq_ignore_ascii_case("IdentityAgent")
+}
+
 fn is_concrete_host_alias(alias: &str) -> bool {
     !alias.is_empty() && !alias.contains('*') && !alias.contains('?') && !alias.starts_with('!')
 }
@@ -845,4 +1202,88 @@ fn current_username() -> String {
     env::var("USER")
         .or_else(|_| env::var("USERNAME"))
         .unwrap_or_else(|_| "root".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_ssh_config_hosts_keeps_direct_host_when_no_advanced_resolution() {
+        let content = r#"
+Host dev-box
+  HostName 192.168.56.10
+  User ubuntu
+  Port 2202
+  IdentityFile "~/.ssh/dev key"
+"#;
+
+        let hosts = parse_ssh_config_hosts(content);
+
+        assert_eq!(hosts.len(), 1);
+        assert_eq!(hosts[0].name, "dev-box");
+        assert_eq!(hosts[0].host, "192.168.56.10");
+        assert_eq!(hosts[0].username, "ubuntu");
+        assert_eq!(hosts[0].port, 2202);
+        assert_eq!(hosts[0].identity_path.as_deref(), Some("~/.ssh/dev key"));
+    }
+
+    #[test]
+    fn parse_ssh_config_hosts_uses_alias_when_proxy_jump_is_required() {
+        let content = r#"
+Host prod-app
+  HostName 10.0.12.31
+  User deploy
+  ProxyJump bastion
+  IdentityFile "~/.ssh/prod # key" # 本地注释不能截断引号内内容
+"#;
+
+        let hosts = parse_ssh_config_hosts(content);
+
+        assert_eq!(hosts.len(), 1);
+        assert_eq!(hosts[0].name, "prod-app");
+        assert_eq!(hosts[0].host, "prod-app");
+        assert_eq!(hosts[0].username, "deploy");
+        assert_eq!(hosts[0].identity_path.as_deref(), Some("~/.ssh/prod # key"));
+    }
+
+    #[test]
+    fn parse_ssh_config_hosts_filters_wildcard_aliases() {
+        let content = r#"
+Host * !blocked concrete-host
+  User root
+"#;
+
+        let hosts = parse_ssh_config_hosts(content);
+
+        assert_eq!(hosts.len(), 1);
+        assert_eq!(hosts[0].name, "concrete-host");
+    }
+
+    #[test]
+    fn parse_remote_directory_entries_keeps_unicode_names_and_directory_first() {
+        let stdout = b"file\012\0z.log\0directory\00\0src\0file\03\0\xe4\xbd\xa0\xe5\xa5\xbd.txt\0";
+
+        let entries = parse_remote_directory_entries(stdout, "/home/app");
+
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0].kind, "directory");
+        assert_eq!(entries[0].path, "/home/app/src");
+        assert_eq!(entries[1].name, "z.log");
+        assert_eq!(entries[2].name, "你好.txt");
+    }
+
+    #[test]
+    fn validate_remote_mutation_names_rejects_path_control_names() {
+        assert!(is_safe_file_name("release").then_some(()).is_some());
+        assert!(!is_safe_file_name("../release"));
+        assert!(!is_safe_file_name("nested/release"));
+        assert!(!is_safe_file_name("bad\nname"));
+        assert!(validate_remote_path("bad\rpath").is_err());
+    }
+
+    #[test]
+    fn quote_posix_shell_escapes_single_quotes() {
+        assert_eq!(quote_posix_shell("deploy's app"), "'deploy'\\''s app'");
+    }
 }

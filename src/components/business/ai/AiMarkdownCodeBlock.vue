@@ -13,6 +13,7 @@ const isCopied = ref(false);
 const isExpanded = ref(true);
 const codeBlockBodyId = useId();
 const highlightedHtml = ref('');
+const highlightedSourceCode = ref('');
 
 let copyResetTimer: number | undefined;
 let highlightRequestId = 0;
@@ -27,6 +28,32 @@ const canCopy = computed(
 const isSingleLineCode = computed(() => {
   const code = String(props.node.code ?? '').trimEnd();
   return code.split(/\r\n|\r|\n/).length <= 1;
+});
+
+function getCurrentSourceCode(): string {
+  return String(props.node.code ?? '');
+}
+
+function syncPlainCodeHtmlFromCurrentNode(): boolean {
+  const sourceCode = getCurrentSourceCode();
+
+  if (highlightedSourceCode.value === sourceCode && highlightedHtml.value) {
+    return false;
+  }
+
+  highlightedSourceCode.value = sourceCode;
+  highlightedHtml.value = buildPlainCodeHtml(sourceCode);
+  return true;
+}
+
+const codeHtml = computed(() => {
+  const sourceCode = getCurrentSourceCode();
+
+  if (highlightedSourceCode.value !== sourceCode) {
+    return buildPlainCodeHtml(sourceCode);
+  }
+
+  return highlightedHtml.value || buildPlainCodeHtml(sourceCode);
 });
 
 /**
@@ -130,6 +157,7 @@ watch(
     const sourceCode = String(code ?? '');
     const lang = toShikiLanguage(language);
 
+    highlightedSourceCode.value = sourceCode;
     highlightedHtml.value = buildPlainCodeHtml(sourceCode);
 
     if (isLoading || Array.from(sourceCode).length > MAX_SYNC_HIGHLIGHT_CHARS) {
@@ -295,6 +323,12 @@ async function handleCopy(): Promise<void> {
 }
 
 function toggleExpanded(): void {
+  const didRecoverStaleCode = syncPlainCodeHtmlFromCurrentNode();
+
+  if (isExpanded.value && didRecoverStaleCode) {
+    return;
+  }
+
   isExpanded.value = !isExpanded.value;
 }
 
@@ -347,7 +381,7 @@ type="button" class="code-action-btn ai-code-block__icon-button ai-code-block__c
     </div>
 
     <div v-show="isExpanded" :id="codeBlockBodyId" class="ai-code-block__body">
-      <div class="ai-code-block__highlight ai-markdown-design-body" v-html="highlightedHtml" />
+      <div class="ai-code-block__highlight ai-markdown-design-body" v-html="codeHtml" />
     </div>
   </div>
 </template>

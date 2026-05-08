@@ -31,11 +31,13 @@
               :expanded-paths="effectiveExplorerExpandedPaths" :loading-paths="loadingPaths"
               :active-path="document.path" :active-dirty="document.isDirty" :search-query="explorerSearchQuery"
               :inline-create-draft="inlineCreateDraft" :root-path="root.rootPath"
-              @toggle-directory="void toggleExplorerPath($event)" @open-file="handleOpenFile"
-              @context-menu="handleEntryContextMenu" @inline-create-input="handleInlineCreateInputValue"
-              @inline-create-blur="handleInlineCreateBlur"
+              :inline-rename-draft="inlineRenameDraft" @toggle-directory="void toggleExplorerPath($event)"
+              @open-file="handleOpenFile" @context-menu="handleEntryContextMenu"
+              @inline-create-input="handleInlineCreateInputValue" @inline-create-blur="handleInlineCreateBlur"
               @inline-create-confirm="void confirmInlineCreateWorkspaceEntry()"
-              @inline-create-cancel="cancelInlineCreateWorkspaceEntry" />
+              @inline-create-cancel="cancelInlineCreateWorkspaceEntry"
+              @inline-rename-input="inlineRenameDraft.value = $event"
+              @inline-rename-confirm="void confirmInlineRename()" @inline-rename-cancel="cancelInlineRename" />
           </FileTree>
         </template>
       </div>
@@ -43,27 +45,6 @@
       <LinearContextMenu :open="explorerContextMenu.open" :x="explorerContextMenu.x" :y="explorerContextMenu.y"
         :groups="explorerContextMenuGroups" :theme="appStore.theme"
         :submenu-direction="explorerContextMenu.x > 280 ? 'left' : 'right'" @select="handleExplorerContextMenuSelect" />
-
-      <div v-if="workspaceEntryNameDialog.open" class="explorer-entry-dialog-backdrop"
-        @click.self="handleWorkspaceEntryNameCancel">
-        <section class="explorer-entry-dialog" role="dialog" aria-modal="true" aria-label="输入名称">
-          <p class="explorer-entry-dialog-title">{{ workspaceEntryNameDialog.title }}</p>
-          <input ref="workspaceEntryNameInputRef" v-model="workspaceEntryNameDialog.value"
-            class="explorer-entry-dialog-input" type="text" :placeholder="workspaceEntryNameDialog.placeholder"
-            @keydown.enter.prevent="handleWorkspaceEntryNameConfirm"
-            @keydown.esc.prevent="handleWorkspaceEntryNameCancel" />
-          <div class="explorer-entry-dialog-actions">
-            <button type="button" class="explorer-entry-dialog-button is-secondary"
-              @click="handleWorkspaceEntryNameCancel">
-              取消
-            </button>
-            <button type="button" class="explorer-entry-dialog-button is-primary"
-              @click="handleWorkspaceEntryNameConfirm">
-              {{ workspaceEntryNameDialog.confirmText }}
-            </button>
-          </div>
-        </section>
-      </div>
     </section>
 
     <SearchSidebarPanel v-else-if="isSearchView" :document-path="document.path" :is-desktop-runtime="isDesktopRuntime"
@@ -231,16 +212,12 @@ const inlineCreateDraft = reactive({
   value: '',
   placeholder: '',
 });
-const workspaceEntryNameDialog = reactive({
-  open: false,
-  title: '',
-  placeholder: '',
-  confirmText: '确认',
+const inlineRenameDraft = reactive({
+  path: null as string | null,
   value: '',
 });
-const workspaceEntryNameInputRef = ref<HTMLInputElement | null>(null);
-let resolveWorkspaceEntryNameDialog: ((value: string | null) => void) | null = null;
 const isInlineCreateSubmitting = ref(false);
+const isInlineRenamePriming = ref(false);
 
 const explorerContextMenuGroups = computed<ILinearContextMenuGroup<IExplorerContextMenuItem>[]>(() => {
   const target = explorerContextTarget.value;
@@ -794,53 +771,69 @@ const handleInlineCreateBlur = (): void => {
   void confirmInlineCreateWorkspaceEntry();
 };
 
-const closeWorkspaceEntryNameDialog = (value: string | null): void => {
-  if (!workspaceEntryNameDialog.open) {
+let resolveInlineRename: ((value: string | null) => void) | null = null;
+
+const cancelInlineRename = (): void => {
+  isInlineRenamePriming.value = false;
+  inlineRenameDraft.path = null;
+  inlineRenameDraft.value = '';
+  const resolver = resolveInlineRename;
+  resolveInlineRename = null;
+  resolver?.(null);
+};
+
+const confirmInlineRename = (): void => {
+  if (isInlineRenamePriming.value) {
     return;
   }
 
-  workspaceEntryNameDialog.open = false;
-  const resolver = resolveWorkspaceEntryNameDialog;
-  resolveWorkspaceEntryNameDialog = null;
-  resolver?.(value);
+  const value = inlineRenameDraft.value.trim();
+  inlineRenameDraft.path = null;
+  inlineRenameDraft.value = '';
+  const resolver = resolveInlineRename;
+  resolveInlineRename = null;
+  resolver?.(value || null);
 };
 
-const requestWorkspaceEntryName = async (options: {
-  title: string;
-  defaultName: string;
-  placeholder: string;
-  confirmText: string;
-}): Promise<string | null> => {
-  if (resolveWorkspaceEntryNameDialog) {
-    closeWorkspaceEntryNameDialog(null);
-  }
-
-  workspaceEntryNameDialog.title = options.title;
-  workspaceEntryNameDialog.placeholder = options.placeholder;
-  workspaceEntryNameDialog.confirmText = options.confirmText;
-  workspaceEntryNameDialog.value = options.defaultName;
-  workspaceEntryNameDialog.open = true;
-
-  await nextTick();
-  workspaceEntryNameInputRef.value?.focus();
-  workspaceEntryNameInputRef.value?.select();
-
+const waitNextFrame = (): Promise<void> => {
   return new Promise((resolve) => {
-    resolveWorkspaceEntryNameDialog = resolve;
+    requestAnimationFrame(() => resolve());
   });
 };
 
-const handleWorkspaceEntryNameConfirm = (): void => {
-  const value = workspaceEntryNameDialog.value.trim();
-  if (!value) {
-    return;
+const focusInlineRenameInput = async (): Promise<boolean> => {
+  await nextTick();
+  await waitNextFrame();
+
+  const input = document.querySelector('.explorer-inline-rename-input') as HTMLInputElement | null;
+  if (!input) {
+    return false;
   }
 
-  closeWorkspaceEntryNameDialog(value);
+  input.focus();
+  input.select();
+  return true;
 };
 
-const handleWorkspaceEntryNameCancel = (): void => {
-  closeWorkspaceEntryNameDialog(null);
+const requestInlineRename = async (path: string, defaultName: string): Promise<string | null> => {
+  if (resolveInlineRename) {
+    cancelInlineRename();
+  }
+
+  isInlineRenamePriming.value = true;
+  inlineRenameDraft.path = path;
+  inlineRenameDraft.value = defaultName;
+  const renamePromise = new Promise<string | null>((resolve) => {
+    resolveInlineRename = resolve;
+  });
+
+  const didFocus = await focusInlineRenameInput();
+  isInlineRenamePriming.value = false;
+  if (!didFocus) {
+    cancelInlineRename();
+  }
+
+  return renamePromise;
 };
 
 const refreshDirectoryAfterMutation = async (path: string | null): Promise<void> => {
@@ -883,12 +876,7 @@ const handleRenameWorkspaceEntry = async (target: IExplorerContextTarget): Promi
     return;
   }
 
-  const newName = await requestWorkspaceEntryName({
-    title: '重命名',
-    defaultName: target.name,
-    placeholder: '输入新名称',
-    confirmText: '重命名',
-  });
+  const newName = await requestInlineRename(target.path, target.name);
   if (!newName || newName === target.name) {
     return;
   }
@@ -1010,10 +998,7 @@ if (typeof window !== 'undefined') {
 
 onBeforeUnmount(() => {
   closeInlineCreateDraft();
-
-  if (resolveWorkspaceEntryNameDialog) {
-    closeWorkspaceEntryNameDialog(null);
-  }
+  cancelInlineRename();
 
   if (typeof window !== 'undefined') {
     window.removeEventListener('pointerdown', handleWindowPointerDown, true);
@@ -1095,83 +1080,5 @@ watch(
 .explorer-inline-create-input:focus {
   border-color: color-mix(in srgb, var(--accent-strong) 70%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-strong) 28%, transparent);
-}
-
-.explorer-entry-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1400;
-  display: grid;
-  place-items: center;
-  background: rgba(6, 8, 12, 0.18);
-}
-
-.explorer-entry-dialog {
-  width: min(420px, calc(100vw - 36px));
-  border: 1px solid var(--overlay-border, var(--border-strong));
-  border-radius: 10px;
-  background: var(--overlay-bg, var(--bg-4));
-  box-shadow:
-    0 14px 34px rgba(0, 0, 0, 0.32),
-    0 0 0 0.5px rgba(255, 255, 255, 0.06);
-  padding: 14px;
-}
-
-.explorer-entry-dialog-title {
-  margin: 0 0 10px;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.explorer-entry-dialog-input {
-  width: 100%;
-  height: 32px;
-  border: 1px solid color-mix(in srgb, var(--shell-divider) 90%, transparent);
-  border-radius: 7px;
-  background: #fafafa;
-  color: var(--text-primary);
-  font-size: 12.5px;
-  padding: 0 10px;
-  outline: none;
-}
-
-.explorer-entry-dialog-input:focus {
-  border-color: color-mix(in srgb, var(--accent-strong) 66%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-strong) 20%, transparent);
-}
-
-.explorer-entry-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.explorer-entry-dialog-button {
-  height: 28px;
-  border-radius: 6px;
-  font-size: 12px;
-  padding: 0 12px;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-.explorer-entry-dialog-button.is-secondary {
-  color: var(--text-tertiary);
-  background: transparent;
-}
-
-.explorer-entry-dialog-button.is-secondary:hover {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-}
-
-.explorer-entry-dialog-button.is-primary {
-  color: var(--primary-foreground, #f8fafc);
-  background: var(--accent-strong);
-}
-
-.explorer-entry-dialog-button.is-primary:hover {
-  background: color-mix(in srgb, var(--accent-strong) 85%, black 15%);
 }
 </style>

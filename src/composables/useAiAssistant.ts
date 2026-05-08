@@ -182,6 +182,7 @@ const AI_EDIT_ROLLBACK_TIMELINE_LIMIT = 24;
 const AGENT_RUNTIME_TIMELINE_LIMIT = 32;
 const AGENT_ACTIVITY_TRAIL_LIMIT = 6;
 const ENABLE_ACTIVITY_NARRATOR = false;
+const SIDECAR_MESSAGE_DELTA_PHASE_FALLBACK = 'stage';
 
 const TEXT_ATTACHMENT_PATTERN =
   /^(application\/(json|xml|x-sh|x-shellscript|javascript|typescript)|text\/)/i;
@@ -242,6 +243,63 @@ const appendActivityTrail = (
   return uniqueTrail.slice(-AGENT_ACTIVITY_TRAIL_LIMIT);
 };
 
+const getRuntimeReasoningOverlapLength = (previous: string, incoming: string): number => {
+  const maxLength = Math.min(previous.length, incoming.length);
+
+  for (let length = maxLength; length > 0; length -= 1) {
+    if (previous.slice(-length) === incoming.slice(0, length)) {
+      return length;
+    }
+  }
+
+  return 0;
+};
+
+const mergeRuntimeReasoningText = (previous: string, incoming: string): string => {
+  if (!previous) {
+    return incoming;
+  }
+
+  if (!incoming || previous.startsWith(incoming)) {
+    return previous;
+  }
+
+  if (incoming.startsWith(previous)) {
+    return incoming;
+  }
+
+  const overlapLength = getRuntimeReasoningOverlapLength(previous, incoming);
+
+  return previous + incoming.slice(overlapLength);
+};
+
+const compactRuntimeEvents = (
+  events: readonly TAgentRuntimeEvent[],
+): TAgentRuntimeEvent[] => {
+  const compacted: TAgentRuntimeEvent[] = [];
+
+  for (const event of events) {
+    if (event.type === 'agent.text.delta') {
+      continue;
+    }
+
+    const previous = compacted.at(-1);
+    if (previous?.type === 'agent.reasoning.delta' && event.type === 'agent.reasoning.delta') {
+      compacted[compacted.length - 1] = {
+        ...previous,
+        text: mergeRuntimeReasoningText(previous.text, event.text),
+        timestamp: event.timestamp,
+        seq: event.seq,
+      };
+      continue;
+    }
+
+    compacted.push(event);
+  }
+
+  return compacted.slice(-AGENT_RUNTIME_TIMELINE_LIMIT);
+};
+
 const mergeRuntimeEvents = (
   currentEvents: readonly TAgentRuntimeEvent[] | undefined,
   incomingEvents: readonly TAgentRuntimeEvent[] | undefined,
@@ -249,7 +307,9 @@ const mergeRuntimeEvents = (
   const nextEvents = [...(currentEvents ?? [])];
 
   if (!incomingEvents?.length) {
-    return nextEvents.length ? nextEvents : undefined;
+    const compactedEvents = compactRuntimeEvents(nextEvents);
+
+    return compactedEvents.length ? compactedEvents : undefined;
   }
 
   const seenIds = new Set(nextEvents.map((event) => event.id));
@@ -263,7 +323,9 @@ const mergeRuntimeEvents = (
     nextEvents.push(event);
   }
 
-  return nextEvents.length ? nextEvents : undefined;
+  const compactedEvents = compactRuntimeEvents(nextEvents);
+
+  return compactedEvents.length ? compactedEvents : undefined;
 };
 
 const isCheckpointCreatedRuntimeEvent = (
@@ -627,9 +689,28 @@ const createSidecarLiveEventBuffer = (
   onFlush: (events: readonly TAgentUiEvent[], freshEvents: readonly TAgentUiEvent[]) => void,
 ): ISidecarLiveEventBuffer => {
   const events: TAgentUiEvent[] = [];
+  const messageDeltaIndexes = new Map<string, number>();
   let pendingEvents: TAgentUiEvent[] = [];
   let scheduledFlush: TUiFlushHandle | null = null;
   let isFlushScheduled = false;
+
+  const retainEvent = (event: TAgentUiEvent): void => {
+    if (event.type !== 'message_delta') {
+      events.push(event);
+      return;
+    }
+
+    const phase = event.phase ?? SIDECAR_MESSAGE_DELTA_PHASE_FALLBACK;
+    const existingIndex = messageDeltaIndexes.get(phase);
+
+    if (existingIndex !== undefined && events[existingIndex]?.type === 'message_delta') {
+      events[existingIndex] = event;
+      return;
+    }
+
+    messageDeltaIndexes.set(phase, events.length);
+    events.push(event);
+  };
 
   const flush = (): void => {
     scheduledFlush = null;
@@ -641,7 +722,7 @@ const createSidecarLiveEventBuffer = (
 
     const freshEvents = pendingEvents;
     pendingEvents = [];
-    events.push(...freshEvents);
+    freshEvents.forEach(retainEvent);
     onFlush(events, freshEvents);
   };
 
@@ -678,6 +759,8 @@ const createSidecarLiveEventBuffer = (
       scheduledFlush = null;
       isFlushScheduled = false;
       pendingEvents = [];
+      events.length = 0;
+      messageDeltaIndexes.clear();
     },
   };
 };
@@ -1155,26 +1238,33 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     finalAnswerStarted?: boolean,
   ): void => {
     replaceMessageById(messageId, (message) => {
+      const hasRuntimeTimeline = Boolean(runtimeEvents?.length || message.stream?.runtimeEvents?.length);
       const previousActivityEvents = message.stream?.activityEvents ?? [];
       const previousActivities = message.stream?.activities
         ?? (previousActivityEvents.length
           ? materializeAgentActivities(previousActivityEvents)
           : undefined);
       const nextActivityText = activityText ?? message.stream?.activityText;
-      const nextActivityTrail = activityTrail ?? appendActivityTrail(
-        message.stream?.activityTrail,
-        nextActivityText,
-      );
-      const nextActivityEvents = activityEvents
-        ?? (activities
-          ? appendAgentActivityEvents(previousActivityEvents, activities)
-          : previousActivityEvents.length
-            ? previousActivityEvents
-            : undefined);
-      const nextActivityNotes = mergeActivityNotes(
-        message.stream?.activityNotes,
-        activityNotes,
-      );
+      const nextActivityTrail = hasRuntimeTimeline
+        ? undefined
+        : activityTrail ?? appendActivityTrail(
+          message.stream?.activityTrail,
+          nextActivityText,
+        );
+      const nextActivityEvents = hasRuntimeTimeline
+        ? undefined
+        : activityEvents
+          ?? (activities
+            ? appendAgentActivityEvents(previousActivityEvents, activities)
+            : previousActivityEvents.length
+              ? previousActivityEvents
+              : undefined);
+      const nextActivityNotes = hasRuntimeTimeline
+        ? undefined
+        : mergeActivityNotes(
+          message.stream?.activityNotes,
+          activityNotes,
+        );
       const nextRuntimeEvents = mergeRuntimeEvents(
         message.stream?.runtimeEvents,
         runtimeEvents,
@@ -1182,10 +1272,12 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       const nextFinalAnswerStarted = finalAnswerStarted
         ?? message.stream?.finalAnswerStarted
         ?? (streamStatus === 'completed' && hasMeaningfulAssistantText(content));
-      const nextActivities = activities
-        ?? (nextActivityEvents?.length
-          ? materializeAgentActivities(nextActivityEvents)
-          : previousActivities);
+      const nextActivities = hasRuntimeTimeline
+        ? undefined
+        : activities
+          ?? (nextActivityEvents?.length
+            ? materializeAgentActivities(nextActivityEvents)
+            : previousActivities);
       const persistedActivities = nextActivityEvents?.length
         ? undefined
         : nextActivities;
@@ -2082,7 +2174,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         activityNotes: undefined,
         activities: activityProjection.activities,
         activityEvents: activityProjection.activityEvents,
-        runtimeEvents: extractVisibleAgentRuntimeEvents(payload.events),
+        runtimeEvents: compactRuntimeEvents(extractVisibleAgentRuntimeEvents(payload.events)),
         finalAnswerStarted: hasMeaningfulAssistantText(projection.assistantContent),
       };
       if (projection.errorMessage) {
@@ -2259,7 +2351,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
         activityNotes: undefined,
         activities: activityProjection.activities,
         activityEvents: activityProjection.activityEvents,
-        runtimeEvents: extractVisibleAgentRuntimeEvents(payload.events),
+        runtimeEvents: compactRuntimeEvents(extractVisibleAgentRuntimeEvents(payload.events)),
         finalAnswerStarted: hasMeaningfulAssistantText(projection.assistantContent),
       };
       if (projection.errorMessage) {

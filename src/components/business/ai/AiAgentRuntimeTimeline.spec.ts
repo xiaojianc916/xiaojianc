@@ -251,4 +251,21 @@ describe('AiAgentRuntimeTimeline', () => {
 
         expect(wrapper.findAll('.agent-line__segment').length).toBe(expandedSegmentCount);
     });
+
+    it('对 reasoning 文本做轻量行内 Markdown 渲染', () => {
+        const wrapper = mount(AiAgentRuntimeTimeline, {
+            props: {
+                events: [createEvent({
+                    id: 'reasoning-markdown',
+                    type: 'agent.reasoning.delta',
+                    text: '推荐 **城市的时间层叠**，并记录 `24h` 观察点，保持 *开放*。',
+                })],
+            },
+        });
+
+        expect(wrapper.text()).toContain('城市的时间层叠');
+        expect(wrapper.get('.agent-line__strong').text()).toBe('城市的时间层叠');
+        expect(wrapper.get('.agent-line__code').text()).toBe('24h');
+        expect(wrapper.get('.agent-line__emphasis').text()).toBe('开放');
+    });
 });

@@ -3,9 +3,85 @@ import type { TThemeMode } from '@/types/app';
 
 import 'monaco-editor/esm/nls.messages.zh-cn.js';
 import {
+  conf as cppConfig,
+  language as cppLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/cpp/cpp.js';
+import {
+  conf as cssConfig,
+  language as cssLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/css/css.js';
+import {
+  conf as dockerfileConfig,
+  language as dockerfileLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/dockerfile/dockerfile.js';
+import {
+  conf as goConfig,
+  language as goLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/go/go.js';
+import {
+  conf as htmlConfig,
+  language as htmlLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/html/html.js';
+import {
+  conf as iniConfig,
+  language as iniLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/ini/ini.js';
+import {
+  conf as javaConfig,
+  language as javaLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/java/java.js';
+import {
+  conf as jsConfig,
+  language as jsLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/javascript/javascript.js';
+import {
+  conf as lessConfig,
+  language as lessLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/less/less.js';
+import {
+  conf as markdownConfig,
+  language as markdownLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/markdown/markdown.js';
+import {
+  conf as powershellConfig,
+  language as powershellLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/powershell/powershell.js';
+import {
+  conf as pythonConfig,
+  language as pythonLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/python/python.js';
+import {
+  conf as rubyConfig,
+  language as rubyLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/ruby/ruby.js';
+import {
+  conf as rustConfig,
+  language as rustLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/rust/rust.js';
+import {
+  conf as scssConfig,
+  language as scssLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/scss/scss.js';
+import {
   conf as shellLanguageConfig,
   language as shellLanguageDefinition,
 } from 'monaco-editor/esm/vs/basic-languages/shell/shell.js';
+import {
+  conf as sqlConfig,
+  language as sqlLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/sql/sql.js';
+import {
+  conf as tsConfig,
+  language as tsLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/typescript/typescript.js';
+import {
+  conf as xmlConfig,
+  language as xmlLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/xml/xml.js';
+import {
+  conf as yamlConfig,
+  language as yamlLanguage,
+} from 'monaco-editor/esm/vs/basic-languages/yaml/yaml.js';
 import { Range } from 'monaco-editor/esm/vs/editor/common/core/range.js';
 import { Selection } from 'monaco-editor/esm/vs/editor/common/core/selection.js';
 import {
@@ -26,6 +102,7 @@ import {
   create as createStandaloneEditor,
   createModel as createStandaloneModel,
   defineTheme as defineStandaloneTheme,
+  setModelLanguage as setStandaloneModelLanguage,
   setModelMarkers as setStandaloneModelMarkers,
   setTheme as setStandaloneTheme,
 } from 'monaco-editor/esm/vs/editor/standalone/browser/standaloneEditor.js';
@@ -70,6 +147,7 @@ const monaco = {
     createDiffEditor: createStandaloneDiffEditor,
     createModel: createStandaloneModel,
     defineTheme: defineStandaloneTheme,
+    setModelLanguage: setStandaloneModelLanguage,
     setModelMarkers: setStandaloneModelMarkers,
     setTheme: setStandaloneTheme,
     EditorOption,
@@ -114,6 +192,52 @@ const registerShellLanguage = (): void => {
   });
   monaco.languages.setMonarchTokensProvider(SHELL_LANGUAGE_ID, shellLanguageDefinition);
   monaco.languages.setLanguageConfiguration(SHELL_LANGUAGE_ID, shellLanguageConfig);
+
+  // ---------------------------------------------------------------------------
+  // Extra basic-language Monarch tokenizers (syntax highlight only, no worker)
+  // ---------------------------------------------------------------------------
+  type TLangSpec = {
+    id: string;
+    extensions: string[];
+    aliases: string[];
+    conf: unknown;
+    language: unknown;
+  };
+
+  const EXTRA_LANGS: TLangSpec[] = [
+    { id: 'python', extensions: ['.py', '.pyw', '.pyi'], aliases: ['Python'], conf: pythonConfig, language: pythonLanguage },
+    { id: 'javascript', extensions: ['.js', '.mjs', '.cjs', '.jsx'], aliases: ['JavaScript'], conf: jsConfig, language: jsLanguage },
+    { id: 'typescript', extensions: ['.ts', '.mts', '.cts', '.tsx'], aliases: ['TypeScript'], conf: tsConfig, language: tsLanguage },
+    { id: 'ruby', extensions: ['.rb', '.rbw', '.rake', '.gemspec'], aliases: ['Ruby'], conf: rubyConfig, language: rubyLanguage },
+    { id: 'c', extensions: ['.c', '.h'], aliases: ['C'], conf: cppConfig, language: cppLanguage },
+    { id: 'cpp', extensions: ['.cpp', '.cc', '.cxx', '.hpp', '.hh'], aliases: ['C++', 'CPP'], conf: cppConfig, language: cppLanguage },
+    { id: 'java', extensions: ['.java'], aliases: ['Java'], conf: javaConfig, language: javaLanguage },
+    { id: 'rust', extensions: ['.rs'], aliases: ['Rust'], conf: rustConfig, language: rustLanguage },
+    { id: 'go', extensions: ['.go'], aliases: ['Go'], conf: goConfig, language: goLanguage },
+    { id: 'css', extensions: ['.css'], aliases: ['CSS'], conf: cssConfig, language: cssLanguage },
+    { id: 'less', extensions: ['.less'], aliases: ['Less'], conf: lessConfig, language: lessLanguage },
+    { id: 'scss', extensions: ['.scss'], aliases: ['SCSS'], conf: scssConfig, language: scssLanguage },
+    { id: 'html', extensions: ['.html', '.htm'], aliases: ['HTML'], conf: htmlConfig, language: htmlLanguage },
+    { id: 'xml', extensions: ['.xml', '.xsd', '.xsl', '.svg'], aliases: ['XML'], conf: xmlConfig, language: xmlLanguage },
+    { id: 'yaml', extensions: ['.yaml', '.yml'], aliases: ['YAML'], conf: yamlConfig, language: yamlLanguage },
+    { id: 'markdown', extensions: ['.md', '.markdown'], aliases: ['Markdown'], conf: markdownConfig, language: markdownLanguage },
+    { id: 'sql', extensions: ['.sql'], aliases: ['SQL'], conf: sqlConfig, language: sqlLanguage },
+    { id: 'dockerfile', extensions: ['.dockerfile'], aliases: ['Dockerfile'], conf: dockerfileConfig, language: dockerfileLanguage },
+    { id: 'powershell', extensions: ['.ps1', '.psm1', '.psd1'], aliases: ['PowerShell'], conf: powershellConfig, language: powershellLanguage },
+    { id: 'ini', extensions: ['.ini', '.conf', '.toml', '.env'], aliases: ['INI', 'TOML'], conf: iniConfig, language: iniLanguage },
+  ];
+
+  for (const spec of EXTRA_LANGS) {
+    monaco.languages.register({ id: spec.id, extensions: spec.extensions, aliases: spec.aliases });
+    monaco.languages.setMonarchTokensProvider(
+      spec.id,
+      spec.language as MonacoApi.languages.IMonarchLanguage,
+    );
+    monaco.languages.setLanguageConfiguration(
+      spec.id,
+      spec.conf as MonacoApi.languages.LanguageConfiguration,
+    );
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -160,6 +284,84 @@ if (!globalScope[READY_FLAG_KEY]) {
 // Public API
 // ---------------------------------------------------------------------------
 
+/**
+ * 根据文件路径（或文件名）推断 Monaco 语言 ID。
+ * 未能识别时回退到 `'shell'`（主编辑器默认语言）。
+ */
+const LANGUAGE_BY_EXTENSION: Readonly<Record<string, string>> = {
+  bash: 'shell',
+  c: 'c',
+  cc: 'cpp',
+  cjs: 'javascript',
+  conf: 'ini',
+  cpp: 'cpp',
+  css: 'css',
+  cts: 'typescript',
+  cxx: 'cpp',
+  dockerfile: 'dockerfile',
+  env: 'ini',
+  gemspec: 'ruby',
+  go: 'go',
+  h: 'c',
+  hh: 'cpp',
+  hpp: 'cpp',
+  htm: 'html',
+  html: 'html',
+  ini: 'ini',
+  java: 'java',
+  js: 'javascript',
+  json: 'json',
+  jsonc: 'json',
+  jsx: 'javascript',
+  ksh: 'shell',
+  less: 'less',
+  md: 'markdown',
+  markdown: 'markdown',
+  mjs: 'javascript',
+  mts: 'typescript',
+  ps1: 'powershell',
+  psd1: 'powershell',
+  psm1: 'powershell',
+  py: 'python',
+  pyi: 'python',
+  pyw: 'python',
+  rake: 'ruby',
+  rb: 'ruby',
+  rbw: 'ruby',
+  rs: 'rust',
+  scss: 'scss',
+  sh: 'shell',
+  sql: 'sql',
+  svg: 'xml',
+  toml: 'ini',
+  ts: 'typescript',
+  tsx: 'typescript',
+  vue: 'html',
+  xml: 'xml',
+  xsd: 'xml',
+  xsl: 'xml',
+  yaml: 'yaml',
+  yml: 'yaml',
+} as const;
+
+const resolveLanguageForPath = (filePath: string | null | undefined): string => {
+  if (!filePath) {
+    return 'shell';
+  }
+  const lower = filePath.toLowerCase().split(/[?#]/)[0] ?? '';
+  const fileName = lower.split('/').at(-1) ?? lower.split('\\').at(-1) ?? '';
+
+  if (fileName === 'dockerfile' || fileName.endsWith('.dockerfile')) {
+    return 'dockerfile';
+  }
+  if (fileName === 'makefile' || fileName === 'gnumakefile') {
+    return 'ini'; // no makefile grammar; ini tokenizer is close enough for highlighting
+  }
+
+  const ext = fileName.includes('.') ? fileName.split('.').at(-1) : undefined;
+  return ext ? (LANGUAGE_BY_EXTENSION[ext] ?? 'shell') : 'shell';
+};
+
 const applyMonacoTheme = (theme: TThemeMode): void => {
   monaco.editor.setTheme(resolveMonacoThemeName(theme));
 };
@@ -179,4 +381,4 @@ const ensureMonacoSuggestContribution = async (): Promise<void> => {
   return suggestContributionPromise;
 };
 
-export { applyMonacoTheme, ensureMonacoSuggestContribution, monaco };
+export { applyMonacoTheme, ensureMonacoSuggestContribution, monaco, resolveLanguageForPath };

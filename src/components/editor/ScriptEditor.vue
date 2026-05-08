@@ -35,7 +35,7 @@ import type { IAiCodeActionRequest, IAiCodeActionResult } from '@/types/ai';
 import type { TThemeMode } from '@/types/app';
 import type { IAnalyzeScriptPayload, IEditorSelectionSummary, TScriptDiagnosticSeverity } from '@/types/editor';
 import type { IEditorSettings } from '@/types/settings';
-import { applyMonacoTheme, ensureMonacoSuggestContribution, monaco } from '@/utils/monaco';
+import { applyMonacoTheme, ensureMonacoSuggestContribution, monaco, resolveLanguageForPath } from '@/utils/monaco';
 import {
   SHELL_WINDOW_RESIZE_END_EVENT,
   SHELL_WINDOW_RESIZE_SETTLED_EVENT,
@@ -582,7 +582,7 @@ const createEditor = async (): Promise<void> => {
 
   editorInstance = monaco.editor.create(containerRef.value, {
     value: props.modelValue,
-    language: 'shell',
+    language: resolveLanguageForPath(props.documentPath),
     useShadowDOM: false,
     automaticLayout: false,
     lineDecorationsWidth: 16,
@@ -684,6 +684,12 @@ watch(
 
     if (previousPath) {
       persistViewState(previousPath);
+    }
+
+    const model = editorInstance.getModel();
+    if (model) {
+      const lang = resolveLanguageForPath(nextPath);
+      monaco.editor.setModelLanguage(model, lang);
     }
 
     restoreViewStateForPath(nextPath);

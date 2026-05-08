@@ -13,46 +13,12 @@
 import type { TThemeMode } from '@/types/app';
 import type { IGitDiffPreviewPayload } from '@/types/git';
 import type { IEditorSettings } from '@/types/settings';
-import { applyMonacoTheme, monaco } from '@/utils/monaco';
+import { applyMonacoTheme, monaco, resolveLanguageForPath } from '@/utils/monaco';
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const DEFAULT_DIFF_EDITOR_FONT_FAMILY =
   "Berkeley Mono, JetBrains Mono, Consolas, 'Courier New', monospace";
 
-const MONACO_LANGUAGE_BY_EXTENSION: Record<string, string> = {
-  bash: 'shell',
-  c: 'c',
-  cc: 'cpp',
-  cjs: 'javascript',
-  cpp: 'cpp',
-  css: 'css',
-  cts: 'typescript',
-  cxx: 'cpp',
-  h: 'c',
-  hpp: 'cpp',
-  html: 'html',
-  java: 'java',
-  js: 'javascript',
-  json: 'json',
-  jsonc: 'json',
-  jsx: 'javascript',
-  ksh: 'shell',
-  less: 'less',
-  md: 'markdown',
-  mjs: 'javascript',
-  mts: 'typescript',
-  py: 'python',
-  rs: 'rust',
-  scss: 'scss',
-  sh: 'shell',
-  sql: 'sql',
-  ts: 'typescript',
-  tsx: 'typescript',
-  vue: 'html',
-  xml: 'xml',
-  yaml: 'yaml',
-  yml: 'yaml',
-};
 
 const props = defineProps<{
   preview: IGitDiffPreviewPayload;
@@ -82,19 +48,6 @@ const resolveLineHeight = (
 ): number => Math.max(fontSize + 4, Math.round(fontSize * Number(lineHeight)));
 
 const resolveLineNumbers = (enabled: boolean): 'off' | 'on' => (enabled ? 'on' : 'off');
-
-const resolveLanguage = (path: string): string => {
-  const lowerPath = path.toLowerCase().split(/[?#]/)[0] ?? '';
-  const fileName = lowerPath.split('/').at(-1) ?? '';
-
-  if (fileName === 'dockerfile' || fileName.endsWith('.dockerfile')) {
-    return 'dockerfile';
-  }
-
-  const extension = fileName.includes('.') ? fileName.split('.').at(-1) : undefined;
-
-  return extension ? (MONACO_LANGUAGE_BY_EXTENSION[extension] ?? 'plaintext') : 'plaintext';
-};
 
 const resolveRuntimeOptions = (): monaco.editor.IDiffEditorConstructionOptions => ({
   automaticLayout: false,
@@ -184,7 +137,7 @@ const syncModels = (): void => {
   }
 
   disposeModels();
-  const language = resolveLanguage(props.preview.relativePath);
+  const language = resolveLanguageForPath(props.preview.relativePath);
   originalModel = monaco.editor.createModel(props.preview.originalContent, language);
   modifiedModel = monaco.editor.createModel(props.preview.modifiedContent, language);
   diffEditor.setModel({

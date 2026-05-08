@@ -35,11 +35,11 @@ use commands::{
     get_git_pull_request_support, get_git_repository_status, get_wsl_link_agent_artifact_status,
     get_wsl_link_status, init_git_repository, install_wsl_link_agent, list_git_branches,
     list_git_commit_history, list_git_stashes, list_ssh_config_hosts, list_ssh_directory,
-    list_workspace_entries, load_image_asset, load_script, probe_wsl_link_primary, rename_ssh_path,
-    rename_workspace_path, resize_terminal_session, save_git_stash, save_script, search_workspace,
-    set_window_background, shutdown_all_terminal_sessions, stage_git_paths, start_wsl_link_agent,
-    start_wsl_link_supervisor, stop_wsl_link_supervisor, test_ssh_connection, unstage_git_paths,
-    upload_ssh_file, write_terminal_input, TerminalSessionState,
+    list_workspace_entries, load_image_asset, load_script, probe_wsl_link_primary, read_ssh_file,
+    rename_ssh_path, rename_workspace_path, resize_terminal_session, save_git_stash, save_script,
+    search_workspace, set_window_background, shutdown_all_terminal_sessions, stage_git_paths,
+    start_wsl_link_agent, start_wsl_link_supervisor, stop_wsl_link_supervisor, test_ssh_connection,
+    unstage_git_paths, upload_ssh_file, write_terminal_input, TerminalSessionState,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
@@ -265,6 +265,7 @@ fn main() {
             list_ssh_directory,
             download_ssh_file,
             upload_ssh_file,
+            read_ssh_file,
             delete_ssh_path,
             rename_ssh_path,
             create_ssh_directory,

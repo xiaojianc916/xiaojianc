@@ -7,57 +7,23 @@ import type {
 import { useIntegratedTerminalControls } from '@/composables/useIntegratedTerminal'
 import { useMessage } from '@/composables/useMessage'
 import { tauriService } from '@/services/tauri'
+import { useSshStore } from '@/store/ssh'
+import type {
+  ISshAuthOption,
+  ISshFileItem,
+  ISshPathSegment,
+  ISshRecentConnection,
+  ISshTransferItem,
+  TSshAuthMode,
+  TSshContentTab,
+  TSshFileKind,
+  TSshFooterAction,
+  TSshPanelTab,
+  TSshTransferDirection,
+} from '@/types/ssh'
 import { Server } from 'lucide-vue-next'
+import { storeToRefs } from 'pinia'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-
-type TSshContentTab = 'explorer' | 'transfer'
-type TSshPanelTab = TSshContentTab | 'connect'
-type TSshAuthMode = 'key' | 'password'
-type TSshFileKind = 'folder' | 'rust' | 'toml' | 'markdown' | 'lock' | 'file'
-type TSshTransferDirection = 'upload' | 'download'
-type TSshTransferStatus = 'uploading' | 'downloading' | 'done' | 'failed'
-type TSshFooterAction = TSshTransferDirection | 'new-folder'
-
-interface ISshPathSegment {
-  id: string
-  label: string
-  path: string
-}
-
-interface ISshFileItem {
-  id: string
-  name: string
-  kind: TSshFileKind
-  metaLabel: string
-  path: string
-  isDirectory: boolean
-}
-
-interface ISshTransferItem {
-  id: string
-  name: string
-  direction: TSshTransferDirection
-  sizeLabel: string
-  progressLabel: string
-  progress: number
-  status: TSshTransferStatus
-}
-
-interface ISshRecentConnection {
-  id: string
-  name: string
-  username: string
-  host: string
-  port: string
-  authMode: TSshAuthMode
-  identityPath: string
-  lastUsedLabel: string
-}
-
-interface ISshAuthOption {
-  value: TSshAuthMode
-  label: string
-}
 
 const CONTEXT_MENU_WIDTH = 172
 const CONTEXT_MENU_HEIGHT = 252
@@ -69,19 +35,6 @@ const SSH_PASSWORD_SEND_DELAY_MS = 180
 const HOST_PATTERN = /^[a-zA-Z0-9._:-]+$/
 const USER_PATTERN = /^[a-zA-Z0-9._-]+$/
 const SAFE_PATH_PATTERN = /^[^\r\n]+$/
-
-const SSH_FILE_ITEMS: ISshFileItem[] = [
-  { id: 'src', name: 'src', kind: 'folder', metaLabel: '12 项', path: 'src', isDirectory: true },
-  { id: 'assets', name: 'assets', kind: 'folder', metaLabel: '5 项', path: 'assets', isDirectory: true },
-  { id: 'target', name: 'target', kind: 'folder', metaLabel: '3 项', path: 'target', isDirectory: true },
-  { id: 'main-rs', name: 'main.rs', kind: 'rust', metaLabel: '4.2 KB', path: 'main.rs', isDirectory: false },
-  { id: DEFAULT_SELECTED_FILE_ID, name: 'ssh_client.rs', kind: 'rust', metaLabel: '8.7 KB', path: 'ssh_client.rs', isDirectory: false },
-  { id: 'sidebar-rs', name: 'sidebar.rs', kind: 'rust', metaLabel: '3.1 KB', path: 'sidebar.rs', isDirectory: false },
-  { id: 'cargo-toml', name: 'Cargo.toml', kind: 'toml', metaLabel: '1.4 KB', path: 'Cargo.toml', isDirectory: false },
-  { id: 'cargo-lock', name: 'Cargo.lock', kind: 'lock', metaLabel: '42 KB', path: 'Cargo.lock', isDirectory: false },
-  { id: 'readme-md', name: 'README.md', kind: 'markdown', metaLabel: '2.0 KB', path: 'README.md', isDirectory: false },
-  { id: 'gitignore', name: '.gitignore', kind: 'file', metaLabel: '48 B', path: '.gitignore', isDirectory: false },
-]
 
 const SSH_CONTEXT_MENU_GROUPS: ILinearContextMenuGroup[] = [
   {
@@ -115,39 +68,6 @@ const SSH_AUTH_OPTIONS: ISshAuthOption[] = [
   },
 ]
 
-const SSH_RECENT_CONNECTIONS: ISshRecentConnection[] = [
-  {
-    id: 'dev-server',
-    name: '开发服务器',
-    username: 'root',
-    host: '192.168.1.100',
-    port: '22',
-    authMode: 'key',
-    identityPath: '~/.ssh/id_rsa',
-    lastUsedLabel: '昨天',
-  },
-  {
-    id: 'prod-bastion',
-    name: '生产跳板机',
-    username: 'deploy',
-    host: '10.0.12.31',
-    port: '22',
-    authMode: 'key',
-    identityPath: '~/.ssh/id_rsa',
-    lastUsedLabel: '3 天前',
-  },
-  {
-    id: 'personal-vps',
-    name: '个人 VPS',
-    username: 'ubuntu',
-    host: 'vps.example.com',
-    port: '22',
-    authMode: 'key',
-    identityPath: '~/.ssh/id_rsa',
-    lastUsedLabel: '上周',
-  },
-]
-
 const FALLBACK_SELECTED_FILE: ISshFileItem = {
   id: DEFAULT_SELECTED_FILE_ID,
   name: 'ssh_client.rs',
@@ -163,26 +83,34 @@ const emit = defineEmits<{
 
 const message = useMessage()
 const terminalControls = useIntegratedTerminalControls()
-const activeContentTab = ref<TSshContentTab>('explorer')
-const isConnectFormVisible = ref(false)
-const isConnected = ref(false)
-const currentConnectionId = ref<string | null>(null)
-const selectedFileId = ref(DEFAULT_SELECTED_FILE_ID)
+const sshStore = useSshStore()
+const {
+  activeContentTab,
+  isConnectFormVisible,
+  isConnected,
+  selectedFileId,
+  normalizedRecentConnections,
+  sshFileItems,
+  transferItems,
+  currentRemotePath,
+} = storeToRefs(sshStore)
+const connectionForm = sshStore.connectionForm
 const authSelectRef = ref<HTMLElement | null>(null)
 const renameInputRef = ref<HTMLInputElement | null>(null)
 const createDirectoryInputRef = ref<HTMLInputElement | null>(null)
 const isConnecting = ref(false)
+const connectionStatusText = ref('')
+const connectionErrorText = ref('')
 const isAuthSelectOpen = ref(false)
-const recentConnections = ref<ISshRecentConnection[]>(SSH_RECENT_CONNECTIONS)
-const sshFileItems = ref<ISshFileItem[]>(SSH_FILE_ITEMS)
-const transferItems = ref<ISshTransferItem[]>([])
-const currentRemotePath = ref('.')
 const isRemoteDirectoryLoading = ref(false)
 const isUploading = ref(false)
 const isDownloading = ref(false)
 const isPathMutating = ref(false)
 const pendingRenameItem = ref<ISshFileItem | null>(null)
 const pendingDeleteItem = ref<ISshFileItem | null>(null)
+const previewFileItem = ref<ISshFileItem | null>(null)
+const previewContent = ref('')
+const isPreviewLoading = ref(false)
 const isCreateDirectoryDialogOpen = ref(false)
 const renameInputValue = ref('')
 const createDirectoryName = ref('')
@@ -191,38 +119,9 @@ const contextMenu = reactive({
   x: 0,
   y: 0,
 })
-const connectionForm = reactive({
-  host: '192.168.1.100',
-  port: '22',
-  username: 'root',
-  authMode: 'key' as TSshAuthMode,
-  identityPath: '~/.ssh/id_rsa',
-  password: '',
-})
-
 const isExplorerActive = computed(() => activeContentTab.value === 'explorer')
 const isTransferActive = computed(() => activeContentTab.value === 'transfer')
 const isDisconnected = computed(() => !isConnected.value)
-const currentConnection = computed<ISshRecentConnection>(() => {
-  const matchedConnection = recentConnections.value.find(
-    (item) => item.id === currentConnectionId.value,
-  )
-
-  if (matchedConnection) {
-    return matchedConnection
-  }
-
-  return {
-    id: MANUAL_CONNECTION_ID,
-    name: '自定义连接',
-    username: connectionForm.username,
-    host: connectionForm.host,
-    port: connectionForm.port,
-    authMode: connectionForm.authMode,
-    identityPath: connectionForm.identityPath,
-    lastUsedLabel: '刚刚',
-  }
-})
 const selectedFile = computed<ISshFileItem>(
   () => sshFileItems.value.find((item) => item.id === selectedFileId.value) ?? FALLBACK_SELECTED_FILE,
 )
@@ -234,9 +133,6 @@ const selectedAuthOption = computed(
     SSH_AUTH_OPTIONS[0],
 )
 const isTransferBusy = computed(() => isUploading.value || isDownloading.value)
-const isPasswordTerminalMode = computed(
-  () => isConnected.value && currentConnection.value.authMode === 'password',
-)
 const normalizedRenameInput = computed(() => renameInputValue.value.trim())
 const normalizedCreateDirectoryName = computed(() => createDirectoryName.value.trim())
 const canConfirmRename = computed(() => {
@@ -313,19 +209,9 @@ const handleCancelConnect = (): void => {
 }
 
 const applyConnectionState = (connectionId: string | null): void => {
-  currentConnectionId.value = connectionId
-  isConnected.value = true
-  isConnectFormVisible.value = false
+  sshStore.applyConnectionState(connectionId)
   activeContentTab.value = 'explorer'
   closeContextMenu()
-}
-
-const applyPasswordTerminalState = (connectionId: string | null): void => {
-  applyConnectionState(connectionId)
-  currentRemotePath.value = '.'
-  sshFileItems.value = []
-  selectedFileId.value = ''
-  isRemoteDirectoryLoading.value = false
 }
 
 const quoteShellArg = (value: string): string => {
@@ -402,6 +288,7 @@ const createSshDirectoryRequest = (path: string) => ({
   username: connectionForm.username.trim(),
   authMode: connectionForm.authMode,
   identityPath: connectionForm.authMode === 'key' ? connectionForm.identityPath.trim() || null : null,
+  password: connectionForm.authMode === 'password' ? connectionForm.password : null,
   path,
 })
 
@@ -411,6 +298,7 @@ const createSshFileTransferRequest = (remotePath: string, localPath: string) => 
   username: connectionForm.username.trim(),
   authMode: connectionForm.authMode,
   identityPath: connectionForm.authMode === 'key' ? connectionForm.identityPath.trim() || null : null,
+  password: connectionForm.authMode === 'password' ? connectionForm.password : null,
   remotePath,
   localPath,
 })
@@ -421,6 +309,7 @@ const createSshFileUploadRequest = (localPath: string, remoteDirectory: string) 
   username: connectionForm.username.trim(),
   authMode: connectionForm.authMode,
   identityPath: connectionForm.authMode === 'key' ? connectionForm.identityPath.trim() || null : null,
+  password: connectionForm.authMode === 'password' ? connectionForm.password : null,
   localPath,
   remoteDirectory,
 })
@@ -431,6 +320,7 @@ const createSshPathDeleteRequest = (remotePath: string) => ({
   username: connectionForm.username.trim(),
   authMode: connectionForm.authMode,
   identityPath: connectionForm.authMode === 'key' ? connectionForm.identityPath.trim() || null : null,
+  password: connectionForm.authMode === 'password' ? connectionForm.password : null,
   remotePath,
 })
 
@@ -440,6 +330,7 @@ const createSshPathRenameRequest = (remotePath: string, newName: string) => ({
   username: connectionForm.username.trim(),
   authMode: connectionForm.authMode,
   identityPath: connectionForm.authMode === 'key' ? connectionForm.identityPath.trim() || null : null,
+  password: connectionForm.authMode === 'password' ? connectionForm.password : null,
   remotePath,
   newName,
 })
@@ -450,8 +341,29 @@ const createSshDirectoryCreateRequest = (remoteDirectory: string, name: string) 
   username: connectionForm.username.trim(),
   authMode: connectionForm.authMode,
   identityPath: connectionForm.authMode === 'key' ? connectionForm.identityPath.trim() || null : null,
+  password: connectionForm.authMode === 'password' ? connectionForm.password : null,
   remoteDirectory,
   name,
+})
+
+const createSshFileReadRequest = (remotePath: string) => ({
+  host: connectionForm.host.trim(),
+  port: Number.parseInt(connectionForm.port.trim(), 10),
+  username: connectionForm.username.trim(),
+  authMode: connectionForm.authMode,
+  identityPath: connectionForm.authMode === 'key' ? connectionForm.identityPath.trim() || null : null,
+  password: connectionForm.authMode === 'password' ? connectionForm.password : null,
+  remotePath,
+})
+
+const createSshConnectionTestRequest = () => ({
+  host: connectionForm.host.trim(),
+  port: Number.parseInt(connectionForm.port.trim(), 10),
+  username: connectionForm.username.trim(),
+  authMode: connectionForm.authMode,
+  identityPath:
+    connectionForm.authMode === 'key' ? connectionForm.identityPath.trim() || null : null,
+  password: connectionForm.authMode === 'password' ? connectionForm.password : null,
 })
 
 const createTransferItem = (
@@ -480,7 +392,7 @@ const updateTransferItem = (
   Object.assign(target, patch)
 }
 
-const loadRemoteDirectory = async (path: string): Promise<void> => {
+const loadRemoteDirectorySnapshot = async (path: string): Promise<void> => {
   isRemoteDirectoryLoading.value = true
 
   try {
@@ -498,20 +410,22 @@ const loadRemoteDirectory = async (path: string): Promise<void> => {
       }
     })
     selectedFileId.value = sshFileItems.value[0]?.id ?? ''
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : '读取远端目录失败。'
-    message.error(errorMessage)
   } finally {
     isRemoteDirectoryLoading.value = false
   }
 }
 
+const loadRemoteDirectory = async (path: string): Promise<void> => {
+  try {
+    await loadRemoteDirectorySnapshot(path)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : '读取远端目录失败。'
+    message.error(errorMessage)
+  }
+}
+
 const downloadSelectedFile = async (): Promise<void> => {
   if (!isConnected.value || isDownloading.value) {
-    return
-  }
-  if (isPasswordTerminalMode.value) {
-    message.info('密码认证下请在终端中执行文件操作；侧边栏文件管理需要密钥或 SSH agent。')
     return
   }
 
@@ -558,10 +472,6 @@ const uploadFileToCurrentDirectory = async (): Promise<void> => {
   if (!isConnected.value || isUploading.value) {
     return
   }
-  if (isPasswordTerminalMode.value) {
-    message.info('密码认证下请在终端中执行文件操作；侧边栏文件管理需要密钥或 SSH agent。')
-    return
-  }
 
   const localPath = await tauriService.pickAnyOpenPath()
   if (!localPath) {
@@ -606,6 +516,33 @@ const copySelectedPath = async (): Promise<void> => {
     message.success('已复制远端路径。')
   } catch {
     message.error('复制远端路径失败。')
+  }
+}
+
+const closePreviewDialog = (): void => {
+  if (isPreviewLoading.value) {
+    return
+  }
+  previewFileItem.value = null
+  previewContent.value = ''
+}
+
+const previewRemoteFile = async (fileItem: ISshFileItem): Promise<void> => {
+  if (isPreviewLoading.value) {
+    return
+  }
+  previewFileItem.value = fileItem
+  previewContent.value = ''
+  isPreviewLoading.value = true
+  try {
+    const result = await tauriService.readSshFile(createSshFileReadRequest(fileItem.path))
+    previewContent.value = result.content
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : '读取远端文件失败。'
+    message.error(errorMessage)
+    previewFileItem.value = null
+  } finally {
+    isPreviewLoading.value = false
   }
 }
 
@@ -667,10 +604,6 @@ const renameSelectedPath = async (): Promise<void> => {
 
 const openCreateDirectoryDialog = async (): Promise<void> => {
   if (!isConnected.value || isPathMutating.value) {
-    return
-  }
-  if (isPasswordTerminalMode.value) {
-    message.info('密码认证下请在终端中创建目录；侧边栏文件管理需要密钥或 SSH agent。')
     return
   }
 
@@ -825,58 +758,62 @@ const buildSshCommand = (): string => {
   return parts.join(' ')
 }
 
+const openTerminalSessionBestEffort = async (): Promise<void> => {
+  try {
+    emit('open-terminal')
+    await new Promise((resolve) => window.setTimeout(resolve, TERMINAL_OPEN_DELAY_MS))
+    await terminalControls.sendCommand(sshCommandPreview.value)
+    if (connectionForm.authMode === 'password') {
+      await new Promise((resolve) => window.setTimeout(resolve, SSH_PASSWORD_SEND_DELAY_MS))
+      await terminalControls.sendInput(`${connectionForm.password}\n`)
+    }
+  } catch {
+    message.info('文件连接已建立，终端会话暂未打开。')
+  }
+}
+
 const handleConnect = async (connectionId = MANUAL_CONNECTION_ID): Promise<void> => {
+  connectionErrorText.value = ''
+  connectionStatusText.value = ''
   const validationError = validateConnectionForm()
   if (validationError) {
+    connectionErrorText.value = validationError
     message.error(validationError)
     return
   }
 
   isConnecting.value = true
+  connectionStatusText.value = '正在验证 SSH 连接…'
 
   try {
-    if (connectionForm.authMode === 'password') {
-      emit('open-terminal')
-      await new Promise((resolve) => window.setTimeout(resolve, TERMINAL_OPEN_DELAY_MS))
-      await terminalControls.sendCommand(sshCommandPreview.value)
-      await new Promise((resolve) => window.setTimeout(resolve, SSH_PASSWORD_SEND_DELAY_MS))
-      await terminalControls.sendInput(`${connectionForm.password}\n`)
-      applyPasswordTerminalState(connectionId)
-      message.success('已自动提交登录密码，正在建立 SSH 终端会话。')
-      return
-    }
-
-    const testResult = await tauriService.testSshConnection({
-      host: connectionForm.host.trim(),
-      port: Number.parseInt(connectionForm.port.trim(), 10),
-      username: connectionForm.username.trim(),
-      authMode: connectionForm.authMode,
-      identityPath:
-        connectionForm.authMode === 'key' ? connectionForm.identityPath.trim() || null : null,
-    })
+    const testResult = await tauriService.testSshConnection(createSshConnectionTestRequest())
 
     if (!testResult.ok) {
-      isConnected.value = false
+      connectionErrorText.value = testResult.message
       message.error(testResult.message)
       return
     }
 
-    emit('open-terminal')
-    await new Promise((resolve) => window.setTimeout(resolve, TERMINAL_OPEN_DELAY_MS))
-    await terminalControls.sendCommand(sshCommandPreview.value)
-    applyConnectionState(connectionId)
-    await loadRemoteDirectory('.')
+    connectionStatusText.value = '正在读取远端目录…'
+    await loadRemoteDirectorySnapshot('.')
+    const rememberedConnectionId = sshStore.rememberCurrentConnection(connectionId)
+    applyConnectionState(rememberedConnectionId)
     message.success('SSH 连接验证成功，已打开远端会话。')
+    void openTerminalSessionBestEffort()
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'SSH 连接失败。'
-    isConnected.value = false
+    connectionErrorText.value = errorMessage
     message.error(errorMessage)
   } finally {
     isConnecting.value = false
+    connectionStatusText.value = ''
   }
 }
 
 const handleConnectSubmit = (): void => {
+  if (isConnecting.value) {
+    return
+  }
   void handleConnect()
 }
 
@@ -888,7 +825,7 @@ const handleImportConfig = async (): Promise<void> => {
       return
     }
 
-    recentConnections.value = hosts.map((host) => ({
+    const importedConnections = hosts.map((host) => ({
       id: host.id,
       name: host.name,
       username: host.username,
@@ -897,7 +834,9 @@ const handleImportConfig = async (): Promise<void> => {
       authMode: 'key',
       identityPath: host.identityPath ?? '',
       lastUsedLabel: host.lastUsedLabel,
+      lastUsedAt: null,
     }))
+    sshStore.setRecentConnections([...importedConnections, ...sshStore.recentConnections])
     message.success(`已导入 ${hosts.length} 个 SSH 配置主机。`)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'SSH 配置导入失败。'
@@ -906,11 +845,13 @@ const handleImportConfig = async (): Promise<void> => {
 }
 
 const handleSelectRecentConnection = async (connection: ISshRecentConnection): Promise<void> => {
-  connectionForm.host = connection.host
-  connectionForm.port = connection.port
-  connectionForm.username = connection.username
-  connectionForm.authMode = connection.authMode
-  connectionForm.identityPath = connection.identityPath
+  sshStore.setConnectionFormFromProfile(connection)
+  if (connection.authMode === 'password') {
+    isConnectFormVisible.value = true
+    message.info('请输入该主机的 SSH 密码后继续连接。')
+    return
+  }
+
   await handleConnect(connection.id)
 }
 
@@ -923,7 +864,7 @@ const handlePathSegmentClick = (segment: ISshPathSegment): void => {
 }
 
 const refreshCurrentRemoteDirectory = (): void => {
-  if (!isConnected.value || isRemoteDirectoryLoading.value || isPasswordTerminalMode.value) {
+  if (!isConnected.value || isRemoteDirectoryLoading.value) {
     return
   }
 
@@ -935,16 +876,16 @@ const handleSelectFile = (fileId: string): void => {
   closeContextMenu()
 
   const fileItem = sshFileItems.value.find((item) => item.id === fileId)
-  if (fileItem?.isDirectory && !isRemoteDirectoryLoading.value && !isPasswordTerminalMode.value) {
+  if (fileItem?.isDirectory && !isRemoteDirectoryLoading.value) {
     void loadRemoteDirectory(fileItem.path)
+    return
+  }
+  if (fileItem && !fileItem.isDirectory) {
+    void previewRemoteFile(fileItem)
   }
 }
 
 const handleFileContextMenu = (event: MouseEvent, fileId: string): void => {
-  if (isPasswordTerminalMode.value) {
-    return
-  }
-
   selectedFileId.value = fileId
 
   const maxX = Math.max(12, window.innerWidth - CONTEXT_MENU_WIDTH - 12)
@@ -956,7 +897,7 @@ const handleFileContextMenu = (event: MouseEvent, fileId: string): void => {
 }
 
 const handleContextMenuSelect = (action: ILinearContextMenuItem): void => {
-  if (isPathMutating.value || isRemoteDirectoryLoading.value || isPasswordTerminalMode.value) {
+  if (isPathMutating.value || isRemoteDirectoryLoading.value) {
     closeContextMenu()
     return
   }
@@ -1168,8 +1109,17 @@ onBeforeUnmount(() => {
         </label>
 
         <div class="ssh-form-actions">
-          <button type="submit" class="ssh-button ssh-button--primary">连接</button>
-          <button type="button" class="ssh-button ssh-button--ghost" @click="handleCancelConnect">取消</button>
+          <button type="submit" class="ssh-button ssh-button--primary" :disabled="isConnecting"
+            @click.prevent="handleConnectSubmit">
+            {{ isConnecting ? '连接中…' : '连接' }}
+          </button>
+          <button type="button" class="ssh-button ssh-button--ghost" :disabled="isConnecting"
+            @click="handleCancelConnect">取消</button>
+        </div>
+
+        <div v-if="connectionStatusText || connectionErrorText" class="ssh-connect-feedback"
+          :class="{ 'is-error': Boolean(connectionErrorText) }" aria-live="polite">
+          {{ connectionErrorText || connectionStatusText }}
         </div>
       </form>
 
@@ -1210,7 +1160,11 @@ onBeforeUnmount(() => {
         <section class="ssh-recent-section ssh-recent-section--disconnected" aria-label="最近使用 SSH 连接">
           <div class="ssh-recent-title ssh-recent-title--disconnected">最近使用</div>
 
-          <button v-for="connection in recentConnections" :key="connection.id" type="button"
+          <div v-if="normalizedRecentConnections.length === 0" class="ssh-recent-empty">
+            暂无真实连接记录，可新建连接或导入本机 SSH 配置。
+          </div>
+
+          <button v-for="connection in normalizedRecentConnections" :key="connection.id" type="button"
             class="ssh-recent-item ssh-recent-item--disconnected" @click="handleSelectRecentConnection(connection)">
             <span class="ssh-recent-icon ssh-recent-icon--disconnected" aria-hidden="true">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -1232,7 +1186,7 @@ onBeforeUnmount(() => {
       </section>
 
       <template v-else>
-        <div v-if="isExplorerActive && !isPasswordTerminalMode" class="ssh-path-bar" aria-label="远端路径">
+        <div v-if="isExplorerActive" class="ssh-path-bar" aria-label="远端路径">
           <template v-for="(segment, index) in sshPathSegments" :key="segment.id">
             <button type="button" class="ssh-path-segment" :class="{ 'is-current': segment.path === currentRemotePath }"
               @click="handlePathSegmentClick(segment)">
@@ -1250,10 +1204,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-if="isExplorerActive" class="ssh-file-list" role="list" aria-label="远端文件列表">
-          <div v-if="isPasswordTerminalMode" class="ssh-file-list-state">
-            密码认证已打开终端会话。文件浏览、上传下载和远端改名删除需要密钥或 SSH agent。
-          </div>
-          <div v-else-if="isRemoteDirectoryLoading" class="ssh-file-list-state" aria-live="polite">
+          <div v-if="isRemoteDirectoryLoading" class="ssh-file-list-state" aria-live="polite">
             正在读取远端目录…
           </div>
           <div v-else-if="sshFileItems.length === 0" class="ssh-file-list-state">
@@ -1322,8 +1273,8 @@ onBeforeUnmount(() => {
     <footer class="ssh-sidebar-footer" :class="{ 'ssh-sidebar-footer--disconnected': isDisconnected }">
       <button type="button" class="ssh-footer-button" :class="{
         'ssh-footer-button--disconnected': isDisconnected,
-        'is-disabled': isDisconnected || isPathMutating || isPasswordTerminalMode,
-      }" :disabled="isDisconnected || isPathMutating || isPasswordTerminalMode" title="连接后可用"
+        'is-disabled': isDisconnected || isPathMutating,
+      }" :disabled="isDisconnected || isPathMutating" title="连接后可用"
         @click="handleFooterAction('new-folder')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
           stroke-linejoin="round" aria-hidden="true">
@@ -1335,8 +1286,8 @@ onBeforeUnmount(() => {
 
       <button type="button" class="ssh-footer-button" :class="{
         'ssh-footer-button--disconnected': isDisconnected,
-        'is-disabled': isDisconnected || isTransferBusy || isPathMutating || isPasswordTerminalMode,
-      }" :disabled="isDisconnected || isTransferBusy || isPathMutating || isPasswordTerminalMode" title="连接后可用"
+        'is-disabled': isDisconnected || isTransferBusy || isPathMutating,
+      }" :disabled="isDisconnected || isTransferBusy || isPathMutating" title="连接后可用"
         @click="handleFooterAction('upload')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
           stroke-linejoin="round" aria-hidden="true">
@@ -1349,8 +1300,8 @@ onBeforeUnmount(() => {
 
       <button type="button" class="ssh-footer-button" :class="{
         'ssh-footer-button--disconnected': isDisconnected,
-        'is-disabled': isDisconnected || isTransferBusy || isPathMutating || isPasswordTerminalMode,
-      }" :disabled="isDisconnected || isTransferBusy || isPathMutating || isPasswordTerminalMode" title="连接后可用"
+        'is-disabled': isDisconnected || isTransferBusy || isPathMutating,
+      }" :disabled="isDisconnected || isTransferBusy || isPathMutating" title="连接后可用"
         @click="handleFooterAction('download')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
           stroke-linejoin="round" aria-hidden="true">
@@ -1365,6 +1316,26 @@ onBeforeUnmount(() => {
 
   <LinearContextMenu :open="isConnected && contextMenu.open" :x="contextMenu.x" :y="contextMenu.y"
     :groups="SSH_CONTEXT_MENU_GROUPS" theme="dark" submenu-direction="right" @select="handleContextMenuSelect" />
+
+  <Teleport to="body">
+    <div v-if="previewFileItem" class="ssh-modal-backdrop" @click.self="closePreviewDialog">
+      <section class="ssh-modal ssh-preview-modal" role="dialog" aria-modal="true">
+        <div class="ssh-modal-copy">
+          <h3>{{ previewFileItem.name }}</h3>
+          <p>{{ previewFileItem.path }}</p>
+        </div>
+        <div class="ssh-preview-body" aria-live="polite">
+          <div v-if="isPreviewLoading" class="ssh-file-list-state">正在读取远端文件…</div>
+          <pre v-else>{{ previewContent }}</pre>
+        </div>
+        <div class="ssh-modal-actions">
+          <button type="button" class="ssh-modal-button" :disabled="isPreviewLoading" @click="closePreviewDialog">
+            关闭
+          </button>
+        </div>
+      </section>
+    </div>
+  </Teleport>
 
   <Teleport to="body">
     <div v-if="isCreateDirectoryDialogOpen" class="ssh-modal-backdrop" @click.self="closeCreateDirectoryDialog">
@@ -1728,6 +1699,14 @@ onBeforeUnmount(() => {
 
 .ssh-recent-title--disconnected {
   color: var(--ssh-sidebar-text-faint);
+}
+
+.ssh-recent-empty {
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ssh-sidebar-text-muted);
 }
 
 .ssh-recent-item {
@@ -2104,6 +2083,27 @@ onBeforeUnmount(() => {
   color: var(--text-secondary);
 }
 
+.ssh-button:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.ssh-connect-feedback {
+  border: 1px solid color-mix(in srgb, var(--accent-strong) 28%, var(--shell-divider));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent-strong) 8%, transparent);
+  padding: 7px 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.ssh-connect-feedback.is-error {
+  border-color: color-mix(in srgb, var(--danger) 38%, var(--shell-divider));
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+}
+
 .ssh-path-bar {
   display: flex;
   align-items: center;
@@ -2472,6 +2472,31 @@ onBeforeUnmount(() => {
 
 .ssh-modal.is-danger {
   border-color: color-mix(in srgb, var(--danger) 34%, var(--shell-divider));
+}
+
+.ssh-preview-modal {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 48px));
+}
+
+.ssh-preview-body {
+  min-height: 220px;
+  max-height: 520px;
+  overflow: auto;
+  border: 1px solid var(--shell-divider);
+  border-radius: 6px;
+  background: var(--panel-bg);
+}
+
+.ssh-preview-body pre {
+  margin: 0;
+  padding: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary);
 }
 
 .ssh-modal-copy {

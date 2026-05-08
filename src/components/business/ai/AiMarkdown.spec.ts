@@ -1,4 +1,5 @@
 import AiMarkdown from '@/components/business/ai/AiMarkdown.vue';
+import AiMarkdownCodeBlock from '@/components/business/ai/AiMarkdownCodeBlock.vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import MarkdownRender from 'markstream-vue';
 import { describe, expect, it } from 'vitest';
@@ -122,6 +123,31 @@ describe('AiMarkdown rendering', () => {
 
     expect(wrapper.find('button[aria-label="折叠代码块"]').exists()).toBe(true);
     expect(wrapper.get('.ai-code-block').classes()).not.toContain('is-collapsed');
+    expect(wrapper.get('.ai-code-block__body').attributes('style') ?? '').not.toContain('display: none');
+  });
+
+  it('代码节点原地更新时仍用当前内容渲染代码块', async () => {
+    const node = {
+      code: '',
+      language: 'text',
+    };
+    const wrapper = mount(AiMarkdownCodeBlock, {
+      props: {
+        isDark: true,
+        loading: false,
+        node,
+      },
+    });
+
+    await flushRender();
+    node.code = '第一步：观察地图\n第二步：记录问题';
+    await wrapper.setProps({ node });
+    await wrapper.get('button[aria-label="折叠代码块"]').trigger('click');
+    await nextTick();
+
+    expect(wrapper.text()).toContain('第一步：观察地图');
+    expect(wrapper.text()).toContain('第二步：记录问题');
+    expect(wrapper.find('button[aria-label="折叠代码块"]').exists()).toBe(true);
     expect(wrapper.get('.ai-code-block__body').attributes('style') ?? '').not.toContain('display: none');
   });
 

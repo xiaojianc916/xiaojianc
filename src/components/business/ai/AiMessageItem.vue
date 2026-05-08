@@ -97,7 +97,10 @@ const shouldShowRuntimeTimeline = computed(
 );
 
 const shouldShowActivityTimeline = computed(
-  () => props.message.role === 'assistant' && hasActivityTimelineData.value,
+  () =>
+    props.message.role === 'assistant' &&
+    !shouldShowRuntimeTimeline.value &&
+    hasActivityTimelineData.value,
 );
 
 const hasStreamingRuntimeBeforeFinalAnswer = computed(

@@ -123,7 +123,7 @@ watch(
         <div class="workbench-dashboard-sidebar__panel-host min-h-0 flex-1 overflow-hidden"
             :data-switch-direction="switchDirection">
             <Transition name="workbench-sidebar-panel">
-                <AppSidebar :key="props.activeView" :document="props.document" :view="props.activeView"
+                <AppSidebar :document="props.document" :view="props.activeView"
                     :is-desktop-runtime="props.isDesktopRuntime" :workspace-root-path="props.workspaceRootPath"
                     :preloaded-workspace-root="props.preloadedWorkspaceRoot"
                     :startup-explorer-expanded-paths="props.startupExplorerExpandedPaths"
@@ -284,7 +284,7 @@ watch(
     font-weight: 500;
     line-height: 1;
     opacity: 0;
-    transform: translateX(-3px);
+    transform: translate(-3px, 0.5px);
     transition:
         opacity var(--sidebar-pill-label-duration) ease var(--sidebar-pill-label-delay),
         transform var(--sidebar-pill-duration) var(--sidebar-pill-ease) var(--sidebar-pill-label-delay);
@@ -296,7 +296,7 @@ watch(
 
 .workbench-dashboard-sidebar__toolbar-button.is-active .workbench-dashboard-sidebar__toolbar-label {
     opacity: 1;
-    transform: translateX(0);
+    transform: translate(0, 0.5px);
 }
 
 .workbench-dashboard-sidebar__panel-host {

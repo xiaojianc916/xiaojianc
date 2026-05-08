@@ -35,7 +35,6 @@ import type {
 } from '@/types/ai-edit';
 import type { IAnalyzeScriptPayload, IEditorDocument } from '@/types/editor';
 import type { IGitRepositoryStatusPayload } from '@/types/git';
-import { materializeAgentActivities } from '@/utils/agent-activity';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -2121,72 +2120,51 @@ describe('useAiAssistant streaming integration', () => {
 
         const sendPromise = assistant.sendMessage();
         for (let attempt = 0; attempt < 8; attempt += 1) {
-            if ((assistant.messages.value[1]?.stream?.activityTrail?.length ?? 0) >= 3) {
+            if ((assistant.messages.value[1]?.stream?.runtimeEvents?.length ?? 0) >= 3) {
                 break;
             }
             await Promise.resolve();
         }
 
-        expect(assistant.messages.value[1]?.stream?.activityTrail).toEqual(expect.arrayContaining([
-            '已记录文件写入副作用风险，后续需要人工确认。',
-            '正在恢复回滚检查点：snapshot-42',
-            '回滚恢复失败：未找到可恢复的 checkpoint。',
-        ]));
+        expect(assistant.messages.value[1]?.stream?.activityTrail).toBeUndefined();
         expect(assistant.messages.value[1]?.stream?.activities).toBeUndefined();
-        const runningActivities = materializeAgentActivities(
-            assistant.messages.value[1]?.stream?.activityEvents ?? [],
-        );
-        expect(runningActivities).toEqual(expect.arrayContaining([
+        expect(assistant.messages.value[1]?.stream?.activityEvents).toBeUndefined();
+        expect(assistant.messages.value[1]?.stream?.runtimeEvents).toEqual(expect.arrayContaining([
             expect.objectContaining({
-                kind: 'run',
-                status: 'running',
+                type: 'side_effect.recorded',
+                message: '已记录文件写入副作用风险，后续需要人工确认。',
             }),
             expect.objectContaining({
-                kind: 'reasoning_summary',
-                status: 'running',
-                title: '已记录文件写入副作用风险，后续需要人工确认。',
+                type: 'rollback.restore.started',
+                snapshotId: 'snapshot-42',
             }),
             expect.objectContaining({
-                kind: 'reasoning_summary',
-                status: 'running',
-                title: '正在恢复回滚检查点：snapshot-42',
-            }),
-            expect.objectContaining({
-                kind: 'reasoning_summary',
-                status: 'running',
-                title: '回滚恢复失败：未找到可恢复的 checkpoint。',
+                type: 'rollback.restore.failed',
+                errorMessage: '未找到可恢复的 checkpoint。',
             }),
         ]));
-        expect(assistant.messages.value[1]?.stream?.activityEvents?.some((event) =>
-            event.type === 'ACTIVITY_SNAPSHOT')).toBe(true);
 
         sidecarGate.resolve(undefined);
         await sendPromise;
 
         expect(assistant.messages.value[1]?.stream?.status).toBe('completed');
+        expect(assistant.messages.value[1]?.stream?.activityTrail).toBeUndefined();
         expect(assistant.messages.value[1]?.stream?.activities).toBeUndefined();
-        const completedActivities = materializeAgentActivities(
-            assistant.messages.value[1]?.stream?.activityEvents ?? [],
-        );
-        expect(completedActivities).toEqual(expect.arrayContaining([
+        expect(assistant.messages.value[1]?.stream?.activityEvents).toBeUndefined();
+        expect(assistant.messages.value[1]?.stream?.runtimeEvents).toEqual(expect.arrayContaining([
             expect.objectContaining({
-                kind: 'reasoning_summary',
-                status: 'success',
-                title: '已记录文件写入副作用风险，后续需要人工确认。',
+                type: 'side_effect.recorded',
+                message: '已记录文件写入副作用风险，后续需要人工确认。',
             }),
             expect.objectContaining({
-                kind: 'reasoning_summary',
-                status: 'success',
-                title: '正在恢复回滚检查点：snapshot-42',
+                type: 'rollback.restore.started',
+                snapshotId: 'snapshot-42',
             }),
             expect.objectContaining({
-                kind: 'reasoning_summary',
-                status: 'success',
-                title: '回滚恢复失败：未找到可恢复的 checkpoint。',
+                type: 'rollback.restore.failed',
+                errorMessage: '未找到可恢复的 checkpoint。',
             }),
         ]));
-        expect(assistant.messages.value[1]?.stream?.activityEvents?.some((event) =>
-            event.type === 'ACTIVITY_DELTA')).toBe(true);
     });
 
     it('preserves cumulative sidecar markdown exactly while a code fence is still streaming', async () => {

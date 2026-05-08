@@ -269,6 +269,7 @@ pub struct SshConnectionTestRequest {
     /// 已知值："password" | "key" | "agent"。
     pub(crate) auth_mode: String,
     pub(crate) identity_path: Option<String>,
+    pub(crate) password: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -288,6 +289,7 @@ pub struct SshDirectoryListRequest {
     pub(crate) username: String,
     pub(crate) auth_mode: String,
     pub(crate) identity_path: Option<String>,
+    pub(crate) password: Option<String>,
     pub(crate) path: String,
 }
 
@@ -316,6 +318,7 @@ pub struct SshFileDownloadRequest {
     pub(crate) username: String,
     pub(crate) auth_mode: String,
     pub(crate) identity_path: Option<String>,
+    pub(crate) password: Option<String>,
     pub(crate) remote_path: String,
     pub(crate) local_path: String,
 }
@@ -336,6 +339,7 @@ pub struct SshFileUploadRequest {
     pub(crate) username: String,
     pub(crate) auth_mode: String,
     pub(crate) identity_path: Option<String>,
+    pub(crate) password: Option<String>,
     pub(crate) local_path: String,
     pub(crate) remote_directory: String,
 }
@@ -356,6 +360,7 @@ pub struct SshPathDeleteRequest {
     pub(crate) username: String,
     pub(crate) auth_mode: String,
     pub(crate) identity_path: Option<String>,
+    pub(crate) password: Option<String>,
     pub(crate) remote_path: String,
 }
 
@@ -373,6 +378,7 @@ pub struct SshPathRenameRequest {
     pub(crate) username: String,
     pub(crate) auth_mode: String,
     pub(crate) identity_path: Option<String>,
+    pub(crate) password: Option<String>,
     pub(crate) remote_path: String,
     pub(crate) new_name: String,
 }
@@ -392,6 +398,7 @@ pub struct SshDirectoryCreateRequest {
     pub(crate) username: String,
     pub(crate) auth_mode: String,
     pub(crate) identity_path: Option<String>,
+    pub(crate) password: Option<String>,
     pub(crate) remote_directory: String,
     pub(crate) name: String,
 }
@@ -400,6 +407,26 @@ pub struct SshDirectoryCreateRequest {
 #[serde(rename_all = "camelCase")]
 pub struct SshDirectoryCreatePayload {
     pub(crate) remote_path: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SshFileReadRequest {
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) username: String,
+    pub(crate) auth_mode: String,
+    pub(crate) identity_path: Option<String>,
+    pub(crate) password: Option<String>,
+    pub(crate) remote_path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SshFileReadPayload {
+    pub(crate) remote_path: String,
+    pub(crate) content: String,
+    pub(crate) byte_size: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -138,6 +138,7 @@ const sshConnectionInputSchema = z.object({
   username: z.string().min(1),
   authMode: z.enum(['key', 'password']),
   identityPath: z.string().nullable(),
+  password: z.string().nullable(),
 });
 
 const executionOptionSchema = z.object({
@@ -695,6 +696,16 @@ export const tauriContracts = {
     outSchema: z.object({
       localPath: z.string(),
       remotePath: z.string(),
+      byteSize: z.number().int().nonnegative(),
+    }),
+  },
+  readSshFile: {
+    inSchema: sshConnectionInputSchema.extend({
+      remotePath: z.string().min(1),
+    }),
+    outSchema: z.object({
+      remotePath: z.string(),
+      content: z.string(),
       byteSize: z.number().int().nonnegative(),
     }),
   },
