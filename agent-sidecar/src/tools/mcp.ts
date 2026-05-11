@@ -249,7 +249,7 @@ const mergeHeaders = (
 };
 
 const createHeaderFetch = (headers: Record<string, string>): MastraFetchLike =>
-  async (url, init, _requestContext) => fetch(url, {
+  async (url, init) => fetch(url, {
     ...init,
     headers: mergeHeaders(init?.headers, headers),
   });

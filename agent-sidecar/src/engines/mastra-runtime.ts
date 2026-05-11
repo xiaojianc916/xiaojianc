@@ -109,6 +109,9 @@ const DEFAULT_ROLLBACK_STEP: TRollbackStepPath = [
     DurableStepIds.AGENTIC_EXECUTION,
     DurableStepIds.LLM_EXECUTION,
 ];
+const MCP_TOOLS_REPLACED_BY_MASTRA_WORKSPACE = new Set([
+    'probe_grep',
+]);
 
 type TMastraRequestContextValues = Record<string, unknown>;
 type TMastraRequestContext = RequestContext<TMastraRequestContextValues>;
@@ -569,6 +572,18 @@ const destroyMastraBrowser = async (browser: MastraBrowser | undefined): Promise
     await browser.close().catch(() => undefined);
 };
 
+const removeMcpToolsDuplicatedByMastraWorkspace = (tools: ToolsInput): ToolsInput => {
+    const filteredTools: ToolsInput = {};
+
+    for (const [toolName, tool] of Object.entries(tools)) {
+        if (!MCP_TOOLS_REPLACED_BY_MASTRA_WORKSPACE.has(toolName)) {
+            filteredTools[toolName] = tool;
+        }
+    }
+
+    return filteredTools;
+};
+
 const createMastraModelConfig = (
     model: TDeepSeekModelConfig,
 ): MastraModelConfig => model;
@@ -750,7 +765,10 @@ const loadMastraMcpTools = async (
         : {});
     const workspace = createMastraWorkspace(workspaceRootPath, profile);
     const browser = createMastraBrowser();
-    const mcpTools = filterMcpToolsForProfile(bundle.tools, profile);
+    const profileFilteredMcpTools = filterMcpToolsForProfile(bundle.tools, profile);
+    const mcpTools = workspace
+        ? removeMcpToolsDuplicatedByMastraWorkspace(profileFilteredMcpTools)
+        : profileFilteredMcpTools;
     const tools: ToolsInput = {
         ...mcpTools,
         ...createUiContextTools(contextReferences),

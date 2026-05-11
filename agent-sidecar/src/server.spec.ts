@@ -1495,6 +1495,36 @@ describe('Mastra runtime chat', () => {
         configs: [],
         errors: [],
         tools: {
+          probe_grep: createTool({
+            id: 'probe_grep',
+            description: '正则搜索文件内容',
+            inputSchema: z.object({
+              pattern: z.string(),
+            }),
+            execute: async () => ({
+              matches: [],
+            }),
+          }),
+          probe_search_code: createTool({
+            id: 'probe_search_code',
+            description: '语义代码搜索',
+            inputSchema: z.object({
+              query: z.string(),
+            }),
+            execute: async () => ({
+              results: [],
+            }),
+          }),
+          probe_extract_code: createTool({
+            id: 'probe_extract_code',
+            description: 'AST 提取代码块',
+            inputSchema: z.object({
+              path: z.string(),
+            }),
+            execute: async () => ({
+              blocks: [],
+            }),
+          }),
           tavily_mcp_tavily_search: createTool({
             id: 'tavily_mcp_tavily_search',
             description: '联网搜索',
@@ -1542,10 +1572,68 @@ describe('Mastra runtime chat', () => {
       });
 
       assert.equal(capturedToolNames.includes('read_text_file'), false);
+      assert.equal(capturedToolNames.includes('probe_grep'), false);
+      assert.equal(capturedToolNames.includes('probe_search_code'), true);
+      assert.equal(capturedToolNames.includes('probe_extract_code'), true);
       assert.equal(capturedToolNames.includes('tavily_mcp_tavily_search'), true);
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }
+  });
+
+  it('keeps Probe grep when no Mastra workspace is available', async () => {
+    let capturedToolNames: string[] = [];
+    const runtime = new MastraRuntime({
+      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      createMcpClientBundle: async () => ({
+        clients: [],
+        configs: [],
+        errors: [],
+        tools: {
+          probe_grep: createTool({
+            id: 'probe_grep',
+            description: '正则搜索文件内容',
+            inputSchema: z.object({
+              pattern: z.string(),
+            }),
+            execute: async () => ({
+              matches: [],
+            }),
+          }),
+        },
+        disconnectAll: async () => undefined,
+      }),
+      createAgent: (config) => {
+        capturedToolNames = Object.keys(config.tools ?? {});
+
+        return {
+          stream: async () => ({
+            fullStream: (async function* () {
+              yield {
+                type: 'text-delta',
+                runId: 'no-workspace-filter-run',
+                payload: {
+                  id: 'no-workspace-filter-text',
+                  text: '无 workspace。',
+                },
+              };
+            })(),
+          }),
+          generate: async () => {
+            throw new Error('generate should not be used in no workspace duplicate filter test');
+          },
+        };
+      },
+    });
+
+    await runtime.chat({
+      mode: 'ask',
+      goal: '没有 workspace',
+      messages: [{ role: 'user', content: '没有 workspace' }],
+      context: [],
+    });
+
+    assert.equal(capturedToolNames.includes('probe_grep'), true);
   });
 
   it('routes Mastra reasoning chunks into agent runtime events instead of final text', async () => {
