@@ -9,13 +9,13 @@ import type {
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { z } from 'zod';
 
-export const TERMINAL_DATA_EVENT = 'terminal:data';
-export const TERMINAL_RUN_CHUNK_EVENT = 'terminal:run-chunk';
-export const TERMINAL_RUN_STARTED_EVENT = 'terminal:run-started';
-export const TERMINAL_RUN_COMPLETED_EVENT = 'terminal:run-completed';
-export const TERMINAL_INTERACTIVE_READY_EVENT = 'terminal:interactive-ready';
-export const TERMINAL_INTERACTIVE_EXITED_EVENT = 'terminal:interactive-exited';
-export const TERMINAL_STATE_CHANGED_EVENT = 'terminal:state-changed';
+const TERMINAL_DATA_EVENT = 'terminal:data';
+const TERMINAL_RUN_CHUNK_EVENT = 'terminal:run-chunk';
+const TERMINAL_RUN_STARTED_EVENT = 'terminal:run-started';
+const TERMINAL_RUN_COMPLETED_EVENT = 'terminal:run-completed';
+const TERMINAL_INTERACTIVE_READY_EVENT = 'terminal:interactive-ready';
+const TERMINAL_INTERACTIVE_EXITED_EVENT = 'terminal:interactive-exited';
+const TERMINAL_STATE_CHANGED_EVENT = 'terminal:state-changed';
 
 type TEventHandler<TPayload> = (payload: TPayload) => void;
 
