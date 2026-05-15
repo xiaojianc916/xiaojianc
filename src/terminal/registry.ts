@@ -1,6 +1,6 @@
 /**
  * src/terminal/registry.ts
- * useTerminalRegistry — 终端会话注册表（R-20.2.2）
+ * useTerminalRegistryStore — 终端会话注册表（R-20.2.2）
  *
  * 通过 Pinia setup store 暴露，MUST NOT 使用裸模块级变量。
  * 负责 TerminalSession 的创建、查询、枚举和完整销毁。
@@ -88,6 +88,3 @@ export const useTerminalRegistryStore = defineStore('terminal-registry', () => {
 
     return { get, set, list, dispose, getOrCreate, getStatusRefs };
 });
-
-/** 别名，与 composable 命名惯例一致 */
-export const useTerminalRegistry = useTerminalRegistryStore;
