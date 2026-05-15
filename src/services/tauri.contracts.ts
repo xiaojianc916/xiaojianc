@@ -39,7 +39,6 @@ import {
   aiAgentNetworkPermissionPayloadSchema,
   aiAgentSetNetworkPermissionRequestSchema,
   aiApplyPatchMetadataSchema,
-  aiChatPayloadSchema,
   aiChatRequestSchema,
   aiChatStreamPayloadSchema,
   aiCodeActionPayloadSchema,
@@ -48,9 +47,6 @@ import {
   aiConversationTitlePayloadSchema,
   aiConversationTitleRequestSchema,
   aiModelRoleSchema,
-  aiNarratorRequestSchema,
-  aiNarratorResponseSchema,
-  aiNarratorStreamPayloadSchema,
   aiPatchSetSchema,
   aiProviderConnectionPayloadSchema,
   aiProviderConnectionRequestSchema,
@@ -918,10 +914,6 @@ export const tauriContracts = {
     inSchema: z.void(),
     outSchema: aiProviderTestPayloadSchema,
   },
-  aiChat: {
-    inSchema: aiChatRequestSchema,
-    outSchema: aiChatPayloadSchema,
-  },
   aiGenerateConversationTitle: {
     inSchema: aiConversationTitleRequestSchema,
     outSchema: aiConversationTitlePayloadSchema,
@@ -933,14 +925,6 @@ export const tauriContracts = {
   aiGenerateSuggestionPool: {
     inSchema: aiSuggestionPoolRequestSchema,
     outSchema: aiSuggestionPoolPayloadSchema,
-  },
-  aiNarrateActivity: {
-    inSchema: aiNarratorRequestSchema,
-    outSchema: aiNarratorResponseSchema,
-  },
-  aiNarrateActivityStream: {
-    inSchema: aiNarratorRequestSchema,
-    outSchema: aiNarratorStreamPayloadSchema,
   },
   aiChatStream: {
     inSchema: aiChatRequestSchema,
@@ -989,32 +973,6 @@ export const tauriContracts = {
   aiWebFetch: {
     inSchema: aiWebFetchInputSchema,
     outSchema: aiWebFetchPayloadSchema,
-  },
-  aiBuildIndex: {
-    inSchema: z.object({
-      workspaceRootPath: z.string().min(1),
-    }),
-    outSchema: z.object({
-      rootPath: z.string(),
-      indexedFileCount: z.number().int().nonnegative(),
-      skippedFileCount: z.number().int().nonnegative(),
-    }),
-  },
-  aiQueryIndex: {
-    inSchema: z.object({
-      workspaceRootPath: z.string().min(1),
-      query: z.string(),
-      limit: z.number().int().positive().max(80).optional(),
-    }),
-    outSchema: z.object({
-      rootPath: z.string(),
-      results: z.array(z.object({
-        path: z.string(),
-        lineNumber: z.number().int().positive().nullable(),
-        preview: z.string(),
-        score: z.number(),
-      })),
-    }),
   },
   aiProposePatch: {
     inSchema: z.object({

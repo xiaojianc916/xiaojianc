@@ -39,9 +39,9 @@ import { Observability, SensitiveDataFilter } from '@mastra/observability';
 import { z } from 'zod';
 
 import {
-    createDeepSeekModelConfigFromEnv,
-    type TDeepSeekModelConfig,
-} from '../models/deepseek-model.js';
+    createMastraModelConfigFromEnv,
+    type IMastraResolvedModelConfig,
+} from '../models/mastra-model-config.js';
 import {
     createDeepSeekReasoningRunPrefix,
     evictDeepSeekReasoningByPrefix,
@@ -277,7 +277,7 @@ interface IMastraRuntimeDeps {
         workflowName: string,
         runId: string,
     ) => Promise<IMastraWorkflowSnapshotLike | null>;
-    readModelConfig?: () => TDeepSeekModelConfig | null;
+    readModelConfig?: () => IMastraResolvedModelConfig | null;
     createMcpClientBundle?: (
         options?: { workspaceRootPath?: string | null; serverNames?: readonly TMcpServerName[] },
     ) => Promise<IMastraMcpBundle>;
@@ -987,11 +987,11 @@ const createMastraToolLoadPlan = (
 };
 
 const createMastraModelConfig = (
-    model: TDeepSeekModelConfig,
-): MastraModelConfig => model;
+    model: IMastraResolvedModelConfig,
+): MastraModelConfig => model.model;
 
 const createMastraMemoryForModel = (
-    model: TDeepSeekModelConfig,
+    model: IMastraResolvedModelConfig,
 ): ReturnType<typeof createMastraAgentMemory> =>
     createMastraAgentMemory(resolveMastraStorageUrl(), createMastraModelConfig(model));
 
@@ -1996,7 +1996,7 @@ export class MastraRuntime {
         runId: string,
     ) => Promise<IMastraWorkflowSnapshotLike | null>;
 
-    private readonly readModelConfig: () => TDeepSeekModelConfig | null;
+    private readonly readModelConfig: () => IMastraResolvedModelConfig | null;
 
     private readonly createMcpClientBundle: (
         options?: { workspaceRootPath?: string | null; serverNames?: readonly TMcpServerName[] },
@@ -2031,7 +2031,7 @@ export class MastraRuntime {
                 const workflowStore = await this.storage.getStore('workflows');
                 return workflowStore?.loadWorkflowSnapshot({ workflowName, runId }) ?? null;
             });
-        this.readModelConfig = deps.readModelConfig ?? createDeepSeekModelConfigFromEnv;
+        this.readModelConfig = deps.readModelConfig ?? createMastraModelConfigFromEnv;
         this.createMcpClientBundle = deps.createMcpClientBundle ?? createMastraMcpClientBundle;
         this.mcpGatewayPool = createMcpGatewayWarmPool({
             createBundle: this.createMcpClientBundle,
@@ -2347,7 +2347,7 @@ export class MastraRuntime {
         if (!modelConfig) {
             return createErrorResponse(
                 sessionId,
-                'DeepSeek 未配置：请在 Node sidecar 环境设置 DEEPSEEK_API_KEY。',
+                'AI 模型未配置：请在 Node sidecar 环境设置 AGENT_SIDECAR_MODEL 与 AGENT_SIDECAR_API_KEY。',
                 events,
                 options,
             );
@@ -2508,7 +2508,7 @@ export class MastraRuntime {
         if (!modelConfig) {
             return createErrorResponse(
                 sessionId,
-                'DeepSeek 未配置：请在 Node sidecar 环境设置 DEEPSEEK_API_KEY。',
+                'AI 模型未配置：请在 Node sidecar 环境设置 AGENT_SIDECAR_MODEL 与 AGENT_SIDECAR_API_KEY。',
                 events,
                 options,
             );
@@ -2769,7 +2769,7 @@ export class MastraRuntime {
         if (!modelConfig) {
             return createErrorResponse(
                 sessionId,
-                'DeepSeek 未配置：请在 Node sidecar 环境设置 DEEPSEEK_API_KEY。',
+                'AI 模型未配置：请在 Node sidecar 环境设置 AGENT_SIDECAR_MODEL 与 AGENT_SIDECAR_API_KEY。',
                 events,
                 options,
             );
@@ -2955,7 +2955,7 @@ export class MastraRuntime {
         if (!modelConfig) {
             return createErrorResponse(
                 sessionId,
-                'DeepSeek 未配置：请在 Node sidecar 环境设置 DEEPSEEK_API_KEY。',
+                'AI 模型未配置：请在 Node sidecar 环境设置 AGENT_SIDECAR_MODEL 与 AGENT_SIDECAR_API_KEY。',
                 events,
                 options,
             );
@@ -3192,7 +3192,7 @@ export class MastraRuntime {
         if (!modelConfig) {
             return createErrorResponse(
                 sessionId,
-                'DeepSeek 未配置：请在 Node sidecar 环境设置 DEEPSEEK_API_KEY。',
+                'AI 模型未配置：请在 Node sidecar 环境设置 AGENT_SIDECAR_MODEL 与 AGENT_SIDECAR_API_KEY。',
                 events,
                 options,
             );
@@ -3534,7 +3534,7 @@ export class MastraRuntime {
         if (!modelConfig) {
             return createErrorResponse(
                 sessionId,
-                'DeepSeek 未配置：请在 Node sidecar 环境设置 DEEPSEEK_API_KEY。',
+                'AI 模型未配置：请在 Node sidecar 环境设置 AGENT_SIDECAR_MODEL 与 AGENT_SIDECAR_API_KEY。',
                 events,
                 options,
             );

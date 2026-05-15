@@ -1,8 +1,8 @@
 use super::contracts::{
     AiAgentClassifyTaskPayload, AiAgentClassifyTaskRequest, AiAgentNetworkPermissionPayload,
     AiAgentSetNetworkPermissionRequest, AiApplyPatchPayload, AiApplyPatchRequest,
-    AiBuildIndexPayload, AiBuildIndexRequest, AiCancelRequest, AiChatMessagePayload, AiChatPayload,
-    AiChatRequest, AiChatStreamPayload, AiCodeActionPayload, AiCodeActionRequest, AiConfigPayload,
+    AiCancelRequest, AiChatRequest, AiChatStreamPayload, AiCodeActionPayload,
+    AiCodeActionRequest, AiConfigPayload,
     AiConversationTitlePayload, AiConversationTitleRequest, AiEditAuthStatePayload,
     AiEditCreateSnapshotPayload, AiEditCreateSnapshotRequest, AiEditGetDiffPayload,
     AiEditGetDiffRequest, AiEditListTimelinePayload, AiEditListTimelineRequest,
@@ -10,14 +10,12 @@ use super::contracts::{
     AiEditRevertFileRequest, AiEditRevertHunkPayload, AiEditRevertHunkRequest,
     AiEditRevertTaskPayload, AiEditRevertTaskRequest, AiEditSetAuthLevelRequest,
     AiEditUndoOperationPayload, AiEditUndoOperationRequest, AiInlineCompletionRangePayload,
-    AiInlineCompletionRequest, AiInlineCompletionResult, AiNarratorRequest,
-    AiNarratorResponsePayload, AiNarratorStreamPayload, AiProposePatchPayload,
+    AiInlineCompletionRequest, AiInlineCompletionResult, AiProposePatchPayload,
     AiProposePatchRequest, AiProviderConnectionPayload, AiProviderConnectionRequest,
     AiProviderProfileDetailPayload, AiProviderProfilePayload, AiProviderProfileSwitchRequest,
-    AiProviderTestPayload, AiQueryIndexPayload, AiQueryIndexRequest, AiSaveConfigRequest,
-    AiSaveCredentialsRequest, AiSuggestionPoolPayload, AiSuggestionPoolRequest,
-    AiWebFetchInput, AiWebFetchPayload, AiWebSearchInput,
-    AiWebSearchPayload,
+    AiProviderTestPayload, AiSaveConfigRequest, AiSaveCredentialsRequest,
+    AiSuggestionPoolPayload, AiSuggestionPoolRequest, AiWebFetchInput, AiWebFetchPayload,
+    AiWebSearchInput, AiWebSearchPayload,
 };
 use crate::ai::audit::{self, AiAuditEventKind};
 use crate::ai::gateway;
@@ -26,7 +24,6 @@ use crate::ai::redaction::redact_text;
 use crate::ai::stream_manager;
 use crate::ai_edit;
 use crate::ai_edit::AiEditState;
-use crate::ai_index;
 use crate::ai_patch;
 use crate::ai_tools::web_safety::validate_public_http_url;
 use std::path::PathBuf;
@@ -172,23 +169,6 @@ pub async fn ai_test_provider() -> Result<AiProviderTestPayload, String> {
 }
 
 #[tauri::command]
-pub async fn ai_chat(payload: AiChatRequest) -> Result<AiChatPayload, String> {
-    let response = gateway::chat(payload).await?;
-    Ok(AiChatPayload {
-        message: AiChatMessagePayload {
-            id: format!("assistant-{}", chrono::Utc::now().timestamp_millis()),
-            role: "assistant".to_string(),
-            content: response.content,
-            created_at: chrono::Utc::now().to_rfc3339(),
-            references: Vec::new(),
-        },
-        provider_type: gateway::get_config().provider_type,
-        model: response.model,
-        usage: response.usage,
-    })
-}
-
-#[tauri::command]
 pub async fn ai_generate_conversation_title(
     payload: AiConversationTitleRequest,
 ) -> Result<AiConversationTitlePayload, String> {
@@ -205,31 +185,6 @@ pub async fn ai_generate_suggestion_pool(
     payload: AiSuggestionPoolRequest,
 ) -> Result<AiSuggestionPoolPayload, String> {
     gateway::generate_suggestion_pool(payload).await
-}
-
-#[tauri::command]
-pub async fn ai_narrate_activity(
-    payload: AiNarratorRequest,
-) -> Result<AiNarratorResponsePayload, String> {
-    gateway::narrate_activity(payload).await
-}
-
-#[tauri::command]
-pub async fn ai_narrate_activity_stream(
-    app: AppHandle,
-    payload: AiNarratorRequest,
-) -> Result<AiNarratorStreamPayload, String> {
-    let started = gateway::narrate_activity_stream(app, payload).await?;
-    Ok(AiNarratorStreamPayload {
-        stream_id: started.stream_id,
-        run_id: started.run_id,
-        message_id: started.message_id,
-        turn_id: started.turn_id,
-        facts_hash: started.facts_hash,
-        sequence: started.sequence,
-        trigger: started.trigger,
-        model: started.model,
-    })
 }
 
 #[tauri::command]
@@ -337,16 +292,6 @@ pub async fn ai_web_fetch(payload: AiWebFetchInput) -> Result<AiWebFetchPayload,
     }
 
     result
-}
-
-#[tauri::command]
-pub fn ai_build_index(payload: AiBuildIndexRequest) -> Result<AiBuildIndexPayload, String> {
-    ai_index::build_index(payload)
-}
-
-#[tauri::command]
-pub fn ai_query_index(payload: AiQueryIndexRequest) -> Result<AiQueryIndexPayload, String> {
-    ai_index::query_index(payload)
 }
 
 #[tauri::command]

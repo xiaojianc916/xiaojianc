@@ -3,6 +3,7 @@ use super::config::{
     AiProviderConnectionCandidate,
 };
 use super::*;
+use crate::ai::provider::AiProviderResponse;
 
 #[derive(Debug, Clone)]
 pub(super) struct AiUpstreamEndpoint {

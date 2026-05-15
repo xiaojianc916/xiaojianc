@@ -1,8 +1,5 @@
 import { agentSidecarStreamEventPayloadSchema } from '@/types/agent-sidecar.schema';
-import {
-  aiChatStreamEventPayloadSchema,
-  aiNarratorStreamEventPayloadSchema,
-} from '@/types/ai.schema';
+import { aiChatStreamEventPayloadSchema } from '@/types/ai.schema';
 import { AppError, isAppError } from '@/types/app-error';
 import type { ITauriService } from '@/types/tauri';
 import { wslLinkStatusPayloadSchema } from '@/types/wsl-link.schema';
@@ -1060,13 +1057,6 @@ const aiTestProviderIpc = defineContractIpc(
   { idempotent: true, audit: 'sensitive' },
 );
 
-const aiChatIpc = definePayloadIpc(
-  'ai_chat',
-  '发送 AI 对话请求',
-  tauriContracts.aiChat,
-  { audit: 'sensitive', timeoutMs: 60_000, measureInput: measureAiChatInput },
-);
-
 const aiGenerateConversationTitleIpc = definePayloadIpc(
   'ai_generate_conversation_title',
   '生成 AI 对话标题',
@@ -1086,20 +1076,6 @@ const aiGenerateSuggestionPoolIpc = definePayloadIpc(
   '生成 AI 提示词池',
   tauriContracts.aiGenerateSuggestionPool,
   { audit: 'info', timeoutMs: 30_000, measureInput: buildPayloadMetrics },
-);
-
-const aiNarrateActivityIpc = definePayloadIpc(
-  'ai_narrate_activity',
-  '生成 AI 活动旁白',
-  tauriContracts.aiNarrateActivity,
-  { audit: 'sensitive', timeoutMs: 20_000, measureInput: buildPayloadMetrics },
-);
-
-const aiNarrateActivityStreamIpc = definePayloadIpc(
-  'ai_narrate_activity_stream',
-  '发送 AI 活动旁白流式请求',
-  tauriContracts.aiNarrateActivityStream,
-  { audit: 'sensitive', timeoutMs: 20_000, measureInput: buildPayloadMetrics },
 );
 
 const aiChatStreamIpc = definePayloadIpc(
@@ -1156,20 +1132,6 @@ const aiWebFetchIpc = definePayloadIpc(
   '读取 AI Agent 网页来源',
   tauriContracts.aiWebFetch,
   { idempotent: true, audit: 'sensitive', timeoutMs: 30_000 },
-);
-
-const aiBuildIndexIpc = definePayloadIpc(
-  'ai_build_index',
-  '构建 AI 代码索引',
-  tauriContracts.aiBuildIndex,
-  { audit: 'sensitive', timeoutMs: 60_000 },
-);
-
-const aiQueryIndexIpc = definePayloadIpc(
-  'ai_query_index',
-  '查询 AI 代码索引',
-  tauriContracts.aiQueryIndex,
-  { audit: 'sensitive', timeoutMs: 30_000 },
 );
 
 const aiProposePatchIpc = definePayloadIpc(
@@ -1513,19 +1475,11 @@ export const tauriService: ITauriService & {
 
   aiConnectProvider: aiConnectProviderIpc,
 
-  aiChat(payload, options) {
-    return aiChatIpc(payload, options) as ReturnType<ITauriService['aiChat']>;
-  },
-
   aiGenerateConversationTitle: aiGenerateConversationTitleIpc,
 
   aiGetSuggestionPoolCache: () => aiGetSuggestionPoolCacheIpc(undefined),
 
   aiGenerateSuggestionPool: aiGenerateSuggestionPoolIpc,
-
-  aiNarrateActivity: aiNarrateActivityIpc,
-
-  aiNarrateActivityStream: aiNarrateActivityStreamIpc,
 
   aiChatStream: aiChatStreamIpc,
 
@@ -1536,18 +1490,6 @@ export const tauriService: ITauriService & {
     const { listen } = await loadTauriEvent();
     return listen('ai:chat-stream', (event) => {
       const parsed = aiChatStreamEventPayloadSchema.safeParse(event.payload);
-      if (!parsed.success) {
-        return;
-      }
-      handler(parsed.data);
-    });
-  },
-
-  async onAiNarratorStream(handler) {
-    await assertDesktopRuntime('监听 AI 活动旁白流式响应');
-    const { listen } = await loadTauriEvent();
-    return listen('ai:narrator-stream', (event) => {
-      const parsed = aiNarratorStreamEventPayloadSchema.safeParse(event.payload);
       if (!parsed.success) {
         return;
       }
@@ -1590,10 +1532,6 @@ export const tauriService: ITauriService & {
   aiWebSearch: aiWebSearchIpc,
 
   aiWebFetch: aiWebFetchIpc,
-
-  aiBuildIndex: aiBuildIndexIpc,
-
-  aiQueryIndex: aiQueryIndexIpc,
 
   aiProposePatch: aiProposePatchIpc,
 

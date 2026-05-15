@@ -4,7 +4,6 @@ mod agent_sidecar;
 mod ai;
 mod ai_agent;
 mod ai_edit;
-mod ai_index;
 mod ai_patch;
 mod ai_tools;
 mod commands;
@@ -18,16 +17,16 @@ use commands::{
     agent_sidecar_plan_approve, agent_sidecar_plan_finish, agent_sidecar_plan_query,
     agent_sidecar_plan_reject, agent_sidecar_plan_replan, agent_sidecar_plan_validate,
     agent_sidecar_resolve_approval, agent_sidecar_restart, agent_sidecar_restore_checkpoint,
-    ai_agent_classify_task, ai_agent_set_network_permission, ai_apply_patch, ai_build_index,
-    ai_cancel, ai_chat, ai_chat_stream, ai_clear_credentials, ai_code_action, ai_connect_provider,
+    ai_agent_classify_task, ai_agent_set_network_permission, ai_apply_patch,
+    ai_cancel, ai_chat_stream, ai_clear_credentials, ai_code_action, ai_connect_provider,
     ai_edit_create_snapshot, ai_edit_get_auth_level, ai_edit_get_diff, ai_edit_list_timeline,
     ai_edit_restore_snapshot, ai_edit_revert_file, ai_edit_revert_hunk, ai_edit_revert_task,
     ai_edit_set_auth_level, ai_edit_undo_operation, ai_generate_conversation_title,
     ai_generate_suggestion_pool, ai_get_config, ai_get_provider_profile_detail,
     ai_get_suggestion_pool_cache, ai_inline_complete, ai_list_provider_profiles,
-    ai_narrate_activity, ai_narrate_activity_stream, ai_propose_patch, ai_query_index,
-    ai_save_config, ai_save_credentials, ai_switch_provider_profile, ai_test_provider,
-    ai_test_provider_config, ai_web_fetch, ai_web_search, analyze_script, apply_git_stash,
+    ai_propose_patch, ai_save_config, ai_save_credentials, ai_switch_provider_profile,
+    ai_test_provider, ai_test_provider_config, ai_web_fetch, ai_web_search, analyze_script,
+    apply_git_stash,
     apply_window_stage, apply_workspace_replacement, cancel_terminal_run,
     check_wsl_link_environment, checkout_git_branch, close_terminal_session, commit_git_index,
     create_git_branch, create_ssh_directory, create_workspace_path, delete_ssh_path,
@@ -361,12 +360,9 @@ fn main() {
             ai_test_provider,
             ai_test_provider_config,
             ai_connect_provider,
-            ai_chat,
             ai_generate_conversation_title,
             ai_get_suggestion_pool_cache,
             ai_generate_suggestion_pool,
-            ai_narrate_activity,
-            ai_narrate_activity_stream,
             ai_chat_stream,
             ai_cancel,
             ai_inline_complete,
@@ -375,8 +371,6 @@ fn main() {
             ai_agent_set_network_permission,
             ai_web_search,
             ai_web_fetch,
-            ai_build_index,
-            ai_query_index,
             ai_propose_patch,
             ai_apply_patch,
             ai_edit_get_auth_level,

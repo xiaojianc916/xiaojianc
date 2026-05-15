@@ -22,9 +22,6 @@ import type {
   IAiAgentSetNetworkPermissionRequest,
   IAiApplyPatchPayload,
   IAiApplyPatchRequest,
-  IAiBuildIndexPayload,
-  IAiBuildIndexRequest,
-  IAiChatPayload,
   IAiChatRequest,
   IAiChatStreamEventPayload,
   IAiChatStreamPayload,
@@ -35,10 +32,6 @@ import type {
   IAiConversationTitleRequest,
   IAiInlineCompletionRequest,
   IAiInlineCompletionResult,
-  IAiNarratorRequest,
-  IAiNarratorResponse,
-  IAiNarratorStreamEventPayload,
-  IAiNarratorStreamPayload,
   IAiProposePatchPayload,
   IAiProposePatchRequest,
   IAiProviderConnectionPayload,
@@ -47,8 +40,6 @@ import type {
   IAiProviderProfilePayload,
   IAiProviderProfileSwitchRequest,
   IAiProviderTestPayload,
-  IAiQueryIndexPayload,
-  IAiQueryIndexRequest,
   IAiSaveConfigRequest,
   IAiSaveCredentialsRequest,
   IAiSuggestionPoolPayload,
@@ -285,9 +276,6 @@ export const aiService = {
   connectProvider(payload: IAiProviderConnectionRequest): Promise<IAiProviderConnectionPayload> {
     return tauriService.aiConnectProvider(payload);
   },
-  chat(payload: IAiChatRequest, options: { signal?: AbortSignal } = {}): Promise<IAiChatPayload> {
-    return tauriService.aiChat(payload, options);
-  },
   generateConversationTitle(
     payload: IAiConversationTitleRequest,
   ): Promise<IAiConversationTitlePayload> {
@@ -299,12 +287,6 @@ export const aiService = {
   generateSuggestionPool(payload: IAiSuggestionPoolRequest): Promise<IAiSuggestionPoolPayload> {
     return tauriService.aiGenerateSuggestionPool(payload);
   },
-  narrateActivity(payload: IAiNarratorRequest): Promise<IAiNarratorResponse> {
-    return tauriService.aiNarrateActivity(payload);
-  },
-  narrateActivityStream(payload: IAiNarratorRequest): Promise<IAiNarratorStreamPayload> {
-    return tauriService.aiNarrateActivityStream(payload);
-  },
   chatStream(payload: IAiChatRequest): Promise<IAiChatStreamPayload> {
     return tauriService.aiChatStream(payload);
   },
@@ -313,11 +295,6 @@ export const aiService = {
   },
   onChatStream(handler: (payload: IAiChatStreamEventPayload) => void): Promise<() => void> {
     return tauriService.onAiChatStream(handler);
-  },
-  onNarratorStream(
-    handler: (payload: IAiNarratorStreamEventPayload) => void,
-  ): Promise<() => void> {
-    return tauriService.onAiNarratorStream(handler);
   },
   inlineComplete(payload: IAiInlineCompletionRequest): Promise<IAiInlineCompletionResult> {
     return tauriService.aiInlineComplete(payload);
@@ -338,12 +315,6 @@ export const aiService = {
   },
   webFetch(payload: IAiWebFetchInput): Promise<IAiWebFetchPayload> {
     return tauriService.aiWebFetch(payload);
-  },
-  buildIndex(payload: IAiBuildIndexRequest): Promise<IAiBuildIndexPayload> {
-    return tauriService.aiBuildIndex(payload);
-  },
-  queryIndex(payload: IAiQueryIndexRequest): Promise<IAiQueryIndexPayload> {
-    return tauriService.aiQueryIndex(payload);
   },
   proposePatch(payload: IAiProposePatchRequest): Promise<IAiProposePatchPayload> {
     return tauriService.aiProposePatch(payload);

@@ -22,16 +22,15 @@ pub use agent_sidecar::{
     agent_sidecar_resolve_approval, agent_sidecar_restart, agent_sidecar_restore_checkpoint,
 };
 pub use ai::{
-    ai_agent_classify_task, ai_agent_set_network_permission, ai_apply_patch, ai_build_index,
-    ai_cancel, ai_chat, ai_chat_stream, ai_clear_credentials, ai_code_action, ai_connect_provider,
+    ai_agent_classify_task, ai_agent_set_network_permission, ai_apply_patch,
+    ai_cancel, ai_chat_stream, ai_clear_credentials, ai_code_action, ai_connect_provider,
     ai_edit_create_snapshot, ai_edit_get_auth_level, ai_edit_get_diff, ai_edit_list_timeline,
     ai_edit_restore_snapshot, ai_edit_revert_file, ai_edit_revert_hunk, ai_edit_revert_task,
     ai_edit_set_auth_level, ai_edit_undo_operation, ai_generate_conversation_title,
     ai_generate_suggestion_pool, ai_get_config, ai_get_provider_profile_detail,
     ai_get_suggestion_pool_cache, ai_inline_complete, ai_list_provider_profiles,
-    ai_narrate_activity, ai_narrate_activity_stream, ai_propose_patch, ai_query_index,
-    ai_save_config, ai_save_credentials, ai_switch_provider_profile, ai_test_provider,
-    ai_test_provider_config, ai_web_fetch, ai_web_search,
+    ai_propose_patch, ai_save_config, ai_save_credentials, ai_switch_provider_profile,
+    ai_test_provider, ai_test_provider_config, ai_web_fetch, ai_web_search,
 };
 pub use contracts::{
     AnalyzeScriptPayload, AnalyzeScriptRequest, ExecutionEnvironment, ExecutionOption,

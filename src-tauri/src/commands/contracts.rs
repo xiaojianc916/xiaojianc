@@ -1,7 +1,6 @@
 use std::fmt;
 use std::ops::Deref;
 
-use crate::ai::provider::AiProviderUsage;
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
@@ -514,15 +513,6 @@ pub struct AiChatRequest {
     pub(crate) references: Vec<AiContextReferencePayload>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiChatPayload {
-    pub(crate) message: AiChatMessagePayload,
-    pub(crate) provider_type: String,
-    pub(crate) model: String,
-    pub(crate) usage: Option<AiProviderUsage>,
-}
-
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiConversationTitleRequest {
@@ -551,84 +541,6 @@ pub struct AiSuggestionPoolPayload {
     pub(crate) suggestions: Vec<String>,
     pub(crate) model: String,
     pub(crate) generated_at: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiNarratorChangedFilePayload {
-    pub(crate) path: String,
-    pub(crate) additions: Option<u32>,
-    pub(crate) deletions: Option<u32>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiNarratorReadFilePayload {
-    pub(crate) path: String,
-    pub(crate) range: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiNarratorSearchSummaryPayload {
-    pub(crate) query: String,
-    pub(crate) result_count: Option<u32>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiNarratorFactsPayload {
-    pub(crate) user_goal: String,
-    pub(crate) trigger: String,
-    pub(crate) recent_actions: Vec<String>,
-    pub(crate) changed_files: Vec<AiNarratorChangedFilePayload>,
-    pub(crate) read_files: Vec<AiNarratorReadFilePayload>,
-    pub(crate) search_summary: Option<AiNarratorSearchSummaryPayload>,
-    pub(crate) error_summary: Option<String>,
-    pub(crate) current_finding: Option<String>,
-    pub(crate) next_action: Option<String>,
-    pub(crate) previous_narrations: Vec<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiNarratorRequest {
-    pub(crate) run_id: String,
-    pub(crate) message_id: String,
-    pub(crate) turn_id: Option<String>,
-    pub(crate) facts_hash: String,
-    pub(crate) sequence: u32,
-    pub(crate) facts: AiNarratorFactsPayload,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiNarratorResponsePayload {
-    pub(crate) run_id: String,
-    pub(crate) message_id: String,
-    pub(crate) turn_id: Option<String>,
-    pub(crate) facts_hash: String,
-    pub(crate) sequence: u32,
-    pub(crate) trigger: String,
-    pub(crate) should_show: bool,
-    pub(crate) tone: String,
-    pub(crate) text: String,
-    pub(crate) related_files: Vec<String>,
-    pub(crate) confidence: Option<String>,
-    pub(crate) model: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiNarratorStreamPayload {
-    pub(crate) stream_id: String,
-    pub(crate) run_id: String,
-    pub(crate) message_id: String,
-    pub(crate) turn_id: Option<String>,
-    pub(crate) facts_hash: String,
-    pub(crate) sequence: u32,
-    pub(crate) trigger: String,
-    pub(crate) model: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1193,44 +1105,6 @@ pub struct AiWebFetchResultPayload {
 #[serde(rename_all = "camelCase")]
 pub struct AiWebFetchPayload {
     pub(crate) source: AiWebFetchResultPayload,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiBuildIndexRequest {
-    pub(crate) workspace_root_path: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiBuildIndexPayload {
-    pub(crate) root_path: String,
-    pub(crate) indexed_file_count: usize,
-    pub(crate) skipped_file_count: usize,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiQueryIndexRequest {
-    pub(crate) workspace_root_path: String,
-    pub(crate) query: String,
-    pub(crate) limit: Option<usize>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiIndexResultPayload {
-    pub(crate) path: String,
-    pub(crate) line_number: Option<usize>,
-    pub(crate) preview: String,
-    pub(crate) score: i64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiQueryIndexPayload {
-    pub(crate) root_path: String,
-    pub(crate) results: Vec<AiIndexResultPayload>,
 }
 
 // ============================================================================

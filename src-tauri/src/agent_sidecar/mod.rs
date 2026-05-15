@@ -26,7 +26,6 @@ const SIDECAR_REQUEST_TIMEOUT_SECONDS: u64 = 30 * 60;
 const SIDECAR_HEALTH_TIMEOUT_SECONDS: u64 = 2;
 const SIDECAR_STARTUP_TIMEOUT_SECONDS: u64 = 15;
 const SIDECAR_STARTUP_RETRY_MS: u64 = 250;
-const DEFAULT_DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com";
 const SIDECAR_PROTOCOL_VERSION: &str = "7";
 const SIDECAR_IMPLEMENTATION_VERSION: &str = "deepseek-reasoning-transport-v6-plan-history";
 const DEFAULT_SIDECAR_PORT: u16 = 39871;
@@ -543,7 +542,7 @@ fn spawn_default_sidecar() -> Result<(), String> {
     inject_sidecar_dotenv_key_if_present(&mut command, &sidecar_root, "TAVILY_API_KEY");
     inject_user_env_if_present(&mut command, "TAVILY_API_KEY");
     inject_uvx_path(&mut command);
-    inject_deepseek_env_from_ai_config(&mut command);
+    inject_sidecar_model_env_from_ai_config(&mut command);
 
     crate::commands::configure_std_command_for_background(&mut command);
     command
@@ -695,37 +694,26 @@ fn inject_sidecar_dotenv_key_if_present(command: &mut Command, sidecar_root: &Pa
     }
 }
 
-fn inject_deepseek_env_from_ai_config(command: &mut Command) {
+fn inject_sidecar_model_env_from_ai_config(command: &mut Command) {
     let config = crate::ai::gateway::get_config();
     let Some(model) = config.selected_model.as_deref() else {
-        return;
-    };
-    let Some(deepseek_model) = strip_litellm_model_provider_prefix(model, "deepseek") else {
         return;
     };
     let Ok(api_key) = CredentialStore::get(&config.provider_type) else {
         return;
     };
 
-    command.env("DEEPSEEK_API_KEY", api_key);
-    command.env("DEEPSEEK_MODEL", deepseek_model);
-    command.env("DEEPSEEK_BASE_URL", DEFAULT_DEEPSEEK_BASE_URL);
-}
+    command.env("AGENT_SIDECAR_API_KEY", api_key);
+    command.env("AGENT_SIDECAR_MODEL", model.trim());
 
-fn strip_litellm_model_provider_prefix(model: &str, provider: &str) -> Option<String> {
-    let normalized = model.trim();
-    if normalized.is_empty() {
-        return None;
+    if let Some(base_url) = config
+        .base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        command.env("AGENT_SIDECAR_BASE_URL", base_url);
     }
-
-    let prefix = format!("{provider}/");
-    if let Some(stripped) = normalized.strip_prefix(&prefix) {
-        return Some(stripped.to_string());
-    }
-
-    normalized
-        .starts_with(provider)
-        .then(|| normalized.to_string())
 }
 
 fn env_or_user_env(key: &str) -> Option<String> {
@@ -1000,22 +988,6 @@ mod tests {
     fn sidecar_stream_line_buffer_ignores_whitespace_tail() {
         assert!(!has_non_whitespace_bytes(b"\r\n\t "));
         assert!(has_non_whitespace_bytes(b"\n{}"));
-    }
-
-    #[test]
-    fn strips_litellm_provider_prefix_for_deepseek_sidecar_model() {
-        assert_eq!(
-            strip_litellm_model_provider_prefix("deepseek/deepseek-v4-pro", "deepseek"),
-            Some("deepseek-v4-pro".to_string())
-        );
-        assert_eq!(
-            strip_litellm_model_provider_prefix("deepseek-v4-pro", "deepseek"),
-            Some("deepseek-v4-pro".to_string())
-        );
-        assert_eq!(
-            strip_litellm_model_provider_prefix("openai/gpt-5.5", "deepseek"),
-            None
-        );
     }
 
     #[test]

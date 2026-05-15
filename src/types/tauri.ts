@@ -21,9 +21,6 @@ import type {
   IAiAgentSetNetworkPermissionRequest,
   IAiApplyPatchPayload,
   IAiApplyPatchRequest,
-  IAiBuildIndexPayload,
-  IAiBuildIndexRequest,
-  IAiChatPayload,
   IAiChatRequest,
   IAiChatStreamEventPayload,
   IAiChatStreamPayload,
@@ -34,10 +31,6 @@ import type {
   IAiConversationTitleRequest,
   IAiInlineCompletionRequest,
   IAiInlineCompletionResult,
-  IAiNarratorRequest,
-  IAiNarratorResponse,
-  IAiNarratorStreamEventPayload,
-  IAiNarratorStreamPayload,
   IAiProposePatchPayload,
   IAiProposePatchRequest,
   IAiProviderConnectionPayload,
@@ -46,8 +39,6 @@ import type {
   IAiProviderProfilePayload,
   IAiProviderProfileSwitchRequest,
   IAiProviderTestPayload,
-  IAiQueryIndexPayload,
-  IAiQueryIndexRequest,
   IAiSaveConfigRequest,
   IAiSaveCredentialsRequest,
   IAiSuggestionPoolPayload,
@@ -386,20 +377,14 @@ export interface ITauriService {
   aiTestProvider(): Promise<IAiProviderTestPayload>;
   aiTestProviderConfig(payload: IAiProviderConnectionRequest): Promise<IAiProviderTestPayload>;
   aiConnectProvider(payload: IAiProviderConnectionRequest): Promise<IAiProviderConnectionPayload>;
-  aiChat(payload: IAiChatRequest, options?: { signal?: AbortSignal }): Promise<IAiChatPayload>;
   aiGenerateConversationTitle(
     payload: IAiConversationTitleRequest,
   ): Promise<IAiConversationTitlePayload>;
   aiGetSuggestionPoolCache(): Promise<IAiSuggestionPoolPayload | null>;
   aiGenerateSuggestionPool(payload: IAiSuggestionPoolRequest): Promise<IAiSuggestionPoolPayload>;
-  aiNarrateActivity(payload: IAiNarratorRequest): Promise<IAiNarratorResponse>;
-  aiNarrateActivityStream(payload: IAiNarratorRequest): Promise<IAiNarratorStreamPayload>;
   aiChatStream(payload: IAiChatRequest): Promise<IAiChatStreamPayload>;
   aiCancel(payload: { streamId: string }): Promise<void>;
   onAiChatStream(handler: (payload: IAiChatStreamEventPayload) => void): Promise<() => void>;
-  onAiNarratorStream(
-    handler: (payload: IAiNarratorStreamEventPayload) => void,
-  ): Promise<() => void>;
   aiInlineComplete(payload: IAiInlineCompletionRequest): Promise<IAiInlineCompletionResult>;
   aiCodeAction(payload: IAiCodeActionRequest): Promise<IAiCodeActionResult>;
   aiAgentClassifyTask(payload: IAiAgentClassifyTaskRequest): Promise<IAiAgentClassifyTaskPayload>;
@@ -408,8 +393,6 @@ export interface ITauriService {
   aiAgentSetNetworkPermission(
     payload: IAiAgentSetNetworkPermissionRequest,
   ): Promise<IAiAgentNetworkPermissionPayload>;
-  aiBuildIndex(payload: IAiBuildIndexRequest): Promise<IAiBuildIndexPayload>;
-  aiQueryIndex(payload: IAiQueryIndexRequest): Promise<IAiQueryIndexPayload>;
   aiProposePatch(payload: IAiProposePatchRequest): Promise<IAiProposePatchPayload>;
   aiApplyPatch(payload: IAiApplyPatchRequest): Promise<IAiApplyPatchPayload>;
   aiEditGetAuthLevel(): Promise<IAiEditAuthState>;

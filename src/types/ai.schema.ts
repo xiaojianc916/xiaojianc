@@ -74,37 +74,6 @@ const aiUnifiedDiffHunkLineSchema = z
 
 export const aiProviderTypeSchema = z.enum(['litellm']);
 export const aiModelRoleSchema = z.enum(['main', 'narrator']);
-export const activityNoteToneSchema = z.enum([
-  'plan',
-  'progress',
-  'decision',
-  'repair',
-  'warning',
-  'summary',
-]);
-export const activityNoteTriggerSchema = z.enum([
-  'run_started',
-  'plan_ready',
-  'plan_approved',
-  'context_checked',
-  'search_done',
-  'files_read',
-  'file_batch_read',
-  'web_search_done',
-  'time_checked',
-  'edit_done',
-  'edit_batch_done',
-  'patch_failed',
-  'verification_started',
-  'verification_failed',
-  'test_failed',
-  'git_checked',
-  'git_diff_ready',
-  'git_commit_ready',
-  'git_done',
-  'verification_done',
-  'final_summary',
-]);
 
 export const aiChatMessageActionSchema = z.object({
   id: z.enum(['allow-agent-execution']),
@@ -229,13 +198,6 @@ export const aiChatRequestSchema = z.object({
   references: z.array(aiContextReferenceSchema),
 });
 
-export const aiChatPayloadSchema = z.object({
-  message: aiChatMessageSchema,
-  providerType: aiProviderTypeSchema,
-  model: z.string(),
-  usage: aiLanguageModelUsageSchema.nullable().optional(),
-});
-
 export const aiConversationTitleRequestSchema = z.object({
   userMessage: z.string().min(1),
   assistantMessage: z.string().min(1),
@@ -256,89 +218,6 @@ export const aiSuggestionPoolPayloadSchema = z.object({
   suggestions: z.array(z.string().min(1)).min(9).max(90),
   model: z.string().min(1),
   generatedAt: z.string().min(1),
-});
-
-export const aiNarratorChangedFileSchema = z.object({
-  path: z.string().min(1),
-  additions: z.number().int().nonnegative().optional(),
-  deletions: z.number().int().nonnegative().optional(),
-});
-
-export const aiNarratorReadFileSchema = z.object({
-  path: z.string().min(1),
-  range: z.string().min(1).optional(),
-});
-
-export const aiNarratorSearchSummarySchema = z.object({
-  query: z.string().min(1),
-  resultCount: z.number().int().nonnegative().optional(),
-});
-
-export const aiNarratorFactsSchema = z.object({
-  userGoal: z.string().min(1),
-  trigger: activityNoteTriggerSchema,
-  recentActions: z.array(z.string().min(1)),
-  changedFiles: z.array(aiNarratorChangedFileSchema),
-  readFiles: z.array(aiNarratorReadFileSchema),
-  searchSummary: aiNarratorSearchSummarySchema.optional(),
-  errorSummary: z.string().min(1).optional(),
-  currentFinding: z.string().min(1).optional(),
-  nextAction: z.string().min(1).optional(),
-  previousNarrations: z.array(z.string().min(1)),
-});
-
-export const aiNarratorRequestSchema = z.object({
-  runId: z.string().min(1),
-  messageId: z.string().min(1),
-  turnId: z.string().min(1).nullable().optional(),
-  factsHash: z.string().min(1),
-  sequence: z.number().int().nonnegative(),
-  facts: aiNarratorFactsSchema,
-});
-
-export const aiNarratorResponseSchema = z.object({
-  runId: z.string().min(1),
-  messageId: z.string().min(1),
-  turnId: z.string().min(1).nullable().optional(),
-  factsHash: z.string().min(1),
-  sequence: z.number().int().nonnegative(),
-  trigger: activityNoteTriggerSchema,
-  shouldShow: z.boolean(),
-  tone: activityNoteToneSchema,
-  text: z.string(),
-  relatedFiles: z.array(z.string().min(1)),
-  confidence: z.enum(['low', 'medium', 'high']).nullable().optional(),
-  model: z.string().min(1),
-});
-
-export const aiNarratorStreamPayloadSchema = z.object({
-  streamId: z.string().min(1),
-  runId: z.string().min(1),
-  messageId: z.string().min(1),
-  turnId: z.string().min(1).nullable().optional(),
-  factsHash: z.string().min(1),
-  sequence: z.number().int().nonnegative(),
-  trigger: activityNoteTriggerSchema,
-  model: z.string().min(1),
-});
-
-export const aiNarratorStreamEventPayloadSchema = z.object({
-  streamId: z.string().min(1),
-  runId: z.string().min(1),
-  messageId: z.string().min(1),
-  turnId: z.string().min(1).nullable().optional(),
-  factsHash: z.string().min(1),
-  sequence: z.number().int().nonnegative(),
-  trigger: activityNoteTriggerSchema,
-  kind: z.enum(['start', 'delta', 'done', 'error', 'cancelled']),
-  delta: z.string().nullable(),
-  message: z.string().nullable(),
-  shouldShow: z.boolean().nullable().optional(),
-  tone: activityNoteToneSchema.nullable().optional(),
-  text: z.string().nullable().optional(),
-  relatedFiles: z.array(z.string().min(1)).optional(),
-  confidence: z.enum(['low', 'medium', 'high']).nullable().optional(),
-  model: z.string().nullable(),
 });
 
 export const aiChatStreamPayloadSchema = z.object({

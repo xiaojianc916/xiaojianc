@@ -21,10 +21,6 @@ import type {
   IAiApplyPatchRequest,
   IAiChatRequest,
   IAiChatStreamEventPayload,
-  IAiNarratorRequest,
-  IAiNarratorResponse,
-  IAiNarratorStreamEventPayload,
-  IAiNarratorStreamPayload,
   IAiPatchSet,
   IAiTaskPlanStep,
 } from '@/types/ai';
@@ -57,11 +53,9 @@ const WORKSPACE_ROOT = 'd:/com.xiaojianc/my_desktop_app' as const;
 
 const aiServiceMock = vi.hoisted(() => {
   type StreamHandler = (payload: IAiChatStreamEventPayload) => void;
-  type NarratorStreamHandler = (payload: IAiNarratorStreamEventPayload) => void;
   type SidecarStreamHandler = (payload: IAgentSidecarStreamEventPayload) => void;
 
   let streamHandler: StreamHandler | null = null;
-  const narratorStreamHandlers = new Set<NarratorStreamHandler>();
   let sidecarStreamHandler: SidecarStreamHandler | null = null;
   let streamSequence = 0;
   const queuedStreamResponses: Array<{
@@ -133,18 +127,6 @@ const aiServiceMock = vi.hoisted(() => {
     };
   });
 
-  const chat = vi.fn(async () => ({
-    message: {
-      id: ASSISTANT_MESSAGE_ID,
-      role: 'assistant',
-      content: '{"type":"final","content":"mock agent final"}',
-      createdAt: '2026-04-29T00:00:00.000Z',
-      references: [],
-    },
-    providerType: 'mock',
-    model: MOCK_MODEL,
-  }));
-
   const generateConversationTitle = vi.fn(async () => ({
     title: '生成会话标题',
     model: MOCK_MODEL,
@@ -174,92 +156,6 @@ const aiServiceMock = vi.hoisted(() => {
       };
     },
   );
-
-  const narrateActivity = vi.fn<(payload: IAiNarratorRequest) => Promise<IAiNarratorResponse>>(
-    async (payload) => ({
-      runId: payload.runId,
-      messageId: payload.messageId,
-      turnId: payload.turnId ?? null,
-      factsHash: payload.factsHash,
-      sequence: payload.sequence,
-      trigger: payload.facts.trigger,
-      shouldShow: true,
-      tone: payload.facts.trigger === 'final_summary' ? 'summary' : 'progress',
-      text: 'mock narrator update',
-      relatedFiles: payload.facts.changedFiles.map((item) => item.path),
-      confidence: 'medium',
-      model: MOCK_MODEL,
-    }),
-  );
-
-  const onNarratorStream = vi.fn(async (handler: NarratorStreamHandler) => {
-    narratorStreamHandlers.add(handler);
-    return vi.fn(() => {
-      narratorStreamHandlers.delete(handler);
-    });
-  });
-
-  const narrateActivityStream = vi.fn<
-    (payload: IAiNarratorRequest) => Promise<IAiNarratorStreamPayload>
-  >(async (payload) => {
-    const started: IAiNarratorStreamPayload = {
-      streamId: `narrator-stream-${payload.sequence}`,
-      runId: payload.runId,
-      messageId: payload.messageId,
-      turnId: payload.turnId ?? null,
-      factsHash: payload.factsHash,
-      sequence: payload.sequence,
-      trigger: payload.facts.trigger,
-      model: MOCK_MODEL,
-    };
-
-    queueMicrotask(() => {
-      for (const handler of narratorStreamHandlers) {
-        handler({
-          ...started,
-          kind: 'start',
-          delta: null,
-          message: null,
-          shouldShow: null,
-          tone: null,
-          text: null,
-          relatedFiles: [],
-          confidence: null,
-          model: MOCK_MODEL,
-        });
-      }
-      for (const handler of narratorStreamHandlers) {
-        handler({
-          ...started,
-          kind: 'delta',
-          delta: 'mock narrator ',
-          message: null,
-          shouldShow: null,
-          tone: null,
-          text: null,
-          relatedFiles: [],
-          confidence: null,
-          model: MOCK_MODEL,
-        });
-      }
-      for (const handler of narratorStreamHandlers) {
-        handler({
-          ...started,
-          kind: 'done',
-          delta: null,
-          message: null,
-          shouldShow: true,
-          tone: payload.facts.trigger === 'final_summary' ? 'summary' : 'progress',
-          text: 'mock narrator update',
-          relatedFiles: payload.facts.changedFiles.map((item) => item.path),
-          confidence: 'medium',
-          model: MOCK_MODEL,
-        });
-      }
-    });
-
-    return started;
-  });
 
   const classifyTask = vi.fn(async () => ({
     classification: 'complex',
@@ -481,16 +377,12 @@ const aiServiceMock = vi.hoisted(() => {
 
   return {
     onChatStream,
-    chat,
     generateConversationTitle,
     chatStream,
     cancel,
     queryIndex,
     proposePatch,
     applyPatch,
-    narrateActivity,
-    onNarratorStream,
-    narrateActivityStream,
     classifyTask,
     planTask,
     sidecarPlan,
@@ -518,11 +410,6 @@ const aiServiceMock = vi.hoisted(() => {
     emit(event: IAiChatStreamEventPayload): void {
       streamHandler?.(event);
     },
-    emitNarrator(event: IAiNarratorStreamEventPayload): void {
-      for (const handler of narratorStreamHandlers) {
-        handler(event);
-      }
-    },
     emitSidecar(event: IAgentSidecarStreamEventPayload): void {
       sidecarStreamHandler?.(event);
     },
@@ -538,21 +425,16 @@ const aiServiceMock = vi.hoisted(() => {
     },
     reset(): void {
       streamHandler = null;
-      narratorStreamHandlers.clear();
       sidecarStreamHandler = null;
       streamSequence = 0;
       queuedStreamResponses.length = 0;
       onChatStream.mockClear();
-      chat.mockClear();
       generateConversationTitle.mockClear();
       chatStream.mockClear();
       cancel.mockClear();
       queryIndex.mockClear();
       proposePatch.mockClear();
       applyPatch.mockClear();
-      narrateActivity.mockClear();
-      onNarratorStream.mockClear();
-      narrateActivityStream.mockClear();
       classifyTask.mockClear();
       planTask.mockClear();
       sidecarPlan.mockClear();
@@ -569,18 +451,14 @@ const aiServiceMock = vi.hoisted(() => {
 vi.mock('@/services/modules/ai', () => ({
   aiService: {
     onChatStream: aiServiceMock.onChatStream,
-    chat: aiServiceMock.chat,
     generateConversationTitle: aiServiceMock.generateConversationTitle,
     chatStream: aiServiceMock.chatStream,
     cancel: aiServiceMock.cancel,
     queryIndex: aiServiceMock.queryIndex,
     proposePatch: aiServiceMock.proposePatch,
     applyPatch: aiServiceMock.applyPatch,
-    narrateActivity: aiServiceMock.narrateActivity,
-    narrateActivityStream: aiServiceMock.narrateActivityStream,
     classifyTask: aiServiceMock.classifyTask,
     planTask: aiServiceMock.planTask,
-    onNarratorStream: aiServiceMock.onNarratorStream,
     sidecarChat: aiServiceMock.sidecarChat,
     sidecarPlan: aiServiceMock.sidecarPlan,
     sidecarPlanQuery: aiServiceMock.sidecarPlanQuery,
@@ -1702,8 +1580,6 @@ describe('useAiAssistant streaming integration', () => {
 
     await assistant.sendMessage();
     await flushMicrotasks();
-
-    expect(aiServiceMock.narrateActivityStream).toHaveBeenCalledTimes(0);
   });
 
   it('raw sidecar event 模式下编辑完成时不会再启动 narrator', async () => {
@@ -1734,8 +1610,6 @@ describe('useAiAssistant streaming integration', () => {
 
     await assistant.sendMessage();
     await flushMicrotasks();
-
-    expect(aiServiceMock.narrateActivityStream).toHaveBeenCalledTimes(0);
   });
 
   it('raw sidecar event 模式下重复编辑事件也不会创建 narrator 请求', async () => {
@@ -1774,8 +1648,6 @@ describe('useAiAssistant streaming integration', () => {
 
     await assistant.sendMessage();
     await flushMicrotasks();
-
-    expect(aiServiceMock.narrateActivityStream).toHaveBeenCalledTimes(0);
   });
 
   it('raw sidecar event 模式下不会监听 narrator turn 结果', async () => {
@@ -1805,8 +1677,6 @@ describe('useAiAssistant streaming integration', () => {
 
     await assistant.sendMessage();
     await flushMicrotasks();
-
-    expect(aiServiceMock.narrateActivityStream).toHaveBeenCalledTimes(0);
   });
 
   it('raw sidecar event 模式下连续序列更新不会创建 narrator 序列', async () => {
@@ -1871,8 +1741,6 @@ describe('useAiAssistant streaming integration', () => {
 
     await assistant.sendMessage();
     await flushMicrotasks();
-
-    expect(aiServiceMock.narrateActivityStream).toHaveBeenCalledTimes(0);
   });
 
   it('raw sidecar event 模式下不会再发送 narrator facts', async () => {
@@ -1912,8 +1780,6 @@ describe('useAiAssistant streaming integration', () => {
 
     await assistant.sendMessage();
     await flushMicrotasks();
-
-    expect(aiServiceMock.narrateActivityStream).toHaveBeenCalledTimes(0);
   });
 
   it('sidecar 首个事件到达前就显示上下文相关的运行状态', async () => {

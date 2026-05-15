@@ -38,11 +38,15 @@ import {
   resolveConfiguredRuntimeName,
   type IAgentSidecarRuntime,
 } from './engines/runtime.js';
+import type { IMastraResolvedModelConfig } from './models/mastra-model-config.js';
 import {
   clearDeepSeekReasoningStoreForTest,
   deepseekReasoningFetch,
   runWithDeepSeekReasoningContext,
 } from './models/deepseek-reasoning-fetch.js';
+import {
+  createDeepSeekMastraGateway,
+} from './models/deepseek-mastra-gateway.js';
 import { compactModelOutput } from './models/model-output-budget.js';
 import {
   agentPlanDeltaSchema,
@@ -169,6 +173,27 @@ const unsupportedPlanReplan = async (
   void args;
   throw new Error('Not implemented in test runtime.');
 };
+
+const createTestModelConfig = (
+  overrides: Partial<IMastraResolvedModelConfig> = {},
+): IMastraResolvedModelConfig => ({
+  modelId: 'deepseek/deepseek-chat',
+  providerId: 'deepseek',
+  providerModelId: 'deepseek-chat',
+  customGateways: [
+    createDeepSeekMastraGateway({
+      apiKey: 'test-key',
+      baseUrl: 'https://example.com/v1',
+    }),
+  ],
+  model: new ModelRouterLanguageModel({
+    providerId: 'deepseek',
+    modelId: 'deepseek-chat',
+    apiKey: 'test-key',
+    url: 'https://example.com/v1',
+  }),
+  ...overrides,
+});
 
 const createFakeRuntime = (
   overrides: Partial<IAgentSidecarRuntime> = {},
@@ -1134,7 +1159,6 @@ describe('DeepSeek reasoning fetch middleware', () => {
     const assistantMessage = toRecordForTest(messages[0]);
     assert.equal(assistantMessage?.reasoning_content, '先调用工具。');
   });
-
 });
 
 describe('Agent sidecar request schema', () => {
@@ -1596,7 +1620,7 @@ describe('Mastra runtime chat', () => {
     let capturedModel: MastraModelConfig | null = null;
     let disconnectCalls = 0;
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async (options) => {
         capturedMcpOptions = options;
 
@@ -1761,7 +1785,7 @@ describe('Mastra runtime chat', () => {
 
   it('sums official usage across multiple model finish chunks', async () => {
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         clients: [],
         configs: [],
@@ -1888,7 +1912,7 @@ describe('Mastra runtime chat', () => {
     let disconnectCalls = 0;
     const runtime = new MastraRuntime({
       now: () => '2026-05-03T00:00:00.000Z',
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         clients: [],
         configs: [],
@@ -2040,7 +2064,7 @@ describe('Mastra runtime chat', () => {
     let capturedStreamOptions: unknown;
     let disconnectCalls = 0;
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         clients: [],
         configs: [],
@@ -2137,7 +2161,7 @@ describe('Mastra runtime chat', () => {
     } | null = null;
     let capturedToolNames: string[] = [];
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         clients: [],
         configs: [],
@@ -2253,7 +2277,7 @@ describe('Mastra runtime chat', () => {
   it('keeps MCP access behind the gateway when no Mastra workspace is available', async () => {
     let capturedToolNames: string[] = [];
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         clients: [],
         configs: [],
@@ -2310,7 +2334,7 @@ describe('Mastra runtime chat', () => {
     let disconnectCalls = 0;
     const runtime = new MastraRuntime({
       now: () => '2026-05-07T00:00:00.000Z',
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         clients: [],
         configs: [],
@@ -2409,7 +2433,7 @@ describe('Mastra runtime chat', () => {
   it('streams Mastra tool calls into the new runtime activity timeline', async () => {
     let disconnectCalls = 0;
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         clients: [],
         configs: [],
@@ -2517,7 +2541,7 @@ describe('Mastra runtime chat', () => {
   it('normalizes Mastra stream errors into the existing error event shape', async () => {
     let disconnectCalls = 0;
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         clients: [],
         configs: [],
@@ -2754,7 +2778,7 @@ describe('Mastra runtime built-in tools', () => {
   it('keeps native time tools available even when no MCP tool is connected', async () => {
     let capturedToolNames: string[] = [];
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         clients: [],
         configs: [],
@@ -2814,7 +2838,7 @@ describe('Mastra runtime built-in tools', () => {
       capturedReadCurrentFileTool.current = tool;
     };
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         clients: [],
         configs: [],
@@ -2900,7 +2924,7 @@ describe('Mastra runtime execute', () => {
     const executionRecord = createPlanRecordForTest();
     const workflowStore = createPlanWorkflowStoreForTest();
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createPlanStore: () => createFakePlanStore(executionRecord),
       createPlanWorkflowStore: () => workflowStore.store,
       createMcpClientBundle: async () => ({
@@ -3159,7 +3183,16 @@ describe('Mastra runtime execute', () => {
   it('captures reasoning_content chunks as agent.reasoning.delta events', async () => {
     let disconnectCalls = 0;
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-v4-flash', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig({
+        modelId: 'deepseek/deepseek-v4-flash',
+        providerModelId: 'deepseek-v4-flash',
+        model: new ModelRouterLanguageModel({
+          providerId: 'deepseek',
+          modelId: 'deepseek-v4-flash',
+          apiKey: 'test-key',
+          url: 'https://example.com/v1',
+        }),
+      }),
       createMcpClientBundle: async () => ({
         clients: [],
         configs: [],
@@ -3251,7 +3284,7 @@ describe('Mastra runtime approval resolution', () => {
     });
     const workflowStore = createPlanWorkflowStoreForTest();
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createPlanStore: () => createFakePlanStore(executionRecord),
       createPlanWorkflowStore: () => workflowStore.store,
       createMcpClientBundle: async () => ({
@@ -3498,7 +3531,7 @@ describe('Mastra runtime plan', () => {
       ],
     });
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         tools: {
           git_read_file: createTool({
@@ -3666,7 +3699,7 @@ describe('Mastra runtime plan', () => {
       ],
     });
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         tools: {
           git_read_file: createTool({
@@ -3743,7 +3776,7 @@ describe('Mastra runtime plan', () => {
       ],
     };
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         tools: {},
         disconnectAll: async () => {
@@ -3804,7 +3837,7 @@ describe('Mastra runtime plan', () => {
       ],
     };
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         tools: {},
         disconnectAll: async () => {
@@ -3845,7 +3878,7 @@ describe('Mastra runtime plan', () => {
   it('returns the existing sidecar error shape when Mastra plan output is invalid', async () => {
     let disconnectCalls = 0;
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createMcpClientBundle: async () => ({
         tools: {},
         disconnectAll: async () => {
@@ -3923,7 +3956,7 @@ describe('Mastra runtime plan', () => {
       ],
     });
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createPlanStore: () => createFakePlanStore(executionRecord),
       createPlanWorkflowStore: () => workflowStore.store,
       createMcpClientBundle: async () => ({
@@ -4024,7 +4057,7 @@ describe('Mastra runtime plan', () => {
       removed: [],
     });
     const runtime = new MastraRuntime({
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       createPlanStore: () => createFakePlanStore(executionRecord),
       createPlanWorkflowStore: () => workflowStore.store,
       createMcpClientBundle: async () => ({
@@ -4088,7 +4121,7 @@ describe('Mastra runtime plan', () => {
     let disconnectCalls = 0;
     const runtime = new MastraRuntime({
       now: () => '2026-05-03T01:00:00.000Z',
-      readModelConfig: () => new ModelRouterLanguageModel({ providerId: 'deepseek', modelId: 'deepseek-chat', apiKey: 'test-key', url: 'https://example.com/v1' }),
+      readModelConfig: () => createTestModelConfig(),
       loadExecutionSnapshot: async () => ({
         status: 'success',
         requestContext: {

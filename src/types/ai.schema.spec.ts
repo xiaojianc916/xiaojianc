@@ -1,5 +1,4 @@
 import {
-  aiChatPayloadSchema,
   aiChatRequestSchema,
   aiConfigPayloadSchema,
   aiProviderProfilePayloadSchema,
@@ -139,20 +138,5 @@ describe('AI schema', () => {
 
     expect(parsed.role).toBe('narrator');
     expect(parsed.isConnected).toBe(true);
-  });
-
-  it('校验 chat 响应消息', () => {
-    const parsed = aiChatPayloadSchema.parse({
-      providerType: 'litellm',
-      model: 'openai/gpt-5.5',
-      message: {
-        ...message,
-        id: 'assistant-1',
-        role: 'assistant',
-        content: 'Mock 回复',
-      },
-    });
-
-    expect(parsed.message.role).toBe('assistant');
   });
 });

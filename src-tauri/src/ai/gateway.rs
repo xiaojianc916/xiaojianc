@@ -3,7 +3,7 @@ use super::credential::CredentialStore;
 use super::errors;
 use super::openai_compatible;
 use super::provider::{
-    AiProviderChatRequest, AiProviderMessage, AiProviderResponse, AiProviderUsage,
+    AiProviderChatRequest, AiProviderMessage, AiProviderUsage,
 };
 use super::redaction::redact_text;
 use super::stream_manager;
@@ -13,8 +13,7 @@ use crate::commands::contracts::{
     AiAgentClassifyTaskPayload, AiAgentClassifyTaskRequest, AiChatRequest, AiCodeActionPayload,
     AiCodeActionRequest, AiConfigPayload, AiContextReferencePayload, AiConversationTitlePayload,
     AiConversationTitleRequest, AiInlineCompletionRangePayload, AiInlineCompletionRequest,
-    AiInlineCompletionResult, AiModelEndpointConfigPayload, AiNarratorFactsPayload,
-    AiNarratorRequest, AiNarratorResponsePayload, AiProviderProfileDetailPayload,
+    AiInlineCompletionResult, AiModelEndpointConfigPayload, AiProviderProfileDetailPayload,
     AiProviderProfilePayload, AiProviderProfileSwitchRequest, AiSuggestionPoolPayload,
     AiSuggestionPoolRequest,
 };
@@ -30,7 +29,6 @@ use tauri::{AppHandle, Emitter, Manager};
 mod config;
 mod connection;
 mod conversation;
-mod narrator;
 mod suggestions;
 
 #[cfg(test)]
@@ -42,9 +40,8 @@ pub use config::{
 };
 pub use connection::{connect_provider, test_provider, test_provider_config};
 pub use conversation::{
-    chat, chat_stream, classify_task, code_action, generate_conversation_title, inline_complete,
+    chat_stream, classify_task, code_action, generate_conversation_title, inline_complete,
 };
-pub use narrator::{narrate_activity, narrate_activity_stream};
 pub use suggestions::{generate_suggestion_pool, get_suggestion_pool_cache};
 
 const MAX_AI_MESSAGES: usize = 32;
@@ -171,42 +168,10 @@ pub struct AiChatStreamEventPayload {
     pub usage: Option<AiProviderUsage>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AiNarratorStreamEventPayload {
-    pub stream_id: String,
-    pub run_id: String,
-    pub message_id: String,
-    pub turn_id: Option<String>,
-    pub facts_hash: String,
-    pub sequence: u32,
-    pub trigger: String,
-    pub kind: String,
-    pub delta: Option<String>,
-    pub message: Option<String>,
-    pub should_show: Option<bool>,
-    pub tone: Option<String>,
-    pub text: Option<String>,
-    pub related_files: Vec<String>,
-    pub confidence: Option<String>,
-    pub model: Option<String>,
-}
-
 pub struct AiChatStreamStart {
     pub stream_id: String,
     pub assistant_message_id: String,
     pub provider_type: String,
-    pub model: String,
-}
-
-pub struct AiNarratorStreamStart {
-    pub stream_id: String,
-    pub run_id: String,
-    pub message_id: String,
-    pub turn_id: Option<String>,
-    pub facts_hash: String,
-    pub sequence: u32,
-    pub trigger: String,
     pub model: String,
 }
 

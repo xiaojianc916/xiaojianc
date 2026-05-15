@@ -1,43 +1,5 @@
 use super::*;
 
-pub async fn chat(payload: AiChatRequest) -> Result<AiProviderResponse, String> {
-    audit::emit(AiAuditEventKind::ChatStarted);
-
-    let result = async {
-        let config = current_config()?;
-
-        ensure_chat_enabled(&config)?;
-
-        let model = config
-            .selected_model
-            .as_deref()
-            .unwrap_or(DEFAULT_LITELLM_MODEL);
-        let _thread_id = payload.thread_id.as_deref();
-        let messages = with_identity_system_message(
-            collect_messages(payload.messages, payload.references)?,
-            model,
-        );
-        let request = AiProviderChatRequest::new(messages);
-
-        let base_url = resolve_base_url(&config)?;
-        let api_key = get_api_key_for_config(&config)?;
-
-        connection::chat_with_litellm_fallback(base_url, &api_key, model, request).await
-    }
-    .await;
-
-    match result {
-        Ok(response) => {
-            audit::emit(AiAuditEventKind::ChatCompleted);
-            Ok(response)
-        }
-        Err(error) => {
-            audit::emit(AiAuditEventKind::ChatFailed);
-            Err(error)
-        }
-    }
-}
-
 pub async fn generate_conversation_title(
     payload: AiConversationTitleRequest,
 ) -> Result<AiConversationTitlePayload, String> {

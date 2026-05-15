@@ -12,15 +12,12 @@ const tauriServiceMock = vi.hoisted(() => ({
   aiTestProvider: vi.fn(),
   aiTestProviderConfig: vi.fn(),
   aiConnectProvider: vi.fn(),
-  aiChat: vi.fn(),
   aiChatStream: vi.fn(),
   aiCancel: vi.fn(),
   onAiChatStream: vi.fn(),
   aiInlineComplete: vi.fn(),
   aiCodeAction: vi.fn(),
   aiPlanTask: vi.fn(),
-  aiBuildIndex: vi.fn(),
-  aiQueryIndex: vi.fn(),
   aiProposePatch: vi.fn(),
   aiApplyPatch: vi.fn(),
 }));
@@ -34,25 +31,6 @@ describe('AI service and store', () => {
     setActivePinia(createPinia());
     vi.clearAllMocks();
   });
-
-  it('service 通过统一 tauriService 调用 chat', async () => {
-    const payload = {
-      providerType: 'litellm',
-      model: 'openai/gpt-5.5',
-      message: {
-        id: 'assistant-1',
-        role: 'assistant',
-        content: 'ok',
-        createdAt: '2026-04-27T00:00:00.000Z',
-        references: [],
-      },
-    };
-    tauriServiceMock.aiChat.mockResolvedValueOnce(payload);
-
-    await expect(aiService.chat({ threadId: null, messages: [payload.message], references: [] }))
-      .resolves.toBe(payload);
-  });
-
   it('store 只保存非敏感配置', async () => {
     tauriServiceMock.aiGetConfig.mockResolvedValueOnce({
       providerType: 'litellm',
