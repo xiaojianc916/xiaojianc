@@ -810,6 +810,7 @@ describe('useAiAssistant streaming integration', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -1208,6 +1209,35 @@ describe('useAiAssistant streaming integration', () => {
       assistantMessage: '第一轮 AI 回答',
     });
     expect(readReactiveValue(conversationStore.activeThread)?.title).toBe('生成会话标题');
+    expect(readReactiveValue(conversationStore.activeThread)?.titleStatus).toBe('generated');
+  });
+
+  it('会话标题首次失败后会自动重试', async () => {
+    vi.useFakeTimers();
+    const assistant = createAssistantHarness();
+    const conversationStore = useAiConversationStore();
+
+    aiServiceMock.generateConversationTitle
+      .mockRejectedValueOnce(new Error('429 Too Many Requests'))
+      .mockResolvedValueOnce({
+        title: '重试后标题',
+        model: MOCK_MODEL,
+      });
+    aiServiceMock.queueStreamResponse('第一轮 AI 回答');
+    assistant.activeMode.value = 'chat';
+    assistant.draft.value = '为什么标题有时生成失败？';
+
+    await assistant.sendMessage();
+    await flushMicrotasks();
+
+    expect(aiServiceMock.generateConversationTitle).toHaveBeenCalledTimes(1);
+    expect(readReactiveValue(conversationStore.activeThread)?.titleStatus).toBe('failed');
+
+    await vi.advanceTimersByTimeAsync(1500);
+    await flushMicrotasks();
+
+    expect(aiServiceMock.generateConversationTitle).toHaveBeenCalledTimes(2);
+    expect(readReactiveValue(conversationStore.activeThread)?.title).toBe('重试后标题');
     expect(readReactiveValue(conversationStore.activeThread)?.titleStatus).toBe('generated');
   });
 

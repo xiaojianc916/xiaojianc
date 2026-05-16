@@ -4,7 +4,7 @@ import FieldError from '@/components/common/FieldError.vue';
 import type { TAiServicePlatformId } from '@/constants/ai-providers';
 import {
   AI_SERVICE_PLATFORM_PRESETS,
-  DEFAULT_LITELLM_BASE_URL,
+  DEFAULT_MASTRA_BASE_URL,
   findAiProviderPreset,
   findAiServicePlatformByModel,
   findAiServicePlatformPreset,
@@ -328,21 +328,23 @@ const settingsSubtitle = computed(() => {
   }
 });
 
-const ensureLiteLlmConnectionDefaults = (): void => {
+const ensureMastraConnectionDefaults = (): void => {
+  const platform = findAiServicePlatformPreset(activeServicePlatformId.value);
   patchAiModelEndpointConfig(nextConfig.value, activeModelRole.value, {
-    providerType: 'litellm',
+    providerType: 'mastra',
   });
-  if (!activeRoleConfig.value.baseUrl?.trim()) {
-    patchAiModelEndpointConfig(nextConfig.value, activeModelRole.value, {
-      baseUrl: DEFAULT_LITELLM_BASE_URL,
-    });
+  if (activeRoleConfig.value.baseUrl?.trim()) {
+    return;
   }
+  patchAiModelEndpointConfig(nextConfig.value, activeModelRole.value, {
+    baseUrl: platform.baseUrl || DEFAULT_MASTRA_BASE_URL || null,
+  });
 };
 
 const syncDraftWithServicePlatform = (platformId: TAiServicePlatformId): void => {
   const platform = findAiServicePlatformPreset(platformId);
   activeServicePlatformId.value = platform.id;
-  ensureLiteLlmConnectionDefaults();
+  ensureMastraConnectionDefaults();
   if (!isAiServicePlatformModel(platform.id, activeRoleConfig.value.selectedModel)) {
     patchAiModelEndpointConfig(nextConfig.value, activeModelRole.value, {
       selectedModel: platform.defaultModel,
@@ -710,7 +712,7 @@ const getProfileModelLabel = (profile: IAiProviderProfilePayload): string => {
 };
 
 const getProfileEndpointLabel = (profile: IAiProviderProfilePayload): string =>
-  profile.baseUrl?.trim() || DEFAULT_LITELLM_BASE_URL;
+  profile.baseUrl?.trim() || '使用 Provider 默认地址';
 
 const getProfileRoleLabel = (profile: IAiProviderProfilePayload): string =>
   profile.role === 'narrator' ? '小模型' : '主力模型';
@@ -788,7 +790,7 @@ const maskedDetailApiKey = computed(() => {
 watch(
   () => activeRoleConfig.value.providerType,
   () => {
-    ensureLiteLlmConnectionDefaults();
+    ensureMastraConnectionDefaults();
   },
   { immediate: true },
 );
@@ -888,7 +890,7 @@ onBeforeUnmount(() => {
 
             <div class="cfg-row cfg-row--stacked">
               <div class="cfg-row-main">
-                <span class="cfg-name">MODEL</span>
+                <span class="cfg-name">模型 ID</span>
                 <span class="cfg-tag">必填</span>
                 <span class="cfg-spacer"></span>
                 <select class="cfg-select" data-field="model" :value="activeRoleConfig.selectedModel ?? ''"
@@ -903,7 +905,7 @@ onBeforeUnmount(() => {
 
             <div class="cfg-row cfg-row--stacked">
               <div class="cfg-row-main">
-                <span class="cfg-name">API_KEY</span>
+                <span class="cfg-name">API 密钥</span>
                 <span class="cfg-tag">必填</span>
                 <span class="cfg-spacer"></span>
                 <div class="cfg-secret-field">
@@ -919,12 +921,11 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <FieldError v-if="fieldErrors.apiKey" :message="fieldErrors.apiKey" />
-              <span class="cfg-help">仅本地存储，不上传。</span>
             </div>
 
             <div class="cfg-row cfg-row--stacked">
               <div class="cfg-row-main">
-                <span class="cfg-name">BASE_URL</span>
+                <span class="cfg-name">接口地址</span>
                 <span class="cfg-spacer"></span>
                 <input :value="activeRoleConfig.baseUrl ?? ''" class="cfg-input"
                   :readonly="!activePreset.isEndpointEditable" :aria-invalid="Boolean(fieldErrors.baseUrl)"
@@ -934,41 +935,41 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="cfg-row">
-              <span class="cfg-name">TIMEOUT_S</span>
+              <span class="cfg-name">超时时间（秒）</span>
               <span class="cfg-spacer"></span>
               <input v-model.number="advancedDraft.timeoutSeconds" type="number" class="cfg-input cfg-input--short"
                 min="5" max="120" />
             </div>
 
             <div class="cfg-row">
-              <span class="cfg-name">PROXY_URL</span>
+              <span class="cfg-name">代理地址</span>
               <span class="cfg-spacer"></span>
               <input v-model="advancedDraft.proxyUrl" class="cfg-input" placeholder="http://127.0.0.1:7890" />
             </div>
 
             <div class="cfg-row">
-              <span class="cfg-name">TEMPERATURE</span>
+              <span class="cfg-name">温度值</span>
               <span class="cfg-spacer"></span>
               <input v-model.number="advancedDraft.temperature" type="number" class="cfg-input cfg-input--short" min="0"
                 max="2" step="0.1" />
             </div>
 
             <div class="cfg-row">
-              <span class="cfg-name">TOP_P</span>
+              <span class="cfg-name">核采样阈值</span>
               <span class="cfg-spacer"></span>
               <input v-model.number="advancedDraft.topP" type="number" class="cfg-input cfg-input--short" min="0"
                 max="1" step="0.1" />
             </div>
 
             <div class="cfg-row">
-              <span class="cfg-name">MAX_TOKENS</span>
+              <span class="cfg-name">最大生成 Token 数</span>
               <span class="cfg-spacer"></span>
               <input v-model.number="advancedDraft.maxTokens" type="number" class="cfg-input cfg-input--short" min="256"
                 max="128000" />
             </div>
 
             <div class="cfg-row">
-              <span class="cfg-name">STREAM</span>
+              <span class="cfg-name">流式响应</span>
               <span class="cfg-spacer"></span>
               <button type="button" class="cfg-switch" :class="{ 'is-active': streamEnabled }"
                 :aria-pressed="streamEnabled" @click="toggleStream">

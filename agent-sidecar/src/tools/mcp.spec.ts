@@ -258,6 +258,113 @@ describe('MCP gateway warm pool', () => {
     await pool.disconnectAll();
   });
 
+  it('passes raw arguments to MCP tools before trying a Mastra-style context wrapper', async () => {
+    let capturedInput: unknown = null;
+    const pool = createMcpGatewayWarmPool({
+      createBundle: async () => ({
+        configs: [createMockStdioConfig('tavily-mcp')],
+        errors: [],
+        tools: {
+          tavily_mcp_tavily_search: createTool({
+            id: 'tavily_mcp_tavily_search',
+            description: '联网搜索',
+            inputSchema: z.object({
+              query: z.string(),
+            }),
+            execute: async (inputData) => {
+              capturedInput = inputData;
+              return {
+                content: [{ type: 'text', text: '搜索完成' }],
+                isError: false,
+              };
+            },
+          }),
+        },
+        disconnectAll: async () => undefined,
+      }),
+      ttlIdleMs: 60_000,
+    });
+    const tools = pool.createTools({ profile: 'write' });
+    const executeCall = tools.mcp_call_tool.execute;
+
+    assert.equal(typeof executeCall, 'function');
+    if (!executeCall) {
+      throw new Error('mcp_call_tool execute 不可用。');
+    }
+
+    const result = await executeCall({
+      serverName: 'tavily-mcp',
+      toolName: 'tavily_search',
+      arguments: { query: '2026年5月 最新闻' },
+    }, {});
+
+    assert.deepEqual(capturedInput, { query: '2026年5月 最新闻' });
+    assert.deepEqual(result, {
+      serverName: 'tavily-mcp',
+      toolName: 'tavily_mcp_tavily_search',
+      result: {
+        content: [{ type: 'text', text: '搜索完成' }],
+        isError: false,
+      },
+    });
+
+    await pool.disconnectAll();
+  });
+
+  it('falls back to a Mastra-style context wrapper when a tool requires context input', async () => {
+    let rawAttemptCount = 0;
+    let wrappedAttemptCount = 0;
+    const pool = createMcpGatewayWarmPool({
+      createBundle: async () => ({
+        configs: [createMockStdioConfig('memory')],
+        errors: [],
+        tools: {
+          memory_lookup: {
+            description: '读取记忆',
+            execute: async (inputData: unknown) => {
+              const record = inputData as Record<string, unknown>;
+              if ('context' in record) {
+                wrappedAttemptCount += 1;
+                return { key: (record.context as Record<string, unknown>).key, value: 'ok' };
+              }
+
+              rawAttemptCount += 1;
+              throw new Error("Cannot read properties of undefined (reading 'context')");
+            },
+          },
+        },
+        disconnectAll: async () => undefined,
+      }),
+      ttlIdleMs: 60_000,
+    });
+    const tools = pool.createTools({ profile: 'write' });
+    const executeCall = tools.mcp_call_tool.execute;
+
+    assert.equal(typeof executeCall, 'function');
+    if (!executeCall) {
+      throw new Error('mcp_call_tool execute 不可用。');
+    }
+
+    const result = await executeCall({
+      serverName: 'memory',
+      toolName: 'lookup',
+      arguments: { key: 'session-1' },
+    }, {});
+
+    assert.equal(rawAttemptCount, 1);
+    assert.equal(wrappedAttemptCount, 1);
+    assert.deepEqual(result, {
+      serverName: 'memory',
+      toolName: 'memory_lookup',
+      result: {
+        key: 'session-1',
+        value: 'ok',
+      },
+    });
+
+    await pool.disconnectAll();
+  });
+
   it('reports readonly profile filtering separately from an empty MCP server', async () => {
     const pool = createMcpGatewayWarmPool({
       createBundle: async () => ({

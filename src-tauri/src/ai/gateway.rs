@@ -1,7 +1,6 @@
 use super::audit::{self, AiAuditEventKind};
 use super::credential::CredentialStore;
 use super::errors;
-use super::openai_compatible;
 use super::provider::{
     AiProviderChatRequest, AiProviderMessage, AiProviderUsage,
 };
@@ -53,9 +52,8 @@ const MAX_TITLE_SOURCE_CHARS: usize = 1_200;
 const MIN_GENERATED_TITLE_CHARS: usize = 5;
 const MAX_GENERATED_TITLE_CHARS: usize = 10;
 
-const DEFAULT_LITELLM_BASE_URL: &str = "http://127.0.0.1:4000/v1";
-const DEFAULT_LITELLM_MODEL: &str = "openai/gpt-5.5";
-const DEFAULT_NARRATOR_MODEL: &str = "zhipu/glm-4-flash";
+const DEFAULT_MASTRA_MODEL: &str = "openai/gpt-5.5";
+const DEFAULT_NARRATOR_MODEL: &str = "zhipuai/glm-4.7-flash";
 
 static CONFIG: OnceLock<Mutex<AiRuntimeConfig>> = OnceLock::new();
 static STREAM_SEQUENCE: AtomicU64 = AtomicU64::new(1);
@@ -129,9 +127,9 @@ struct AiProviderProfile {
 impl Default for AiRuntimeConfig {
     fn default() -> Self {
         Self {
-            provider_type: "litellm".to_string(),
-            selected_model: Some(DEFAULT_LITELLM_MODEL.to_string()),
-            base_url: Some(DEFAULT_LITELLM_BASE_URL.to_string()),
+            provider_type: "mastra".to_string(),
+            selected_model: Some(DEFAULT_MASTRA_MODEL.to_string()),
+            base_url: None,
             active_profile_id: None,
             profiles: Vec::new(),
             narrator: AiModelEndpointRuntimeConfig::default(),
@@ -145,9 +143,9 @@ impl Default for AiRuntimeConfig {
 impl Default for AiModelEndpointRuntimeConfig {
     fn default() -> Self {
         Self {
-            provider_type: "litellm".to_string(),
+            provider_type: "mastra".to_string(),
             selected_model: Some(DEFAULT_NARRATOR_MODEL.to_string()),
-            base_url: Some(DEFAULT_LITELLM_BASE_URL.to_string()),
+            base_url: None,
             active_profile_id: None,
         }
     }
@@ -368,14 +366,12 @@ fn build_profile_name(selected_model: Option<&str>, base_url: Option<&str>) -> S
         .unwrap_or("未选择模型");
     let base_url = base_url
         .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(DEFAULT_LITELLM_BASE_URL);
+        .filter(|value| !value.is_empty());
 
-    if base_url == DEFAULT_LITELLM_BASE_URL {
-        return model.to_string();
+    match base_url {
+        Some(value) => format!("{model} · {value}"),
+        None => model.to_string(),
     }
-
-    format!("{model} · {base_url}")
 }
 
 fn normalize_model_role(role: Option<&str>) -> Result<AiResolvedModelRole, String> {
@@ -395,10 +391,10 @@ fn default_profile_role() -> String {
 
 fn validate_provider(provider_type: &str) -> Result<(), String> {
     match provider_type {
-        "litellm" => Ok(()),
+        "mastra" => Ok(()),
         _ => Err(errors::error(
             "AI_PROVIDER_NOT_CONFIGURED",
-            "当前版本只支持 LiteLLM Proxy Provider。",
+            "当前版本只支持 Mastra Provider。",
         )),
     }
 }
@@ -410,8 +406,11 @@ fn normalize_base_url(
     let value = base_url
         .map(|item| item.trim().trim_end_matches('/').to_string())
         .filter(|item| !item.is_empty())
-        .or_else(|| default_base_url(provider_type))
-        .unwrap_or_else(|| DEFAULT_LITELLM_BASE_URL.to_string());
+        .or_else(|| default_base_url(provider_type));
+
+    let Some(value) = value else {
+        return Ok(None);
+    };
 
     if !is_allowed_base_url(&value) {
         return Err(errors::error(
@@ -432,14 +431,14 @@ fn is_allowed_base_url(value: &str) -> bool {
 
 fn default_model(provider_type: &str) -> Option<String> {
     match provider_type {
-        "litellm" => Some(DEFAULT_LITELLM_MODEL.to_string()),
+        "mastra" => Some(DEFAULT_MASTRA_MODEL.to_string()),
         _ => None,
     }
 }
 
 fn default_base_url(provider_type: &str) -> Option<String> {
     match provider_type {
-        "litellm" => Some(DEFAULT_LITELLM_BASE_URL.to_string()),
+        "mastra" => None,
         _ => None,
     }
 }

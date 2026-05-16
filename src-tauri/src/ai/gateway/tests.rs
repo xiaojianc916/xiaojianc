@@ -35,12 +35,15 @@ fn deepseek_model_routes_to_direct_upstream_when_default_litellm_is_unavailable(
 
 #[test]
 fn zhipu_model_routes_to_direct_upstream_when_default_litellm_is_unavailable() {
-    let endpoint = resolve_direct_upstream_endpoint(DEFAULT_LITELLM_BASE_URL, "zhipu/glm-4-flash")
+    let endpoint = resolve_direct_upstream_endpoint(
+        DEFAULT_LITELLM_BASE_URL,
+        "zhipuai/glm-4.7-flash",
+    )
         .expect("zhipu route should resolve");
 
     assert_eq!(endpoint.provider_name, "智谱 GLM");
     assert_eq!(endpoint.base_url, "https://open.bigmodel.cn/api/paas/v4");
-    assert_eq!(endpoint.model, "glm-4-flash");
+    assert_eq!(endpoint.model, "glm-4.7-flash");
 }
 
 #[test]
@@ -118,7 +121,7 @@ fn conversation_title_generation_prefers_narrator_model() {
     let config = AiRuntimeConfig {
         selected_model: Some("openai/gpt-5.5".to_string()),
         narrator: AiModelEndpointRuntimeConfig {
-            selected_model: Some("zhipu/glm-4-flash".to_string()),
+            selected_model: Some("zhipuai/glm-4.7-flash".to_string()),
             ..AiModelEndpointRuntimeConfig::default()
         },
         ..AiRuntimeConfig::default()
@@ -130,7 +133,7 @@ fn conversation_title_generation_prefers_narrator_model() {
         .as_deref()
         .unwrap_or(DEFAULT_NARRATOR_MODEL);
 
-    assert_eq!(model, "zhipu/glm-4-flash");
+    assert_eq!(model, "zhipuai/glm-4.7-flash");
     assert_ne!(
         model,
         config
@@ -180,4 +183,15 @@ fn suggestion_text_normalization_rejects_overlong_items() {
     let value = "这是一条明显超过字符上限的提示词，内容冗长到已经不适合作为首页按钮文案展示，也不利于快速扫描";
 
     assert_eq!(normalize_suggestion_text(value), None);
+}
+
+#[test]
+fn suggestion_pool_cache_model_must_match_current_narrator_model() {
+    let current_model = AiRuntimeConfig::default()
+        .narrator
+        .selected_model
+        .unwrap_or_else(|| DEFAULT_NARRATOR_MODEL.to_string());
+
+    assert_eq!(current_model, "zhipuai/glm-4.7-flash");
+    assert_ne!(current_model, "zhipu/glm-4-flash");
 }

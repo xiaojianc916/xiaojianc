@@ -2,12 +2,12 @@ use super::errors;
 
 const SERVICE_NAME: &str = "calamex.ai";
 
-const LITELLM_USER: &str = "litellm";
-const LITELLM_NARRATOR_USER: &str = "litellm:narrator";
+const MASTRA_USER: &str = "mastra";
+const MASTRA_NARRATOR_USER: &str = "mastra:narrator";
 
-const PROVIDER_ACCOUNTS: &[(&str, &str)] = &[("litellm", LITELLM_USER)];
+const PROVIDER_ACCOUNTS: &[(&str, &str)] = &[("mastra", MASTRA_USER)];
 const PROVIDER_ROLE_ACCOUNTS: &[(&str, &str, &str)] =
-    &[("litellm", "narrator", LITELLM_NARRATOR_USER)];
+    &[("mastra", "narrator", MASTRA_NARRATOR_USER)];
 
 const LEGACY_PROVIDER_ACCOUNTS: &[&str] = &[
     "openai-compatible",
@@ -221,18 +221,18 @@ fn profile_account(profile_id: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        profile_account, provider_account, provider_role_account, LITELLM_NARRATOR_USER,
-        LITELLM_USER,
+        profile_account, provider_account, provider_role_account, MASTRA_NARRATOR_USER,
+        MASTRA_USER,
     };
 
     #[test]
     fn provider_account_resolves_supported_providers() {
-        assert_eq!(provider_account("litellm").unwrap(), LITELLM_USER);
+        assert_eq!(provider_account("mastra").unwrap(), MASTRA_USER);
     }
 
     #[test]
     fn provider_account_trims_provider_type() {
-        assert_eq!(provider_account(" litellm ").unwrap(), LITELLM_USER);
+        assert_eq!(provider_account(" mastra ").unwrap(), MASTRA_USER);
     }
 
     #[test]
@@ -249,12 +249,12 @@ mod tests {
     #[test]
     fn provider_role_account_keeps_main_and_narrator_separate() {
         assert_eq!(
-            provider_role_account("litellm", "main").unwrap(),
-            LITELLM_USER
+            provider_role_account("mastra", "main").unwrap(),
+            MASTRA_USER
         );
         assert_eq!(
-            provider_role_account("litellm", "narrator").unwrap(),
-            LITELLM_NARRATOR_USER
+            provider_role_account("mastra", "narrator").unwrap(),
+            MASTRA_NARRATOR_USER
         );
     }
 

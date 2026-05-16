@@ -1,4 +1,20 @@
 use super::*;
+use crate::agent_sidecar;
+use crate::commands::contracts::{AgentSidecarChatRequest, AgentSidecarMessagePayload};
+
+fn to_sidecar_message_payloads(messages: Vec<AiProviderMessage>) -> Vec<AgentSidecarMessagePayload> {
+    messages
+        .into_iter()
+        .map(|message| AgentSidecarMessagePayload {
+            role: message.role,
+            content: message.content,
+        })
+        .collect()
+}
+
+fn sidecar_events_result_text(payload: &crate::commands::contracts::AgentSidecarResponsePayload) -> String {
+    payload.result.clone().unwrap_or_default()
+}
 
 pub async fn generate_conversation_title(
     payload: AiConversationTitleRequest,
@@ -30,11 +46,20 @@ pub async fn generate_conversation_title(
             &assistant_message,
         )),
     ]);
-    let base_url = resolve_model_endpoint_base_url(narrator_config)?;
-    let api_key = get_api_key_for_model_endpoint(narrator_config, AiResolvedModelRole::Narrator)?;
-    let response =
-        connection::chat_with_litellm_fallback(base_url, &api_key, model, request).await?;
-    let title = normalize_conversation_title(&response.content);
+    let sidecar_response = agent_sidecar::narrator_model_chat_once(
+        AgentSidecarChatRequest {
+            session_id: None,
+            mode: Some("ask".to_string()),
+            goal: Some("生成会话标题".to_string()),
+            messages: to_sidecar_message_payloads(request.messages),
+            workspace_root_path: None,
+            context: Vec::new(),
+            model_config: None,
+            thread_id: None,
+        },
+    )
+    .await?;
+    let title = normalize_conversation_title(&sidecar_events_result_text(&sidecar_response));
 
     if title.chars().count() < MIN_GENERATED_TITLE_CHARS {
         return Err(errors::error(
@@ -45,7 +70,7 @@ pub async fn generate_conversation_title(
 
     Ok(AiConversationTitlePayload {
         title,
-        model: response.model,
+        model: model.to_string(),
     })
 }
 
@@ -63,13 +88,14 @@ pub async fn chat_stream(
     let response_provider_type = config.provider_type.clone();
     let task_config = config.clone();
 
+    let input_references = payload.references.clone();
     let model = config
         .selected_model
         .clone()
         .or_else(|| default_model(&config.provider_type))
-        .unwrap_or_else(|| DEFAULT_LITELLM_MODEL.to_string());
+        .unwrap_or_else(|| DEFAULT_MASTRA_MODEL.to_string());
     let messages = with_identity_system_message(
-        collect_messages(payload.messages, payload.references)?,
+        collect_messages(payload.messages, input_references.clone())?,
         &model,
     );
     let request = AiProviderChatRequest::new(messages);
@@ -84,6 +110,8 @@ pub async fn chat_stream(
     let task_stream_id = stream_id.clone();
     let task_assistant_message_id = assistant_message_id.clone();
     let task_model = model.clone();
+    let task_messages = request.messages.clone();
+    let task_context = input_references;
 
     tokio::spawn(async move {
         emit_stream_event(
@@ -103,55 +131,47 @@ pub async fn chat_stream(
         );
 
         let result = async {
-            let base_url = resolve_base_url(&task_config)?.to_string();
-            let api_key = get_api_key_for_config(&task_config)?;
-            let mut final_usage = None;
-            let mut latest_completion_tokens = None;
-
-            connection::chat_stream_with_litellm_fallback(
-                &base_url,
-                &api_key,
-                &task_model,
-                request,
-                |event| {
-                    match event {
-                        openai_compatible::AiProviderStreamEvent::Delta {
-                            delta,
-                            completion_tokens_estimate,
-                        } => {
-                            latest_completion_tokens = completion_tokens_estimate;
-                            emit_stream_event(
-                                &app,
-                                AiChatStreamEventPayload {
-                                    stream_id: task_stream_id.clone(),
-                                    assistant_message_id: task_assistant_message_id.clone(),
-                                    kind: "delta".to_string(),
-                                    delta: Some(delta),
-                                    message: None,
-                                    model: Some(task_model.clone()),
-                                    prompt_tokens,
-                                    completion_tokens: completion_tokens_estimate,
-                                    total_tokens: prompt_tokens
-                                        .zip(completion_tokens_estimate)
-                                        .map(|(input_tokens, output_tokens)| {
-                                            input_tokens + output_tokens
-                                        }),
-                                    usage: None,
-                                },
-                            );
-                        }
-                        openai_compatible::AiProviderStreamEvent::Usage { usage } => {
-                            final_usage = Some(usage);
-                        }
-                    }
-
-                    Ok(())
+            let _ = task_config;
+            let sidecar_response = agent_sidecar::model_chat(
+                app.clone(),
+                AgentSidecarChatRequest {
+                    session_id: Some(task_stream_id.clone()),
+                    mode: Some("ask".to_string()),
+                    goal: Some(task_messages
+                        .iter()
+                        .rev()
+                        .find(|message| message.role == "user")
+                        .map(|message| message.content.clone())
+                        .unwrap_or_else(|| "继续当前任务".to_string())),
+                    messages: to_sidecar_message_payloads(task_messages.clone()),
+                    workspace_root_path: None,
+                    context: task_context.clone(),
+                    model_config: None,
+                    thread_id: payload.thread_id.clone(),
                 },
-                || stream_manager::is_cancelled(&task_stream_id),
             )
             .await?;
 
-            Ok::<_, String>((final_usage, latest_completion_tokens))
+            let final_text = sidecar_events_result_text(&sidecar_response);
+            if !final_text.is_empty() {
+                emit_stream_event(
+                    &app,
+                    AiChatStreamEventPayload {
+                        stream_id: task_stream_id.clone(),
+                        assistant_message_id: task_assistant_message_id.clone(),
+                        kind: "delta".to_string(),
+                        delta: Some(final_text),
+                        message: None,
+                        model: Some(task_model.clone()),
+                        prompt_tokens,
+                        completion_tokens: None,
+                        total_tokens: prompt_tokens,
+                        usage: None,
+                    },
+                );
+            }
+
+            Ok::<_, String>((None, None))
         }
         .await;
 
@@ -264,18 +284,22 @@ pub async fn inline_complete(
         content: prompt,
     }]);
 
-    let base_url = resolve_base_url(&config)?;
-    let api_key = get_api_key_for_config(&config)?;
-    let model = config
-        .selected_model
-        .as_deref()
-        .unwrap_or(DEFAULT_LITELLM_MODEL);
-
-    let response =
-        connection::chat_with_litellm_fallback(base_url, &api_key, model, request).await?;
+    let response = agent_sidecar::model_chat_once(
+        AgentSidecarChatRequest {
+            session_id: None,
+            mode: Some("ask".to_string()),
+            goal: Some("生成行内补全".to_string()),
+            messages: to_sidecar_message_payloads(request.messages),
+            workspace_root_path: None,
+            context: Vec::new(),
+            model_config: None,
+            thread_id: None,
+        },
+    )
+    .await?;
 
     Ok(AiInlineCompletionResult {
-        insert_text: response.content,
+        insert_text: sidecar_events_result_text(&response),
         range: AiInlineCompletionRangePayload {
             start_offset: payload.cursor_offset,
             end_offset: payload.cursor_offset,
@@ -285,7 +309,6 @@ pub async fn inline_complete(
 }
 
 pub async fn code_action(payload: AiCodeActionRequest) -> Result<AiCodeActionPayload, String> {
-    let config = current_config()?;
     let trimmed_selection = payload.selection.trim();
 
     if trimmed_selection.is_empty() {
@@ -309,18 +332,22 @@ pub async fn code_action(payload: AiCodeActionRequest) -> Result<AiCodeActionPay
         content: redacted_prompt.text,
     }]);
 
-    let base_url = resolve_base_url(&config)?;
-    let api_key = get_api_key_for_config(&config)?;
-    let model = config
-        .selected_model
-        .as_deref()
-        .unwrap_or(DEFAULT_LITELLM_MODEL);
-
-    let response =
-        connection::chat_with_litellm_fallback(base_url, &api_key, model, request).await?;
+    let response = agent_sidecar::model_chat_once(
+        AgentSidecarChatRequest {
+            session_id: None,
+            mode: Some("ask".to_string()),
+            goal: Some("执行代码动作".to_string()),
+            messages: to_sidecar_message_payloads(request.messages),
+            workspace_root_path: None,
+            context: Vec::new(),
+            model_config: None,
+            thread_id: None,
+        },
+    )
+    .await?;
 
     Ok(AiCodeActionPayload {
-        explanation: response.content,
+        explanation: sidecar_events_result_text(&response),
         suggested_patch: None,
         test_suggestion: if payload.kind == "generate_tests" {
             Some("建议基于返回内容在测试目录新增用例；应用前请先走 patch 预览。".to_string())

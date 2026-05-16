@@ -76,6 +76,16 @@ export interface IAgentContextReferenceInput {
 }
 
 // -----------------------------------------------------------------------------
+// Request-scoped model config
+// -----------------------------------------------------------------------------
+
+export interface IAgentRuntimeModelConfigInput {
+    modelId: string;
+    apiKey: string;
+    baseUrl?: string | undefined;
+}
+
+// -----------------------------------------------------------------------------
 // Runtime input
 // -----------------------------------------------------------------------------
 
@@ -94,6 +104,7 @@ export interface IAgentRuntimeInput {
     workspaceRootPath?: string | undefined;
     context?: IAgentContextReferenceInput[] | undefined;
     threadId?: string | undefined;
+    modelConfig?: IAgentRuntimeModelConfigInput | undefined;
 
     /**
      * Plan continuation triple. These three fields are coupled — they must
@@ -133,6 +144,7 @@ export interface ICheckpointRestoreInput {
     snapshotId?: string | undefined;
     step?: TRollbackStepPath | undefined;
     sessionId?: string | undefined;
+    modelConfig?: IAgentRuntimeModelConfigInput | undefined;
 }
 
 // -----------------------------------------------------------------------------

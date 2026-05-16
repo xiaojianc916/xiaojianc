@@ -36,6 +36,7 @@ interface IUseAiSuggestionPoolOptions {
 const MS_PER_SECOND = 1000;
 const MS_PER_MINUTE = 60 * MS_PER_SECOND;
 const SUGGESTION_REFRESH_WINDOW_MINUTES = AI_SUGGESTION_REFRESH_INTERVAL_MS / MS_PER_MINUTE;
+const SUGGESTION_REFRESH_RETRY_DELAYS_MS = [1500, 3000, 5000, 9000, 16000, 30000, 60000] as const;
 
 const getUltimateFallbackPool = (): string[] =>
   normalizeSuggestionPool(AI_ASSISTANT_FALLBACK_SUGGESTIONS, AI_SUGGESTION_LOCALE)
@@ -95,9 +96,12 @@ export const useAiSuggestionPool = (options: IUseAiSuggestionPoolOptions = {}) =
   const isRefreshing = ref(false);
   const refreshErrorMessage = ref('');
   let refreshTimer: ReturnType<typeof window.setTimeout> | null = null;
+  let refreshRetryTimer: ReturnType<typeof window.setTimeout> | null = null;
   let cachedPoolPromise: Promise<void> | null = null;
   let hasLoadedCachedPool = false;
   let activePoolGeneratedAt: string | null = null;
+  let refreshRetryAttempt = 0;
+  let refreshRetryWindowKey: string | null = null;
 
   const clearRefreshTimer = (): void => {
     if (refreshTimer === null || typeof window === 'undefined') {
@@ -107,6 +111,27 @@ export const useAiSuggestionPool = (options: IUseAiSuggestionPoolOptions = {}) =
 
     window.clearTimeout(refreshTimer);
     refreshTimer = null;
+  };
+
+  const clearRefreshRetryTimer = (): void => {
+    if (refreshRetryTimer === null || typeof window === 'undefined') {
+      refreshRetryTimer = null;
+      return;
+    }
+
+    window.clearTimeout(refreshRetryTimer);
+    refreshRetryTimer = null;
+  };
+
+  const syncRefreshRetryWindow = (): void => {
+    const currentWindowKey = resolveRefreshWindowKey(now());
+
+    if (currentWindowKey === refreshRetryWindowKey) {
+      return;
+    }
+
+    refreshRetryWindowKey = currentWindowKey;
+    refreshRetryAttempt = 0;
   };
 
   const rotateBatch = (): void => {
@@ -187,6 +212,8 @@ export const useAiSuggestionPool = (options: IUseAiSuggestionPoolOptions = {}) =
     }
 
     isRefreshing.value = true;
+    clearRefreshRetryTimer();
+    syncRefreshRetryWindow();
 
     try {
       const payload = await service.generateSuggestionPool({
@@ -204,9 +231,26 @@ export const useAiSuggestionPool = (options: IUseAiSuggestionPoolOptions = {}) =
       applyLocalPool(generatedPool);
       activePoolGeneratedAt = payload.generatedAt;
       refreshErrorMessage.value = '';
+      refreshRetryWindowKey = resolveGeneratedAtWindowKey(payload.generatedAt) ?? refreshRetryWindowKey;
+      refreshRetryAttempt = 0;
     } catch (error) {
       refreshErrorMessage.value = toErrorMessage(error, '提示词池刷新失败。');
       console.warn(refreshErrorMessage.value);
+
+      const retryDelay = SUGGESTION_REFRESH_RETRY_DELAYS_MS[refreshRetryAttempt];
+      refreshRetryAttempt += 1;
+
+      if (
+        retryDelay !== undefined &&
+        typeof window !== 'undefined' &&
+        isRefreshEnabled.value &&
+        shouldRefreshCurrentWindow()
+      ) {
+        refreshRetryTimer = window.setTimeout(() => {
+          refreshRetryTimer = null;
+          void refreshCurrentWindowIfNeeded();
+        }, retryDelay);
+      }
     } finally {
       isRefreshing.value = false;
     }
@@ -251,6 +295,9 @@ export const useAiSuggestionPool = (options: IUseAiSuggestionPoolOptions = {}) =
     (enabled) => {
       if (!enabled) {
         clearRefreshTimer();
+        clearRefreshRetryTimer();
+        refreshRetryAttempt = 0;
+        refreshRetryWindowKey = null;
         void loadCachedPool();
         return;
       }
@@ -262,6 +309,9 @@ export const useAiSuggestionPool = (options: IUseAiSuggestionPoolOptions = {}) =
 
   onScopeDispose(() => {
     clearRefreshTimer();
+    clearRefreshRetryTimer();
+    refreshRetryAttempt = 0;
+    refreshRetryWindowKey = null;
     stopEnabledWatcher();
   });
 

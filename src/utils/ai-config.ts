@@ -1,6 +1,7 @@
 import {
-  DEFAULT_LITELLM_BASE_URL,
-  DEFAULT_LITELLM_MODEL_ID,
+  DEFAULT_MASTRA_BASE_URL,
+  DEFAULT_MASTRA_MODEL_ID,
+  findAiServicePlatformByModel,
 } from '@/constants/ai-providers';
 import type {
   IAiConfigPayload,
@@ -9,25 +10,28 @@ import type {
   TAiProviderType,
 } from '@/types/ai';
 
-const DEFAULT_PROVIDER_TYPE: TAiProviderType = 'litellm';
-const DEFAULT_NARRATOR_MODEL_ID = 'zhipu/glm-4-flash';
+const DEFAULT_PROVIDER_TYPE: TAiProviderType = 'mastra';
+const DEFAULT_NARRATOR_MODEL_ID = 'zhipuai/glm-4.7-flash';
 
 export const createDefaultAiModelEndpointConfig = (
-  selectedModel = DEFAULT_LITELLM_MODEL_ID,
-): IAiModelEndpointConfigPayload => ({
+  selectedModel = DEFAULT_MASTRA_MODEL_ID,
+): IAiModelEndpointConfigPayload => {
+  const platform = findAiServicePlatformByModel(selectedModel);
+  return {
   providerType: DEFAULT_PROVIDER_TYPE,
   selectedModel,
-  baseUrl: DEFAULT_LITELLM_BASE_URL,
+  baseUrl: platform.baseUrl || DEFAULT_MASTRA_BASE_URL || null,
   activeProfileId: null,
   isBaseUrlConfigured: true,
   hasCredentials: false,
   isConfigured: false,
-});
+  };
+};
 
 export const createDefaultAiConfigPayload = (): IAiConfigPayload => ({
   providerType: DEFAULT_PROVIDER_TYPE,
-  selectedModel: DEFAULT_LITELLM_MODEL_ID,
-  baseUrl: DEFAULT_LITELLM_BASE_URL,
+  selectedModel: DEFAULT_MASTRA_MODEL_ID,
+  baseUrl: DEFAULT_MASTRA_BASE_URL || null,
   activeProfileId: null,
   isBaseUrlConfigured: true,
   hasCredentials: false,

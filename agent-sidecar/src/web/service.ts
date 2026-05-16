@@ -21,7 +21,6 @@ const MAX_WEB_SEARCH_RESULTS = 8
 const MIN_TAVILY_SEARCH_RESULTS = 5
 const WEB_TEXT_REF_PREFIX = 'web-text:'
 const WEB_EXCERPT_CHARS = 600
-const WEB_TEXT_REF_MAX_ENTRIES = 256
 
 const TAVILY_FIELD = {
   title: 'Title: ',
@@ -83,36 +82,6 @@ type TMcpBundle = Awaited<ReturnType<typeof createMastraMcpClientBundle>>
 // Ref 存储（FIFO 上限，避免无界内存）
 // ---------------------------------------------------------------------------
 
-const webTextRefStore = new Map<string, string>()
-
-const setWebTextRef = (refId: string, text: string): void => {
-  if (webTextRefStore.has(refId)) {
-    webTextRefStore.delete(refId)
-  }
-  webTextRefStore.set(refId, text)
-  while (webTextRefStore.size > WEB_TEXT_REF_MAX_ENTRIES) {
-    const oldestKey = webTextRefStore.keys().next().value
-    if (oldestKey === undefined) {
-      break
-    }
-    webTextRefStore.delete(oldestKey)
-  }
-}
-
-export const webTextRefs = {
-  load(refId: string): string | null {
-    return webTextRefStore.get(refId) ?? null
-  },
-  evict(refId: string): boolean {
-    return webTextRefStore.delete(refId)
-  },
-  clear(): void {
-    webTextRefStore.clear()
-  },
-  get size(): number {
-    return webTextRefStore.size
-  },
-}
 
 // ---------------------------------------------------------------------------
 // MCP 工具与错误处理
@@ -553,8 +522,6 @@ export const fetchWeb = async (rawInput: unknown): Promise<TAiWebFetchPayload> =
   const extracted = parseExtractText(text, input)
   const clipped = clipToByteLimit(extracted.rawContent, input.maxBytes)
   const textRef = buildTextRef(trimmedUrl, clipped)
-  setWebTextRef(textRef, clipped)
-
   return aiWebFetchPayloadSchema.parse({
     source: {
       url: trimmedUrl,

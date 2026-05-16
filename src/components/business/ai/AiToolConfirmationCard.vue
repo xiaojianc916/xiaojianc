@@ -1,17 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
+import { Card } from '@/components/ui/card';
 import type {
   IAiToolConfirmationOption,
   IAiToolConfirmationRequest,
@@ -27,10 +18,16 @@ const emit = defineEmits<{
   resolve: [decision: TAiToolConfirmationDecision];
 }>();
 
+const isDetailExpanded = ref(false);
+
 const visibleOptions = computed(() =>
   props.confirmation.options.filter((option) => option.id !== 'view-details'),
 );
 
+const canToggleDetails = computed(() => Boolean(props.confirmation.impact?.trim()));
+const detailPreview = computed(() =>
+  props.confirmation.impact?.trim() || props.confirmation.summary.trim() || props.confirmation.toolName,
+);
 const riskLabel = computed(() => {
   switch (props.confirmation.riskLevel) {
     case 'high':
@@ -44,21 +41,10 @@ const riskLabel = computed(() => {
   }
 });
 
-const riskVariant = computed(() => {
-  switch (props.confirmation.riskLevel) {
-    case 'high':
-      return 'destructive' as const;
-    case 'medium':
-      return 'warning' as const;
-    case 'low':
-      return 'secondary' as const;
-    default:
-      return 'default' as const;
-  }
-});
-
-const reversibleLabel = computed(() =>
-  props.confirmation.reversible ? '可回滚' : '需谨慎执行',
+const riskDescription = computed(() =>
+  props.confirmation.reversible
+    ? `${riskLabel.value}，允许后可回滚。`
+    : `${riskLabel.value}，请确认后继续。`,
 );
 
 const getOptionVariant = (option: IAiToolConfirmationOption): 'default' | 'outline' | 'ghost' => {
@@ -77,8 +63,13 @@ const getOptionVariant = (option: IAiToolConfirmationOption): 'default' | 'outli
 const getOptionClass = (option: IAiToolConfirmationOption): string =>
   option.tone === 'danger' ? 'ai-tool-confirmation-option is-danger' : 'ai-tool-confirmation-option';
 
+const toggleDetails = (): void => {
+  isDetailExpanded.value = !isDetailExpanded.value;
+};
+
 const handleOptionClick = (option: IAiToolConfirmationOption): void => {
   if (option.id === 'view-details') {
+    toggleDetails();
     return;
   }
 
@@ -88,32 +79,60 @@ const handleOptionClick = (option: IAiToolConfirmationOption): void => {
 
 <template>
   <Card class="ai-tool-confirmation-card" aria-label="工具执行确认">
-    <CardHeader class="ai-tool-confirmation-header">
-      <div class="ai-tool-confirmation-kicker">
-        <Badge :variant="riskVariant" class="ai-tool-confirmation-badge">
-          {{ riskLabel }}
-        </Badge>
-        <Badge variant="secondary" class="ai-tool-confirmation-badge">
-          {{ confirmation.toolName }}
-        </Badge>
-        <Badge variant="secondary" class="ai-tool-confirmation-badge">
-          {{ reversibleLabel }}
-        </Badge>
-      </div>
-      <CardTitle class="ai-tool-confirmation-title">
+    <div class="ai-tool-confirmation-risk-mark" :aria-label="riskDescription">
+      <svg class="ai-tool-confirmation-risk-mark__umbrella" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M3 13a9 9 0 0 1 18 0" />
+        <path d="M12 4v17" />
+        <path d="M12 21a3 3 0 0 0 3-3" />
+        <path d="M6.6 13a3.6 3.6 0 0 1 5.4 0" />
+        <path d="M12 13a3.6 3.6 0 0 1 5.4 0" />
+      </svg>
+      <span class="ai-tool-confirmation-risk-mark__shield">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 3.5 19 6v5.2c0 4.4-2.8 7.4-7 9.3-4.2-1.9-7-4.9-7-9.3V6l7-2.5Z" />
+          <path d="M12 8v5" />
+          <path d="M12 16.5h.01" />
+        </svg>
+      </span>
+    </div>
+
+    <div class="ai-tool-confirmation-copy">
+      <h3 class="ai-tool-confirmation-title">
         {{ confirmation.question }}
-      </CardTitle>
-      <CardDescription class="ai-tool-confirmation-summary">
-        {{ confirmation.summary }}
-      </CardDescription>
-    </CardHeader>
-    <CardContent v-if="confirmation.impact" class="ai-tool-confirmation-content">
-      <Separator class="ai-tool-confirmation-separator" />
-      <p class="ai-tool-confirmation-impact">
-        {{ confirmation.impact }}
+      </h3>
+      <p class="ai-tool-confirmation-summary">
+        <span>{{ confirmation.summary }}</span>
+        <button
+          v-if="canToggleDetails"
+          type="button"
+          class="ai-tool-confirmation-learn-more"
+          :aria-expanded="isDetailExpanded"
+          @click="toggleDetails"
+        >
+          了解更多
+        </button>
       </p>
-    </CardContent>
-    <CardFooter class="ai-tool-confirmation-actions">
+      <div class="ai-tool-confirmation-detail-row">
+        <code
+          class="ai-tool-confirmation-detail"
+          :class="{ 'is-expanded': isDetailExpanded }"
+          :title="detailPreview"
+        >
+          {{ detailPreview }}
+        </code>
+        <button
+          v-if="canToggleDetails"
+          type="button"
+          class="ai-tool-confirmation-detail-toggle"
+          :aria-expanded="isDetailExpanded"
+          @click="toggleDetails"
+        >
+          {{ isDetailExpanded ? '收起' : '全部显示' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="ai-tool-confirmation-actions">
       <Button
         v-for="option in visibleOptions"
         :key="option.id"
@@ -125,89 +144,183 @@ const handleOptionClick = (option: IAiToolConfirmationOption): void => {
       >
         {{ option.label }}
       </Button>
-    </CardFooter>
+    </div>
   </Card>
 </template>
 
 <style scoped>
 .ai-tool-confirmation-card {
-  gap: 0;
-  border-color: color-mix(in srgb, var(--accent-strong) 22%, var(--border-subtle));
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--accent-strong) 7%, transparent),
-      color-mix(in srgb, var(--surface-soft) 72%, transparent)
-    );
+  display: grid;
+  gap: 18px;
+  width: min(100%, 720px);
+  border-color: color-mix(in srgb, var(--border-subtle) 72%, transparent);
+  border-radius: 16px;
+  background: var(--panel-bg);
+  padding: 28px 30px 24px;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text-primary) 5%, transparent);
   transition:
     opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
     transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.ai-tool-confirmation-header {
-  gap: 8px;
-  padding-bottom: 12px;
+.ai-tool-confirmation-risk-mark {
+  position: relative;
+  width: 40px;
+  height: 36px;
+  color: var(--text-secondary);
 }
 
-.ai-tool-confirmation-kicker {
-  display: flex;
-  flex-wrap: wrap;
-  min-width: 0;
-  align-items: center;
-  gap: 6px;
+.ai-tool-confirmation-risk-mark__umbrella {
+  width: 29px;
+  height: 29px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
 }
 
-.ai-tool-confirmation-badge {
+.ai-tool-confirmation-risk-mark__shield {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--danger);
+  color: var(--panel-bg);
+}
+
+.ai-tool-confirmation-risk-mark__shield svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.1;
+}
+
+.ai-tool-confirmation-copy {
+  display: grid;
   min-width: 0;
+  gap: 10px;
 }
 
 .ai-tool-confirmation-title {
-  font-size: 13px;
-  line-height: 18px;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 450;
+  letter-spacing: -0.02em;
+  line-height: 26px;
 }
 
 .ai-tool-confirmation-summary {
-  color: var(--text-tertiary);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.ai-tool-confirmation-content {
-  display: grid;
-  gap: 10px;
-  padding-top: 0;
-}
-
-.ai-tool-confirmation-separator {
-  background: color-mix(in srgb, var(--border-subtle) 78%, transparent);
-}
-
-.ai-tool-confirmation-impact {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.ai-tool-confirmation-learn-more {
+  border: 0;
+  padding: 0 0 0 8px;
+  color: var(--accent-strong);
+}
+
+.ai-tool-confirmation-learn-more:hover {
+  color: color-mix(in srgb, var(--accent-strong) 78%, var(--text-primary));
+}
+
+.ai-tool-confirmation-detail-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px;
+}
+
+.ai-tool-confirmation-detail {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-tool-confirmation-detail.is-expanded {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.ai-tool-confirmation-detail-toggle {
+  border: 0;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+.ai-tool-confirmation-detail-toggle:hover {
+  color: var(--text-primary);
 }
 
 .ai-tool-confirmation-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding-top: 0;
+  gap: 12px;
+  padding-top: 4px;
 }
 
 .ai-tool-confirmation-option {
-  min-width: 84px;
+  min-width: 108px;
+  border-color: transparent;
+  background: var(--surface-soft);
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.ai-tool-confirmation-option:hover {
+  background: var(--surface-hover);
 }
 
 .ai-tool-confirmation-option.is-danger {
-  border-color: color-mix(in srgb, var(--danger) 42%, var(--border-subtle));
+  border-color: transparent;
+  background: var(--surface-soft);
   color: var(--danger);
+}
+
+.ai-tool-confirmation-option.is-danger:hover {
+  background: color-mix(in srgb, var(--danger) 9%, var(--surface-hover));
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ai-tool-confirmation-card {
     transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .ai-tool-confirmation-card {
+    padding: 22px 20px 20px;
+  }
+
+  .ai-tool-confirmation-detail-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .ai-tool-confirmation-detail-toggle {
+    justify-self: start;
   }
 }
 </style>

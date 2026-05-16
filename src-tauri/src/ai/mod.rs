@@ -4,7 +4,6 @@ pub mod errors;
 pub mod favicon;
 pub mod gateway;
 pub mod network_permission;
-pub mod openai_compatible;
 pub mod provider;
 pub mod redaction;
 pub mod stream_manager;

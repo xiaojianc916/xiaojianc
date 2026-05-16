@@ -21,7 +21,7 @@ import {
   aiWebSearchInputSchema,
   aiWebSearchPayloadSchema,
 } from './web/types.js';
-import { fetchWeb, searchWeb, webTextRefs } from './web/service.js';
+import { fetchWeb, searchWeb } from './web/service.js';
 
 const DEFAULT_PORT = 39871;
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
@@ -87,6 +87,12 @@ const agentContextReferenceSchema = z.object({
   redacted: z.boolean(),
 });
 
+const requestScopedModelConfigSchema = z.object({
+  modelId: requiredNonEmptyStringSchema,
+  apiKey: requiredNonEmptyStringSchema,
+  baseUrl: optionalNonEmptyStringSchema,
+});
+
 // -----------------------------------------------------------------------
 // Request schemas
 // -----------------------------------------------------------------------
@@ -98,6 +104,7 @@ export const baseAgentRequestSchema = z.object({
   messages: z.array(agentMessageInputSchema).default([]),
   workspaceRootPath: optionalWorkspaceRootPathSchema,
   context: z.array(agentContextReferenceSchema).default([]),
+  modelConfig: requestScopedModelConfigSchema.optional(),
   threadId: optionalNonEmptyStringSchema,
   planId: optionalNonEmptyStringSchema,
   planVersion: z.number().int().positive().optional(),
@@ -171,6 +178,7 @@ export const agentSidecarRollbackRestoreRequestSchema = z.object({
   runId: requiredNonEmptyStringSchema,
   snapshotId: optionalNonEmptyStringSchema,
   step: rollbackStepSchema.optional(),
+  modelConfig: requestScopedModelConfigSchema.optional(),
 });
 
 // -----------------------------------------------------------------------
@@ -233,6 +241,9 @@ const toAgentInput = (
   }
   if (payload.threadId) {
     input.threadId = payload.threadId;
+  }
+  if (payload.modelConfig) {
+    input.modelConfig = payload.modelConfig;
   }
   if (payload.planId) {
     input.planId = payload.planId;
@@ -401,14 +412,6 @@ export const createAgentSidecarServer = (
       return;
     }
 
-    if (request.method === 'GET' && parsedUrl.pathname.startsWith('/web/text-ref/')) {
-      const refId = decodeURIComponent(parsedUrl.pathname.slice('/web/text-ref/'.length));
-      writeJson(response, 200, {
-        text: webTextRefs.load(refId),
-      });
-      return;
-    }
-
     if (request.method === 'GET' && parsedUrl.pathname.startsWith('/agent/plan/')) {
       const planId = decodeURIComponent(parsedUrl.pathname.slice('/agent/plan/'.length));
       const rawVersion = parsedUrl.searchParams.get('version');
@@ -438,6 +441,22 @@ export const createAgentSidecarServer = (
     }
 
     if (request.method === 'POST' && url === '/agent/chat/stream') {
+      void handlePostStream(request, response, async (body, options) => {
+        const payload = agentSidecarChatRequestSchema.parse(body);
+        return runtime.chat(toAgentInput(payload, 'ask'), options);
+      });
+      return;
+    }
+
+    if (request.method === 'POST' && url === '/model/chat') {
+      void handlePost(request, response, async (body, options) => {
+        const payload = agentSidecarChatRequestSchema.parse(body);
+        return runtime.chat(toAgentInput(payload, 'ask'), options);
+      });
+      return;
+    }
+
+    if (request.method === 'POST' && url === '/model/chat/stream') {
       void handlePostStream(request, response, async (body, options) => {
         const payload = agentSidecarChatRequestSchema.parse(body);
         return runtime.chat(toAgentInput(payload, 'ask'), options);

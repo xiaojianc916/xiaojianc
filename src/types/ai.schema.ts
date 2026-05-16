@@ -72,7 +72,7 @@ const aiUnifiedDiffHunkLineSchema = z
     'Patch hunk line must be a unified diff line.',
   );
 
-export const aiProviderTypeSchema = z.enum(['litellm']);
+export const aiProviderTypeSchema = z.enum(['mastra']);
 export const aiModelRoleSchema = z.enum(['main', 'narrator']);
 
 export const aiChatMessageActionSchema = z.object({

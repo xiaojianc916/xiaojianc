@@ -1112,7 +1112,7 @@ onBeforeUnmount(() => {
     <AiChatThread :messages="threadMessages" :is-typing="assistant.isSending.value" :platform-id="aiIconPlatformId"
       :provider-label="aiIconTitle" :conversation-id="assistant.activeConversationId.value"
       :workspace-root-path="workspaceRootPath" :scroll-state="assistant.activeConversationScrollState.value"
-      :typing-label="assistantTypingLabel" :has-extra-content="planConfirmationVisible"
+      :typing-label="assistantTypingLabel" :has-extra-content="planConfirmationVisible || directToolConfirmationVisible"
       :reverting-changed-files-summary-id="assistant.revertingChangedFilesSummaryId.value"
       @scroll-state-change="handleConversationScrollStateChange"
       @changed-files-rollback="assistant.rollbackChangedFilesSummary">
@@ -1138,6 +1138,10 @@ onBeforeUnmount(() => {
           :can-edit="canEditPlan" :can-approve="canApprovePlan" :approved-at="planApprovedAt"
           @update-step-title="handleUpdatePlanStepTitle" @remove-step="handleRemovePlanStep"
           @regenerate="handleRegeneratePlan" @reject="handleRejectPlan" @approve="handleApprovePlan" />
+        <div v-if="directToolConfirmationVisible && planPendingToolConfirmation" class="ai-direct-tool-confirmation">
+          <AiToolConfirmationCard :confirmation="planPendingToolConfirmation" :disabled="isAgentRunActionPending"
+            @resolve="handleResolveToolConfirmation" />
+        </div>
       </template>
     </AiChatThread>
     <div v-if="fileRollbackPrompt" class="ai-file-rollback-entry" :class="`is-${fileRollbackPrompt.status}`">
@@ -1187,10 +1191,6 @@ onBeforeUnmount(() => {
         @regenerate="handleRegeneratePlan" @reject="handleRejectPlan" @approve="handleApprovePlan"
         @reset="handleResetPlan" @run-step="handleRunStep" @pause-run="handlePauseRun" @resume-run="handleResumeRun"
         @cancel-run="handleCancelRun" @resolve-tool-confirmation="handleResolveToolConfirmation" />
-      <div v-if="directToolConfirmationVisible && planPendingToolConfirmation" class="ai-direct-tool-confirmation">
-        <AiToolConfirmationCard :confirmation="planPendingToolConfirmation" :disabled="isAgentRunActionPending"
-          @resolve="handleResolveToolConfirmation" />
-      </div>
       <AiPromptInput v-model="assistant.draft.value" v-model:active-mode="assistant.activeMode.value"
         :disabled="assistant.isSending.value" :error-message="assistant.errorMessage.value" :submit-label="submitLabel"
         :provider-label="aiIconTitle" :attachments="assistant.attachedFiles.value"
@@ -1626,7 +1626,11 @@ onBeforeUnmount(() => {
 }
 
 .ai-direct-tool-confirmation {
-  padding: 8px 10px 0;
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  padding: 0 88px 0 12px;
 }
 
 .ai-composer-shell :global(.ai-composer) {

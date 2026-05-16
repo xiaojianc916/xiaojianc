@@ -64,6 +64,7 @@
     "vue-sonner": "2.0.9",
     "vue-stick-to-bottom": "^1.0.0",
     "web-tree-sitter": "^0.26.8",
+    "zhipuai": "^2.0.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

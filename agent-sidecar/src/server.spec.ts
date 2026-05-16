@@ -40,6 +40,10 @@ import {
 } from './engines/runtime.js';
 import type { IMastraResolvedModelConfig } from './models/mastra-model-config.js';
 import {
+  createMastraObserverModelConfig,
+  createMastraReflectorModelConfig,
+} from './models/mastra-model-config.js';
+import {
   clearDeepSeekReasoningStoreForTest,
   deepseekReasoningFetch,
   runWithDeepSeekReasoningContext,
@@ -180,6 +184,8 @@ const createTestModelConfig = (
   modelId: 'deepseek/deepseek-chat',
   providerId: 'deepseek',
   providerModelId: 'deepseek-chat',
+  apiKey: 'test-key',
+  baseUrl: 'https://example.com/v1',
   customGateways: [
     createDeepSeekMastraGateway({
       apiKey: 'test-key',
@@ -1418,16 +1424,79 @@ describe('Mastra memory helpers', () => {
     } as NodeJS.ProcessEnv), 2);
   });
 
-  it('keeps observational memory opt-in to avoid hidden background model calls', () => {
-    assert.equal(resolveObservationalMemoryEnabled({} as NodeJS.ProcessEnv), false);
+  it('enables observational memory by default and still supports explicit disable', () => {
+    assert.equal(resolveObservationalMemoryEnabled({} as NodeJS.ProcessEnv), true);
 
     assert.equal(resolveObservationalMemoryEnabled({
       AGENT_SIDECAR_MEMORY_ENABLE_OBSERVATIONAL: '1',
     } as NodeJS.ProcessEnv), true);
 
+    assert.equal(resolveObservationalMemoryEnabled({
+      AGENT_SIDECAR_MEMORY_ENABLE_OBSERVATIONAL: 'false',
+    } as NodeJS.ProcessEnv), false);
+
     assert.equal(resolveObservationalMemoryBufferingEnabled({
       AGENT_SIDECAR_MEMORY_ENABLE_OBSERVATIONAL_BUFFERING: 'true',
     } as NodeJS.ProcessEnv), true);
+  });
+
+  it('routes observer and reflector to smaller same-provider models by default', () => {
+    const openAiBase = createTestModelConfig({
+      modelId: 'openai/gpt-5.5',
+      providerId: 'openai',
+      providerModelId: 'gpt-5.5',
+      apiKey: 'openai-key',
+      baseUrl: 'https://api.openai.example/v1',
+      customGateways: [],
+      model: new ModelRouterLanguageModel({
+        providerId: 'openai',
+        modelId: 'gpt-5.5',
+        apiKey: 'openai-key',
+        url: 'https://api.openai.example/v1',
+      }),
+    });
+
+    const observer = createMastraObserverModelConfig(openAiBase);
+    const reflector = createMastraReflectorModelConfig(openAiBase);
+
+    assert.equal(observer.modelId, 'openai/gpt-5.4-mini');
+    assert.equal(observer.providerId, 'openai');
+    assert.equal(observer.apiKey, 'openai-key');
+    assert.equal(observer.baseUrl, 'https://api.openai.example/v1');
+    assert.equal(reflector.modelId, 'openai/gpt-5.4-mini');
+    assert.equal(reflector.providerId, 'openai');
+    assert.equal(reflector.apiKey, 'openai-key');
+    assert.equal(reflector.baseUrl, 'https://api.openai.example/v1');
+  });
+
+  it('allows explicit observer and reflector model overrides from env', () => {
+    const anthropicBase = createTestModelConfig({
+      modelId: 'anthropic/claude-sonnet-4-6',
+      providerId: 'anthropic',
+      providerModelId: 'claude-sonnet-4-6',
+      apiKey: 'anthropic-key',
+      baseUrl: 'https://api.anthropic.example',
+      customGateways: [],
+      model: new ModelRouterLanguageModel({
+        providerId: 'anthropic',
+        modelId: 'claude-sonnet-4-6',
+        apiKey: 'anthropic-key',
+        url: 'https://api.anthropic.example',
+      }),
+    });
+
+    const env = {
+      AGENT_SIDECAR_OBSERVER_MODEL: 'anthropic/claude-haiku-4-5',
+      AGENT_SIDECAR_REFLECTOR_MODEL: 'anthropic/claude-3-5-haiku-latest',
+    } as NodeJS.ProcessEnv;
+
+    const observer = createMastraObserverModelConfig(anthropicBase, env);
+    const reflector = createMastraReflectorModelConfig(anthropicBase, env);
+
+    assert.equal(observer.modelId, 'anthropic/claude-haiku-4-5');
+    assert.equal(observer.apiKey, 'anthropic-key');
+    assert.equal(reflector.modelId, 'anthropic/claude-3-5-haiku-latest');
+    assert.equal(reflector.apiKey, 'anthropic-key');
   });
 
   it('uses stable project UUID from .mastracode/project.json instead of path hash', () => {
@@ -1724,31 +1793,26 @@ describe('Mastra runtime chat', () => {
       { role: 'user', content: '请打招呼' },
     ]);
     assert.equal(capturedMcpOptions, undefined);
-    const chatMemoryScope = createMastraMemoryScope({}, response.sessionId);
     assert.deepEqual(capturedStreamOptions, {
       abortSignal: abortController.signal,
       runId: 'req-123',
-      maxSteps: 10,
-      toolChoice: 'auto',
-      memory: {
-        thread: chatMemoryScope.thread,
-        resource: chatMemoryScope.resource,
-      },
+      maxSteps: 1,
+      toolChoice: 'none',
     });
     assertTokenBudgetEvent(streamedEvents, {
       runId: 'req-123',
-      toolCount: 6,
-      mcpToolCount: 2,
+      toolCount: 0,
+      mcpToolCount: 0,
       mcpServerCount: 0,
       uiContextToolCount: 0,
-      nativeToolCount: 2,
-      logToolCount: 2,
+      nativeToolCount: 0,
+      logToolCount: 0,
       workspaceEnabled: false,
       browserEnabled: false,
-      memoryEnabled: true,
-      maxSteps: 10,
-      toolChoice: 'auto',
-      toolLoadStrategy: 'gateway',
+      memoryEnabled: false,
+      maxSteps: 1,
+      toolChoice: 'none',
+      toolLoadStrategy: 'none',
     });
     assert.deepEqual(stripTokenBudgetEvents(streamedEvents), [
       {
@@ -2007,16 +2071,16 @@ describe('Mastra runtime chat', () => {
     });
     assertTokenBudgetEvent(response.events, {
       runId: 'run-om-1',
-      toolCount: 6,
-      mcpToolCount: 2,
+      toolCount: 0,
+      mcpToolCount: 0,
       uiContextToolCount: 0,
-      nativeToolCount: 2,
-      logToolCount: 2,
+      nativeToolCount: 0,
+      logToolCount: 0,
       workspaceEnabled: false,
       browserEnabled: false,
       memoryEnabled: true,
-      maxSteps: 10,
-      toolChoice: 'auto',
+      maxSteps: 1,
+      toolChoice: 'none',
     });
     assert.deepEqual(stripTokenBudgetEvents(response.events), [
       {
@@ -2392,16 +2456,16 @@ describe('Mastra runtime chat', () => {
     });
     assertTokenBudgetEvent(streamedEvents, {
       runId: 'req-reasoning',
-      toolCount: 6,
-      mcpToolCount: 2,
+      toolCount: 0,
+      mcpToolCount: 0,
       uiContextToolCount: 0,
-      nativeToolCount: 2,
-      logToolCount: 2,
+      nativeToolCount: 0,
+      logToolCount: 0,
       workspaceEnabled: false,
       browserEnabled: false,
-      memoryEnabled: true,
-      maxSteps: 10,
-      toolChoice: 'auto',
+      memoryEnabled: false,
+      maxSteps: 1,
+      toolChoice: 'none',
     });
     const reasoningEvent = streamedEvents.find((event) =>
       isRuntimeEventType(event, 'agent.reasoning.delta'));
@@ -2578,16 +2642,16 @@ describe('Mastra runtime chat', () => {
     });
 
     assertTokenBudgetEvent(response.events, {
-      toolCount: 6,
-      mcpToolCount: 2,
+      toolCount: 0,
+      mcpToolCount: 0,
       uiContextToolCount: 0,
-      nativeToolCount: 2,
-      logToolCount: 2,
+      nativeToolCount: 0,
+      logToolCount: 0,
       workspaceEnabled: false,
       browserEnabled: false,
-      memoryEnabled: true,
-      maxSteps: 10,
-      toolChoice: 'auto',
+      memoryEnabled: false,
+      maxSteps: 1,
+      toolChoice: 'none',
     });
     assert.deepEqual(stripTokenBudgetEvents(response.events), [{
       type: 'error',
@@ -2821,6 +2885,83 @@ describe('Mastra runtime built-in tools', () => {
     assert.equal(capturedToolNames.includes('get_current_time'), true);
     assert.equal(capturedToolNames.includes('convert_time'), true);
     assert.equal(response.result, '现在可以继续。');
+  });
+
+  it('stops retrying the same tool class after three consecutive failures', async () => {
+    let capturedToolNames: string[] = [];
+    let blockedErrorMessage = '';
+    const runtime = new MastraRuntime({
+      readModelConfig: () => createTestModelConfig(),
+      createMcpClientBundle: async () => ({
+        clients: [],
+        configs: [],
+        errors: [],
+        tools: {},
+        disconnectAll: async () => undefined,
+      }),
+      createAgent: (config) => {
+        capturedToolNames = Object.keys(config.tools ?? {});
+        const blockedTool = config.tools?.mcp_call_tool;
+
+        if (!blockedTool || typeof blockedTool.execute !== 'function') {
+          throw new Error('mcp_call_tool 未正确暴露执行入口。');
+        }
+        const executeBlockedTool = blockedTool.execute;
+
+        return {
+          stream: async () => {
+            for (let index = 0; index < 3; index += 1) {
+              await assert.rejects(
+                async () => executeBlockedTool({
+                  serverName: 'tavily-mcp',
+                  toolName: 'tavily_search',
+                  arguments: { query: `第 ${index + 1} 次失败` },
+                }, {}),
+              );
+            }
+
+            try {
+              await executeBlockedTool({
+                serverName: 'tavily-mcp',
+                toolName: 'tavily_search',
+                arguments: { query: '第 4 次应被阻断' },
+              }, {});
+            } catch (error) {
+              blockedErrorMessage = error instanceof Error ? error.message : String(error);
+            }
+
+            return {
+              runId: 'run-tool-stop',
+              fullStream: (async function* () {
+                yield {
+                  type: 'text-delta',
+                  runId: 'run-tool-stop',
+                  payload: {
+                    id: 'tool-stop-text',
+                    text: '已停止重复失败工具。',
+                  },
+                };
+              })(),
+            };
+          },
+          generate: async () => {
+            throw new Error('generate should not be used in repeated tool failure guard test');
+          },
+        };
+      },
+    });
+
+    const response = await runtime.chat({
+      mode: 'ask',
+      goal: '验证工具失败止损',
+      messages: [{ role: 'user', content: '验证工具失败止损' }],
+      context: [],
+    });
+
+    assert.equal(capturedToolNames.includes('mcp_call_tool'), true);
+    assert.match(blockedErrorMessage, /已连续失败 3 次/u);
+    assert.match(blockedErrorMessage, /mcp_call_tool:tavily-mcp:tavily_search/u);
+    assert.equal(response.result, '已停止重复失败工具。');
   });
 
   it('exposes read_current_file only when UI provides current-file tool context', async () => {

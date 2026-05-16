@@ -3,7 +3,7 @@ import type { IAiContextReference, IAiImageAttachmentPreview } from '@/types/ai-
 import type { IAiAgentPatchSummary } from '@/types/ai-patch';
 import type { LanguageModelUsage } from 'ai';
 
-export type TAiProviderType = 'litellm';
+export type TAiProviderType = 'mastra';
 export type TAiModelRole = 'main' | 'narrator';
 export type TAiStatus = 'idle' | 'generating' | 'streaming' | 'error';
 export type TAiChatRole = 'user' | 'assistant' | 'system' | 'tool';

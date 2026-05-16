@@ -43,7 +43,7 @@ describe('AI service and store', () => {
       inlineCompletionEnabled: false,
       chatEnabled: true,
       agentEnabled: false,
-      narrator: createDefaultAiModelEndpointConfig('zhipu/glm-4-flash'),
+      narrator: createDefaultAiModelEndpointConfig('zhipuai/glm-4.7-flash'),
     });
 
     const store = useAiStore();
@@ -66,7 +66,7 @@ describe('AI service and store', () => {
         inlineCompletionEnabled: true,
         chatEnabled: true,
         agentEnabled: false,
-        narrator: createDefaultAiModelEndpointConfig('zhipu/glm-4-flash'),
+        narrator: createDefaultAiModelEndpointConfig('zhipuai/glm-4.7-flash'),
       },
       test: {
         ok: true,

@@ -376,9 +376,9 @@ const isExecutableTool = (tool: unknown): tool is IMcpGatewayExecutableTool => {
   return typeof record?.execute === 'function';
 };
 
-// Mastra createTool 的 execute 签名是 (args: { context, runtimeContext, ... }) → 输入参数在 args.context
-// 部分 MCP 适配器可能直接传 raw args → 输入参数就是 args 自身
-// 双路兼容：先试 Mastra 风格，捕获到 context-相关错误则回退原始参数
+// MCP 原生工具通常直接接收 raw args；
+// 少数 Mastra 风格工具的 execute 实现会从 args.context 取输入。
+// 双路兼容：优先传 raw args，只有明确缺少 context/runtimeContext 时才回退包装参数。
 const isContextSignatureError = (error: unknown): boolean => {
   if (!(error instanceof Error)) {
     return false;
@@ -396,10 +396,10 @@ const executeMcpGatewayToolWithTimeout = async (
   }
   const invoke = async (): Promise<unknown> => {
     try {
-      return await tool.execute({ context: args, runtimeContext: undefined });
+      return await tool.execute(args);
     } catch (error) {
       if (isContextSignatureError(error)) {
-        return await tool.execute(args);
+        return await tool.execute({ context: args, runtimeContext: undefined });
       }
       throw error;
     }

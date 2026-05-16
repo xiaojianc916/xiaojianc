@@ -1,6 +1,8 @@
 use std::{collections::HashSet, fs, path::PathBuf};
 
 use super::*;
+use crate::agent_sidecar;
+use crate::commands::contracts::{AgentSidecarChatRequest, AgentSidecarMessagePayload};
 
 const MIN_SUGGESTION_POOL_SIZE: usize = 9;
 const MAX_SUGGESTION_POOL_SIZE: usize = 90;
@@ -51,18 +53,34 @@ pub async fn generate_suggestion_pool(
         .selected_model
         .as_deref()
         .unwrap_or(DEFAULT_NARRATOR_MODEL);
-    let base_url = resolve_model_endpoint_base_url(narrator_config)?;
-    let api_key = get_api_key_for_model_endpoint(narrator_config, AiResolvedModelRole::Narrator)?;
-
     let request = AiProviderChatRequest::new(vec![
         conversation::build_identity_system_message(model),
         AiProviderMessage::system(build_suggestion_pool_system_prompt(count)),
         AiProviderMessage::user(build_suggestion_pool_user_prompt(&locale, &topics, count)),
     ]);
 
-    let response =
-        connection::chat_with_litellm_fallback(base_url, &api_key, model, request).await?;
-    let suggestions = parse_suggestion_pool_response(&response.content, count);
+    let response = agent_sidecar::narrator_model_chat_once(AgentSidecarChatRequest {
+        session_id: None,
+        mode: Some("ask".to_string()),
+        goal: Some("生成首页提示词池".to_string()),
+        messages: request
+            .messages
+            .into_iter()
+            .map(|message| AgentSidecarMessagePayload {
+                role: message.role,
+                content: message.content,
+            })
+            .collect(),
+        workspace_root_path: None,
+        context: Vec::new(),
+        model_config: None,
+        thread_id: None,
+    })
+    .await?;
+    let suggestions = parse_suggestion_pool_response(
+        response.result.as_deref().unwrap_or_default(),
+        count,
+    );
 
     // 软约束:只要达到展示下限即接受。前端 MMR + 兜底池负责把残缺池子凑成 9 个多样按钮。
     if suggestions.len() < MIN_SUGGESTION_POOL_SIZE {
@@ -78,7 +96,7 @@ pub async fn generate_suggestion_pool(
 
     let payload = AiSuggestionPoolPayload {
         suggestions,
-        model: response.model,
+        model: model.to_string(),
         generated_at: chrono::Utc::now().to_rfc3339(),
     };
 
@@ -111,6 +129,18 @@ pub fn get_suggestion_pool_cache() -> Result<Option<AiSuggestionPoolPayload>, St
         || payload.model.trim().is_empty()
         || payload.generated_at.trim().is_empty()
     {
+        return Ok(None);
+    }
+
+    let config = current_config()?;
+    let current_model = config
+        .narrator
+        .selected_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_NARRATOR_MODEL);
+    if payload.model.trim() != current_model {
         return Ok(None);
     }
 
@@ -413,11 +443,8 @@ pub(super) fn normalize_suggestion_text(value: &str) -> Option<String> {
                     | '』'
                     | '。'
                     | ','
-                    | ','
                     | '.'
                     | ':'
-                    | ':'
-                    | ';'
                     | ';'
             )
     });
@@ -442,7 +469,7 @@ fn strip_leading_list_marker(value: &str) -> &str {
             digit_end = index + item.len_utf8();
             continue;
         }
-        if has_digit && matches!(item, '.' | '、' | ')' | ')') {
+        if has_digit && matches!(item, '.' | '、' | ')') {
             digit_end = index + item.len_utf8();
             break;
         }

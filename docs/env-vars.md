@@ -13,6 +13,16 @@
 | AGENT_MCP_GIT_EXECUTABLE_PATH | string | 自动探测 | dev/staging/prod | Windows 下 git.exe 绝对路径，供 Git MCP 绑定 `GIT_PYTHON_GIT_EXECUTABLE` | Copilot |
 | AGENT_MCP_MEMORY_FILE_PATH | string | `%USERPROFILE%/.xiaojianc/mcp-memory.jsonl` | dev/staging/prod | memory MCP 持久化文件路径 | Copilot |
 | AGENT_MCP_LOCAL_TIMEZONE | string | Asia/Shanghai | dev/staging/prod | time MCP 本地时区参数 | Copilot |
+| AGENT_SIDECAR_MODEL | string | `deepseek/deepseek-v4-flash` | dev/staging/prod | Node sidecar 主 Agent 的默认模型标识 | Codex |
+| AGENT_SIDECAR_API_KEY | string(secret) | - | dev/staging/prod | Node sidecar 调用主模型与后台记忆模型时使用的 API Key | Codex |
+| AGENT_SIDECAR_BASE_URL | string | provider 默认值 | dev/staging/prod | Node sidecar 主模型与后台记忆模型共用的可选 Base URL | Codex |
+| AGENT_SIDECAR_OBSERVER_MODEL | string | 按主模型 provider 自动降级到小模型 | dev/staging/prod | Observational Memory 中 Observer 后台 agent 的模型标识覆盖项 | Codex |
+| AGENT_SIDECAR_REFLECTOR_MODEL | string | 按主模型 provider 自动降级到小模型 | dev/staging/prod | Observational Memory 中 Reflector 后台 agent 的模型标识覆盖项 | Codex |
+| AGENT_SIDECAR_MEMORY_LAST_MESSAGES | string(number) | 6 | dev/staging/prod | Mastra memory 回放到模型的最近消息条数，范围 2-12 | Codex |
+| AGENT_SIDECAR_MEMORY_EMBEDDER_MODEL | string | - | dev/staging/prod | 开启 semantic recall 时使用的 embedding 模型标识 | Codex |
+| AGENT_SIDECAR_MEMORY_ENABLE_SEMANTIC_RECALL | string(boolean) | 自动（配置 embedder 时开启） | dev/staging/prod | 显式控制 semantic recall 开关；设为 falsy 时关闭 | Codex |
+| AGENT_SIDECAR_MEMORY_ENABLE_OBSERVATIONAL | string(boolean) | true | dev/staging/prod | Observational Memory 总开关；默认开启，设为 falsy 时关闭 | Codex |
+| AGENT_SIDECAR_MEMORY_ENABLE_OBSERVATIONAL_BUFFERING | string(boolean) | false | dev/staging/prod | 是否启用 Observational Memory 的异步 buffering | Codex |
 | GITHUB_MCP_PAT | string(secret) | - | dev/staging/prod | GitHub MCP Server 访问令牌（Bearer） | Copilot |
 | GITHUB_MCP_URL | string | https://api.githubcopilot.com/mcp/ | dev/staging/prod | GitHub MCP Server Streamable HTTP 地址 | Copilot |
 | SQLITE_DB_PATH | string | - | dev/staging/prod | sqlite-mcp 连接的本地数据库绝对/相对路径 | Copilot |

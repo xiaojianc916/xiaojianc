@@ -160,7 +160,7 @@ const createAssistantMock = (
         chatEnabled: true,
         agentEnabled: false,
         activeProfileId: null,
-        narrator: createDefaultAiModelEndpointConfig('zhipu/glm-4-flash'),
+        narrator: createDefaultAiModelEndpointConfig('zhipuai/glm-4.7-flash'),
     });
 
     const messages = ref<IAiChatMessage[]>(messagesList);
@@ -420,7 +420,7 @@ describe('AiAssistantPanel', () => {
             },
             global: {
                 stubs: {
-                    AiChatThread: { template: '<div />' },
+                    AiChatThread: { template: '<div data-testid="chat-thread"><slot name="after-messages" /></div>' },
                     AiContextChips: { template: '<div />' },
                     AiPatchPreview: { template: '<div />' },
                     AiPromptInput: { template: '<div />' },

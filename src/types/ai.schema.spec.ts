@@ -39,7 +39,7 @@ describe('AI schema', () => {
       agentEnabled: false,
       narrator: {
         providerType: 'litellm',
-        selectedModel: 'zhipu/glm-4-flash',
+        selectedModel: 'zhipuai/glm-4.7-flash',
         baseUrl: 'http://127.0.0.1:4000/v1',
         activeProfileId: null,
         isBaseUrlConfigured: true,
@@ -103,7 +103,7 @@ describe('AI schema', () => {
         agentEnabled: false,
         narrator: {
           providerType: 'litellm',
-          selectedModel: 'zhipu/glm-4-flash',
+          selectedModel: 'zhipuai/glm-4.7-flash',
           baseUrl: 'http://127.0.0.1:4000/v1',
           activeProfileId: null,
           isBaseUrlConfigured: true,
@@ -124,7 +124,7 @@ describe('AI schema', () => {
       role: 'narrator',
       name: '旁白 GLM',
       providerType: 'litellm',
-      selectedModel: 'zhipu/glm-4-flash',
+      selectedModel: 'zhipuai/glm-4.7-flash',
       baseUrl: 'http://127.0.0.1:4000/v1',
       inlineCompletionEnabled: false,
       chatEnabled: false,

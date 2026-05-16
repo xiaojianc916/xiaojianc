@@ -70,6 +70,12 @@ const optionalWorkspaceRootPathSchema = z.preprocess((value) => {
   return value;
 }, z.string().trim().min(1).nullable().optional()).optional();
 
+const requestScopedModelConfigSchema = z.object({
+  modelId: requiredNonEmptyStringSchema,
+  apiKey: requiredNonEmptyStringSchema,
+  baseUrl: optionalNonEmptyStringSchema,
+});
+
 export const agentSidecarMessageSchema = z.object({
   role: z.enum(['user', 'assistant', 'system', 'tool']),
   content: z.string(),
@@ -255,6 +261,7 @@ const agentSidecarBaseRequestSchema = z.object({
   messages: z.array(agentSidecarMessageSchema),
   workspaceRootPath: optionalWorkspaceRootPathSchema,
   context: z.array(aiContextReferenceSchema).default([]),
+  modelConfig: requestScopedModelConfigSchema.optional(),
   threadId: optionalNonEmptyStringSchema,
   planId: optionalNonEmptyStringSchema,
   planVersion: z.number().int().positive().optional(),

@@ -61,7 +61,8 @@ const UUID_REGEX =
 //   Otherwise semantic recall is enabled iff AGENT_SIDECAR_MEMORY_EMBEDDER_MODEL
 //   is set.
 // AGENT_SIDECAR_MEMORY_ENABLE_OBSERVATIONAL
-//   Truthy to enable observational memory.
+//   Falsy ("0"/"false"/"no"/"off") explicitly disables observational memory.
+//   Otherwise observational memory is enabled by default.
 // AGENT_SIDECAR_MEMORY_ENABLE_OBSERVATIONAL_BUFFERING
 //   Truthy to let Mastra buffer observation tokens. Defaults to false.
 // -----------------------------------------------------------------------------
@@ -197,11 +198,16 @@ export const resolveSemanticRecallEnabled = (
 
 export const resolveObservationalMemoryEnabled = (
     env: NodeJS.ProcessEnv = process.env,
-): boolean => isTruthyEnv(env[ENABLE_OBSERVATIONAL_MEMORY_ENV]);
+): boolean => !isFalsyEnv(env[ENABLE_OBSERVATIONAL_MEMORY_ENV]);
 
 export const resolveObservationalMemoryBufferingEnabled = (
     env: NodeJS.ProcessEnv = process.env,
 ): boolean => isTruthyEnv(env[ENABLE_OBSERVATIONAL_MEMORY_BUFFERING_ENV]);
+
+export interface IMastraObservationalMemoryModels {
+    observer: MastraModelConfig;
+    reflector: MastraModelConfig;
+}
 
 /**
  * Platform-aware default storage directory. Override with
@@ -432,7 +438,7 @@ export const createMastraMemoryReference = (
  */
 export const createMastraAgentMemory = (
     storageUrl: string,
-    observationalMemoryModel: MastraModelConfig,
+    observationalMemoryModels: IMastraObservationalMemoryModels,
     env: NodeJS.ProcessEnv = process.env,
 ): Memory => {
     const embedder = resolveSemanticRecallEmbedder(env);
@@ -458,13 +464,23 @@ export const createMastraAgentMemory = (
         // when the user explicitly wants buffering OFF.
         options.observationalMemory = observationalMemoryBufferingEnabled
             ? {
-                model: observationalMemoryModel,
                 scope: 'thread',
+                observation: {
+                    model: observationalMemoryModels.observer,
+                },
+                reflection: {
+                    model: observationalMemoryModels.reflector,
+                },
             }
             : {
-                model: observationalMemoryModel,
                 scope: 'thread',
-                observation: { bufferTokens: false },
+                observation: {
+                    model: observationalMemoryModels.observer,
+                    bufferTokens: false,
+                },
+                reflection: {
+                    model: observationalMemoryModels.reflector,
+                },
             };
     }
 

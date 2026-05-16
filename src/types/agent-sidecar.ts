@@ -38,6 +38,12 @@ export interface IAgentSidecarMessage {
   content: string;
 }
 
+export interface IAgentSidecarModelConfig {
+  modelId: string;
+  apiKey: string;
+  baseUrl?: string;
+}
+
 export interface IAgentPlanStep {
   id: string;
   title: string;
@@ -382,6 +388,7 @@ export interface IAgentSidecarBaseRequest {
   messages: IAgentSidecarMessage[];
   workspaceRootPath?: string | null;
   context: IAiContextReference[];
+  modelConfig?: IAgentSidecarModelConfig;
   threadId?: string;
   planId?: string;
   planVersion?: number;

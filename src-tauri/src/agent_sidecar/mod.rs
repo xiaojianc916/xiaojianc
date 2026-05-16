@@ -11,10 +11,11 @@ use crate::ai::credential::CredentialStore;
 use crate::commands::contracts::{
     AgentSidecarApprovalResolveRequest, AgentSidecarChatRequest,
     AgentSidecarCheckpointRestoreRequest, AgentSidecarExecuteRequest, AgentSidecarHealthPayload,
-    AgentSidecarPlanApproveRequest, AgentSidecarPlanFinishRequest, AgentSidecarPlanQueryRequest,
-    AgentSidecarPlanRejectRequest, AgentSidecarPlanReplanRequest, AgentSidecarPlanRequest,
-    AgentSidecarPlanValidateRequest, AgentSidecarResponsePayload, AiWebFetchInput,
-    AiWebFetchPayload, AiWebSearchInput, AiWebSearchPayload,
+    AgentSidecarModelConfigPayload, AgentSidecarPlanApproveRequest,
+    AgentSidecarPlanFinishRequest, AgentSidecarPlanQueryRequest, AgentSidecarPlanRejectRequest,
+    AgentSidecarPlanReplanRequest, AgentSidecarPlanRequest, AgentSidecarPlanValidateRequest,
+    AgentSidecarResponsePayload, AiWebFetchInput, AiWebFetchPayload, AiWebSearchInput,
+    AiWebSearchPayload,
 };
 
 const DEFAULT_SIDECAR_URL: &str = "http://127.0.0.1:39871";
@@ -26,10 +27,10 @@ const SIDECAR_REQUEST_TIMEOUT_SECONDS: u64 = 30 * 60;
 const SIDECAR_HEALTH_TIMEOUT_SECONDS: u64 = 2;
 const SIDECAR_STARTUP_TIMEOUT_SECONDS: u64 = 15;
 const SIDECAR_STARTUP_RETRY_MS: u64 = 250;
+const NARRATOR_CHAT_RETRY_DELAYS_MS: &[u64] = &[1500, 3000, 5000, 9000, 16000, 30000, 60000];
 const SIDECAR_PROTOCOL_VERSION: &str = "7";
 const SIDECAR_IMPLEMENTATION_VERSION: &str = "deepseek-reasoning-transport-v6-plan-history";
 const DEFAULT_SIDECAR_PORT: u16 = 39871;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SidecarHealthStatus {
     Ready,
@@ -169,6 +170,60 @@ where
         })?;
 
     decode_response(response, endpoint).await
+}
+
+fn is_retryable_narrator_sidecar_error(error: &str) -> bool {
+    let normalized = error.to_ascii_lowercase();
+
+    normalized.contains(" http 429")
+        || normalized.contains(" too many requests")
+        || normalized.contains(" rate limit")
+        || normalized.contains(" retry later")
+        || normalized.contains("temporarily unavailable")
+        || normalized.contains(" timeout")
+        || normalized.contains(" timed out")
+        || normalized.contains(" connection reset")
+        || normalized.contains(" connection aborted")
+        || normalized.contains(" broken pipe")
+        || normalized.contains(" eof")
+        || normalized.contains(" http 500")
+        || normalized.contains(" http 502")
+        || normalized.contains(" http 503")
+        || normalized.contains(" http 504")
+}
+
+async fn post_json_with_narrator_retry<TRequest, TResponse>(
+    endpoint: &str,
+    payload: &TRequest,
+) -> Result<TResponse, String>
+where
+    TRequest: Serialize,
+    TResponse: DeserializeOwned,
+{
+    let mut last_error: Option<String> = None;
+
+    for (attempt_index, retry_delay_ms) in NARRATOR_CHAT_RETRY_DELAYS_MS.iter().enumerate() {
+        match post_json(endpoint, payload).await {
+            Ok(response) => return Ok(response),
+            Err(error) if is_retryable_narrator_sidecar_error(&error) => {
+                last_error = Some(error);
+                tokio::time::sleep(Duration::from_millis(*retry_delay_ms)).await;
+            }
+            Err(error) => return Err(error),
+        }
+
+        if attempt_index + 1 == NARRATOR_CHAT_RETRY_DELAYS_MS.len() {
+            break;
+        }
+    }
+
+    match post_json(endpoint, payload).await {
+        Ok(response) => Ok(response),
+        Err(error) if is_retryable_narrator_sidecar_error(&error) => {
+            Err(last_error.unwrap_or(error))
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn create_sidecar_session_id(prefix: &str) -> String {
@@ -542,7 +597,6 @@ fn spawn_default_sidecar() -> Result<(), String> {
     inject_sidecar_dotenv_key_if_present(&mut command, &sidecar_root, "TAVILY_API_KEY");
     inject_user_env_if_present(&mut command, "TAVILY_API_KEY");
     inject_uvx_path(&mut command);
-    inject_sidecar_model_env_from_ai_config(&mut command);
 
     crate::commands::configure_std_command_for_background(&mut command);
     command
@@ -694,26 +748,112 @@ fn inject_sidecar_dotenv_key_if_present(command: &mut Command, sidecar_root: &Pa
     }
 }
 
-fn inject_sidecar_model_env_from_ai_config(command: &mut Command) {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SidecarCredentialLookup<'a> {
+    Profile(&'a str),
+    Provider(&'a str),
+    ProviderRole {
+        provider_type: &'a str,
+        role: &'a str,
+    },
+}
+
+fn resolve_sidecar_credential_lookup<'a>(
+    active_profile_id: Option<&'a str>,
+    provider_type: &'a str,
+    role: Option<&'a str>,
+) -> SidecarCredentialLookup<'a> {
+    if let Some(profile_id) = active_profile_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return SidecarCredentialLookup::Profile(profile_id);
+    }
+
+    match role.map(str::trim).filter(|value| !value.is_empty()) {
+        Some("narrator") => SidecarCredentialLookup::ProviderRole {
+            provider_type,
+            role: "narrator",
+        },
+        _ => SidecarCredentialLookup::Provider(provider_type),
+    }
+}
+
+fn load_sidecar_api_key(
+    active_profile_id: Option<&str>,
+    provider_type: &str,
+    role: Option<&str>,
+) -> Result<String, String> {
+    match resolve_sidecar_credential_lookup(active_profile_id, provider_type, role) {
+        SidecarCredentialLookup::Profile(profile_id) => {
+            CredentialStore::get_profile_secret(profile_id)
+        }
+        SidecarCredentialLookup::Provider(provider_type) => CredentialStore::get(provider_type),
+        SidecarCredentialLookup::ProviderRole {
+            provider_type,
+            role,
+        } => CredentialStore::get_for_role(provider_type, role),
+    }
+}
+
+fn current_sidecar_model_config() -> Result<AgentSidecarModelConfigPayload, String> {
     let config = crate::ai::gateway::get_config();
-    let Some(model) = config.selected_model.as_deref() else {
-        return;
-    };
-    let Ok(api_key) = CredentialStore::get(&config.provider_type) else {
-        return;
-    };
-
-    command.env("AGENT_SIDECAR_API_KEY", api_key);
-    command.env("AGENT_SIDECAR_MODEL", model.trim());
-
-    if let Some(base_url) = config
+    let model_id = config
+        .selected_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            "AI 模型未配置：请先在 AI 设置中选择模型并保存。".to_string()
+        })?;
+    let api_key = load_sidecar_api_key(
+        config.active_profile_id.as_deref(),
+        &config.provider_type,
+        None,
+    )?;
+    let base_url = config
         .base_url
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-    {
-        command.env("AGENT_SIDECAR_BASE_URL", base_url);
-    }
+        .map(|value| value.trim_end_matches('/').to_string());
+
+    Ok(AgentSidecarModelConfigPayload {
+        model_id: model_id.to_string(),
+        api_key: api_key.into(),
+        base_url,
+    })
+}
+
+fn narrator_sidecar_model_config() -> Result<AgentSidecarModelConfigPayload, String> {
+    let config = crate::ai::gateway::get_config();
+    let model_id = config
+        .narrator
+        .selected_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            "Narrator 模型未配置：请先在 AI 设置中选择 Narrator 模型并保存。".to_string()
+        })?;
+    let api_key = load_sidecar_api_key(
+        config.narrator.active_profile_id.as_deref(),
+        &config.narrator.provider_type,
+        Some("narrator"),
+    )?;
+    let base_url = config
+        .narrator
+        .base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.trim_end_matches('/').to_string());
+
+    Ok(AgentSidecarModelConfigPayload {
+        model_id: model_id.to_string(),
+        api_key: api_key.into(),
+        base_url,
+    })
 }
 
 fn env_or_user_env(key: &str) -> Option<String> {
@@ -778,6 +918,9 @@ pub async fn chat(
     mut payload: AgentSidecarChatRequest,
 ) -> Result<AgentSidecarResponsePayload, String> {
     let session_id = ensure_request_session_id(&mut payload.session_id, "sidecar-chat");
+    if payload.model_config.is_none() {
+        payload.model_config = Some(current_sidecar_model_config()?);
+    }
     post_json_streaming_events(
         &app,
         "/agent/chat",
@@ -793,6 +936,9 @@ pub async fn plan(
     mut payload: AgentSidecarPlanRequest,
 ) -> Result<AgentSidecarResponsePayload, String> {
     let session_id = ensure_request_session_id(&mut payload.session_id, "sidecar-plan");
+    if payload.model_config.is_none() {
+        payload.model_config = Some(current_sidecar_model_config()?);
+    }
     post_json_streaming_events(
         &app,
         "/agent/plan",
@@ -828,14 +974,20 @@ pub async fn finish_plan(
 }
 
 pub async fn validate_plan(
-    payload: AgentSidecarPlanValidateRequest,
+    mut payload: AgentSidecarPlanValidateRequest,
 ) -> Result<AgentSidecarResponsePayload, String> {
+    if payload.model_config.is_none() {
+        payload.model_config = Some(current_sidecar_model_config()?);
+    }
     post_json("/agent/plan/validate", &payload).await
 }
 
 pub async fn replan_plan(
-    payload: AgentSidecarPlanReplanRequest,
+    mut payload: AgentSidecarPlanReplanRequest,
 ) -> Result<AgentSidecarResponsePayload, String> {
+    if payload.model_config.is_none() {
+        payload.model_config = Some(current_sidecar_model_config()?);
+    }
     post_json("/agent/plan/replan", &payload).await
 }
 
@@ -844,6 +996,9 @@ pub async fn execute(
     mut payload: AgentSidecarExecuteRequest,
 ) -> Result<AgentSidecarResponsePayload, String> {
     let session_id = ensure_request_session_id(&mut payload.session_id, "sidecar-agent");
+    if payload.model_config.is_none() {
+        payload.model_config = Some(current_sidecar_model_config()?);
+    }
     post_json_streaming_events(
         &app,
         "/agent/execute",
@@ -874,6 +1029,9 @@ pub async fn restore_checkpoint(
     mut payload: AgentSidecarCheckpointRestoreRequest,
 ) -> Result<AgentSidecarResponsePayload, String> {
     let session_id = ensure_request_session_id(&mut payload.session_id, "sidecar-rollback");
+    if payload.model_config.is_none() {
+        payload.model_config = Some(current_sidecar_model_config()?);
+    }
     post_json_streaming_events(
         &app,
         "/rollback/restore",
@@ -884,9 +1042,60 @@ pub async fn restore_checkpoint(
     .await
 }
 
-#[derive(Debug, Deserialize)]
-struct SidecarWebTextRefPayload {
-    text: Option<String>,
+pub async fn model_chat(
+    app: AppHandle,
+    mut payload: AgentSidecarChatRequest,
+) -> Result<AgentSidecarResponsePayload, String> {
+    let session_id = ensure_request_session_id(&mut payload.session_id, "sidecar-model-chat");
+    if payload.model_config.is_none() {
+        payload.model_config = Some(current_sidecar_model_config()?);
+    }
+    post_json_streaming_events(
+        &app,
+        "/model/chat",
+        "/model/chat/stream",
+        &payload,
+        &session_id,
+    )
+    .await
+}
+
+pub async fn narrator_model_chat(
+    app: AppHandle,
+    mut payload: AgentSidecarChatRequest,
+) -> Result<AgentSidecarResponsePayload, String> {
+    let session_id = ensure_request_session_id(&mut payload.session_id, "sidecar-narrator-chat");
+    if payload.model_config.is_none() {
+        payload.model_config = Some(narrator_sidecar_model_config()?);
+    }
+    post_json_streaming_events(
+        &app,
+        "/model/chat",
+        "/model/chat/stream",
+        &payload,
+        &session_id,
+    )
+    .await
+}
+
+pub async fn model_chat_once(
+    mut payload: AgentSidecarChatRequest,
+) -> Result<AgentSidecarResponsePayload, String> {
+    let _session_id = ensure_request_session_id(&mut payload.session_id, "sidecar-model-chat");
+    if payload.model_config.is_none() {
+        payload.model_config = Some(current_sidecar_model_config()?);
+    }
+    post_json("/model/chat", &payload).await
+}
+
+pub async fn narrator_model_chat_once(
+    mut payload: AgentSidecarChatRequest,
+) -> Result<AgentSidecarResponsePayload, String> {
+    let _session_id = ensure_request_session_id(&mut payload.session_id, "sidecar-narrator-chat");
+    if payload.model_config.is_none() {
+        payload.model_config = Some(narrator_sidecar_model_config()?);
+    }
+    post_json_with_narrator_retry("/model/chat", &payload).await
 }
 
 pub async fn web_search(payload: AiWebSearchInput) -> Result<AiWebSearchPayload, String> {
@@ -897,25 +1106,16 @@ pub async fn web_fetch(payload: AiWebFetchInput) -> Result<AiWebFetchPayload, St
     post_json("/web/fetch", &payload).await
 }
 
-pub async fn load_web_text_ref(ref_id: &str) -> Result<Option<String>, String> {
-    let normalized = ref_id.trim();
-    if normalized.is_empty() {
-        return Ok(None);
-    }
-
-    let payload: SidecarWebTextRefPayload =
-        get_json(&format!("/web/text-ref/{normalized}")).await?;
-    Ok(payload.text)
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
         build_sidecar_url, classify_sidecar_health, drain_complete_sidecar_stream_lines,
         has_non_whitespace_bytes, inject_sidecar_dotenv_key_if_present,
-        is_default_local_sidecar_url, normalize_base_url, parse_netstat_listening_pids,
-        strip_litellm_model_provider_prefix, SidecarHealthProbePayload, SidecarHealthStatus,
-        DEFAULT_SIDECAR_URL,
+        is_default_litellm_model_base_url, is_default_local_sidecar_url, normalize_base_url,
+        parse_netstat_listening_pids, resolve_sidecar_credential_lookup,
+        resolve_sidecar_model_base_url, strip_litellm_model_provider_prefix,
+        SidecarCredentialLookup, SidecarHealthProbePayload, SidecarHealthStatus,
+        DEFAULT_DEEPSEEK_BASE_URL, DEFAULT_SIDECAR_URL,
     };
     use std::fs;
     use std::process::Command;
@@ -1055,6 +1255,61 @@ mod tests {
         assert_eq!(
             classify_sidecar_health(&unavailable_payload),
             SidecarHealthStatus::Unavailable
+        );
+    }
+
+    #[test]
+    fn deepseek_model_rewrites_default_litellm_base_url_to_official_upstream() {
+        let resolved = resolve_sidecar_model_base_url(
+            "deepseek/deepseek-v4-flash",
+            Some("http://127.0.0.1:4000/v1"),
+        );
+
+        assert_eq!(resolved.as_deref(), Some(DEFAULT_DEEPSEEK_BASE_URL));
+    }
+
+    #[test]
+    fn custom_base_url_is_preserved_for_non_default_or_non_deepseek_models() {
+        assert_eq!(
+            resolve_sidecar_model_base_url(
+                "deepseek/deepseek-v4-flash",
+                Some("https://example.com/v1"),
+            )
+            .as_deref(),
+            Some("https://example.com/v1")
+        );
+        assert_eq!(
+            resolve_sidecar_model_base_url("openai/gpt-5.5", Some("http://127.0.0.1:4000/v1"))
+                .as_deref(),
+            Some("http://127.0.0.1:4000/v1")
+        );
+        assert!(is_default_litellm_model_base_url("http://localhost:4000/v1/"));
+    }
+
+    #[test]
+    fn sidecar_credential_lookup_prefers_active_profile_secret() {
+        assert_eq!(
+            resolve_sidecar_credential_lookup(Some(" ai-profile-123 "), "mastra", Some("narrator")),
+            SidecarCredentialLookup::Profile("ai-profile-123")
+        );
+    }
+
+    #[test]
+    fn sidecar_credential_lookup_uses_provider_secret_for_main_model() {
+        assert_eq!(
+            resolve_sidecar_credential_lookup(None, "mastra", None),
+            SidecarCredentialLookup::Provider("mastra")
+        );
+    }
+
+    #[test]
+    fn sidecar_credential_lookup_uses_role_secret_for_narrator_without_profile() {
+        assert_eq!(
+            resolve_sidecar_credential_lookup(None, "mastra", Some("narrator")),
+            SidecarCredentialLookup::ProviderRole {
+                provider_type: "mastra",
+                role: "narrator",
+            }
         );
     }
 }

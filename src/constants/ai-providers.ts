@@ -1,13 +1,15 @@
 import type { TAiProviderType } from '@/types/ai';
 
+export const DEFAULT_LITELLM_MODEL_ID = 'litellm-default-model';
+
 export type TAiServicePlatformId =
   | 'openai'
   | 'anthropic'
   | 'deepseek'
-  | 'gemini'
-  | 'moonshot'
-  | 'dashscope'
-  | 'zhipu'
+  | 'google'
+  | 'moonshotai'
+  | 'alibaba'
+  | 'zhipuai'
   | 'ollama';
 
 export interface IAiServicePlatformModel {
@@ -18,6 +20,7 @@ export interface IAiServicePlatformModel {
 export interface IAiServicePlatformPreset {
   id: TAiServicePlatformId;
   label: string;
+  baseUrl: string;
   defaultModel: string;
   models: readonly IAiServicePlatformModel[];
 }
@@ -36,13 +39,14 @@ export interface IAiProviderPreset {
 }
 
 const DEFAULT_AI_SERVICE_PLATFORM_ID: TAiServicePlatformId = 'openai';
-export const DEFAULT_LITELLM_MODEL_ID = 'openai/gpt-5.5';
-export const DEFAULT_LITELLM_BASE_URL = 'http://127.0.0.1:4000/v1';
+export const DEFAULT_MASTRA_MODEL_ID = 'openai/gpt-5.5';
+export const DEFAULT_MASTRA_BASE_URL = '';
 
 export const AI_SERVICE_PLATFORM_PRESETS = [
   {
     id: 'openai',
     label: 'OpenAI',
+    baseUrl: '',
     defaultModel: 'openai/gpt-5.5',
     models: [
       {
@@ -70,6 +74,7 @@ export const AI_SERVICE_PLATFORM_PRESETS = [
   {
     id: 'anthropic',
     label: 'Anthropic',
+    baseUrl: '',
     defaultModel: 'anthropic/claude-opus-4-6',
     models: [
       {
@@ -101,6 +106,7 @@ export const AI_SERVICE_PLATFORM_PRESETS = [
   {
     id: 'deepseek',
     label: 'DeepSeek',
+    baseUrl: '',
     defaultModel: 'deepseek/deepseek-v4-pro',
     models: [
       {
@@ -114,101 +120,113 @@ export const AI_SERVICE_PLATFORM_PRESETS = [
     ],
   },
   {
-    id: 'gemini',
+    id: 'google',
     label: 'Google Gemini',
-    defaultModel: 'gemini/gemini-3.1-pro-preview',
+    baseUrl: '',
+    defaultModel: 'google/gemini-3.1-pro-preview',
     models: [
       {
-        id: 'gemini/gemini-3.1-pro-preview',
+        id: 'google/gemini-3.1-pro-preview',
         label: 'gemini-3.1-pro-preview',
       },
       {
-        id: 'gemini/gemini-3-flash-preview',
+        id: 'google/gemini-3-flash-preview',
         label: 'gemini-3-flash-preview',
       },
       {
-        id: 'gemini/gemini-3.1-flash-lite-preview',
+        id: 'google/gemini-3.1-flash-lite-preview',
         label: 'gemini-3.1-flash-lite-preview',
       },
       {
-        id: 'gemini/gemini-2.5-pro',
+        id: 'google/gemini-2.5-pro',
         label: 'gemini-2.5-pro',
       },
       {
-        id: 'gemini/gemini-2.5-flash',
+        id: 'google/gemini-2.5-flash',
         label: 'gemini-2.5-flash',
       },
     ],
   },
   {
-    id: 'moonshot',
+    id: 'moonshotai',
     label: 'Moonshot Kimi',
-    defaultModel: 'moonshot/kimi-k2.6',
+    baseUrl: '',
+    defaultModel: 'moonshotai/kimi-k2.6',
     models: [
       {
-        id: 'moonshot/kimi-k2.6',
+        id: 'moonshotai/kimi-k2.6',
         label: 'Kimi-k2.6',
       },
       {
-        id: 'moonshot/kimi-k2.5',
+        id: 'moonshotai/kimi-k2.5',
         label: 'Kimi-k2.5',
       },
       {
-        id: 'moonshot/kimi-k2',
+        id: 'moonshotai/kimi-k2',
         label: 'Kimi-k2',
       },
       {
-        id: 'moonshot/kimi-k2-thinking',
+        id: 'moonshotai/kimi-k2-thinking',
         label: 'Kimi-k2-thinking',
       },
       {
-        id: 'moonshot/kimi-k2-thinking-turbo',
+        id: 'moonshotai/kimi-k2-thinking-turbo',
         label: 'Kimi-k2-thinking-turbo',
       },
       {
-        id: 'moonshot/kimi-k2-turbo-preview',
+        id: 'moonshotai/kimi-k2-turbo-preview',
         label: 'Kimi-k2-turbo-preview',
       },
     ],
   },
   {
-    id: 'dashscope',
+    id: 'alibaba',
     label: '阿里云百炼',
-    defaultModel: 'dashscope/qwen3.6-plus',
+    baseUrl: '',
+    defaultModel: 'alibaba/qwen3.6-plus',
     models: [
       {
-        id: 'dashscope/qwen3.6-plus',
+        id: 'alibaba/qwen3.6-plus',
         label: 'Qwen3.6-plus',
       },
       {
-        id: 'dashscope/qwen3.6-plus-2026-04-02',
+        id: 'alibaba/qwen3.6-plus-2026-04-02',
         label: 'Qwen3.6-plus',
       },
       {
-        id: 'dashscope/qwen3.6-max-preview',
+        id: 'alibaba/qwen3.6-max-preview',
         label: 'Qwen3.6-max-preview',
       },
       {
-        id: 'dashscope/qwen3.6-flash',
+        id: 'alibaba/qwen3.6-flash',
         label: 'Qwen3.6-flash',
       },
     ],
   },
   {
-    id: 'zhipu',
+    id: 'zhipuai',
     label: '智谱 GLM',
-    defaultModel: 'zhipu/glm-4-flash',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    defaultModel: 'zhipuai/glm-4.7-flash',
     models: [
       {
-        id: 'zhipu/glm-4-flash',
+        id: 'zhipuai/glm-4-flash',
         label: 'GLM-4-Flash',
       },
       {
-        id: 'zhipu/glm-4-plus',
+        id: 'zhipuai/glm-4.7-flash',
+        label: 'GLM-4.7-Flash',
+      },
+      {
+        id: 'zhipuai/glm-4.5-flash',
+        label: 'GLM-4.5-Flash',
+      },
+      {
+        id: 'zhipuai/glm-4-plus',
         label: 'GLM-4-Plus',
       },
       {
-        id: 'zhipu/glm-4-air',
+        id: 'zhipuai/glm-4-air',
         label: 'GLM-4-Air',
       },
     ],
@@ -216,6 +234,7 @@ export const AI_SERVICE_PLATFORM_PRESETS = [
   {
     id: 'ollama',
     label: 'Ollama',
+    baseUrl: '',
     defaultModel: 'ollama/qwen3-coder-next',
     models: [
       {
@@ -238,12 +257,12 @@ export const AI_SERVICE_PLATFORM_PRESETS = [
   },
 ] as const satisfies readonly IAiServicePlatformPreset[];
 
-const LITELLM_PROVIDER_PRESET = {
-  id: 'litellm',
-  label: 'LiteLLM Proxy',
-  description: 'LiteLLM Proxy / LLM Gateway，统一通过 OpenAI-compatible API 调用和切换模型。',
-  baseUrl: DEFAULT_LITELLM_BASE_URL,
-  defaultModel: DEFAULT_LITELLM_MODEL_ID,
+const MASTRA_PROVIDER_PRESET = {
+  id: 'mastra',
+  label: 'Mastra',
+  description: 'Mastra 模型路由，统一通过 Mastra 官方模型能力调用与切换模型。',
+  baseUrl: DEFAULT_MASTRA_BASE_URL,
+  defaultModel: DEFAULT_MASTRA_MODEL_ID,
   models: AI_SERVICE_PLATFORM_PRESETS.flatMap((platform) =>
     platform.models.map((model) => model.id),
   ),
@@ -258,7 +277,7 @@ export const findAiProviderPreset = (
   providerType: TAiProviderType,
 ): IAiProviderPreset => {
   void providerType;
-  return LITELLM_PROVIDER_PRESET;
+  return MASTRA_PROVIDER_PRESET;
 };
 
 export const findAiServicePlatformPreset = (

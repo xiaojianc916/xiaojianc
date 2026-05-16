@@ -1118,6 +1118,15 @@ pub struct AgentSidecarMessagePayload {
     pub(crate) content: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSidecarModelConfigPayload {
+    pub(crate) model_id: String,
+    pub(crate) api_key: SecretString,
+    #[serde(skip_serializing_if = "is_blank_optional_string")]
+    pub(crate) base_url: Option<String>,
+}
+
 fn is_blank_optional_string(value: &Option<String>) -> bool {
     value
         .as_deref()
@@ -1140,6 +1149,10 @@ pub struct AgentSidecarChatRequest {
     pub(crate) workspace_root_path: Option<String>,
     #[serde(default)]
     pub(crate) context: Vec<AiContextReferencePayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) model_config: Option<AgentSidecarModelConfigPayload>,
+    #[serde(skip_serializing_if = "is_blank_optional_string")]
+    pub(crate) thread_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1153,6 +1166,8 @@ pub struct AgentSidecarPlanRequest {
     pub(crate) workspace_root_path: Option<String>,
     #[serde(default)]
     pub(crate) context: Vec<AiContextReferencePayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) model_config: Option<AgentSidecarModelConfigPayload>,
     #[serde(skip_serializing_if = "is_blank_optional_string")]
     pub(crate) thread_id: Option<String>,
     #[serde(skip_serializing_if = "is_blank_optional_string")]
@@ -1170,6 +1185,8 @@ pub struct AgentSidecarExecuteRequest {
     pub(crate) workspace_root_path: Option<String>,
     #[serde(default)]
     pub(crate) context: Vec<AiContextReferencePayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) model_config: Option<AgentSidecarModelConfigPayload>,
     pub(crate) plan_id: String,
     pub(crate) plan_version: u32,
     pub(crate) plan_step_id: String,
@@ -1187,6 +1204,8 @@ pub struct AgentSidecarPlanValidateRequest {
     pub(crate) workspace_root_path: Option<String>,
     #[serde(default)]
     pub(crate) context: Vec<AiContextReferencePayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) model_config: Option<AgentSidecarModelConfigPayload>,
     pub(crate) plan_id: String,
     pub(crate) plan_version: u32,
 }
@@ -1202,6 +1221,8 @@ pub struct AgentSidecarPlanReplanRequest {
     pub(crate) workspace_root_path: Option<String>,
     #[serde(default)]
     pub(crate) context: Vec<AiContextReferencePayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) model_config: Option<AgentSidecarModelConfigPayload>,
     pub(crate) plan_id: String,
     pub(crate) plan_version: u32,
 }
@@ -1274,6 +1295,8 @@ pub struct AgentSidecarCheckpointRestoreRequest {
     pub(crate) snapshot_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) step: Option<AgentSidecarRollbackStepPath>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) model_config: Option<AgentSidecarModelConfigPayload>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1342,6 +1365,8 @@ mod agent_sidecar_contract_tests {
             messages: vec![sidecar_message()],
             workspace_root_path: None,
             context: Vec::new(),
+            model_config: None,
+            thread_id: Some(" ".to_string()),
         };
 
         let object = serialize_object(&request);
@@ -1350,8 +1375,30 @@ mod agent_sidecar_contract_tests {
         assert!(!object.contains_key("mode"));
         assert!(!object.contains_key("goal"));
         assert!(!object.contains_key("workspaceRootPath"));
+        assert!(!object.contains_key("threadId"));
         assert!(object.contains_key("messages"));
         assert!(object.contains_key("context"));
+    }
+
+    #[test]
+    fn chat_request_keeps_non_empty_thread_id() {
+        let request = AgentSidecarChatRequest {
+            session_id: Some("sidecar-chat-1".to_string()),
+            mode: Some("ask".to_string()),
+            goal: Some("继续".to_string()),
+            messages: vec![sidecar_message()],
+            workspace_root_path: None,
+            context: Vec::new(),
+            model_config: None,
+            thread_id: Some("thread-chat-1".to_string()),
+        };
+
+        let object = serialize_object(&request);
+
+        assert_eq!(
+            object.get("threadId"),
+            Some(&Value::String("thread-chat-1".to_string()))
+        );
     }
 
     #[test]
@@ -1362,6 +1409,7 @@ mod agent_sidecar_contract_tests {
             messages: vec![sidecar_message()],
             workspace_root_path: None,
             context: Vec::new(),
+            model_config: None,
             plan_id: "plan-1".to_string(),
             plan_version: 1,
             plan_step_id: "step-1".to_string(),
@@ -1382,6 +1430,7 @@ mod agent_sidecar_contract_tests {
             messages: vec![sidecar_message()],
             workspace_root_path: Some("D:/com.xiaojianc/my_desktop_app".to_string()),
             context: Vec::new(),
+            model_config: None,
             plan_id: "plan-1".to_string(),
             plan_version: 1,
             plan_step_id: "step-1".to_string(),
@@ -1408,6 +1457,7 @@ mod agent_sidecar_contract_tests {
             run_id: "run-1".to_string(),
             snapshot_id: None,
             step: None,
+            model_config: None,
         };
 
         let object = serialize_object(&request);
@@ -1431,6 +1481,7 @@ mod agent_sidecar_contract_tests {
                 "durable-agentic-execution".to_string(),
                 "durable-llm-execution".to_string(),
             ])),
+            model_config: None,
         };
 
         let object = serialize_object(&request);

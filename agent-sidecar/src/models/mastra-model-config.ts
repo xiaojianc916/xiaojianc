@@ -15,8 +15,20 @@ import {
 const MODEL_ID_ENV = 'AGENT_SIDECAR_MODEL';
 const API_KEY_ENV = 'AGENT_SIDECAR_API_KEY';
 const BASE_URL_ENV = 'AGENT_SIDECAR_BASE_URL';
+const OBSERVER_MODEL_ID_ENV = 'AGENT_SIDECAR_OBSERVER_MODEL';
+const REFLECTOR_MODEL_ID_ENV = 'AGENT_SIDECAR_REFLECTOR_MODEL';
 
 const DEFAULT_MODEL_ID = 'deepseek/deepseek-v4-flash';
+
+const SMALL_MODEL_BY_PROVIDER: Readonly<Record<string, string>> = {
+  openai: 'openai/gpt-5.4-mini',
+  anthropic: 'anthropic/claude-haiku-4-5',
+  deepseek: 'deepseek/deepseek-v4-flash',
+  google: 'google/gemini-3.1-flash-lite',
+  alibaba: 'alibaba/qwen3.6-flash',
+  zhipuai: 'zhipuai/glm-4.7-flash',
+  moonshotai: 'moonshotai/kimi-k2-turbo-preview',
+};
 
 const readEnv = (
   key: string,
@@ -117,12 +129,20 @@ export interface ICreateMastraOpenAICompatibleModelConfigOptions {
   baseUrl?: string | undefined;
 }
 
+export interface IMastraRequestModelConfigInput {
+  modelId: string;
+  apiKey: string;
+  baseUrl?: string | undefined;
+}
+
 export interface IMastraResolvedModelConfig {
   modelId: string;
   providerId: string;
   providerModelId: string;
   model: MastraModelConfig;
   customGateways: MastraModelGateway[];
+  apiKey: string;
+  baseUrl?: string | undefined;
 }
 
 export const createMastraOpenAICompatibleModelConfig = (
@@ -153,6 +173,8 @@ export const createMastraOpenAICompatibleModelConfig = (
     modelId: normalizedModelId,
     providerId,
     providerModelId,
+    apiKey,
+    ...(baseUrl ? { baseUrl } : {}),
     model: createMastraModel({
       providerId,
       providerModelId,
@@ -162,6 +184,28 @@ export const createMastraOpenAICompatibleModelConfig = (
     }),
     customGateways,
   };
+};
+
+export const createMastraModelConfigFromRequest = (
+  input: IMastraRequestModelConfigInput | null | undefined,
+): IMastraResolvedModelConfig | null => {
+  if (!input) {
+    return null;
+  }
+
+  const modelId = input.modelId.trim();
+  const apiKey = input.apiKey.trim();
+  const baseUrl = input.baseUrl?.trim();
+
+  if (!modelId || !apiKey) {
+    return null;
+  }
+
+  return createMastraOpenAICompatibleModelConfig({
+    modelId,
+    apiKey,
+    baseUrl: baseUrl && baseUrl.length > 0 ? baseUrl : undefined,
+  });
 };
 
 export const createMastraModelConfigFromEnv = (
@@ -178,3 +222,37 @@ export const createMastraModelConfigFromEnv = (
     baseUrl: readEnv(BASE_URL_ENV, env) ?? undefined,
   });
 };
+
+const resolveSmallModelId = (baseModel: IMastraResolvedModelConfig): string =>
+  SMALL_MODEL_BY_PROVIDER[baseModel.providerId] ?? baseModel.modelId;
+
+const resolveBackgroundModelOverride = (
+  envKey: string,
+  baseModel: IMastraResolvedModelConfig,
+  env: NodeJS.ProcessEnv = process.env,
+): IMastraResolvedModelConfig => {
+  const modelId = readEnv(envKey, env) ?? resolveSmallModelId(baseModel);
+  return createMastraOpenAICompatibleModelConfig({
+    modelId,
+    apiKey: baseModel.apiKey,
+    baseUrl: baseModel.baseUrl,
+  });
+};
+
+export const createMastraObserverModelConfig = (
+  baseModel: IMastraResolvedModelConfig,
+  env: NodeJS.ProcessEnv = process.env,
+): IMastraResolvedModelConfig => resolveBackgroundModelOverride(
+  OBSERVER_MODEL_ID_ENV,
+  baseModel,
+  env,
+);
+
+export const createMastraReflectorModelConfig = (
+  baseModel: IMastraResolvedModelConfig,
+  env: NodeJS.ProcessEnv = process.env,
+): IMastraResolvedModelConfig => resolveBackgroundModelOverride(
+  REFLECTOR_MODEL_ID_ENV,
+  baseModel,
+  env,
+);

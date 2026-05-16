@@ -23,7 +23,7 @@ const createGeneratedPayload = (): IAiSuggestionPoolPayload => ({
     { length: AI_SUGGESTION_POOL_SIZE },
     (_value, index) => `模型提示词${index + 1}测试`,
   ),
-  model: 'zhipu/glm-4-flash',
+  model: 'zhipuai/glm-4.7-flash',
   generatedAt: '2026-05-06T00:00:00.000Z',
 });
 
@@ -32,7 +32,7 @@ const createTemplatePayload = (): IAiSuggestionPoolPayload => ({
     { length: AI_SUGGESTION_POOL_SIZE },
     (_value, index) => `如何选择合适的运动方案${index + 1}`,
   ),
-  model: 'zhipu/glm-4-flash',
+  model: 'zhipuai/glm-4.7-flash',
   generatedAt: '2026-05-06T00:00:00.000Z',
 });
 
@@ -41,7 +41,7 @@ const createCachedPayload = (): IAiSuggestionPoolPayload => ({
     { length: AI_SUGGESTION_POOL_SIZE },
     (_value, index) => `缓存提示词${index + 1}测试`,
   ),
-  model: 'zhipu/glm-4-flash',
+  model: 'zhipuai/glm-4.7-flash',
   generatedAt: '2026-05-06T00:10:00.000Z',
 });
 
@@ -211,5 +211,34 @@ describe('useAiSuggestionPool', () => {
     await flushPromises();
 
     expect(generateSuggestionPool).toHaveBeenCalledTimes(1);
+  });
+
+  it('当前窗口首次刷新失败后会用短退避自动重试', async () => {
+    vi.useFakeTimers();
+
+    const generateSuggestionPool = vi.fn<
+      (payload: IAiSuggestionPoolRequest) => Promise<IAiSuggestionPoolPayload>
+    >()
+      .mockRejectedValueOnce(new Error('429 Too Many Requests'))
+      .mockResolvedValueOnce(createGeneratedPayload());
+    const wrapper = mountSuggestionPool({
+      isRefreshEnabled: ref(true),
+      generateSuggestionPool,
+    });
+
+    await flushPromises();
+
+    expect(generateSuggestionPool).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1499);
+    await flushPromises();
+    expect(generateSuggestionPool).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await flushPromises();
+    expect(generateSuggestionPool).toHaveBeenCalledTimes(2);
+
+    const vm = wrapper.vm as unknown as { suggestions: string[] };
+    expect(vm.suggestions.some((suggestion) => suggestion.startsWith('模型提示词'))).toBe(true);
   });
 });

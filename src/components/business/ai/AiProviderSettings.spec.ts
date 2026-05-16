@@ -31,7 +31,7 @@ const createConfig = (overrides: Partial<IAiConfigPayload> = {}): IAiConfigPaylo
   chatEnabled: true,
   agentEnabled: false,
   activeProfileId: null,
-  narrator: createDefaultAiModelEndpointConfig('zhipu/glm-4-flash'),
+  narrator: createDefaultAiModelEndpointConfig('zhipuai/glm-4.7-flash'),
   ...overrides,
 });
 
@@ -196,6 +196,34 @@ describe('AiProviderSettings', () => {
     expect(modelOptions).not.toContain('deepseek-reasoner');
   });
 
+  it('renders latest Zhipu model options and fills the new platform default base url', async () => {
+    const draft = createConfig({
+      narrator: createDefaultAiModelEndpointConfig('zhipuai/glm-4.7-flash'),
+    });
+
+    const wrapper = mount(AiProviderSettings, {
+      props: createSettingsProps({
+        draft,
+      }),
+      ...createGlobalMountOptions(),
+    });
+
+    await openRoleEditor(wrapper, 'narrator');
+    await selectPlatform(wrapper, 'zhipuai');
+
+    expect(draft.narrator.baseUrl).toBe('https://open.bigmodel.cn/api/paas/v4');
+    expect(draft.narrator.selectedModel).toBe('zhipuai/glm-4.7-flash');
+
+    const modelOptions = wrapper
+      .get('[data-field="model"]')
+      .findAll('option')
+      .map((option) => option.text());
+
+    expect(modelOptions).toContain('GLM-4-Flash');
+    expect(modelOptions).toContain('GLM-4.7-Flash');
+    expect(modelOptions).toContain('GLM-4.5-Flash');
+  });
+
   it('keeps narrator model config independent from the main model config', async () => {
     const draft = createConfig();
 
@@ -257,7 +285,7 @@ describe('AiProviderSettings', () => {
         id: 'profile-narrator-ready',
         role: 'narrator',
         name: '旁白 GLM',
-        selectedModel: 'zhipu/glm-4-flash',
+        selectedModel: 'zhipuai/glm-4.7-flash',
         hasCredentials: true,
         isConnected: false,
       }),
@@ -265,7 +293,7 @@ describe('AiProviderSettings', () => {
         id: 'profile-narrator-missing',
         role: 'narrator',
         name: '缺少 Key 的旁白',
-        selectedModel: 'zhipu/glm-4-flash',
+        selectedModel: 'zhipuai/glm-4.7-flash',
         hasCredentials: false,
         isConnected: false,
         updatedAt: '2026-05-02T00:00:00.000Z',
@@ -311,7 +339,7 @@ describe('AiProviderSettings', () => {
         id: 'profile-narrator-ready',
         role: 'narrator',
         name: '可切换旁白',
-        selectedModel: 'zhipu/glm-4-flash',
+        selectedModel: 'zhipuai/glm-4.7-flash',
         hasCredentials: true,
         isConnected: false,
       }),
