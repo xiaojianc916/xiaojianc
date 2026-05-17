@@ -1,0 +1,26 @@
+.ai-terminal-icon-button {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--terminal-muted);
+  cursor: default;
+  padding: 0;
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+.ai-terminal-icon-button:hover {
+  border-color: color-mix(in srgb, #9ca3af 20%, transparent);
+  background: color-mix(in srgb, #d8d8d8 72%, transparent);
+  color: var(--terminal-text);
+}
+
+.ai-terminal-icon-button svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
+}

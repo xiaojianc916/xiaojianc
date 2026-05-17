@@ -125,6 +125,8 @@ export interface IAgentToolStartedEvent extends IAgentRuntimeEventBase {
 
 export interface IAgentToolProgressEvent extends IAgentRuntimeEventBase {
   type: 'agent.tool.progress';
+  toolUseId?: string;
+  toolName?: string;
   /** Mastra `toolStreamUpdateEvent.event.data` 的 redact + 截断预览；进度心跳无 data 时可能缺省。 */
   dataPreview?: string;
 }

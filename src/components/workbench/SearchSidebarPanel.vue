@@ -909,7 +909,7 @@ const runSearch = async (): Promise<void> => {
     const payload = await tauriService.searchWorkspace({
       workspaceRootPath: props.workspaceRootPath,
       query: searchQuery.value.trim(),
-      scope: activeScope.value,
+      scope: 'all',
       matchCase: matchCase.value,
       wholeWord: wholeWord.value,
       useRegex: useRegex.value,
@@ -1256,7 +1256,6 @@ watch(
     () => props.workspaceRootPath,
     () => props.preloadedWorkspaceRoot,
     searchQuery,
-    activeScope,
     matchCase,
     wholeWord,
     useRegex,

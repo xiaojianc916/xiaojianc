@@ -1201,6 +1201,10 @@ const FILE_MUTATION_TOOL_NAME_PATTERN = /(?:write_file|edit_file|create_director
 const COMMAND_TOOL_NAME_PATTERN = /(?:run_|shell|command|install_package)/iu;
 const GIT_TOOL_NAME_PATTERN = /(?:^git_|get_git_|create_commit|stage_file)/iu;
 const TIME_TOOL_NAME_PATTERN = /(?:time)/iu;
+const COMMAND_ACTIVITY_TOOL_NAMES = new Set<string>([
+  'run_command',
+  'mastra_workspace_execute_command',
+]);
 
 const getToolDetailValue = (toolCall: IAiToolCall, label: string): string | null => {
   const prefix = `${label}：`;
@@ -1292,7 +1296,11 @@ const buildToolActivityText = (toolCall: IAiToolCall): string => {
   }
 
   if (COMMAND_TOOL_NAME_PATTERN.test(toolCall.name)) {
-    return `${isActiveToolCall(toolCall) ? '正在运行' : '运行'} ${target}`;
+    const commandTarget = COMMAND_ACTIVITY_TOOL_NAMES.has(toolCall.name)
+      ? getToolDetailValue(toolCall, '命令') ?? '命令'
+      : target;
+
+    return `${isActiveToolCall(toolCall) ? '正在运行' : '运行'} ${commandTarget}`;
   }
 
   if (TIME_TOOL_NAME_PATTERN.test(toolCall.name)) {

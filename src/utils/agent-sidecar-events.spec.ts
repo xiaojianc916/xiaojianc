@@ -12,7 +12,6 @@ import { describe, expect, it } from 'vitest';
 describe('agent-sidecar-events', () => {
   it('等待 sidecar 审批时不把回答投影成已完成', () => {
     const projection = projectSidecarExecuteResponse({
-      schemaVersion: 2,
       sessionId: 'sidecar-session-1',
       result: null,
       events: [
@@ -494,6 +493,56 @@ describe('agent-sidecar-events', () => {
       name: 'tavily_search',
       status: 'running',
     });
+  });
+
+  it('命令工具活动文案不把 stdout 当作运行目标', () => {
+    const projection = projectSidecarEventsToToolState({
+      fallbackActivityText: '请求处理中',
+      streamStatus: 'streaming',
+      events: [
+        {
+          type: 'agent_event',
+          event: {
+            id: 'command-start',
+            type: 'agent.tool.started',
+            runId: 'run-1',
+            sessionId: 'session-1',
+            agentId: 'agent-1',
+            timestamp: '2026-05-03T10:00:00.000Z',
+            seq: 1,
+            schemaVersion: 1,
+            redacted: true,
+            visibility: 'user',
+            level: 'info',
+            toolName: 'mastra_workspace_execute_command',
+            toolUseId: 'command-1',
+            inputPreview: '{"command":"dir"}',
+          },
+        },
+        {
+          type: 'agent_event',
+          event: {
+            id: 'command-progress',
+            type: 'agent.tool.progress',
+            runId: 'run-1',
+            sessionId: 'session-1',
+            agentId: 'agent-1',
+            timestamp: '2026-05-03T10:00:01.000Z',
+            seq: 2,
+            schemaVersion: 1,
+            redacted: true,
+            visibility: 'user',
+            level: 'info',
+            toolName: 'mastra_workspace_execute_command',
+            toolUseId: 'command-1',
+            dataPreview: '{"stream":"stdout","output":"驱动器 D 中的卷是 Data\\n"}',
+          },
+        },
+      ],
+    });
+
+    expect(projection.activityText).toBe('正在运行 dir');
+    expect(projection.activityText).not.toContain('驱动器');
   });
 
   it('没有工具事件时保留 fallback 文案，reasoning delta 交给 runtime timeline 渲染', () => {

@@ -264,23 +264,30 @@ describe('MCP gateway warm pool', () => {
     await pool.disconnectAll();
   });
 
-  it('caps catalog descriptions returned to the model', async () => {
+  it('returns the full MCP catalog to the model without truncation', async () => {
     const pool = createMcpGatewayWarmPool({
-      createBundle: async () => ({
-        configs: [createMockStdioConfig('context7')],
-        errors: [],
-        tools: {
-          context7_query_docs: createTool({
-            id: 'context7_query_docs',
-            description: `${'搜索说明'.repeat(120)}CATALOG_DESCRIPTION_TAIL`,
-            inputSchema: z.object({
-              query: z.string(),
+      createBundle: async (options) => {
+        const serverName = options?.serverNames?.[0] ?? 'context7';
+        const serverPrefix = serverName.replace(/-/gu, '_');
+        const tools = Object.fromEntries(
+          Array.from({ length: 30 }, (_, index) => [
+            `${serverPrefix}_tool_${index}`,
+            createTool({
+              id: `${serverPrefix}_tool_${index}`,
+              description: `${serverName} 完整工具说明 ${index} ${'详细能力'.repeat(120)}CATALOG_DESCRIPTION_TAIL_${index}`,
+              inputSchema: z.object({}),
+              execute: async () => ({ ok: true }),
             }),
-            execute: async () => ({ results: [] }),
-          }),
-        },
-        disconnectAll: async () => undefined,
-      }),
+          ]),
+        );
+
+        return {
+          configs: [createMockStdioConfig(serverName)],
+          errors: [],
+          tools,
+          disconnectAll: async () => undefined,
+        };
+      },
       ttlIdleMs: 60_000,
     });
     const tools = pool.createTools({ profile: 'write' });
@@ -295,8 +302,8 @@ describe('MCP gateway warm pool', () => {
     const serialized = JSON.stringify(tools.mcp_list_tools.toModelOutput?.(catalog)) ?? '';
 
     assert.equal(typeof serialized, 'string');
-    assert.doesNotMatch(serialized, /CATALOG_DESCRIPTION_TAIL/u);
-    assert.match(serialized, /\.\.\./u);
+    assert.match(serialized, /CATALOG_DESCRIPTION_TAIL_29/u);
+    assert.doesNotMatch(serialized, /modelOutputTruncated|__modelOutputOmittedItems__|内容已截断/u);
 
     await pool.disconnectAll();
   });

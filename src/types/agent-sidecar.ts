@@ -195,6 +195,8 @@ export interface IAgentToolStartedEvent extends IAgentRuntimeEventBase {
 
 export interface IAgentToolProgressEvent extends IAgentRuntimeEventBase {
   type: 'agent.tool.progress';
+  toolUseId?: string;
+  toolName?: string;
   dataPreview: string;
 }
 

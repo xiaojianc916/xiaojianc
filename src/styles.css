@@ -1648,8 +1648,8 @@ button:disabled,
   --search-icon-hover: var(--text-primary);
   --search-accent: var(--settings-accent);
   --search-accent-soft: var(--settings-accent-soft);
-  --search-accent-highlight: color-mix(in srgb, var(--settings-accent) 28%, transparent);
-  --search-accent-highlight-foreground: var(--primary-foreground);
+  --search-accent-highlight: #DCE9FF;
+  --search-accent-highlight-foreground: var(--text-primary);
   --search-muted-control-bg: #dcdee0;
   --search-count-bg: var(--search-muted-control-bg);
   --search-count-fg: var(--text-tertiary);

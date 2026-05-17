@@ -1,5 +1,6 @@
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { spawn } from 'node:child_process';
 import { SIDECAR_VERSION } from './runtime.js';
 
 import { AgentBrowser } from '@mastra/agent-browser';
@@ -12,8 +13,8 @@ import {
     BatchPartsProcessor,
     PIIDetector,
     UnicodeNormalizer,
-    type OutputProcessorOrWorkflow,
     type InputProcessorOrWorkflow,
+    type OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type {
@@ -30,27 +31,29 @@ import { createTool } from '@mastra/core/tools';
 import {
     LocalFilesystem,
     LocalSandbox,
-    WORKSPACE_TOOLS,
     Workspace,
+    WORKSPACE_TOOLS,
     type AnyWorkspace,
+    type CommandResult,
+    type ExecuteCommandOptions,
 } from '@mastra/core/workspace';
 import { LibSQLStore } from '@mastra/libsql';
 import { MastraStorageExporter, Observability, SensitiveDataFilter } from '@mastra/observability';
 import { z } from 'zod';
 
 import {
-    createMastraObserverModelConfig,
-    createMastraModelConfigFromRequest,
-    createMastraModelConfigFromEnv,
-    createMastraReflectorModelConfig,
-    type IMastraResolvedModelConfig,
-} from '../models/mastra-model-config.js';
-import {
     createDeepSeekReasoningRunPrefix,
     evictDeepSeekReasoningByPrefix,
     runWithDeepSeekReasoningContext,
     type IDeepSeekRequestPayloadStats,
 } from '../models/deepseek-reasoning-fetch.js';
+import {
+    createMastraModelConfigFromEnv,
+    createMastraModelConfigFromRequest,
+    createMastraObserverModelConfig,
+    createMastraReflectorModelConfig,
+    type IMastraResolvedModelConfig,
+} from '../models/mastra-model-config.js';
 import {
     compactModelOutput,
     truncateModelOutputText,
@@ -111,8 +114,8 @@ import type {
 import type {
     IAgentContextReferenceInput,
     IAgentMessageInput,
-    IAgentRuntimeModelConfigInput,
     IAgentRuntimeInput,
+    IAgentRuntimeModelConfigInput,
     IApprovalResolutionInput,
     ICheckpointRestoreInput,
     IPlanApprovalInput,
@@ -134,14 +137,15 @@ const EXPLICIT_CONTEXT_MESSAGE_LIMIT = 12;
 const TOOL_PREVIEW_REDACTED_TEXT = '[工具参数已收敛显示]';
 const MAX_CONSECUTIVE_SIMILAR_TOOL_ERRORS = 3;
 const MASTRA_GUARDRAIL_MODEL = 'openrouter/openai/gpt-oss-safeguard-20b';
-const MASTRA_WORKSPACE_APPROVAL_TOOL_NAMES = new Set<string>([
+const MASTRA_WORKSPACE_REDACTED_PREVIEW_TOOL_NAMES = new Set<string>([
     WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
     WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
     WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT,
     WORKSPACE_TOOLS.FILESYSTEM.DELETE,
     WORKSPACE_TOOLS.FILESYSTEM.MKDIR,
-    WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
 ]);
+const WINDOWS_POWERSHELL_RELATIVE_PATH = 'System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+const WINDOWS_POWERSHELL_CORE_RELATIVE_PATH = 'PowerShell\\7\\pwsh.exe';
 const DEFAULT_ROLLBACK_STEP: TRollbackStepPath = [
     DurableStepIds.AGENTIC_EXECUTION,
     DurableStepIds.LLM_EXECUTION,
@@ -169,6 +173,19 @@ type TMastraFinishChunk = Extract<TMastraAgentChunk, { type: 'finish' }>;
 type TMastraToolResumeData = { approved: boolean };
 type TOmDataChunk = DataChunkType & {
     type: 'data-om-activation' | 'data-om-observation-end';
+};
+type TSandboxDataChunk = DataChunkType & {
+    type: 'data-sandbox-command' | 'data-sandbox-stdout' | 'data-sandbox-stderr' | 'data-sandbox-exit';
+    data: {
+        toolCallId?: string;
+        command?: string;
+        output?: string;
+        exitCode?: number;
+        success?: boolean;
+        executionTimeMs?: number;
+        killed?: boolean;
+        pid?: string;
+    };
 };
 type TCompatibleReasoningDeltaChunk = TMastraReasoningDeltaChunk & {
     payload: ReasoningDeltaPayload & {
@@ -548,6 +565,82 @@ const createRuntimePreview = (
     return clipped;
 };
 
+const createCommandRuntimeInputPreview = (value: unknown): string => {
+    const record = toRecord(value);
+    if (!record) {
+        return createRuntimePreview(value);
+    }
+
+    const command = toNonEmptyString(record.command);
+    if (!command) {
+        return createRuntimePreview(value);
+    }
+
+    return createRuntimePreview({
+        command,
+        ...(toNonEmptyString(record.cwd) ? { cwd: toNonEmptyString(record.cwd) } : {}),
+        ...(typeof record.timeout === 'number' ? { timeout: record.timeout } : {}),
+        ...(typeof record.tail === 'number' ? { tail: record.tail } : {}),
+        ...(typeof record.background === 'boolean' ? { background: record.background } : {}),
+    });
+};
+
+const createCommandRuntimeResultPreview = (value: unknown): string => {
+    const record = toRecord(value);
+    if (!record) {
+        return createRuntimePreview(value);
+    }
+
+    const preview: Record<string, unknown> = {};
+
+    for (const key of [
+        'command',
+        'stdout',
+        'stderr',
+        'exitCode',
+        'executionTimeMs',
+        'success',
+        'timedOut',
+        'killed',
+        'stdoutTruncated',
+        'stderrTruncated',
+        'stdoutDroppedBytes',
+        'stderrDroppedBytes',
+    ]) {
+        if (record[key] !== undefined) {
+            preview[key] = record[key];
+        }
+    }
+
+    return Object.keys(preview).length > 0
+        ? createRuntimePreview(preview)
+        : createRuntimePreview(value);
+};
+
+const createWorkspaceRuntimeInputPreview = (toolName: string, value: unknown): string => {
+    if (value === undefined) {
+        return '';
+    }
+
+    if (toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) {
+        return createCommandRuntimeInputPreview(value);
+    }
+
+    return shouldRedactWorkspacePreview(toolName)
+        ? TOOL_PREVIEW_REDACTED_TEXT
+        : createRuntimePreview(value);
+};
+
+const createWorkspaceRuntimeResultPreview = (toolName: string, value: unknown): string => {
+    if (toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) {
+        return createCommandRuntimeResultPreview(value);
+    }
+
+    return shouldRedactWorkspacePreview(toolName)
+        ? TOOL_PREVIEW_REDACTED_TEXT
+        : createRuntimePreview(value);
+};
+
 const pushUiEvent = (
     events: TAgentRuntimeOutputEvent[],
     event: TAgentRuntimeOutputEvent,
@@ -905,8 +998,236 @@ const resolveWorkspaceDirectory = (workspaceRootPath?: string | null): string | 
     }
 };
 
-const isWorkspaceMutationTool = (toolName: string): boolean =>
-    MASTRA_WORKSPACE_APPROVAL_TOOL_NAMES.has(toolName);
+const isWindowsRuntime = (): boolean => process.platform === 'win32';
+
+const resolveWindowsPowerShellExecutable = (): string => {
+    const systemRoot = toNonEmptyString(process.env.SystemRoot)
+        ?? toNonEmptyString(process.env.WINDIR)
+        ?? 'C:\\Windows';
+    const programFiles = toNonEmptyString(process.env.ProgramFiles)
+        ?? 'C:\\Program Files';
+    const localAppData = toNonEmptyString(process.env.LOCALAPPDATA);
+    const powerShellCoreCandidates = [
+        `${programFiles}\\${WINDOWS_POWERSHELL_CORE_RELATIVE_PATH}`,
+        ...(localAppData ? [`${localAppData}\\Microsoft\\WindowsApps\\pwsh.exe`] : []),
+    ];
+    const installedPowerShellCore = powerShellCoreCandidates.find((path) => existsSync(path));
+
+    return installedPowerShellCore
+        ? installedPowerShellCore
+        : `${systemRoot}\\${WINDOWS_POWERSHELL_RELATIVE_PATH}`;
+};
+
+const isWindowsPowerShellCoreExecutable = (value: string): boolean =>
+    /(?:^|\\)pwsh\.exe$/iu.test(value);
+
+const isSimpleDirectoryListCommand = (command: string): boolean =>
+    /^(?:dir|ls|gci|get-childitem)(?:\s+(?:\.|-force))*\s*$/iu.test(command.trim());
+
+const prepareWindowsPowerShellCommand = (command: string): string => {
+    const normalized = command.trim();
+
+    if (isSimpleDirectoryListCommand(normalized)) {
+        return 'Get-ChildItem -Force | Format-Table Mode,LastWriteTime,Length,Name -AutoSize | Out-String -Width 4096';
+    }
+
+    return command;
+};
+
+const buildWindowsHostPath = (): string => {
+    const systemRoot = toNonEmptyString(process.env.SystemRoot)
+        ?? toNonEmptyString(process.env.WINDIR)
+        ?? 'C:\\Windows';
+    const existingPath = toNonEmptyString(process.env.PATH);
+    const localAppData = toNonEmptyString(process.env.LOCALAPPDATA);
+    const requiredPaths = [
+        `${systemRoot}\\System32`,
+        systemRoot,
+        `${systemRoot}\\System32\\Wbem`,
+        `${toNonEmptyString(process.env.ProgramFiles) ?? 'C:\\Program Files'}\\PowerShell\\7`,
+        ...(localAppData ? [`${localAppData}\\Microsoft\\WindowsApps`] : []),
+        `${systemRoot}\\System32\\WindowsPowerShell\\v1.0`,
+    ];
+    const mergedPath = existingPath
+        ? [...requiredPaths, existingPath]
+        : requiredPaths;
+
+    return mergedPath.join(';');
+};
+
+const normalizeCommandOutputNewlines = (value: string): string =>
+    value.replace(/\r\n/gu, '\n').replace(/\r/gu, '\n');
+
+const decodeUtf8CommandChunk = (
+    decoder: TextDecoder,
+    chunk?: Buffer,
+): string => normalizeCommandOutputNewlines(decoder.decode(chunk, { stream: Boolean(chunk) }));
+
+const createWindowsPowerShellDecoder = (powerShellExecutable: string): TextDecoder =>
+    new TextDecoder(isWindowsPowerShellCoreExecutable(powerShellExecutable) ? 'utf-8' : 'gb18030');
+
+const executeWindowsHostCommand = async (
+    command: string,
+    options?: ExecuteCommandOptions,
+): Promise<CommandResult> => {
+    const startedAt = Date.now();
+    const powerShellExecutable = resolveWindowsPowerShellExecutable();
+    const preparedCommand = prepareWindowsPowerShellCommand(command);
+    const args = [
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-OutputFormat',
+        'Text',
+        '-Command',
+        preparedCommand,
+    ];
+    const env = {
+        ...createHostCommandEnv(),
+        ...(options?.env ?? {}),
+    };
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    let killed = false;
+    const stdoutDecoder = createWindowsPowerShellDecoder(powerShellExecutable);
+    const stderrDecoder = createWindowsPowerShellDecoder(powerShellExecutable);
+
+    return await new Promise<CommandResult>((resolveResult) => {
+        const child = spawn(powerShellExecutable, args, {
+            cwd: options?.cwd,
+            env,
+            windowsHide: true,
+            shell: false,
+            stdio: ['ignore', 'pipe', 'pipe'],
+            signal: options?.abortSignal,
+        });
+        let settled = false;
+        const timeoutId = options?.timeout
+            ? setTimeout(() => {
+                timedOut = true;
+                killed = child.kill();
+            }, options.timeout)
+            : null;
+        const finish = (exitCode: number): void => {
+            if (settled) {
+                return;
+            }
+
+            settled = true;
+
+            const remainingStdout = decodeUtf8CommandChunk(stdoutDecoder);
+            const remainingStderr = decodeUtf8CommandChunk(stderrDecoder);
+
+            if (remainingStdout) {
+                stdout += remainingStdout;
+                options?.onStdout?.(remainingStdout);
+            }
+
+            if (remainingStderr) {
+                stderr += remainingStderr;
+                options?.onStderr?.(remainingStderr);
+            }
+
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+            }
+
+            resolveResult({
+                command,
+                success: exitCode === 0,
+                exitCode,
+                stdout,
+                stderr,
+                executionTimeMs: Date.now() - startedAt,
+                ...(timedOut ? { timedOut } : {}),
+                ...(killed ? { killed } : {}),
+            });
+        };
+
+        child.stdout?.on('data', (chunk: Buffer) => {
+            const decoded = decodeUtf8CommandChunk(stdoutDecoder, chunk);
+            stdout += decoded;
+            options?.onStdout?.(decoded);
+        });
+
+        child.stderr?.on('data', (chunk: Buffer) => {
+            const decoded = decodeUtf8CommandChunk(stderrDecoder, chunk);
+            stderr += decoded;
+            options?.onStderr?.(decoded);
+        });
+
+        child.on('error', (error) => {
+            const message = normalizeCommandOutputNewlines(error.message);
+            stderr += message;
+            options?.onStderr?.(message);
+            finish(1);
+        });
+
+        child.on('close', (code, signal) => {
+            if (signal && code === null) {
+                finish(timedOut ? 124 : 128);
+                return;
+            }
+
+            finish(code ?? 0);
+        });
+    });
+};
+
+const createHostCommandEnv = (): NodeJS.ProcessEnv => ({
+    PATH: isWindowsRuntime() ? buildWindowsHostPath() : process.env.PATH,
+    ...(isWindowsRuntime() ? {
+        ComSpec: process.env.ComSpec,
+        PATHEXT: process.env.PATHEXT,
+        SystemDrive: process.env.SystemDrive,
+        SystemRoot: process.env.SystemRoot,
+        TEMP: process.env.TEMP,
+        TMP: process.env.TMP,
+        USERPROFILE: process.env.USERPROFILE,
+        WINDIR: process.env.WINDIR,
+    } : {}),
+});
+
+const createHostLocalSandbox = (
+    options: ConstructorParameters<typeof LocalSandbox>[0],
+): LocalSandbox => {
+    const sandbox = new LocalSandbox({
+        ...options,
+        isolation: 'none',
+    });
+    const executeCommand = sandbox.executeCommand;
+
+    if (!executeCommand) {
+        return sandbox;
+    }
+
+    sandbox.executeCommand = async (
+        command: string,
+        args?: string[],
+        options?: ExecuteCommandOptions,
+    ): Promise<CommandResult> => {
+        const shouldUseNativeWindowsExecution = isWindowsRuntime() && (!args || args.length === 0);
+
+        if (shouldUseNativeWindowsExecution) {
+            return await executeWindowsHostCommand(command, options);
+        }
+
+        const result = await executeCommand.call(sandbox, command, args, options);
+
+        return {
+            ...result,
+            command,
+        };
+    };
+
+    return sandbox;
+};
+
+const shouldRedactWorkspacePreview = (toolName: string): boolean =>
+    MASTRA_WORKSPACE_REDACTED_PREVIEW_TOOL_NAMES.has(toolName);
 
 const createMastraAgentInputProcessors = (): InputProcessorOrWorkflow[] => [
     new UnicodeNormalizer({
@@ -968,11 +1289,9 @@ const createMastraWorkspace = async (
             contained: true,
             readOnly: profile === 'readonly',
         }),
-        sandbox: new LocalSandbox({
+        sandbox: createHostLocalSandbox({
             workingDirectory: workspaceDirectory,
-            env: {
-                PATH: process.env.PATH,
-            },
+            env: createHostCommandEnv(),
         }),
         tools: {
             [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
@@ -1548,6 +1867,13 @@ const formatApprovalSummary = (payload: ToolCallPayload): string => {
         return `${payload.toolName} 请求执行，但当前没有可展示的参数。`;
     }
 
+    if (payload.toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) {
+        const command = toNonEmptyString(toRecord(payload.args)?.command);
+        return command
+            ? `请求执行命令：${command}`
+            : '请求执行命令，请确认是否继续。';
+    }
+
     return `${payload.toolName} 请求执行，参数内容已收敛显示，请确认是否继续。`;
 };
 
@@ -1844,6 +2170,18 @@ const getReasoningDelta = (chunk: TMastraStreamChunk): string | null => {
 
     return null;
 };
+
+const isSandboxDataChunk = (chunk: TMastraStreamChunk): chunk is TSandboxDataChunk =>
+    chunk.type === 'data-sandbox-command'
+    || chunk.type === 'data-sandbox-stdout'
+    || chunk.type === 'data-sandbox-stderr'
+    || chunk.type === 'data-sandbox-exit';
+
+const createSandboxToolProgressPreview = (chunk: TSandboxDataChunk): string =>
+    createRuntimePreview({
+        stream: chunk.type.replace(/^data-sandbox-/u, ''),
+        ...toJsonValue(chunk.data) as Record<string, unknown>,
+    });
 
 const isTextDeltaChunk = (
     chunk: TMastraStreamChunk,
@@ -2142,7 +2480,7 @@ const createOmMemoryCompressedEventDraft = (chunk: TMastraStreamChunk): TOmMemor
 const createApprovalRequest = (payload: ToolCallPayload, runId?: string | null) => ({
     id: runId ? encodeApprovalRequestId(runId, payload.toolCallId) : payload.toolCallId,
     toolName: payload.toolName,
-    question: `${payload.toolName} 需要你的确认后才能继续执行。`,
+    question: `${payload.toolName} 需要你的确认后才能继续执行`,
     summary: formatApprovalSummary(payload),
     riskLevel: 'medium' as const,
     reversible: false,
@@ -2150,7 +2488,7 @@ const createApprovalRequest = (payload: ToolCallPayload, runId?: string | null) 
 });
 
 const createDoneResultFromPlan = (plan: TAgentPlan): string =>
-    `已生成计划：${plan.steps.length} 个待办事项。`;
+    `已生成计划：${plan.steps.length} 个待办事项`;
 
 const createApprovedPlanExecutionContext = (
     record: TAgentPlanRecord,
@@ -2487,6 +2825,20 @@ export class MastraRuntime {
                 continue;
             }
 
+            if (isSandboxDataChunk(chunk)) {
+                if (createRuntimeEvent) {
+                    pushUiEvent(events, createRuntimeEvent({
+                        type: 'agent.tool.progress',
+                        visibility: 'user',
+                        level: chunk.type === 'data-sandbox-stderr' ? 'warn' : 'info',
+                        toolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+                        ...(typeof chunk.data.toolCallId === 'string' ? { toolUseId: chunk.data.toolCallId } : {}),
+                        dataPreview: createSandboxToolProgressPreview(chunk),
+                    }), options);
+                }
+                continue;
+            }
+
             const reasoningDelta = getReasoningDelta(chunk);
             if (reasoningDelta) {
                 if (createRuntimeEvent) {
@@ -2535,11 +2887,10 @@ export class MastraRuntime {
                 pendingToolCallIdsByName.set(chunk.payload.toolName, pendingToolCallIds);
 
                 if (createRuntimeEvent) {
-                    const inputPreview = chunk.payload.args === undefined
-                        ? ''
-                        : (isWorkspaceMutationTool(chunk.payload.toolName)
-                            ? TOOL_PREVIEW_REDACTED_TEXT
-                            : createRuntimePreview(chunk.payload.args));
+                    const inputPreview = createWorkspaceRuntimeInputPreview(
+                        chunk.payload.toolName,
+                        chunk.payload.args,
+                    );
 
                     pushUiEvent(events, createRuntimeEvent({
                         type: 'agent.tool.started',
@@ -2574,9 +2925,10 @@ export class MastraRuntime {
                 const toolUseId = chunk.payload.toolCallId ?? pendingToolCallIds.shift();
 
                 if (createRuntimeEvent) {
-                    const resultPreview = isWorkspaceMutationTool(chunk.payload.toolName)
-                        ? TOOL_PREVIEW_REDACTED_TEXT
-                        : createRuntimePreview(chunk.payload.result);
+                    const resultPreview = createWorkspaceRuntimeResultPreview(
+                        chunk.payload.toolName,
+                        chunk.payload.result,
+                    );
 
                     pushUiEvent(events, createRuntimeEvent({
                         type: 'agent.tool.completed',
@@ -2753,33 +3105,33 @@ export class MastraRuntime {
             workspace,
             browser,
         } = executionPlan.useTools
-            ? await loadMastraMcpTools(
-                this.mcpGatewayPool,
-                normalizedInput.workspaceRootPath,
-                this.loggerRef,
-                normalizedInput.context ?? [],
-                normalizedInput.mode === 'agent' ? 'write' : 'readonly',
-                normalizedInput,
-            )
-            : {
-                bundle: createMcpGatewayRunBundle(),
-                tools: {},
-                hasTools: false,
-                toolStats: {
-                    toolCount: 0,
-                    mcpToolCount: 0,
-                    mcpServerCount: 0,
-                    mcpServerNames: [],
-                    uiContextToolCount: 0,
-                    nativeToolCount: 0,
-                    logToolCount: 0,
-                    toolSchemaCharCount: 0,
-                    toolLoadStrategy: 'none',
-                },
-                mcpGatewayMetrics: this.mcpGatewayPool.createMetricBuffer(),
-                workspace: undefined,
-                browser: undefined,
-            };
+                ? await loadMastraMcpTools(
+                    this.mcpGatewayPool,
+                    normalizedInput.workspaceRootPath,
+                    this.loggerRef,
+                    normalizedInput.context ?? [],
+                    normalizedInput.mode === 'agent' ? 'write' : 'readonly',
+                    normalizedInput,
+                )
+                : {
+                    bundle: createMcpGatewayRunBundle(),
+                    tools: {},
+                    hasTools: false,
+                    toolStats: {
+                        toolCount: 0,
+                        mcpToolCount: 0,
+                        mcpServerCount: 0,
+                        mcpServerNames: [],
+                        uiContextToolCount: 0,
+                        nativeToolCount: 0,
+                        logToolCount: 0,
+                        toolSchemaCharCount: 0,
+                        toolLoadStrategy: 'none',
+                    },
+                    mcpGatewayMetrics: this.mcpGatewayPool.createMetricBuffer(),
+                    workspace: undefined,
+                    browser: undefined,
+                };
         const hasAgentTools = hasTools || Boolean(workspace) || Boolean(browser);
         const requestedRunId = options.context?.requestId ?? createSessionId(`${sessionPrefix}-run`);
         const memory = executionPlan.useMemory

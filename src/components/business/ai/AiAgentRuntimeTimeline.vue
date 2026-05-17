@@ -9,6 +9,16 @@ import {
 } from '@/components/ai-elements/chain-of-thought';
 import { Shimmer } from '@/components/ai-elements/shimmer';
 import { Task, TaskContent, TaskItem } from '@/components/ai-elements/task';
+import {
+  Terminal as AiTerminal,
+  TerminalActions,
+  TerminalClearButton,
+  TerminalContent,
+  TerminalCopyButton,
+  TerminalHeader,
+  TerminalStatus,
+  TerminalTitle,
+} from '@/components/ai-elements/terminal';
 import AiReasoningCodeBlock from '@/components/business/ai/AiReasoningCodeBlock.vue';
 import {
   classifyRuntimeToolKind,
@@ -21,6 +31,7 @@ import BadgeCheck from '~icons/lucide/badge-check';
 import BookOpen from '~icons/lucide/book-open';
 import Brain from '~icons/lucide/brain';
 import ChartColumn from '~icons/lucide/chart-column';
+import ChevronRight from '~icons/lucide/chevron-right';
 import CircleAlert from '~icons/lucide/circle-alert';
 import Clock3 from '~icons/lucide/clock3';
 import Coffee from '~icons/lucide/coffee';
@@ -40,7 +51,7 @@ import Play from '~icons/lucide/play';
 import Search from '~icons/lucide/search';
 import Terminal from '~icons/lucide/terminal';
 import Workflow from '~icons/lucide/workflow';
-import { computed, type Component } from 'vue';
+import { computed, ref, type Component } from 'vue';
 
 const REASONING_SEGMENT_CHARS = 420;
 const PREVIEW_TAG_LIMIT = 96;
@@ -84,6 +95,9 @@ interface ITaskNodeItem {
   status: TTaskStatus;
   tail?: string;
   shimmerAction?: boolean;
+  terminalOutput?: string;
+  terminalTitle?: string;
+  terminalStreaming?: boolean;
 }
 
 interface IWebSearchSourceChip {
@@ -616,6 +630,9 @@ const PREVIEW_QUERY_KEYS = [
   'search',
   'searchTerm',
   'search_term',
+  'command',
+  'cmd',
+  'script',
 ] as const;
 
 const WEB_SEARCH_TOOL_NAMES = new Set([
@@ -807,6 +824,44 @@ const collectPreviewQueryCandidate = (value: unknown, depth = 0): string | null 
   return null;
 };
 
+const collectPreviewCommandCandidate = (value: unknown, depth = 0): string | null => {
+  if (depth > 4 || value == null) {
+    return null;
+  }
+
+  if (isNonEmptyString(value)) {
+    return value.trim();
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const candidate = collectPreviewCommandCandidate(item, depth + 1);
+
+      if (candidate) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  if (typeof value !== 'object') {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  for (const key of ['command', 'cmd', 'script'] as const) {
+    const candidate = collectPreviewCommandCandidate(record[key], depth + 1);
+
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  return null;
+};
+
 const resolvePreviewQuery = (value: string | undefined): string | null => {
   const parsed = parsePreviewJson(value);
   const structuredCandidate = collectPreviewQueryCandidate(parsed);
@@ -816,6 +871,170 @@ const resolvePreviewQuery = (value: string | undefined): string | null => {
   }
 
   return isNonEmptyString(value) ? value.trim() : null;
+};
+
+const resolvePreviewCommand = (value: string | undefined): string | null => {
+  const parsed = parsePreviewJson(value);
+  const structuredCandidate = collectPreviewCommandCandidate(parsed);
+
+  if (structuredCandidate) {
+    return structuredCandidate;
+  }
+
+  return isNonEmptyString(value) ? value.trim() : null;
+};
+
+const formatTerminalResultSummary = (value: Record<string, unknown>): string | null => {
+  const segments: string[] = [];
+
+  for (const [key, label] of [
+    ['exitCode', 'exit'],
+    ['statusCode', 'status'],
+    ['code', 'code'],
+  ] as const) {
+    const candidate = value[key];
+
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      segments.push(`${label} ${candidate}`);
+      break;
+    }
+  }
+
+  const durationMs = value.durationMs;
+  if (typeof durationMs === 'number' && Number.isFinite(durationMs)) {
+    segments.push(`${durationMs}ms`);
+  }
+
+  return segments.length ? segments.join(' · ') : null;
+};
+
+const getPreviewStringField = (
+  value: Record<string, unknown> | null,
+  key: string,
+): string | null => {
+  const candidate = value?.[key];
+
+  return isNonEmptyString(candidate) ? candidate.trimEnd() : null;
+};
+
+const getPreviewRecordField = (
+  value: Record<string, unknown> | null,
+  key: string,
+): Record<string, unknown> | null => {
+  const candidate = value?.[key];
+
+  return candidate && typeof candidate === 'object' && !Array.isArray(candidate)
+    ? candidate as Record<string, unknown>
+    : null;
+};
+
+const removePowerShellCliXml = (value: string): string => {
+  const markerIndex = value.indexOf('#< CLIXML');
+
+  if (markerIndex < 0) {
+    return value;
+  }
+
+  return value.slice(0, markerIndex).trimEnd();
+};
+
+const normalizeTerminalOutput = (value: string): string =>
+  removePowerShellCliXml(value)
+    .replace(/\r\n/gu, '\n')
+    .replace(/\r/gu, '\n');
+
+const parseCommandProgressPreview = (
+  value: string | undefined,
+): { output: string; terminalStreaming?: boolean } | null => {
+  const parsed = parsePreviewRecord(value);
+  const stream = getPreviewStringField(parsed, 'stream');
+
+  if (!stream) {
+    return null;
+  }
+
+  if (stream === 'command') {
+    const command = getPreviewStringField(parsed, 'command');
+    return command ? { output: `> ${command}\n`, terminalStreaming: true } : null;
+  }
+
+  if (stream === 'stdout' || stream === 'stderr') {
+    const output = getPreviewStringField(parsed, 'output');
+    const normalizedOutput = output ? normalizeTerminalOutput(output) : '';
+    return normalizedOutput ? { output: normalizedOutput, terminalStreaming: true } : null;
+  }
+
+  if (stream === 'exit') {
+    const summary = formatTerminalResultSummary(parsed ?? {});
+    return {
+      output: summary ? `\n${summary}\n` : '\n',
+      terminalStreaming: false,
+    };
+  }
+
+  return null;
+};
+
+const resolveCommandTerminalOutput = (
+  event: Extract<TToolRuntimeEvent, { type: 'agent.tool.started' | 'agent.tool.completed' }>,
+  command: string,
+): string | undefined => {
+  const parsedInput = event.type === 'agent.tool.started'
+    ? parsePreviewRecord(event.inputPreview)
+    : null;
+  const parsedResult = event.type === 'agent.tool.completed'
+    ? parsePreviewRecord(event.resultPreview)
+    : null;
+  const resultOutput = getPreviewRecordField(parsedResult, 'output')
+    ?? getPreviewRecordField(parsedResult, 'result')
+    ?? getPreviewRecordField(parsedResult, 'toolResult');
+  const resolvedCommand = getPreviewStringField(parsedResult, 'command')
+    ?? getPreviewStringField(parsedInput, 'command')
+    ?? command;
+  const lines: string[] = [`> ${resolvedCommand}`];
+
+  if (event.type === 'agent.tool.started') {
+    return `${lines.join('\n')}\n`;
+  }
+
+  const stdout = getPreviewStringField(parsedResult, 'stdout')
+    ?? getPreviewStringField(resultOutput, 'stdout')
+    ?? getPreviewStringField(parsedResult, 'output')
+    ?? getPreviewStringField(parsedResult, 'text');
+  const stderr = getPreviewStringField(parsedResult, 'stderr')
+    ?? getPreviewStringField(resultOutput, 'stderr');
+
+  const alreadyStreamed = Boolean(event.type === 'agent.tool.completed' && event.toolUseId);
+
+  if (!alreadyStreamed) {
+    if (stdout) {
+      lines.push(normalizeTerminalOutput(stdout));
+    }
+
+    if (stderr) {
+      const normalizedStderr = normalizeTerminalOutput(stderr);
+
+      if (normalizedStderr) {
+        lines.push(normalizedStderr);
+      }
+    }
+  }
+
+  if (!event.ok && isNonEmptyString(event.errorMessage)) {
+    lines.push(event.errorMessage.trim());
+  }
+
+  const summary = formatTerminalResultSummary(resultOutput ?? parsedResult ?? {});
+
+  if (summary && !alreadyStreamed) {
+    lines.push(summary);
+  }
+
+  if (lines.length === 1 && !alreadyStreamed && isNonEmptyString(event.resultPreview)) {
+    lines.push(event.resultPreview.trimEnd());
+  }
+
+  return lines.length > 1 ? lines.join('\n') : `${lines[0]}\n`;
 };
 
 const extractFileNameFromPath = (value: string | undefined): string | null => {
@@ -1286,7 +1505,7 @@ const describeToolAction = (
 
   if (COMMAND_TOOL_NAMES.has(toolName)) {
     const command = fallbackResourceLabel
-      ?? (event.type === 'agent.tool.started' ? resolvePreviewQuery(event.inputPreview) : null)
+      ?? (event.type === 'agent.tool.started' ? resolvePreviewCommand(event.inputPreview) : null)
       ?? '命令';
 
     if (event.type === 'agent.tool.completed' && !event.ok) {
@@ -1504,6 +1723,10 @@ const createToolNode = (
   const id = createEventKey(event, eventIndex);
 
   if (event.type === 'agent.tool.progress') {
+    const progressToolName = event.toolName ? normalizeRuntimeToolName(event.toolName) : previousNode?.toolName;
+    const commandProgress = COMMAND_TOOL_NAMES.has(progressToolName ?? '')
+      ? parseCommandProgressPreview(event.dataPreview)
+      : null;
     const webSearchSources = mergeWebSearchSources(
       previousNode?.webSearchSources,
       resolveWebSearchSources(event.dataPreview),
@@ -1513,8 +1736,8 @@ const createToolNode = (
       id: previousNode?.id ?? id,
       kind: previousNode?.kind ?? 'thinking',
       icon: previousNode?.icon ?? 'brain',
-      toolName: previousNode?.toolName,
-      toolUseId: previousNode?.toolUseId,
+      toolName: progressToolName,
+      toolUseId: event.toolUseId ?? previousNode?.toolUseId,
       resourceLabel: previousNode?.resourceLabel,
       suppressMeta: previousNode?.suppressMeta,
       webSearchSources,
@@ -1524,6 +1747,11 @@ const createToolNode = (
         : parsePreviewValue(event.dataPreview),
       status: 'running',
       tail: previousNode?.tail,
+      terminalOutput: commandProgress
+        ? `${previousNode?.terminalOutput ?? ''}${commandProgress.output}`
+        : previousNode?.terminalOutput,
+      terminalTitle: commandProgress ? 'Windows 终端' : previousNode?.terminalTitle,
+      terminalStreaming: commandProgress?.terminalStreaming ?? previousNode?.terminalStreaming,
     };
   }
 
@@ -1531,6 +1759,16 @@ const createToolNode = (
   const toolName = normalizeRuntimeToolName(event.toolName);
   const actionDescriptor = describeToolAction(event, toolName, previousNode?.resourceLabel);
   const icon = resolveToolEventIcon(event, toolName, resolveRuntimeToolIcon(event.toolName, kind));
+  const hasStreamedCommandOutput = COMMAND_TOOL_NAMES.has(toolName)
+    && isNonEmptyString(previousNode?.terminalOutput);
+  const commandTerminalOutput = COMMAND_TOOL_NAMES.has(toolName)
+    ? hasStreamedCommandOutput && event.type === 'agent.tool.completed'
+      ? previousNode?.terminalOutput
+      : resolveCommandTerminalOutput(
+        event,
+        actionDescriptor.resourceLabel ?? previousNode?.resourceLabel ?? '命令',
+      )
+    : undefined;
 
   if (event.type === 'agent.tool.started') {
     return {
@@ -1551,6 +1789,9 @@ const createToolNode = (
         : [toolName, ...parsePreviewValue(event.inputPreview)].slice(0, MAX_TOOL_TAGS),
       status: 'running',
       tail: actionDescriptor.suppressMeta ? undefined : '执行中',
+      terminalOutput: commandTerminalOutput,
+      terminalTitle: COMMAND_TOOL_NAMES.has(toolName) ? 'Windows 终端' : undefined,
+      terminalStreaming: COMMAND_TOOL_NAMES.has(toolName),
     };
   }
 
@@ -1576,6 +1817,9 @@ const createToolNode = (
       : event.ok
         ? '成功'
         : `失败：${event.errorMessage ?? '未知错误'}`,
+    terminalOutput: commandTerminalOutput ?? previousNode?.terminalOutput,
+    terminalTitle: COMMAND_TOOL_NAMES.has(toolName) ? 'Windows 终端' : previousNode?.terminalTitle,
+    terminalStreaming: false,
   };
 };
 
@@ -1607,6 +1851,26 @@ const findPendingToolTaskIndex = (
     }
 
     if (!event.toolUseId && node.toolName === normalizedToolName) {
+      return index;
+    }
+  }
+
+  return -1;
+};
+
+const findPendingCommandTaskIndex = (
+  items: readonly TTimelineItem[],
+  event: Extract<TToolRuntimeEvent, { type: 'agent.tool.progress' }>,
+): number => {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+
+    if (
+      item.type === 'task'
+      && item.node.status === 'running'
+      && COMMAND_TOOL_NAMES.has(item.node.toolName ?? '')
+      && (!event.toolUseId || item.node.toolUseId === event.toolUseId)
+    ) {
       return index;
     }
   }
@@ -1730,6 +1994,19 @@ const buildTimelineItems = (
       flushReasoningLine();
 
       if (event.type === 'agent.tool.progress') {
+        if (COMMAND_TOOL_NAMES.has(normalizeRuntimeToolName(event.toolName ?? ''))) {
+          const pendingTaskIndex = findPendingCommandTaskIndex(items, event);
+
+          if (pendingTaskIndex >= 0) {
+            const pendingTask = items[pendingTaskIndex];
+
+            if (pendingTask.type === 'task') {
+              pendingTask.node = createToolNode(event, eventIndex, pendingTask.node);
+              return;
+            }
+          }
+        }
+
         const pendingTaskIndex = findPendingWebSearchTaskIndex(items);
 
         if (pendingTaskIndex >= 0 && resolveWebSearchSources(event.dataPreview).length > 0) {
@@ -1850,6 +2127,8 @@ const buildTimelineItems = (
 };
 
 const timelineItems = computed(() => buildTimelineItems(props.events, props.isWaitingConfirmation));
+const expandedTerminalNodeIds = ref<Set<string>>(new Set());
+const clearedTerminalNodeOffsets = ref<Record<string, number>>({});
 
 const shouldRenderTimeline = computed(() =>
   timelineItems.value.length > 0 || props.isStreaming || props.isWaitingConfirmation,
@@ -1861,6 +2140,42 @@ const chainHeaderLabel = computed(() =>
 
 const getTaskIcon = (node: ITaskNodeItem): Component =>
   TASK_ICON_MAP[node.icon];
+
+const hasCommandTerminal = (node: ITaskNodeItem): boolean =>
+  Boolean(node.toolName && COMMAND_TOOL_NAMES.has(node.toolName) && node.terminalOutput);
+
+const isTerminalExpanded = (nodeId: string): boolean =>
+  expandedTerminalNodeIds.value.has(nodeId);
+
+const getTerminalOutput = (node: ITaskNodeItem): string => {
+  const output = node.terminalOutput ?? '';
+  const offset = clearedTerminalNodeOffsets.value[node.id] ?? 0;
+
+  return offset > 0 ? output.slice(offset) : output;
+};
+
+const toggleTerminalNode = (nodeId: string): void => {
+  const next = new Set(expandedTerminalNodeIds.value);
+
+  if (next.has(nodeId)) {
+    next.delete(nodeId);
+  }
+  else {
+    next.add(nodeId);
+  }
+
+  expandedTerminalNodeIds.value = next;
+};
+
+const handleTerminalClear = (nodeId: string): void => {
+  const node = timelineItems.value.find((item) => item.type === 'task' && item.node.id === nodeId);
+  const outputLength = node?.type === 'task' ? node.node.terminalOutput?.length ?? 0 : 0;
+
+  clearedTerminalNodeOffsets.value = {
+    ...clearedTerminalNodeOffsets.value,
+    [nodeId]: outputLength,
+  };
+};
 
 const getFaviconSource = (host: string): string =>
   `http://favicon.localhost/${encodeURIComponent(host)}`;
@@ -2258,10 +2573,27 @@ const parseReasoningMarkdownBlocks = (segment: string): IReasoningMarkdownBlock[
 
         <ChainOfThoughtStep v-else class="ai-runtime-step is-task" :label="item.node.action"
           :status="getTaskStepStatus(item.node)">
-          <template v-if="item.node.shimmerAction" #label>
-            <Shimmer as="span">
-              {{ item.node.action }}
-            </Shimmer>
+          <template v-if="item.node.shimmerAction || hasCommandTerminal(item.node)" #label>
+            <div class="ai-runtime-task-label">
+              <Shimmer v-if="item.node.shimmerAction" as="span" class="ai-runtime-task-label__text">
+                {{ item.node.action }}
+              </Shimmer>
+              <span v-else class="ai-runtime-task-label__text">
+                {{ item.node.action }}
+              </span>
+              <button
+                v-if="hasCommandTerminal(item.node)"
+                type="button"
+                class="ai-runtime-terminal-toggle"
+                :class="{ 'is-open': isTerminalExpanded(item.node.id) }"
+                :aria-expanded="isTerminalExpanded(item.node.id)"
+                :aria-label="isTerminalExpanded(item.node.id) ? '收起终端输出' : '展开终端输出'"
+                :title="isTerminalExpanded(item.node.id) ? '收起终端输出' : '展开终端输出'"
+                @click.stop="toggleTerminalNode(item.node.id)"
+              >
+                <ChevronRight aria-hidden="true" />
+              </button>
+            </div>
           </template>
           <template #icon>
             <component :is="getTaskIcon(item.node)" class="ai-runtime-step-icon" :class="`is-icon-${item.node.icon}`"
@@ -2297,6 +2629,28 @@ const parseReasoningMarkdownBlocks = (segment: string): IReasoningMarkdownBlock[
               </TaskItem>
             </TaskContent>
           </Task>
+
+          <div v-if="hasCommandTerminal(item.node) && isTerminalExpanded(item.node.id)" class="ai-runtime-terminal-wrap">
+            <AiTerminal
+              class="ai-runtime-terminal"
+              :auto-scroll="true"
+              :is-streaming="item.node.terminalStreaming"
+              :output="getTerminalOutput(item.node)"
+              @clear="handleTerminalClear(item.node.id)"
+            >
+              <TerminalHeader>
+                <TerminalTitle>{{ item.node.terminalTitle ?? 'Windows 终端' }}</TerminalTitle>
+                <div class="ai-runtime-terminal-header-actions">
+                  <TerminalStatus />
+                  <TerminalActions>
+                    <TerminalCopyButton />
+                    <TerminalClearButton />
+                  </TerminalActions>
+                </div>
+              </TerminalHeader>
+              <TerminalContent />
+            </AiTerminal>
+          </div>
         </ChainOfThoughtStep>
       </template>
     </ChainOfThoughtContent>
@@ -2432,6 +2786,72 @@ const parseReasoningMarkdownBlocks = (segment: string): IReasoningMarkdownBlock[
 
 .ai-runtime-task {
   min-width: 0;
+}
+
+.ai-runtime-task-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-runtime-task-label__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-runtime-terminal-toggle {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: default;
+  padding: 0;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.ai-runtime-terminal-toggle:hover {
+  border-color: color-mix(in srgb, var(--shell-divider) 72%, transparent);
+  background: color-mix(in srgb, var(--surface-soft) 82%, transparent);
+  color: var(--text-primary);
+}
+
+.ai-runtime-terminal-toggle svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2;
+  transition: transform 140ms ease;
+}
+
+.ai-runtime-terminal-toggle.is-open svg {
+  transform: rotate(90deg);
+}
+
+.ai-runtime-terminal-wrap {
+  min-width: 0;
+  width: min(100%, 640px);
+  max-width: 100%;
+  margin-top: 6px;
+  padding-left: 0;
+}
+
+.ai-runtime-terminal {
+  width: 100%;
+  height: 230px;
+  box-shadow: none;
+}
+
+.ai-runtime-terminal-header-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
 }
 
 .ai-runtime-task-content :deep(> div) {

@@ -77,6 +77,80 @@ describe('AiAgentRuntimeTimeline', () => {
         expect(wrapper.text()).toContain('正在读取 src/main.ts');
     });
 
+    it('命令执行节点展开后显示真实终端输入与输出', async () => {
+        const wrapper = mount(AiAgentRuntimeTimeline, {
+            props: {
+                events: [
+                    createEvent({
+                        id: 'command-start',
+                        type: 'agent.tool.started',
+                        toolUseId: 'command-1',
+                        toolName: 'mastra_workspace_execute_command',
+                        inputPreview: '{"command":"pnpm test","cwd":"D:/repo"}',
+                    }),
+                    createEvent({
+                        id: 'command-stdout',
+                        type: 'agent.tool.progress',
+                        toolUseId: 'command-1',
+                        toolName: 'mastra_workspace_execute_command',
+                        dataPreview: '{"stream":"stdout","output":"PASS src/app.spec.ts\\n"}',
+                    }),
+                    createEvent({
+                        id: 'command-exit',
+                        type: 'agent.tool.progress',
+                        toolUseId: 'command-1',
+                        toolName: 'mastra_workspace_execute_command',
+                        dataPreview: '{"stream":"exit","exitCode":0,"success":true,"executionTimeMs":128}',
+                    }),
+                    createEvent({
+                        id: 'command-completed',
+                        type: 'agent.tool.completed',
+                        toolUseId: 'command-1',
+                        toolName: 'mastra_workspace_execute_command',
+                        ok: true,
+                        resultPreview: '{"command":"pnpm test","stdout":"PASS src/app.spec.ts\\n","stderr":"","exitCode":0}',
+                    }),
+                ],
+            },
+        });
+
+        await wrapper.get('.ai-runtime-terminal-toggle').trigger('click');
+
+        expect(wrapper.find('.ai-runtime-terminal').exists()).toBe(true);
+        expect(wrapper.text()).toContain('> pnpm test');
+        expect(wrapper.text()).toContain('PASS src/app.spec.ts');
+        expect(wrapper.text()).toContain('exit 0');
+        expect(wrapper.text()).not.toContain('[工具参数已收敛显示]');
+    });
+
+    it('命令完成节点不把结果 JSON 当作标题', () => {
+        const wrapper = mount(AiAgentRuntimeTimeline, {
+            props: {
+                events: [
+                    createEvent({
+                        id: 'command-start-json-title',
+                        type: 'agent.tool.started',
+                        toolUseId: 'command-json-title-1',
+                        toolName: 'mastra_workspace_execute_command',
+                        inputPreview: '{"command":"dir"}',
+                    }),
+                    createEvent({
+                        id: 'command-completed-json-title',
+                        type: 'agent.tool.completed',
+                        toolUseId: 'command-json-title-1',
+                        toolName: 'mastra_workspace_execute_command',
+                        ok: true,
+                        resultPreview: '{"command":"dir","stdout":"目录内容","exitCode":0}',
+                    }),
+                ],
+            },
+        });
+
+        expect(wrapper.text()).toContain('执行完成 dir');
+        expect(wrapper.text()).not.toContain('执行完成 {"command":"dir"');
+        expect(wrapper.text()).not.toContain('运行 目录内容');
+    });
+
     it('mcp_list_tools 状态在同一节点内从查找更新为成功', () => {
         const wrapper = mount(AiAgentRuntimeTimeline, {
             props: {
