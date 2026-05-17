@@ -321,7 +321,7 @@ export const useAiAgentRun = () => {
       });
       const validationUsageResolution = resolveSidecarOfficialUsage(validationPayload);
 
-      if (validationUsageResolution.resolved) {
+      if (validationUsageResolution.resolved && validationUsageResolution.usage) {
         store.setLatestOfficialUsage(validationUsageResolution.usage);
       }
 
@@ -345,7 +345,7 @@ export const useAiAgentRun = () => {
 
         const replanUsageResolution = resolveSidecarOfficialUsage(replanPayload);
 
-        if (replanUsageResolution.resolved) {
+        if (replanUsageResolution.resolved && replanUsageResolution.usage) {
           store.setLatestOfficialUsage(replanUsageResolution.usage);
         }
 
@@ -564,7 +564,7 @@ export const useAiAgentRun = () => {
 
     const executeUsageResolution = resolveSidecarOfficialUsage(payload);
 
-    if (executeUsageResolution.resolved) {
+    if (executeUsageResolution.resolved && executeUsageResolution.usage) {
       store.setLatestOfficialUsage(executeUsageResolution.usage);
     }
 
@@ -757,7 +757,7 @@ export const useAiAgentRun = () => {
 
     const approvalUsageResolution = resolveSidecarOfficialUsage(payload);
 
-    if (approvalUsageResolution.resolved) {
+    if (approvalUsageResolution.resolved && approvalUsageResolution.usage) {
       store.setLatestOfficialUsage(approvalUsageResolution.usage);
     }
 

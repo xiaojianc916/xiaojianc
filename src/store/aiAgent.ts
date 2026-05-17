@@ -1,4 +1,4 @@
-import type { LanguageModelUsage } from 'ai';
+import type { IAiLanguageModelUsage } from '@/types/ai';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { z } from 'zod';
@@ -188,9 +188,9 @@ const addRequiredTokenCounts = (
 ): number => (left ?? 0) + (right ?? 0);
 
 const addOfficialUsage = (
-    current: LanguageModelUsage | null,
-    next: LanguageModelUsage,
-): LanguageModelUsage => {
+    current: IAiLanguageModelUsage | null,
+    next: IAiLanguageModelUsage,
+): IAiLanguageModelUsage => {
     const inputTokenDetails = {
         noCacheTokens: addTokenCounts(
             current?.inputTokenDetails?.noCacheTokens,
@@ -282,9 +282,9 @@ export const useAiAgentStore = defineStore('ai-agent', () => {
     const activeRunId = ref<string | null>(null);
     const runs = ref<IAiAgentRun[]>([]);
     const latestOfficialUsageResolved = ref<boolean>(false);
-    const latestOfficialUsage = ref<LanguageModelUsage | null>(null);
+    const latestOfficialUsage = ref<IAiLanguageModelUsage | null>(null);
     const totalOfficialUsageResolved = ref<boolean>(false);
-    const totalOfficialUsage = ref<LanguageModelUsage | null>(null);
+    const totalOfficialUsage = ref<IAiLanguageModelUsage | null>(null);
     const stepDetails = ref<Record<string, IAiAgentStepDetail>>({});
     const stepFinalAnswers = ref<Record<string, IAiAgentStepFinalAnswer[]>>({});
     const patchSummaries = ref<Record<string, IAiAgentPatchSummary[]>>({});
@@ -517,7 +517,7 @@ export const useAiAgentStore = defineStore('ai-agent', () => {
 
     // ── Actions: usage ───────────────────────────────────────────────────────
 
-    const setLatestOfficialUsage = (usage: LanguageModelUsage | null): void => {
+    const setLatestOfficialUsage = (usage: IAiLanguageModelUsage | null): void => {
         latestOfficialUsageResolved.value = true;
         latestOfficialUsage.value = usage;
         if (usage) {

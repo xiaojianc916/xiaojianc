@@ -36,6 +36,7 @@ export const AGENT_SIDECAR_PLAN_VALIDATION_STATUSES = [
   'failed',
   'needs_replan',
 ] as const;
+
 export type TAgentSidecarPlanValidationStatus =
   (typeof AGENT_SIDECAR_PLAN_VALIDATION_STATUSES)[number];
 
@@ -115,6 +116,7 @@ type TAgentRuntimeToolEvent = Extract<
   TAgentRuntimeEvent,
   { type: 'agent.tool.started' | 'agent.tool.completed' }
 >;
+
 type TAgentUiRuntimeToolEvent = Extract<TAgentUiEvent, { type: 'agent_event' }> & {
   event: TAgentRuntimeToolEvent;
 };
@@ -730,7 +732,6 @@ const describeToolPayload = (
   const url = collectFirstString(value, SIDECAR_URL_KEYS);
   const domains = collectStringList(value, SIDECAR_DOMAIN_KEYS, 2) ?? collectUrlDomains(value, 2);
   const command = collectFirstString(value, SIDECAR_COMMAND_KEYS);
-
   if (WEB_SEARCH_TOOL_NAMES.has(toolName)) {
     const targetPreview = joinTargetParts([
       query,
@@ -746,7 +747,6 @@ const describeToolPayload = (
       ]),
     };
   }
-
   if (WEB_FETCH_TOOL_NAMES.has(toolName)) {
     const targetPreview = joinTargetParts([url ?? domains ?? query], '网页');
     return {
@@ -759,7 +759,6 @@ const describeToolPayload = (
       ]),
     };
   }
-
   if (FILE_SEARCH_TOOL_NAMES.has(toolName)) {
     const targetPreview = joinTargetParts([query, scope ?? '工作区'], '工作区');
     return {
@@ -771,7 +770,6 @@ const describeToolPayload = (
       ]),
     };
   }
-
   if (FILE_READ_TOOL_NAMES.has(toolName)) {
     const targetPreview = joinTargetParts([scope], '文件');
     return {
@@ -782,7 +780,6 @@ const describeToolPayload = (
       ]),
     };
   }
-
   if (DIRECTORY_TOOL_NAMES.has(toolName)) {
     const targetPreview = joinTargetParts([scope], '项目结构');
     return {
@@ -793,7 +790,6 @@ const describeToolPayload = (
       ]),
     };
   }
-
   if (GIT_TOOL_NAMES.has(toolName)) {
     const targetPreview = joinTargetParts([scope], 'Git 变更');
     return {
@@ -804,7 +800,6 @@ const describeToolPayload = (
       ]),
     };
   }
-
   if (command) {
     return {
       targetPreview: command,
@@ -814,7 +809,6 @@ const describeToolPayload = (
       ]),
     };
   }
-
   const fallback = summarizeJsonValue(value);
   return {
     targetPreview: fallback,
@@ -1223,7 +1217,6 @@ const buildToolActivityText = (toolCall: IAiToolCall): string => {
   const directory = getToolDetailValue(toolCall, '目录');
   const site = getToolDetailValue(toolCall, '站点');
   const url = getToolDetailValue(toolCall, '网址');
-
   if (isPendingToolCall(toolCall)) {
     return target ? `等待确认 ${target}` : '等待确认';
   }
@@ -1233,7 +1226,6 @@ const buildToolActivityText = (toolCall: IAiToolCall): string => {
   if (toolCall.status === 'denied') {
     return target ? `已停止 ${target}` : '已停止';
   }
-
   if (WEB_TOOL_NAME_PATTERN.test(toolCall.name)) {
     const searchTarget = query ?? url ?? site ?? target;
     const isFetch = Boolean(url && !query);
@@ -1273,7 +1265,6 @@ const buildToolActivityText = (toolCall: IAiToolCall): string => {
   if (TIME_TOOL_NAME_PATTERN.test(toolCall.name)) {
     return isActiveToolCall(toolCall) ? '正在获取时间' : '获取时间';
   }
-
   return target
     ? `${isActiveToolCall(toolCall) ? '正在处理' : '处理'} ${target}`
     : (isActiveToolCall(toolCall) ? '正在处理任务' : '处理任务');
@@ -1505,8 +1496,41 @@ const extractDoneResult = (events: readonly TAgentUiEvent[]): string | null => {
   return event && hasMeaningfulText(event.result) ? event.result : null;
 };
 
-const extractLatestDoneUsage = (events: readonly TAgentUiEvent[]): IAiLanguageModelUsage | null =>
-  findLastEventByType(events, 'done')?.usage ?? null;
+/* ============================================================================
+ * Language model usage normalization
+ *
+ * 让所有下游消费者拿到的 IAiLanguageModelUsage 一定有 detail 子结构,而不是
+ * 让 store / UI 端到处写 `?? 0` 守卫。原始 sidecar usage 是否真的有这些字段
+ * 取决于 mastra 的 LanguageModel,缺失时用 0 占位,语义等价于"未上报"。
+ *
+ * TODO[outputTokenDetails 默认值]: 暂用 `{} as ...` 占位 —— 等 IAiLanguageModelUsage
+ * 的完整定义贴出来后,把 DEFAULT_OUTPUT_TOKEN_DETAILS 换成对应字段全 0 的实例。
+ * 当前 `{}` cast 在 TS 类型上等价于 NonNullable<...>,运行时该字段在第一次访问
+ * 缺省 sub-property 时返回 undefined,UI 端如已用 `??` 兜底则不会出问题。
+ * ========================================================================== */
+
+const DEFAULT_INPUT_TOKEN_DETAILS: NonNullable<IAiLanguageModelUsage['inputTokenDetails']> = {
+  noCacheTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+};
+
+const DEFAULT_OUTPUT_TOKEN_DETAILS = {} as NonNullable<IAiLanguageModelUsage['outputTokenDetails']>;
+
+const normalizeLanguageModelUsage = (
+  usage: IAiLanguageModelUsage,
+): IAiLanguageModelUsage => ({
+  ...usage,
+  inputTokenDetails: usage.inputTokenDetails ?? DEFAULT_INPUT_TOKEN_DETAILS,
+  outputTokenDetails: usage.outputTokenDetails ?? DEFAULT_OUTPUT_TOKEN_DETAILS,
+});
+
+const extractLatestDoneUsage = (
+  events: readonly TAgentUiEvent[],
+): IAiLanguageModelUsage | null => {
+  const usage = findLastEventByType(events, 'done')?.usage;
+  return usage ? normalizeLanguageModelUsage(usage) : null;
+};
 
 export const resolveSidecarOfficialUsage = (
   response: IAgentSidecarResponsePayload,

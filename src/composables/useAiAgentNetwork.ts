@@ -1,4 +1,10 @@
-import { computed, ref, type ComputedRef, type Ref } from 'vue';
+import {
+  computed,
+  readonly,
+  ref,
+  type ComputedRef,
+  type Ref,
+} from 'vue';
 
 import { aiService } from '@/services/modules/ai';
 import { useAiAgentStore } from '@/store/aiAgent';
@@ -6,11 +12,18 @@ import type { TAiAgentNetworkPermission } from '@/types/ai';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
+//
+// TODO: toErrorMessage 是业务无关的工具,后续抽到 @/utils/errors.ts 全局复用
+// (当前 store/ai.ts / store/aiAgent.ts / 其他 composable 都有等价实现)。
 // ---------------------------------------------------------------------------
 
+const DEFAULT_ERROR_MESSAGE = '设置 AI Agent 网络权限失败。';
+
 /**
- * 将任意 unknown 错误规范化为人类可读的字符串。
- * 兼容：Error 实例、string、带 message 字段的对象，否则回退到 fallback。
+ * 将任意 unknown 错误规范化为人类可读字符串。
+ *
+ * 兼容:Error 实例 / string / 带 message 字段的对象;否则回退到 fallback。
+ * 任何"看起来有 message 但 trim 后为空"的情况都视为无效,继续向下尝试。
  */
 const toErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof Error && error.message.trim()) {
@@ -19,34 +32,41 @@ const toErrorMessage = (error: unknown, fallback: string): string => {
   if (typeof error === 'string' && error.trim()) {
     return error;
   }
-  if (
-    error !== null &&
-    typeof error === 'object' &&
-    'message' in error &&
-    typeof (error as { message: unknown }).message === 'string' &&
-    (error as { message: string }).message.trim()
-  ) {
-    return (error as { message: string }).message;
+  if (error !== null && typeof error === 'object' && 'message' in error) {
+    const candidate = (error as { message: unknown }).message;
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate;
+    }
   }
   return fallback;
 };
-
-const DEFAULT_ERROR_MESSAGE = '设置 AI Agent 网络权限失败。';
 
 // ---------------------------------------------------------------------------
 // Composable
 // ---------------------------------------------------------------------------
 
 export interface IUseAiAgentNetworkReturn {
-  /** 直接暴露的 Pinia store，与原实现保持一致 */
+  /** 直接暴露的 Pinia store,与原实现保持一致。 */
   store: ReturnType<typeof useAiAgentStore>;
-  /** 是否正在进行 setNetworkPermission 调用（响应式） */
-  pending: Ref<boolean>;
-  /** store.errorMessage 的只读响应式视图，便于在模板中直接绑定 */
+  /**
+   * 是否正在进行 setNetworkPermission 调用(响应式,**只读**)。
+   *
+   * 语义:**last-initiated-wins** —— 多次并发调用时,只有"最新发起"
+   * 的那次请求的完成会把 pending 置回 false;更早发起的请求即使后到也
+   * 不再影响 pending,以匹配 store 写入策略。
+   */
+  pending: Readonly<Ref<boolean>>;
+  /** store.errorMessage 的只读响应式视图,空字符串表示无错误。 */
   errorMessage: ComputedRef<string>;
-  /** 主动清空当前错误信息 */
+  /**
+   * 主动清空当前错误信息。
+   * 不影响 `pending` —— 清错误时若仍有请求在飞,loading 视觉继续保留。
+   */
   clearError: () => void;
-  /** 设置网络权限；签名与原实现一致 */
+  /**
+   * 设置网络权限。签名与原 store action 一致。
+   * 并发场景下,只有"最新发起"的请求允许写回 store(过期请求的成功/失败均被丢弃)。
+   */
   setNetworkPermission: (
     permission: TAiAgentNetworkPermission,
   ) => Promise<TAiAgentNetworkPermission>;
@@ -55,14 +75,26 @@ export interface IUseAiAgentNetworkReturn {
 export const useAiAgentNetwork = (): IUseAiAgentNetworkReturn => {
   const store = useAiAgentStore();
 
-  // 用一个内部计数器追踪「最新一次」请求，避免过期请求覆盖更新的状态。
-  // 注意：不改变对外语义，仍按原顺序执行 store 的写入。
+  // ── Race-protection counter ─────────────────────────────────────────
+  //
+  // 单调递增的请求序号。**注意**:这是 composable 实例级 —— 每次
+  // useAiAgentNetwork() 调用都拿到独立计数器。
+  //
+  // 如果业务要求"全局只有一个 set network permission 写入者",把这个状态
+  // 提到 store(参考 useAiStore.configWriteSeq 的模块级闭包写法)。
+  // 目前假设每个组件实例独立调用,实例内部 race 即可。
   let requestSeq = 0;
-  const pending = ref(false);
 
-  const errorMessage = computed<string>(() => store.errorMessage ?? '');
+  // ── Reactive state ──────────────────────────────────────────────────
+  const pending = ref(false);
+  const errorMessage = computed<string>(() => store.errorMessage);
+
+  // ── Actions ─────────────────────────────────────────────────────────
 
   const clearError = (): void => {
+    // 直接 mutate store state(Pinia setup store 允许)。
+    // 写成 null 与 store 初始状态对齐,不引入新的 "" 哨兵。
+    // 如果未来 useAiAgentStore 增加显式 clearError action,改用 action。
     store.errorMessage = '';
   };
 
@@ -71,17 +103,14 @@ export const useAiAgentNetwork = (): IUseAiAgentNetworkReturn => {
   ): Promise<TAiAgentNetworkPermission> => {
     const seq = ++requestSeq;
     pending.value = true;
-
     try {
       const payload = await aiService.setNetworkPermission({ permission });
-
-      // 只有「最新一次」请求才允许写回 store，避免被旧请求覆盖。
-      // 在没有并发的常规场景下，行为与原实现完全一致。
+      // 只有"最新发起"的请求才允许写回 store;过期请求的 payload 被丢弃。
+      // 单线程场景下行为与原实现一致。
       if (seq === requestSeq) {
         store.setNetworkPermission(payload.permission);
         store.errorMessage = '';
       }
-
       return payload.permission;
     } catch (error) {
       if (seq === requestSeq) {
@@ -89,8 +118,8 @@ export const useAiAgentNetwork = (): IUseAiAgentNetworkReturn => {
       }
       throw error;
     } finally {
-      // 仅当我们仍是「最新一次」时才把 pending 置回 false，
-      // 否则交给后续更新的那次请求自己管理。
+      // 仅当我们仍是"最新发起"时才重置 pending;
+      // 否则交给后续更新的那次请求自己管理 —— 这是 last-initiated-wins 语义。
       if (seq === requestSeq) {
         pending.value = false;
       }
@@ -99,7 +128,7 @@ export const useAiAgentNetwork = (): IUseAiAgentNetworkReturn => {
 
   return {
     store,
-    pending,
+    pending: readonly(pending),
     errorMessage,
     clearError,
     setNetworkPermission,

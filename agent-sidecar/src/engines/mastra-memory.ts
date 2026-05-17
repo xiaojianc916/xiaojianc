@@ -1,3 +1,6 @@
+import { ModelRouterEmbeddingModel, type MastraModelConfig } from '@mastra/core/llm';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import { randomUUID } from 'node:crypto';
 import {
     existsSync,
@@ -9,10 +12,6 @@ import {
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-
-import { ModelRouterEmbeddingModel, type MastraModelConfig } from '@mastra/core/llm';
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-import { Memory } from '@mastra/memory';
 import { z } from 'zod';
 
 import type { IAgentRuntimeInput } from './runtime-input.js';
@@ -67,7 +66,10 @@ const UUID_REGEX =
 //   Truthy to let Mastra buffer observation tokens. Defaults to false.
 // -----------------------------------------------------------------------------
 
+const STORAGE_ROOT_ENV = 'AGENT_SIDECAR_STORAGE_ROOT';
+const LIBSQL_URL_ENV = 'AGENT_SIDECAR_LIBSQL_URL';
 const MEMORY_LAST_MESSAGES_ENV = 'AGENT_SIDECAR_MEMORY_LAST_MESSAGES';
+const EMBEDDER_MODEL_ENV = 'AGENT_SIDECAR_MEMORY_EMBEDDER_MODEL';
 const ENABLE_SEMANTIC_RECALL_ENV = 'AGENT_SIDECAR_MEMORY_ENABLE_SEMANTIC_RECALL';
 const ENABLE_OBSERVATIONAL_MEMORY_ENV = 'AGENT_SIDECAR_MEMORY_ENABLE_OBSERVATIONAL';
 const ENABLE_OBSERVATIONAL_MEMORY_BUFFERING_ENV =
@@ -81,7 +83,8 @@ const ENABLE_OBSERVATIONAL_MEMORY_BUFFERING_ENV =
 // increases prompt size on every turn.
 // -----------------------------------------------------------------------------
 
-const optionalTrimmedStringSchema = z.string().trim().min(1).optional();
+const trimmedNonEmptyStringSchema = z.string().trim().min(1);
+const optionalTrimmedStringSchema = trimmedNonEmptyStringSchema.optional();
 
 export const mastraWorkingMemorySchema = z.object({
     currentTask: z
@@ -92,10 +95,10 @@ export const mastraWorkingMemorySchema = z.object({
             lastStopReason: optionalTrimmedStringSchema,
         })
         .optional(),
-    constraints: z.array(z.string().trim().min(1)).max(10).optional(),
-    importantFacts: z.array(z.string().trim().min(1)).max(20).optional(),
-    decisions: z.array(z.string().trim().min(1)).max(10).optional(),
-    openQuestions: z.array(z.string().trim().min(1)).max(10).optional(),
+    constraints: z.array(trimmedNonEmptyStringSchema).max(10).optional(),
+    importantFacts: z.array(trimmedNonEmptyStringSchema).max(20).optional(),
+    decisions: z.array(trimmedNonEmptyStringSchema).max(10).optional(),
+    openQuestions: z.array(trimmedNonEmptyStringSchema).max(10).optional(),
 });
 
 // -----------------------------------------------------------------------------
@@ -116,15 +119,19 @@ export interface ICreateMastraMemoryScopeOptions {
 }
 
 /**
- * Structurally identical to IMastraMemoryScope. Kept as a distinct nominal
- * type for call sites that want to express "this is a memory reference passed
- * to a Mastra API" vs "this is the scope of a session". The helper below is a
- * passthrough.
+ * IMastraMemoryReference 与 IMastraMemoryScope 在 TS 结构等价下完全可互换。
+ *
+ * 此处用 type alias 而非 separate interface,**承认它们是同一物**;过去用
+ * 两个独立 interface 试图表达"传给 Mastra API 的 reference vs 会话 scope"
+ * 的语义差异,但 TS 不强制 nominal 区分 —— 编译器允许任意方向互传。
+ *
+ * 如果未来真的需要 nominal 隔离,改成 brand 模式:
+ *   export type IMastraMemoryReference = IMastraMemoryScope & {
+ *       readonly __mastraReferenceBrand: unique symbol;
+ *   };
+ * 届时所有调用点必须通过 createMastraMemoryReference 转换。
  */
-export interface IMastraMemoryReference {
-    thread: string;
-    resource: string;
-}
+export type IMastraMemoryReference = IMastraMemoryScope;
 
 // -----------------------------------------------------------------------------
 // Env helpers
@@ -188,7 +195,7 @@ export const resolveMemoryLastMessages = (
 
 const resolveSemanticRecallEmbedderModel = (
     env: NodeJS.ProcessEnv = process.env,
-): string | null => toNonEmptyString(env.AGENT_SIDECAR_MEMORY_EMBEDDER_MODEL);
+): string | null => toNonEmptyString(env[EMBEDDER_MODEL_ENV]);
 
 /**
  * Semantic recall is enabled when an embedder model is configured, unless
@@ -231,45 +238,51 @@ export const resolveMastraStorageDirectory = (
     env: NodeJS.ProcessEnv = process.env,
     cwd: string = process.cwd(),
 ): string => {
-    const configuredRoot = toNonEmptyString(env.AGENT_SIDECAR_STORAGE_ROOT);
+    const configuredRoot = toNonEmptyString(env[STORAGE_ROOT_ENV]);
     if (configuredRoot) return resolve(configuredRoot);
 
-    const platform = process.platform;
-
-    if (platform === 'win32') {
-        const appDataRoot =
-            toNonEmptyString(env.APPDATA) ?? toNonEmptyString(env.LOCALAPPDATA);
-        if (appDataRoot) {
-            return resolve(appDataRoot, DEFAULT_APP_IDENTIFIER, DEFAULT_STORAGE_DIRECTORY);
+    switch (process.platform) {
+        case 'win32': {
+            const appDataRoot =
+                toNonEmptyString(env.APPDATA) ?? toNonEmptyString(env.LOCALAPPDATA);
+            if (appDataRoot) {
+                return resolve(appDataRoot, DEFAULT_APP_IDENTIFIER, DEFAULT_STORAGE_DIRECTORY);
+            }
+            break;
         }
-    } else if (platform === 'darwin') {
-        const home = toNonEmptyString(env.HOME) ?? homedir();
-        if (home) {
-            return resolve(
-                home,
-                'Library',
-                'Application Support',
-                DEFAULT_APP_IDENTIFIER,
-                DEFAULT_STORAGE_DIRECTORY,
-            );
+        case 'darwin': {
+            const home = toNonEmptyString(env.HOME) ?? homedir();
+            if (home) {
+                return resolve(
+                    home,
+                    'Library',
+                    'Application Support',
+                    DEFAULT_APP_IDENTIFIER,
+                    DEFAULT_STORAGE_DIRECTORY,
+                );
+            }
+            break;
         }
-    } else if (platform === 'linux') {
-        const xdg = toNonEmptyString(env.XDG_DATA_HOME);
-        if (xdg) {
-            return resolve(xdg, DEFAULT_APP_IDENTIFIER, DEFAULT_STORAGE_DIRECTORY);
+        case 'linux': {
+            const xdg = toNonEmptyString(env.XDG_DATA_HOME);
+            if (xdg) {
+                return resolve(xdg, DEFAULT_APP_IDENTIFIER, DEFAULT_STORAGE_DIRECTORY);
+            }
+            const home = toNonEmptyString(env.HOME) ?? homedir();
+            if (home) {
+                return resolve(
+                    home,
+                    '.local',
+                    'share',
+                    DEFAULT_APP_IDENTIFIER,
+                    DEFAULT_STORAGE_DIRECTORY,
+                );
+            }
+            break;
         }
-        const home = toNonEmptyString(env.HOME) ?? homedir();
-        if (home) {
-            return resolve(
-                home,
-                '.local',
-                'share',
-                DEFAULT_APP_IDENTIFIER,
-                DEFAULT_STORAGE_DIRECTORY,
-            );
-        }
+        default:
+            break;
     }
-
     return resolve(cwd, '.agent-sidecar');
 };
 
@@ -281,7 +294,7 @@ export const resolveMastraStorageUrl = (
     env: NodeJS.ProcessEnv = process.env,
     cwd: string = process.cwd(),
 ): string => {
-    const configuredUrl = toNonEmptyString(env.AGENT_SIDECAR_LIBSQL_URL);
+    const configuredUrl = toNonEmptyString(env[LIBSQL_URL_ENV]);
     if (configuredUrl) return configuredUrl;
 
     const storageDirectory = resolveMastraStorageDirectory(env, cwd);
@@ -310,6 +323,14 @@ const isValidUuid = (value: unknown): value is string =>
  *   value written by the racing process if it's valid.
  * - If the atomic write fails entirely, warn and return the in-memory UUID;
  *   memory will be per-session until the underlying issue is fixed.
+ *
+ * **Concurrency caveat**: POSIX `rename(2)` silently overwrites the destination,
+ * so two processes racing the "file does not exist → write" branch can each
+ * overwrite the other; the last writer wins. The rename-failure recovery branch
+ * only catches the Windows scenario where rename-over-existing-file fails with
+ * EPERM/EACCES. For desktop-sidecar use this is acceptable — the workspace is
+ * typically owned by a single Aster IDE process. If multi-process init becomes
+ * a real scenario, switch to an O_CREAT|O_EXCL lockfile pattern.
  */
 export const resolveProjectUuid = (workspaceRootPath: string): string => {
     const mastraCodeDir = join(workspaceRootPath, PROJECT_DIR_NAME);
@@ -348,8 +369,9 @@ export const resolveProjectUuid = (workspaceRootPath: string): string => {
     const newUuid = randomUUID();
     try {
         mkdirSync(mastraCodeDir, { recursive: true });
-
-        const tempPath = `${projectJsonPath}.${process.pid}.${Date.now()}.tmp`;
+        // Tempfile nonce: pid + ms + randomUUID() makes collision practically impossible
+        // even under same-millisecond same-pid retry.
+        const tempPath = `${projectJsonPath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
         writeFileSync(
             tempPath,
             JSON.stringify({ uuid: newUuid, createdAt: new Date().toISOString() }, null, 2),
@@ -358,7 +380,8 @@ export const resolveProjectUuid = (workspaceRootPath: string): string => {
         try {
             renameSync(tempPath, projectJsonPath);
         } catch (renameError) {
-            // Another process may have raced us; prefer their value if valid.
+            // Windows: rename over existing file can fail with EPERM/EACCES.
+            // If another process raced us and produced a valid UUID, defer to it.
             if (existsSync(projectJsonPath)) {
                 try {
                     const raced = JSON.parse(readFileSync(projectJsonPath, 'utf8')) as {
@@ -374,6 +397,9 @@ export const resolveProjectUuid = (workspaceRootPath: string): string => {
             throw renameError;
         }
     } catch (error) {
+        // Asymmetric with the read path above: read-failure throws (data corruption
+        // needs human attention), but write-failure degrades to per-session UUID
+        // (disk-full / EACCES is typically transient or environmental).
         console.warn(
             `[agent-sidecar] Failed to persist project UUID at ${projectJsonPath}: ${(error as Error).message}. ` +
             `Memory will be per-session until this is fixed.`,
@@ -402,7 +428,7 @@ const resolveSemanticRecallEmbedder = (
  * - Pass `{ resourceScope: 'session' }` for durable/suspendable runs, where
  *   Mastra processors require every input message to stay on a stable resource.
  *   Explicit UI threads use the thread id so later turns can replay history.
- * - Otherwise it falls back to `agent-sidecar:session:<fallbackThreadId>`,
+ * - Otherwise it falls back to `agent-sidecar:session:<threadId>`,
  *   so unrelated no-workspace sessions don't share working memory.
  */
 export const createMastraMemoryScope = (
@@ -412,12 +438,13 @@ export const createMastraMemoryScope = (
 ): IMastraMemoryScope => {
     const workspaceRootPath = toNonEmptyString(input.workspaceRootPath ?? null);
     const threadId = toNonEmptyString(input.threadId ?? null) ?? fallbackThreadId;
-    const sessionResourceId = toNonEmptyString(input.threadId ?? null) ?? fallbackThreadId;
 
     if (!workspaceRootPath || options.resourceScope === 'session') {
+        // Session-scoped resource: each thread gets its own resource id,
+        // preventing working-memory bleed across unrelated no-workspace runs.
         return {
             thread: threadId,
-            resource: `${RESOURCE_SCOPE_SESSION_PREFIX}${sessionResourceId}`,
+            resource: `${RESOURCE_SCOPE_SESSION_PREFIX}${threadId}`,
         };
     }
 
@@ -428,22 +455,18 @@ export const createMastraMemoryScope = (
     };
 };
 
+/**
+ * Passthrough by design — see jsdoc on IMastraMemoryReference.
+ * Returns a shallow copy so callers can mutate one without affecting the other.
+ */
 export const createMastraMemoryReference = (
     scope: IMastraMemoryScope,
-): IMastraMemoryReference => ({
-    thread: scope.thread,
-    resource: scope.resource,
-});
+): IMastraMemoryReference => ({ ...scope });
 
 // -----------------------------------------------------------------------------
 // Memory factory
 // -----------------------------------------------------------------------------
 
-/**
- * Build the Mastra `Memory` instance used by the agent sidecar.
- * Configured via env vars — see the "Env var keys" block near the top of this
- * file for the full list.
- */
 /**
  * Build the Mastra `Memory` instance used by the agent sidecar.
  * Configured via env vars — see the "Env var keys" block near the top of this
@@ -460,6 +483,9 @@ export const createMastraAgentMemory = (
     const observationalMemoryBufferingEnabled =
         resolveObservationalMemoryBufferingEnabled(env);
 
+    // Reverse-inferred from `Memory` ctor because @mastra/memory doesn't export
+    // these option types publicly. Stable across patch releases; if a mastra
+    // major bump breaks it, fail loud here at the type level.
     type MemoryCtorArgs = NonNullable<ConstructorParameters<typeof Memory>[0]>;
     type MemoryOpts = NonNullable<MemoryCtorArgs['options']>;
 
@@ -514,6 +540,9 @@ export const createMastraAgentMemory = (
     };
 
     if (semanticRecallEnabled && embedder) {
+        // LibSQLStore 与 LibSQLVector 共用同一个 sqlite 文件 —— 这是 mastra 推荐
+        // 模式(单 db 内分 schema),节省 file handle。如果将来需要把 vector 索引
+        // 隔离到独立文件,改这里。
         ctorArgs.vector = new LibSQLVector({
             id: VECTOR_ID,
             url: storageUrl,
