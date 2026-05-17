@@ -77,6 +77,53 @@ describe('AiAgentRuntimeTimeline', () => {
         expect(wrapper.text()).toContain('正在读取 src/main.ts');
     });
 
+    it('mcp_list_tools 状态在同一节点内从查找更新为成功', () => {
+        const wrapper = mount(AiAgentRuntimeTimeline, {
+            props: {
+                events: [
+                    createEvent({
+                        id: 'mcp-list-start',
+                        type: 'agent.tool.started',
+                        toolUseId: 'mcp-list-1',
+                        toolName: 'mcp_list_tools',
+                        inputPreview: '{}',
+                    }),
+                    createEvent({
+                        id: 'mcp-list-complete',
+                        type: 'agent.tool.completed',
+                        toolUseId: 'mcp-list-1',
+                        toolName: 'mcp_list_tools',
+                        ok: true,
+                        resultPreview: '{"serverCount":10,"toolCount":42}',
+                    }),
+                ],
+            },
+        });
+
+        expect(wrapper.findAll('.ai-runtime-task')).toHaveLength(1);
+        expect(wrapper.text()).toContain('成功获取MCP工具集');
+        expect(wrapper.text()).not.toContain('正在查找MCP工具集');
+        expect(wrapper.find('.ai-runtime-step-icon.is-icon-catalog').exists()).toBe(true);
+    });
+
+    it('多个 mcp_list_tools 调用在时间线中合并为一个状态节点', () => {
+        const events = Array.from({ length: 10 }, (_, index) => createEvent({
+            id: `mcp-list-complete-${index}`,
+            type: 'agent.tool.completed',
+            toolUseId: `mcp-list-${index}`,
+            toolName: 'mcp_list_tools',
+            ok: true,
+            resultPreview: `{"serverName":"server-${index}","toolCount":1}`,
+            seq: index + 1,
+        }));
+        const wrapper = mount(AiAgentRuntimeTimeline, {
+            props: { events },
+        });
+
+        expect(wrapper.findAll('.ai-runtime-task')).toHaveLength(1);
+        expect(wrapper.text()).toContain('成功获取MCP工具集');
+    });
+
     it('read_text_file 在完成后原地替换为读取完成文案', () => {
         const wrapper = mount(AiAgentRuntimeTimeline, {
             props: {
@@ -93,27 +140,39 @@ describe('AiAgentRuntimeTimeline', () => {
                         type: 'agent.tool.completed',
                         toolUseId: 'read-1',
                         toolName: 'read_text_file',
-
-                        it('shellcheck 通过时显示通过结果和校验图标', () => {
-            const wrapper = mount(AiAgentRuntimeTimeline, {
-                props: {
-                    events: [
-                        createEvent({
-                            id: 'shellcheck-pass',
-                            type: 'agent.tool.completed',
-                            toolName: 'shellcheck',
-                            ok: true,
-                            resultPreview: 'D:/test/test.sh：ShellCheck 通过（bash）',
-                        }),
-                    ],
-                },
-            });
-
-            expect(wrapper.findAll('.ai-runtime-step.is-task')).toHaveLength(1);
-            expect(wrapper.text()).toContain('语法校验已通过');
-            expect(wrapper.text()).not.toContain('完成调用 shellcheck');
-            expect(wrapper.find('.ai-runtime-step-icon.is-icon-check').exists()).toBe(true);
+                        ok: true,
+                        resultPreview: '{"content":"echo 1"}',
+                    }),
+                ],
+            },
         });
+
+        expect(wrapper.findAll('.ai-runtime-step.is-task')).toHaveLength(1);
+        expect(wrapper.text()).toContain('读取完成 D:\\test\\test.sh');
+        expect(wrapper.text()).not.toContain('正在读取 D:\\test\\test.sh');
+        expect(wrapper.find('.ai-runtime-task-content').exists()).toBe(false);
+    });
+
+    it('shellcheck 通过时显示通过结果和校验图标', () => {
+        const wrapper = mount(AiAgentRuntimeTimeline, {
+            props: {
+                events: [
+                    createEvent({
+                        id: 'shellcheck-pass',
+                        type: 'agent.tool.completed',
+                        toolName: 'shellcheck',
+                        ok: true,
+                        resultPreview: 'D:/test/test.sh：ShellCheck 通过（bash）',
+                    }),
+                ],
+            },
+        });
+
+        expect(wrapper.findAll('.ai-runtime-step.is-task')).toHaveLength(1);
+        expect(wrapper.text()).toContain('语法校验已通过');
+        expect(wrapper.text()).not.toContain('完成调用 shellcheck');
+        expect(wrapper.find('.ai-runtime-step-icon.is-icon-check').exists()).toBe(true);
+    });
 
     it('shellcheck 有问题时显示问题编号和告警图标', () => {
         const wrapper = mount(AiAgentRuntimeTimeline, {
@@ -135,20 +194,8 @@ describe('AiAgentRuntimeTimeline', () => {
         expect(wrapper.text()).not.toContain('完成调用 shellcheck');
         expect(wrapper.find('.ai-runtime-step-icon.is-icon-alert').exists()).toBe(true);
     });
-    ok: true,
-        resultPreview: '{"content":"echo 1"}',
-                    }),
-                ],
-            },
-        });
 
-expect(wrapper.findAll('.ai-runtime-step.is-task')).toHaveLength(1);
-expect(wrapper.text()).toContain('读取完成 D:\\test\\test.sh');
-expect(wrapper.text()).not.toContain('正在读取 D:\\test\\test.sh');
-expect(wrapper.find('.ai-runtime-task-content').exists()).toBe(false);
-    });
-
-it('write_file 在完成后原地替换为编辑完成文案', () => {
+    it('write_file 在完成后原地替换为编辑完成文案', () => {
     const wrapper = mount(AiAgentRuntimeTimeline, {
         props: {
             events: [

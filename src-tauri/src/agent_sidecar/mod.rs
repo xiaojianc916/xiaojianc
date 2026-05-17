@@ -1014,6 +1014,9 @@ pub async fn resolve_approval(
     mut payload: AgentSidecarApprovalResolveRequest,
 ) -> Result<AgentSidecarResponsePayload, String> {
     let session_id = ensure_request_session_id(&mut payload.session_id, "sidecar-approval");
+    if payload.model_config.is_none() {
+        payload.model_config = Some(current_sidecar_model_config()?);
+    }
     post_json_streaming_events(
         &app,
         "/approval/resolve",

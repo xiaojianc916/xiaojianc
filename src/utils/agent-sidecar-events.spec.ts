@@ -3,12 +3,38 @@ import {
   extractSidecarChangedFilePaths,
   hasSidecarFileMutationEvent,
   mapSidecarEventsToToolCalls,
+  projectSidecarExecuteResponse,
   projectSidecarEventsToToolState,
 } from '@/utils/agent-sidecar-events';
 import type { TAgentUiEvent } from '@/types/agent-sidecar';
 import { describe, expect, it } from 'vitest';
 
 describe('agent-sidecar-events', () => {
+  it('等待 sidecar 审批时不把回答投影成已完成', () => {
+    const projection = projectSidecarExecuteResponse({
+      schemaVersion: 2,
+      sessionId: 'sidecar-session-1',
+      result: null,
+      events: [
+        {
+          type: 'approval_required',
+          request: {
+            id: 'approval-run-command',
+            toolName: 'mastra_workspace_execute_command',
+            question: '需要确认后继续执行。',
+            summary: '请求执行命令，参数内容已收敛显示。',
+            riskLevel: 'medium',
+            reversible: true,
+            createdAt: '2026-05-17T00:00:00.000Z',
+          },
+        },
+      ],
+    });
+
+    expect(projection.pendingConfirmation?.id).toBe('approval-run-command');
+    expect(projection.assistantContent).toBe('');
+  });
+
   it('保留 token 诊断事件给时间线和上下文预算读取，但不放开普通 debug 事件', () => {
     const events: TAgentUiEvent[] = [
       {

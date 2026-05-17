@@ -11,6 +11,7 @@ import { createMcpGatewayWarmPool } from './mcp-gateway.js';
 import {
   createMastraMcpClientBundle,
   getMcpRuntimeStatus,
+  MCP_SERVER_NAMES,
   type IMcpServerConfig,
   loadMcpServerConfigs,
 } from './mcp.js';
@@ -136,18 +137,19 @@ describe('MCP gateway warm pool', () => {
     assert.equal(disconnectCalls, 1);
   });
 
-  it('serves repeated list calls from the catalog cache', async () => {
+  it('deduplicates repeated all-server list calls through the catalog cache', async () => {
     let createBundleCalls = 0;
     const pool = createMcpGatewayWarmPool({
-      createBundle: async () => {
+      createBundle: async (options) => {
         createBundleCalls += 1;
+        const serverName = options?.serverNames?.[0] ?? 'probe';
 
         return {
-          configs: [createMockStdioConfig('probe')],
+          configs: [createMockStdioConfig(serverName)],
           errors: [],
           tools: {
-            probe_search_code: createTool({
-              id: 'probe_search_code',
+            [`${serverName.replace(/-/gu, '_')}_search_code`]: createTool({
+              id: `${serverName}_search_code`,
               description: '语义代码搜索',
               inputSchema: z.object({
                 query: z.string(),
@@ -168,11 +170,96 @@ describe('MCP gateway warm pool', () => {
       throw new Error('mcp_list_tools execute 不可用。');
     }
 
-    const first = await executeList({ serverName: 'probe' }, {});
-    const second = await executeList({ serverName: 'probe' }, {});
+    const first = await executeList({}, {});
+    const second = await executeList({}, {});
 
     assert.deepEqual(first, second);
-    assert.equal(createBundleCalls, 1);
+    assert.equal(createBundleCalls, MCP_SERVER_NAMES.length);
+
+    await pool.disconnectAll();
+  });
+
+  it('lists all MCP gateway catalogs with one tool call', async () => {
+    const loadedServers: string[] = [];
+    const pool = createMcpGatewayWarmPool({
+      createBundle: async (options) => {
+        const serverName = options?.serverNames?.[0] ?? 'unknown';
+        loadedServers.push(serverName);
+
+        return {
+          configs: [createMockStdioConfig(serverName)],
+          errors: [],
+          tools: {
+            [`${serverName.replace(/-/gu, '_')}_status`]: createTool({
+              id: `${serverName}_status`,
+              description: `${serverName} 状态`,
+              inputSchema: z.object({}),
+              execute: async () => ({ ok: true }),
+            }),
+          },
+          disconnectAll: async () => undefined,
+        };
+      },
+      ttlIdleMs: 60_000,
+    });
+    const tools = pool.createTools({ profile: 'write' });
+    const executeList = tools.mcp_list_tools.execute;
+
+    assert.equal(typeof executeList, 'function');
+    if (!executeList) {
+      throw new Error('mcp_list_tools execute 不可用。');
+    }
+
+    const catalog = await executeList({}, {});
+
+    assert.equal(loadedServers.length, MCP_SERVER_NAMES.length);
+    assert.deepEqual(
+      catalog.catalogs.map((item: { serverName: string }) => item.serverName),
+      MCP_SERVER_NAMES,
+    );
+    assert.deepEqual(Object.keys(catalog), ['profile', 'catalogs', 'errors']);
+    assert.equal(catalog.catalogs.every((item: { tools: unknown[] }) => item.tools.length === 1), true);
+
+    await pool.disconnectAll();
+  });
+
+  it('coalesces concurrent all-server catalog calls', async () => {
+    let createBundleCalls = 0;
+    const pool = createMcpGatewayWarmPool({
+      createBundle: async (options) => {
+        createBundleCalls += 1;
+        const serverName = options?.serverNames?.[0] ?? 'unknown';
+
+        return {
+          configs: [createMockStdioConfig(serverName)],
+          errors: [],
+          tools: {
+            [`${serverName.replace(/-/gu, '_')}_status`]: createTool({
+              id: `${serverName}_status`,
+              description: `${serverName} 状态`,
+              inputSchema: z.object({}),
+              execute: async () => ({ ok: true }),
+            }),
+          },
+          disconnectAll: async () => undefined,
+        };
+      },
+      ttlIdleMs: 60_000,
+    });
+    const tools = pool.createTools({ profile: 'write' });
+    const executeList = tools.mcp_list_tools.execute;
+
+    assert.equal(typeof executeList, 'function');
+    if (!executeList) {
+      throw new Error('mcp_list_tools execute 不可用。');
+    }
+
+    const catalogs = await Promise.all(
+      Array.from({ length: 10 }, () => executeList({}, {})),
+    );
+
+    assert.equal(createBundleCalls, MCP_SERVER_NAMES.length);
+    assert.equal(new Set(catalogs.map((catalog) => catalog)).size, 1);
 
     await pool.disconnectAll();
   });
@@ -204,7 +291,7 @@ describe('MCP gateway warm pool', () => {
       throw new Error('mcp_list_tools execute 不可用。');
     }
 
-    const catalog = await executeList({ serverName: 'context7' }, {});
+    const catalog = await executeList({}, {});
     const serialized = JSON.stringify(tools.mcp_list_tools.toModelOutput?.(catalog)) ?? '';
 
     assert.equal(typeof serialized, 'string');
@@ -398,7 +485,7 @@ describe('MCP gateway warm pool', () => {
         toolName: 'commit',
         arguments: { message: 'test' },
       }, {}),
-      /当前 profile 不允许使用 git 的任何 MCP tool/u,
+      /当前 readonly profile 不允许使用 git 的任何 MCP tool/u,
     );
 
     await pool.disconnectAll();
@@ -442,15 +529,14 @@ describe('MCP gateway warm pool', () => {
       throw new Error('MCP gateway tools execute 不可用。');
     }
 
-    const catalog = await executeList({ serverName: 'git' }, {});
+    const catalogCollection = await executeList({}, {});
+    const catalog = catalogCollection.catalogs.find((item: { serverName: string }) => item.serverName === 'git');
 
     assert.deepEqual(catalog, {
       serverName: 'git',
       profile: 'write',
-      toolCount: 0,
       tools: [],
       errors: [],
-      unavailableReason: 'MCP server git 的本地文件读写/搜索工具已由内置 file primitives 接管。',
     });
     await assert.rejects(
       async () => executeCall({

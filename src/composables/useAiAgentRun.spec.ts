@@ -510,7 +510,10 @@ describe('useAiAgentRun', () => {
         expect(aiServiceMock.sidecarResolveApproval).toHaveBeenCalledWith(expect.objectContaining({
             sessionId: 'sidecar-step-session-confirm',
             requestId: 'call-run-test',
-            decision: 'allow-once',
+            decision: 'approve',
+            planId: 'plan-runtime-1',
+            planVersion: 1,
+            planStepId: 'plan-step-1',
         }));
         expect(store.pendingToolConfirmation).toBeNull();
         expect(store.activeRun?.steps[0]?.status).toBe('done');

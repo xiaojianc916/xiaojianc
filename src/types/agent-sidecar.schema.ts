@@ -321,7 +321,7 @@ export const agentSidecarPlanFinishRequestSchema = agentSidecarPlanVersionReques
   errorMessage: optionalNonEmptyStringSchema,
 });
 
-export const agentSidecarApprovalResolveRequestSchema = z.object({
+export const agentSidecarApprovalResolveRequestSchema = agentSidecarBaseRequestSchema.partial().extend({
   sessionId: optionalNonEmptyStringSchema,
   requestId: z.string().min(1),
   decision: z.string().min(1),

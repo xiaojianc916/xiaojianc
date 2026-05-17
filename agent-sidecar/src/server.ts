@@ -158,7 +158,7 @@ export const agentSidecarPlanQueryRequestSchema = z.object({
   version: z.number().int().positive().optional(),
 });
 
-const approvalResolutionSchema = z.object({
+const approvalResolutionSchema = baseAgentRequestSchema.extend({
   sessionId: optionalNonEmptyStringSchema,
   requestId: z.string().min(1),
   decision: approvalDecisionSchema,

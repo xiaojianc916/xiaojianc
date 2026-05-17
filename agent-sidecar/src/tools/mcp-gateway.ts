@@ -2,10 +2,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import {
-  compactModelOutput,
-  truncateModelOutputText,
-} from '../models/model-output-budget.js';
+import { compactModelOutput } from '../models/model-output-budget.js';
 import {
   MCP_SERVER_NAMES,
   type IMcpServerConfig,
@@ -80,10 +77,14 @@ export interface IMcpGatewayCatalogTool {
 export interface IMcpGatewayCatalog {
   serverName: TMcpServerName;
   profile: TMcpGatewayToolProfile;
-  toolCount: number;
   tools: IMcpGatewayCatalogTool[];
   errors: string[];
-  unavailableReason?: string;
+}
+
+export interface IMcpGatewayCatalogCollection {
+  profile: TMcpGatewayToolProfile;
+  catalogs: IMcpGatewayCatalog[];
+  errors: string[];
 }
 
 interface IMcpGatewayPoolOptions {
@@ -123,8 +124,6 @@ const DEFAULT_MCP_GATEWAY_PINNED_SERVERS_IGNORE_WORKSPACE: readonly TMcpServerNa
 const DEFAULT_MCP_CALL_TIMEOUT_MS = 60_000;
 const METRIC_BUFFER_MAX = 1_000;
 
-const MCP_GATEWAY_TOOL_DESCRIPTION_MAX_CHARS = 240;
-const MCP_GATEWAY_CATALOG_MODEL_OUTPUT_MAX_CHARS = 2_500;
 const MCP_GATEWAY_MODEL_OUTPUT_MAX_CHARS = 4_000;
 const MCP_GATEWAY_MODEL_OUTPUT_MAX_STRING_CHARS = 1_500;
 const MCP_GATEWAY_MODEL_OUTPUT_MAX_ARRAY_ITEMS = 20;
@@ -187,9 +186,8 @@ export const MCP_GATEWAY_TOOL_NAMES = ['mcp_list_tools', 'mcp_call_tool'] as con
 
 const mcpGatewayServerNameSchema = z.enum(MCP_SERVER_NAMES);
 
-const mcpGatewayListInputSchema = z.object({
-  serverName: mcpGatewayServerNameSchema,
-});
+const mcpGatewayListInputSchema = z.object({}).strict();
+const mcpGatewayListLegacyInputSchema = z.object({}).passthrough();
 
 const mcpGatewayCallInputSchema = z.object({
   serverName: mcpGatewayServerNameSchema,
@@ -249,15 +247,9 @@ const getToolDescription = (tool: unknown): string => {
   return typeof description === 'string' ? description : '';
 };
 
-const createCompactToolDescription = (tool: unknown, toolName: string): string => {
+const createToolDescription = (tool: unknown, toolName: string): string => {
   const raw = getToolDescription(tool).replace(/\s+/gu, ' ').trim();
-  const fallback = raw || `(no description for ${toolName})`;
-  const truncated = truncateModelOutputText(
-    fallback,
-    MCP_GATEWAY_TOOL_DESCRIPTION_MAX_CHARS,
-    { includeNotice: false },
-  );
-  return truncated.truncated ? `${truncated.text}...` : truncated.text;
+  return raw || `(no description for ${toolName})`;
 };
 
 const normalizeMcpServerToolPrefix = (serverName: TMcpServerName): string =>
@@ -474,21 +466,13 @@ const createCatalogFromBundle = (
   const tools = filterMcpToolsForProfile(serverName, bundle.tools, profile);
   const toolEntries = Object.entries(tools).map(([name, tool]) => ({
     name,
-    description: createCompactToolDescription(tool, name),
+    description: createToolDescription(tool, name),
   }));
-  const unavailableReason = createUnavailableReason(
-    serverName,
-    bundle,
-    profile,
-    toolEntries.length,
-  );
   return {
     serverName,
     profile,
-    toolCount: toolEntries.length,
     tools: toolEntries,
     errors: readErrors(bundle),
-    ...(unavailableReason ? { unavailableReason } : {}),
   };
 };
 
@@ -553,6 +537,7 @@ export class McpGatewayWarmPool {
   private readonly entries = new Map<string, IMcpGatewayPoolEntry>();
   private readonly catalog = new Map<string, IMcpGatewayCatalog>();
   private readonly toolCallCounts = new Map<string, number>();
+  private readonly listAllInflight = new Map<string, Promise<IMcpGatewayCatalogCollection>>();
 
   constructor(options: IMcpGatewayPoolOptions) {
     this.createBundle = options.createBundle;
@@ -579,28 +564,24 @@ export class McpGatewayWarmPool {
       mcp_list_tools: createTool({
         id: 'mcp_list_tools',
         description: [
-          '列出指定 MCP server 的工具目录；仅在不确定 tool 名称时用于探索。',
-          '目录来自 sidecar 缓存，只返回工具名和描述，不暴露完整 schema。',
-          '首次调用某 server 时会触发冷启动（可能数秒），后续调用走缓存。',
+          '一次性列出所有 MCP server 的工具目录。',
+          '这是无参数工具；不要为不同 server 重复调用，也不要传 serverName。',
+          '目录来自 sidecar 缓存，完整返回所有可用工具名和描述，不暴露完整 schema。',
+          '首次调用可能触发 MCP server 冷启动（可能数秒），后续调用走缓存。',
           '已知 tool 名称时应直接用 mcp_call_tool 调用，避免不必要的目录浏览。',
         ].join('\n'),
         inputSchema: mcpGatewayListInputSchema,
         execute: async (inputData) => {
-          const { serverName } = mcpGatewayListInputSchema.parse(unwrapGatewayToolInput(inputData));
-          return await this.listTools({
-            serverName,
+          mcpGatewayListLegacyInputSchema.parse(unwrapGatewayToolInput(inputData));
+          const baseInput = {
             profile: options.profile,
             ...(options.workspaceRootPath ? { workspaceRootPath: options.workspaceRootPath } : {}),
             ...(options.metricSink ? { metricSink: options.metricSink } : {}),
-          });
+          };
+
+          return await this.listAllTools(baseInput);
         },
-        toModelOutput: (output) => createJsonToolModelOutput(compactModelOutput(output, {
-          maxTotalChars: MCP_GATEWAY_CATALOG_MODEL_OUTPUT_MAX_CHARS,
-          maxStringChars: MCP_GATEWAY_TOOL_DESCRIPTION_MAX_CHARS + 3,
-          maxArrayItems: MCP_GATEWAY_MODEL_OUTPUT_MAX_ARRAY_ITEMS,
-          maxObjectKeys: MCP_GATEWAY_MODEL_OUTPUT_MAX_OBJECT_KEYS,
-          maxDepth: MCP_GATEWAY_MODEL_OUTPUT_MAX_DEPTH,
-        })),
+        toModelOutput: (output) => createJsonToolModelOutput(output),
       }),
       mcp_call_tool: createTool({
         id: 'mcp_call_tool',
@@ -679,6 +660,61 @@ export class McpGatewayWarmPool {
     return catalog;
   }
 
+  async listAllTools(input: {
+    profile: TMcpGatewayToolProfile;
+    workspaceRootPath?: string;
+    metricSink?: IMcpGatewayMetricSink;
+  }): Promise<IMcpGatewayCatalogCollection> {
+    const key = `${input.workspaceRootPath ? resolve(input.workspaceRootPath) : '<default>'}::${input.profile}`;
+    const inflight = this.listAllInflight.get(key);
+    if (inflight) {
+      return await inflight;
+    }
+
+    const task = this.listAllToolsUncached(input).finally(() => {
+      this.listAllInflight.delete(key);
+    });
+    this.listAllInflight.set(key, task);
+    return await task;
+  }
+
+  private async listAllToolsUncached(input: {
+    profile: TMcpGatewayToolProfile;
+    workspaceRootPath?: string;
+    metricSink?: IMcpGatewayMetricSink;
+  }): Promise<IMcpGatewayCatalogCollection> {
+    const catalogs: IMcpGatewayCatalog[] = [];
+    const errors: string[] = [];
+
+    for (const serverName of MCP_SERVER_NAMES) {
+      try {
+        const catalog = await this.listTools({
+          serverName,
+          profile: input.profile,
+          ...(input.workspaceRootPath ? { workspaceRootPath: input.workspaceRootPath } : {}),
+          ...(input.metricSink ? { metricSink: input.metricSink } : {}),
+        });
+        catalogs.push(catalog);
+        errors.push(...catalog.errors.map((message) => `${serverName}: ${message}`));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`${serverName}: ${message}`);
+        catalogs.push({
+          serverName,
+          profile: input.profile,
+          tools: [],
+          errors: [message],
+        });
+      }
+    }
+
+    return {
+      profile: input.profile,
+      catalogs,
+      errors,
+    };
+  }
+
   async callTool(input: {
     serverName: TMcpServerName;
     toolName: string;
@@ -751,6 +787,7 @@ export class McpGatewayWarmPool {
     this.entries.clear();
     this.catalog.clear();
     this.toolCallCounts.clear();
+    this.listAllInflight.clear();
     await Promise.all(entries.map(async (entry) => {
       this.clearIdleTimer(entry);
       await entry.bundle?.disconnectAll().catch(() => undefined);
@@ -853,7 +890,7 @@ export class McpGatewayWarmPool {
       durationMs: this.now() - startedAt,
       activeBundleCount: this.countActiveBundles(),
       warmBundleCount: this.countWarmBundles(),
-      toolCount: catalog.toolCount,
+      toolCount: catalog.tools.length,
       errorCount: catalog.errors.length,
     });
   }

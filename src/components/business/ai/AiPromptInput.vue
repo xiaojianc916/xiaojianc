@@ -47,6 +47,7 @@ const activeMode = defineModel<TAiPromptInputMode>('activeMode', { required: tru
 
 const props = defineProps<{
   disabled: boolean;
+  stopVisible?: boolean;
   errorMessage: string;
   submitLabel: string;
   attachments: readonly IAiAttachedFile[];
@@ -251,7 +252,7 @@ const handleStop = (): void => {
           </Context>
 
           <InputGroupButton
-            v-if="disabled"
+            v-if="disabled && stopVisible"
             type="button"
             variant="outline"
             class="ai-send-button rounded-full"
@@ -268,7 +269,7 @@ const handleStop = (): void => {
             variant="default"
             class="ai-send-button rounded-full"
             size="icon-xs"
-            :disabled="!canSubmit"
+            :disabled="disabled || !canSubmit"
             :aria-label="submitLabel"
           >
             <ArrowUpIcon class="size-4" />

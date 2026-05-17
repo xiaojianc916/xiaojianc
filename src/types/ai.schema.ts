@@ -134,7 +134,7 @@ export const aiChatMessageSchema = z.object({
   agentConfirmation: aiAgentConfirmationStateSchema.optional(),
   stream: z
     .object({
-      status: z.enum(['streaming', 'completed', 'cancelled']),
+      status: z.enum(['streaming', 'waiting-confirmation', 'completed', 'cancelled']),
       activityText: z.string().min(1).optional(),
       runtimeEvents: z.array(agentRuntimeEventSchema).optional(),
       finalAnswerStarted: z.boolean().optional(),

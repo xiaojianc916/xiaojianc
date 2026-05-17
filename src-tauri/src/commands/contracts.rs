@@ -1276,6 +1276,24 @@ pub struct AgentSidecarApprovalResolveRequest {
     pub(crate) session_id: Option<String>,
     pub(crate) request_id: String,
     pub(crate) decision: String,
+    #[serde(skip_serializing_if = "is_blank_optional_string")]
+    pub(crate) goal: Option<String>,
+    #[serde(default)]
+    pub(crate) messages: Vec<AgentSidecarMessagePayload>,
+    #[serde(skip_serializing_if = "is_blank_optional_string")]
+    pub(crate) workspace_root_path: Option<String>,
+    #[serde(default)]
+    pub(crate) context: Vec<AiContextReferencePayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) model_config: Option<AgentSidecarModelConfigPayload>,
+    #[serde(skip_serializing_if = "is_blank_optional_string")]
+    pub(crate) thread_id: Option<String>,
+    #[serde(skip_serializing_if = "is_blank_optional_string")]
+    pub(crate) plan_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) plan_version: Option<u32>,
+    #[serde(skip_serializing_if = "is_blank_optional_string")]
+    pub(crate) plan_step_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

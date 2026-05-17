@@ -160,6 +160,22 @@ const planActiveToolActivity = computed<IAiToolActivityInline | null>(() =>
   readPlanStoreValue(planStore.value.activeToolActivity),
 );
 const planPendingToolConfirmation = computed(() => readPlanStoreValue(planStore.value.pendingToolConfirmation));
+const planPendingSidecarSession = computed(() => readPlanStoreValue(planStore.value.pendingSidecarAgentSession));
+const visibleDirectToolConfirmation = computed(() => {
+  const confirmation = planPendingToolConfirmation.value;
+
+  if (!confirmation) {
+    return null;
+  }
+
+  const session = planPendingSidecarSession.value;
+
+  if (session?.threadId && session.threadId !== assistant.activeConversationId.value) {
+    return null;
+  }
+
+  return confirmation;
+});
 const planSteps = computed<IAiTaskPlanStep[]>(() => readPlanStoreValue(planStore.value.steps));
 const planActiveGoal = computed(() => readPlanStoreValue(planStore.value.activeGoal));
 const planActiveRunId = computed<string | null>(() => readPlanStoreValue(planStore.value.activeRunId));
@@ -239,8 +255,11 @@ const directToolConfirmationVisible = computed(() => {
     return false;
   }
 
-  return Boolean(planPendingToolConfirmation.value) && !planProgressVisible.value;
+  return Boolean(visibleDirectToolConfirmation.value) && !planProgressVisible.value;
 });
+const composerDisabled = computed(() =>
+  assistant.isSending.value || Boolean(visibleDirectToolConfirmation.value),
+);
 const activePlanStep = computed(() => {
   const currentStepId = planActiveRun.value?.currentStepId;
 
@@ -1138,8 +1157,8 @@ onBeforeUnmount(() => {
           :can-edit="canEditPlan" :can-approve="canApprovePlan" :approved-at="planApprovedAt"
           @update-step-title="handleUpdatePlanStepTitle" @remove-step="handleRemovePlanStep"
           @regenerate="handleRegeneratePlan" @reject="handleRejectPlan" @approve="handleApprovePlan" />
-        <div v-if="directToolConfirmationVisible && planPendingToolConfirmation" class="ai-direct-tool-confirmation">
-          <AiToolConfirmationCard :confirmation="planPendingToolConfirmation" :disabled="isAgentRunActionPending"
+        <div v-if="directToolConfirmationVisible && visibleDirectToolConfirmation" class="ai-direct-tool-confirmation">
+          <AiToolConfirmationCard :confirmation="visibleDirectToolConfirmation" :disabled="isAgentRunActionPending"
             @resolve="handleResolveToolConfirmation" />
         </div>
       </template>
@@ -1192,7 +1211,8 @@ onBeforeUnmount(() => {
         @reset="handleResetPlan" @run-step="handleRunStep" @pause-run="handlePauseRun" @resume-run="handleResumeRun"
         @cancel-run="handleCancelRun" @resolve-tool-confirmation="handleResolveToolConfirmation" />
       <AiPromptInput v-model="assistant.draft.value" v-model:active-mode="assistant.activeMode.value"
-        :disabled="assistant.isSending.value" :error-message="assistant.errorMessage.value" :submit-label="submitLabel"
+        :disabled="composerDisabled" :stop-visible="assistant.isSending.value"
+        :error-message="assistant.errorMessage.value" :submit-label="submitLabel"
         :provider-label="aiIconTitle" :attachments="assistant.attachedFiles.value"
         :has-attachments="assistant.attachedFiles.value.length > 0" :token-context="tokenContextProps"
         @submit="assistant.sendMessage" @stop="assistant.stopCurrentRequest" @file-selected="assistant.attachFile"

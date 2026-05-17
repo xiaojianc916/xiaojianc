@@ -1277,6 +1277,55 @@ describe('useAiAssistant streaming integration', () => {
     expect(assistant.errorMessage.value).toBe('');
   });
 
+  it('switching conversations keeps pending sidecar approval persisted for its original thread', () => {
+    const assistant = createAssistantHarness();
+    const conversationStore = useAiConversationStore();
+    const agentStore = useAiAgentStore();
+    const firstThreadId = readReactiveValue(assistant.activeConversationId);
+
+    expect(firstThreadId).toBeTruthy();
+
+    agentStore.setPendingToolConfirmation({
+      id: 'approval-switch-command',
+      runId: 'sidecar:sidecar-switch-session',
+      stepId: 'sidecar:approval-switch-command',
+      toolName: 'run_command',
+      question: '允许 Agent 执行命令吗？',
+      summary: '运行验证命令。',
+      riskLevel: 'medium',
+      impact: '运行验证命令。',
+      reversible: false,
+      createdAt: '2026-05-17T00:00:00.000Z',
+      options: [
+        { id: 'allow-once', label: '允许', tone: 'primary' },
+        { id: 'stop', label: '拒绝', tone: 'danger' },
+      ],
+    });
+    agentStore.setPendingSidecarAgentSession({
+      sessionId: 'sidecar-switch-session',
+      assistantMessageId: 'assistant-switch-approval',
+      threadId: firstThreadId,
+      turnId: 'user-switch-approval',
+      baseMessages: [],
+      messageContent: '运行验证命令',
+      references: [],
+    });
+
+    conversationStore.startNewThread();
+    const secondThreadId = readReactiveValue(conversationStore.activeThreadId);
+
+    expect(secondThreadId).toBeTruthy();
+    expect(secondThreadId).not.toBe(firstThreadId);
+
+    assistant.switchConversation(secondThreadId ?? '');
+    expect(agentStore.pendingToolConfirmation?.id).toBe('approval-switch-command');
+    expect(agentStore.pendingSidecarAgentSession?.threadId).toBe(firstThreadId);
+
+    assistant.switchConversation(firstThreadId ?? '');
+    expect(agentStore.pendingToolConfirmation?.id).toBe('approval-switch-command');
+    expect(agentStore.pendingSidecarAgentSession?.threadId).toBe(firstThreadId);
+  });
+
   it('hydrates persisted messages from the conversation store', () => {
     const conversationStore = useAiConversationStore();
 
@@ -3383,7 +3432,7 @@ describe('useAiAssistant streaming integration', () => {
     expect(agentStore.pendingSidecarAgentSession).toMatchObject({
       sessionId: 'sidecar-confirmation-session',
       assistantMessageId: assistant.messages.value[1]?.id,
-      threadId: null,
+      threadId: expect.any(String),
       turnId: assistant.messages.value[0]?.id,
       messageContent: '运行一次最小验证',
     });
@@ -3391,11 +3440,13 @@ describe('useAiAssistant streaming integration', () => {
 
     await assistant.resolveSidecarToolConfirmation('allow-once');
 
-    expect(aiServiceMock.sidecarResolveApproval).toHaveBeenCalledWith({
+    expect(aiServiceMock.sidecarResolveApproval).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: 'sidecar-confirmation-session',
       requestId: 'approval-run-command',
-      decision: 'allow-once',
-    });
+      decision: 'approve',
+      goal: '运行一次最小验证',
+      threadId: expect.any(String),
+    }));
     expect(agentStore.pendingToolConfirmation).toBeNull();
     expect(agentStore.pendingSidecarAgentSession).toBeNull();
     expect(assistant.messages.value[1]?.content).toContain('审批结果已交给 sidecar');
@@ -3435,11 +3486,12 @@ describe('useAiAssistant streaming integration', () => {
 
     await assistant.resolveSidecarToolConfirmation('stop');
 
-    expect(aiServiceMock.sidecarResolveApproval).toHaveBeenCalledWith({
+    expect(aiServiceMock.sidecarResolveApproval).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: 'sidecar-persisted-session',
       requestId: 'approval-persisted-command',
-      decision: 'reject',
-    });
+      decision: 'cancel',
+      goal: '运行一次最小验证',
+    }));
     expect(agentStore.pendingToolConfirmation).toBeNull();
     expect(agentStore.pendingSidecarAgentSession).toBeNull();
   });

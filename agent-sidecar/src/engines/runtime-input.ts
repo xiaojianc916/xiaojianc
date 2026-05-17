@@ -131,6 +131,15 @@ export interface IApprovalResolutionInput {
     requestId: string;
     decision: TApprovalDecision;
     sessionId?: string | undefined;
+    goal?: string | undefined;
+    messages?: IAgentMessageInput[] | undefined;
+    workspaceRootPath?: string | null | undefined;
+    context?: IAgentContextReferenceInput[] | undefined;
+    modelConfig?: IAgentRuntimeModelConfigInput | undefined;
+    threadId?: string | undefined;
+    planId?: string | undefined;
+    planVersion?: number | undefined;
+    planStepId?: string | undefined;
 }
 
 /**

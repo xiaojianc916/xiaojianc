@@ -33,6 +33,7 @@ import GitBranch from '~icons/lucide/git-branch';
 import Globe from '~icons/lucide/globe';
 import HardDrive from '~icons/lucide/hard-drive';
 import ImageIcon from '~icons/lucide/image';
+import ListTree from '~icons/lucide/list-tree';
 import ListTodo from '~icons/lucide/list-todo';
 import Pencil from '~icons/lucide/pencil';
 import Play from '~icons/lucide/play';
@@ -63,6 +64,7 @@ type TTaskIcon =
   | 'brain'
   | 'image'
   | 'clock'
+  | 'catalog'
   | 'check'
   | 'alert';
 
@@ -81,6 +83,7 @@ interface ITaskNodeItem {
   tags: string[];
   status: TTaskStatus;
   tail?: string;
+  shimmerAction?: boolean;
 }
 
 interface IWebSearchSourceChip {
@@ -148,14 +151,24 @@ interface IReasoningMarkdownBlock {
 const props = withDefaults(defineProps<{
   events: TAgentRuntimeEvent[];
   isStreaming?: boolean;
+  isWaitingConfirmation?: boolean;
 }>(), {
   isStreaming: false,
+  isWaitingConfirmation: false,
 });
+
+const WAITING_DECISION_LABEL = '正在等待决策';
 
 const inlineMarkdownTokenCache = new Map<string, IInlineMarkdownToken[]>();
 const reasoningMarkdownBlockCache = new Map<string, IReasoningMarkdownBlock[]>();
 
 const TOOL_ICON_MATCHERS: readonly IToolIconMatcher[] = [
+  {
+    icon: 'catalog',
+    patterns: [
+      /^mcp_list_tools$/u,
+    ],
+  },
   {
     icon: 'folder',
     patterns: [
@@ -375,6 +388,7 @@ const TASK_ICON_MAP: Record<TTaskIcon, Component> = {
   brain: Brain,
   image: ImageIcon,
   clock: Clock3,
+  catalog: ListTree,
   check: BadgeCheck,
   alert: CircleAlert,
 };
@@ -1065,6 +1079,9 @@ const isWebSearchToolName = (toolName: string | undefined): boolean =>
     || /(?:^|[_-])tavily(?:[_-]|$)/iu.test(toolName)
   ));
 
+const isMcpListToolsName = (toolName: string | undefined): boolean =>
+  toolName === 'mcp_list_tools';
+
 interface IToolActionDescriptor {
   action: string;
   resourceLabel?: string;
@@ -1114,6 +1131,17 @@ const describeToolAction = (
 
     return {
       action: '语法校验已完成',
+      suppressMeta: true,
+    };
+  }
+
+  if (isMcpListToolsName(toolName)) {
+    return {
+      action: event.type === 'agent.tool.started'
+        ? '正在查找MCP工具集'
+        : event.ok
+          ? '成功获取MCP工具集'
+          : '查找MCP工具集失败',
       suppressMeta: true,
     };
   }
@@ -1334,6 +1362,10 @@ const resolveToolEventIcon = (
   toolName: string,
   fallbackIcon: TTaskIcon,
 ): TTaskIcon => {
+  if (isMcpListToolsName(toolName)) {
+    return event.type === 'agent.tool.completed' && !event.ok ? 'alert' : 'catalog';
+  }
+
   if (toolName !== 'shellcheck') {
     return fallbackIcon;
   }
@@ -1566,6 +1598,10 @@ const findPendingToolTaskIndex = (
       continue;
     }
 
+    if (isMcpListToolsName(node.toolName) && isMcpListToolsName(normalizedToolName)) {
+      return index;
+    }
+
     if (event.toolUseId && node.toolUseId === event.toolUseId) {
       return index;
     }
@@ -1606,7 +1642,10 @@ const findAdjacentWebSearchTaskIndex = (
     : -1;
 };
 
-const buildTimelineItems = (events: readonly TAgentRuntimeEvent[]): TTimelineItem[] => {
+const buildTimelineItems = (
+  events: readonly TAgentRuntimeEvent[],
+  isWaitingConfirmation: boolean,
+): TTimelineItem[] => {
   const stableEvents = getStableRuntimeEvents(events);
   const items: TTimelineItem[] = [];
   let reasoningBuffer = '';
@@ -1745,6 +1784,24 @@ const buildTimelineItems = (events: readonly TAgentRuntimeEvent[]): TTimelineIte
         }
       }
 
+      if (
+        (event.type === 'agent.tool.started' || event.type === 'agent.tool.completed')
+        && isMcpListToolsName(normalizeRuntimeToolName(event.toolName))
+      ) {
+        const existingTaskIndex = items.findIndex((item) =>
+          item.type === 'task' && isMcpListToolsName(item.node.toolName)
+        );
+
+        if (existingTaskIndex >= 0) {
+          const existingTask = items[existingTaskIndex];
+
+          if (existingTask.type === 'task') {
+            existingTask.node = createToolNode(event, eventIndex, existingTask.node);
+            return;
+          }
+        }
+      }
+
       const node = createToolNode(event, eventIndex);
       items.push({
         type: 'task',
@@ -1769,16 +1826,38 @@ const buildTimelineItems = (events: readonly TAgentRuntimeEvent[]): TTimelineIte
 
   flushReasoningLine();
 
+  if (isWaitingConfirmation) {
+    for (let itemIndex = items.length - 1; itemIndex >= 0; itemIndex -= 1) {
+      const item = items[itemIndex];
+
+      if (item?.type !== 'task' || item.node.status !== 'running') {
+        continue;
+      }
+
+      item.node = {
+        ...item.node,
+        action: WAITING_DECISION_LABEL,
+        tail: undefined,
+        tags: [],
+        suppressMeta: true,
+        shimmerAction: true,
+      };
+      break;
+    }
+  }
+
   return items;
 };
 
-const timelineItems = computed(() => buildTimelineItems(props.events));
+const timelineItems = computed(() => buildTimelineItems(props.events, props.isWaitingConfirmation));
 
 const shouldRenderTimeline = computed(() =>
-  timelineItems.value.length > 0 || props.isStreaming,
+  timelineItems.value.length > 0 || props.isStreaming || props.isWaitingConfirmation,
 );
 
-const chainHeaderLabel = computed(() => props.isStreaming ? '正在思考' : '思考完成');
+const chainHeaderLabel = computed(() =>
+  props.isStreaming || props.isWaitingConfirmation ? '正在思考' : '思考完成',
+);
 
 const getTaskIcon = (node: ITaskNodeItem): Component =>
   TASK_ICON_MAP[node.icon];
@@ -2086,7 +2165,7 @@ const parseReasoningMarkdownBlocks = (segment: string): IReasoningMarkdownBlock[
   <ChainOfThought v-if="shouldRenderTimeline" class="ai-runtime-timeline" default-open
     aria-label="Agent Chain of Thought">
     <ChainOfThoughtHeader class="ai-runtime-chain-header">
-      <Shimmer v-if="isStreaming" as="span" class="ai-runtime-chain-label ai-runtime-chain-label--thinking">
+      <Shimmer v-if="isStreaming || isWaitingConfirmation" as="span" class="ai-runtime-chain-label ai-runtime-chain-label--thinking">
         {{ chainHeaderLabel }}
       </Shimmer>
       <span v-else class="ai-runtime-chain-label ai-runtime-chain-label--done">
@@ -2179,6 +2258,11 @@ const parseReasoningMarkdownBlocks = (segment: string): IReasoningMarkdownBlock[
 
         <ChainOfThoughtStep v-else class="ai-runtime-step is-task" :label="item.node.action"
           :status="getTaskStepStatus(item.node)">
+          <template v-if="item.node.shimmerAction" #label>
+            <Shimmer as="span">
+              {{ item.node.action }}
+            </Shimmer>
+          </template>
           <template #icon>
             <component :is="getTaskIcon(item.node)" class="ai-runtime-step-icon" :class="`is-icon-${item.node.icon}`"
               aria-hidden="true" />

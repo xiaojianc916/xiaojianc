@@ -442,7 +442,7 @@ export interface IAgentSidecarPlanFinishRequest extends IAgentSidecarPlanApprove
   errorMessage?: string;
 }
 
-export interface IAgentSidecarApprovalResolveRequest {
+export interface IAgentSidecarApprovalResolveRequest extends Partial<IAgentSidecarBaseRequest> {
   sessionId?: string;
   requestId: string;
   decision: string;

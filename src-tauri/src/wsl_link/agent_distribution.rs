@@ -325,7 +325,7 @@ impl WslLinkAgentDistributionPlan {
                fi\n\
              }}\n\
              if [ -f \"$pid_file\" ]; then\n\
-               old_pid=$(cat \"$pid_file\" 2>/dev/null || true)\n\
+               old_pid=$(tr -cd '0-9' < \"$pid_file\" 2>/dev/null || true)\n\
                stop_agent_pid \"$old_pid\"\n\
              fi\n\
              if command -v pgrep >/dev/null 2>&1; then\n\
@@ -336,7 +336,7 @@ impl WslLinkAgentDistributionPlan {
              rm -f \"$pid_file\"\n\
              nohup \"$binary\" --noise-config \"$config\" </dev/null >>\"$log_file\" 2>&1 &\n\
              pid=$!\n\
-             printf '%s\\n' \"$pid\" >\"$pid_file\"\n\
+             printf '%s' \"$pid\" >\"$pid_file\"\n\
              chmod 600 \"$pid_file\"\n\
              i=0\n\
              while [ \"$i\" -lt 10 ]; do\n\
@@ -348,7 +348,7 @@ impl WslLinkAgentDistributionPlan {
                i=$((i + 1))\n\
                sleep 0.1\n\
              done\n\
-             printf 'started pid=%s\\n' \"$pid\""
+             printf 'started pid=%s' \"$pid\""
         ))
     }
 
@@ -1006,7 +1006,9 @@ mod tests {
         assert!(script.contains("nohup \"$binary\" --noise-config \"$config\""));
         assert!(script.contains("agent.pid"));
         assert!(script.contains("kill -0 \"$pid\""));
-        assert!(script.contains("tail -n 40 \"$log_file\""));
+        assert!(script.contains("old_pid=$(tr -cd '0-9' < \"$pid_file\""));
+        assert!(script.contains("printf '%s' \"$pid\" >\"$pid_file\""));
+        assert!(!script.contains("printf '%s\\\\n' \"$pid\" >\"$pid_file\""));
     }
 
     #[test]

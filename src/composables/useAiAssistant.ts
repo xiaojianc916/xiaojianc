@@ -23,6 +23,7 @@ import {
   extractVisibleAgentRuntimeEvents,
   projectSidecarEventsToToolState,
   projectSidecarExecuteResponse,
+  type IAgentSidecarExecuteProjection,
   type TAgentSidecarToolStreamStatus,
 } from '@/utils/agent-sidecar-events';
 import { createDefaultAiConfigPayload } from '@/utils/ai-config';
@@ -1016,6 +1017,24 @@ const resolveSidecarToolProjectionStatus = (
 ): TAgentSidecarToolStreamStatus =>
   projection.pendingConfirmation ? 'streaming' : 'completed';
 
+const mapToolConfirmationDecisionToSidecarDecision = (
+  decision: TAiToolConfirmationDecision,
+): 'approve' | 'reject' | 'cancel' | 'modify' => {
+  switch (decision) {
+    case 'allow-once':
+    case 'allow-run':
+      return 'approve';
+    case 'skip':
+      return 'reject';
+    case 'stop':
+      return 'cancel';
+    default: {
+      const exhaustive: never = decision;
+      return exhaustive;
+    }
+  }
+};
+
 const isAiEditOperationEntry = (
   entry: IAiEditTimelineEntry,
 ): entry is IAiEditTimelineEntry & { type: 'operation'; data: IAiEditOperation } =>
@@ -1332,9 +1351,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const activeStreamResolve = ref<(() => void) | null>(null);
   const activeAssistantMessage = ref<IAiChatMessage | null>(null);
   const activeAssistantBaseMessages = shallowRef<IAiChatMessage[]>([]);
-  const activeSidecarAgentSession = ref<IAiPersistedSidecarAgentSession | null>(
-    agentStore.pendingSidecarAgentSession,
-  );
+  const activeSidecarAgentSession = ref<IAiPersistedSidecarAgentSession | null>(null);
   const activeBufferedThreadId = ref<string | null>(null);
   const displayMessages = shallowRef<IAiChatMessage[]>(unref(conversationStore.activeMessages));
   const pendingTitleThreadIds = new Set<string>();
@@ -1418,7 +1435,6 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     confirmation: IAiToolConfirmationRequest,
     session: IAiPersistedSidecarAgentSession,
   ): void => {
-    activeSidecarAgentSession.value = session;
     agentStore.setPendingToolConfirmation(confirmation);
     agentStore.setPendingSidecarAgentSession(session);
   };
@@ -1430,6 +1446,14 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       agentStore.clearPendingSidecarAgentSession();
       activeSidecarAgentSession.value = null;
     }
+  };
+
+  const clearSidecarToolConfirmationForThread = (threadId: string | null): void => {
+    if (agentStore.pendingSidecarAgentSession?.threadId !== threadId) {
+      return;
+    }
+
+    clearSidecarToolConfirmation();
   };
 
   const syncDisplayMessagesFromActiveThread = (): void => {
@@ -2578,7 +2602,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const resolveSidecarToolConfirmation = async (
     decision: TAiToolConfirmationDecision,
   ): Promise<void> => {
-    const session = activeSidecarAgentSession.value;
+    const session = agentStore.pendingSidecarAgentSession;
     const confirmation = unref(agentPlan.store.pendingToolConfirmation);
 
     if (!session || !confirmation) {
@@ -2586,9 +2610,8 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       return;
     }
 
-    clearSidecarToolConfirmation(confirmation.id);
-
     isSending.value = true;
+    activeSidecarAgentSession.value = session;
     activeAgentMessageId.value = session.assistantMessageId;
     activeBufferedThreadId.value = session.threadId;
     const liveEventBuffer = createSidecarLiveEventBuffer((events, freshEvents) => {
@@ -2613,11 +2636,17 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       const payload = await aiService.sidecarResolveApproval({
         sessionId: session.sessionId,
         requestId: confirmation.id,
-        decision: decision === 'stop' ? 'reject' : decision,
+        decision: mapToolConfirmationDecisionToSidecarDecision(decision),
+        goal: session.messageContent,
+        messages: toSidecarMessages(session.baseMessages),
+        workspaceRootPath: options.workspaceRootPath.value,
+        context: session.references,
+        ...(session.threadId ? { threadId: session.threadId } : {}),
       });
       liveEventBuffer.flush();
       unlistenSidecarStream?.();
       unlistenSidecarStream = null;
+      clearSidecarToolConfirmation(confirmation.id);
       appendRuntimeTimelineEvents(payload.events);
       const projection = projectSidecarExecuteResponse(payload);
       const toolProjection = projectSidecarEventsToToolState({
@@ -2749,6 +2778,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       liveEventBuffer.dispose();
       unlistenSidecarStream?.();
       activeAgentMessageId.value = null;
+      activeSidecarAgentSession.value = null;
       commitDisplayMessagesToStore(session.threadId);
       clearActiveBufferedThread(session.threadId);
       isSending.value = false;
@@ -3516,21 +3546,20 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     revertingChangedFilesSummaryId.value = null;
     runtimeTimelineEvents.value = [];
 
-    agentPlan.resetPlan();
-
     clearAttachedFiles();
     errorMessage.value = '';
     activeAssistantMessage.value = null;
     activeAssistantBaseMessages.value = [];
     activeAgentMessageId.value = null;
     disposeSidecarAnswerStream();
-    clearSidecarToolConfirmation();
     isClearDialogOpen.value = false;
   };
 
   const clearConversation = (): void => {
+    clearSidecarToolConfirmationForThread(unref(conversationStore.activeThreadId));
     conversationStore.clearActiveThread();
     resetConversationUiState();
+    agentPlan.resetPlan();
   };
 
   const deleteConversation = (threadId: string): boolean => {
@@ -3541,8 +3570,11 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
       return false;
     }
 
+    clearSidecarToolConfirmationForThread(threadId);
+
     if (wasActiveThread) {
       resetConversationUiState();
+      agentPlan.resetPlan();
     } else {
       syncDisplayMessagesFromActiveThread();
     }
@@ -3553,6 +3585,7 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const startNewConversation = (): void => {
     conversationStore.startNewThread();
     resetConversationUiState();
+    agentPlan.resetPlan();
   };
 
   const switchConversation = (threadId: string): void => {

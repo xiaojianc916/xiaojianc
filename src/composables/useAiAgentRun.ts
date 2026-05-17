@@ -25,6 +25,24 @@ import type {
   TAiToolConfirmationDecision,
 } from '@/types/ai';
 
+const mapToolConfirmationDecisionToSidecarDecision = (
+  decision: TAiToolConfirmationDecision,
+): 'approve' | 'reject' | 'cancel' | 'modify' => {
+  switch (decision) {
+    case 'allow-once':
+    case 'allow-run':
+      return 'approve';
+    case 'skip':
+      return 'reject';
+    case 'stop':
+      return 'cancel';
+    default: {
+      const exhaustive: never = decision;
+      return exhaustive;
+    }
+  }
+};
+
 interface ISidecarStepLoopOptions {
   goal: string;
   context?: IAiContextReference[];
@@ -723,7 +741,15 @@ export const useAiAgentRun = () => {
       payload = await aiService.sidecarResolveApproval({
         sessionId: sidecarSessionId,
         requestId: session.pendingRequestId ?? confirmationId,
-        decision,
+        decision: mapToolConfirmationDecisionToSidecarDecision(decision),
+        goal: session.goal,
+        messages: session.messages,
+        context: session.context,
+        workspaceRootPath: session.workspaceRootPath ?? null,
+        planId: session.planId,
+        planVersion: session.planVersion,
+        planStepId: session.stepId,
+        ...(session.threadId ? { threadId: session.threadId } : {}),
       });
     } finally {
       unlistenSidecarStream();

@@ -3423,7 +3423,8 @@ describe('Mastra runtime execute', () => {
 
 describe('Mastra runtime approval resolution', () => {
   it('resumes a pending approval on the original agent instance while keeping the approval request id opaque to the client', async () => {
-    let capturedApprovalOptions: unknown;
+    let capturedResumeData: unknown;
+    let capturedResumeOptions: unknown;
     let disconnectCalls = 0;
     const executionRecord = createPlanRecordForTest({
       plan: agentPlanSchema.parse({
@@ -3480,8 +3481,9 @@ describe('Mastra runtime approval resolution', () => {
           generate: async () => {
             throw new Error('generate should not be used in Mastra approval resume test');
           },
-          approveToolCall: async (approvalOptions) => {
-            capturedApprovalOptions = approvalOptions;
+          resumeStream: async (resumeData, resumeOptions) => {
+            capturedResumeData = resumeData;
+            capturedResumeOptions = resumeOptions;
 
             return {
               runId: 'approval-run-1',
@@ -3509,6 +3511,9 @@ describe('Mastra runtime approval resolution', () => {
                 };
               })(),
             };
+          },
+          approveToolCall: async (approvalOptions) => {
+            throw new Error(`approveToolCall should not be used when resumeStream is available: ${JSON.stringify(approvalOptions)}`);
           },
           declineToolCall: async () => {
             throw new Error('declineToolCall should not be used in Mastra approval resume test');
@@ -3566,7 +3571,10 @@ describe('Mastra runtime approval resolution', () => {
       decision: 'approve',
     });
 
-    assert.deepEqual(capturedApprovalOptions, {
+    assert.deepEqual(capturedResumeData, {
+      approved: true,
+    });
+    assert.deepEqual(capturedResumeOptions, {
       runId: 'approval-run-1',
       toolCallId: 'tool-approval-1',
     });
@@ -3612,6 +3620,132 @@ describe('Mastra runtime approval resolution', () => {
     assert.equal(resumed.result, '审批后继续执行');
     assert.equal(disconnectCalls, 0);
     workflowStore.cleanup();
+  });
+
+  it('recreates a storage-backed agent to resume a persisted approval when the in-memory pending map is gone', async () => {
+    let capturedResumeData: unknown;
+    let capturedResumeOptions: unknown;
+    let disconnectCalls = 0;
+    const createRuntime = (): MastraRuntime => new MastraRuntime({
+      readModelConfig: () => createTestModelConfig(),
+      createMcpClientBundle: async () => ({
+        clients: [],
+        configs: [],
+        errors: [],
+        tools: {},
+        disconnectAll: async () => {
+          disconnectCalls += 1;
+        },
+      }),
+      now: () => '2026-05-03T00:00:00.000Z',
+      createResumableAgentHandle: async () => ({
+        agent: {
+          stream: async () => ({
+            runId: 'approval-run-restored',
+            cleanup: () => undefined,
+            fullStream: (async function* () {
+              yield {
+                type: 'tool-call-approval',
+                runId: 'approval-run-restored',
+                from: 'AGENT',
+                payload: {
+                  toolCallId: 'tool-restored',
+                  toolName: 'write_file',
+                  args: {
+                    path: 'README.md',
+                  },
+                },
+              };
+            })(),
+          }),
+          generate: async () => {
+            throw new Error('generate should not be used when resuming persisted approval');
+          },
+          resumeStream: async (resumeData, resumeOptions) => {
+            capturedResumeData = resumeData;
+            capturedResumeOptions = resumeOptions;
+
+            return {
+              runId: 'approval-run-restored',
+              cleanup: () => undefined,
+              fullStream: (async function* () {
+                yield {
+                  type: 'text-delta',
+                  runId: 'approval-run-restored',
+                  from: 'AGENT',
+                  payload: {
+                    id: 'approval-restored-text',
+                    text: '已从持久化审批继续。',
+                  },
+                };
+              })(),
+            };
+          },
+        },
+      }),
+    });
+    const initialRuntime = createRuntime();
+    const initial = await initialRuntime.chat({
+      mode: 'agent',
+      goal: '继续当前任务',
+      messages: [{ role: 'user', content: '继续当前任务' }],
+      context: [],
+      threadId: 'thread-restored',
+    });
+
+    const approvalEvent = initial.events.find((event) => event.type === 'approval_required');
+    assert.equal(approvalEvent?.type, 'approval_required');
+
+    if (approvalEvent?.type !== 'approval_required') {
+      throw new Error('expected approval_required event');
+    }
+
+    const restartedRuntime = createRuntime();
+
+    const response = await restartedRuntime.resolveApproval({
+      sessionId: 'sidecar-persisted-session',
+      requestId: approvalEvent.request.id,
+      decision: 'reject',
+      goal: '继续当前任务',
+      messages: [{ role: 'user', content: '继续当前任务' }],
+      context: [],
+      threadId: 'thread-restored',
+    });
+
+    assert.deepEqual(capturedResumeData, {
+      approved: false,
+    });
+    const resumeOptions = capturedResumeOptions as {
+      runId?: string;
+      toolCallId?: string;
+      memory?: unknown;
+      requestContext?: unknown;
+    };
+    assert.deepEqual({
+      runId: resumeOptions.runId,
+      toolCallId: resumeOptions.toolCallId,
+      memory: resumeOptions.memory,
+    }, {
+      runId: 'approval-run-restored',
+      toolCallId: 'tool-restored',
+      memory: {
+        thread: 'thread-restored',
+        resource: 'agent-sidecar:session:thread-restored',
+      },
+    });
+    assert.equal(isMastraRequestContextLike(resumeOptions.requestContext), true);
+    if (!isMastraRequestContextLike(resumeOptions.requestContext)) {
+      throw new Error('expected Mastra request context');
+    }
+    assert.equal(resumeOptions.requestContext.get('mode'), 'agent');
+    assert.equal(resumeOptions.requestContext.get('goal'), '继续当前任务');
+    assert.equal(resumeOptions.requestContext.get('workspaceRootPath'), null);
+    assert.deepEqual(resumeOptions.requestContext.get('context'), []);
+    assert.equal(resumeOptions.requestContext.get('memoryThreadId'), 'thread-restored');
+    assert.equal(resumeOptions.requestContext.get('memoryResourceId'), 'agent-sidecar:session:thread-restored');
+    assert.match(String(resumeOptions.requestContext.get('systemPrompt')), /审批拒绝/u);
+    assert.equal(response.result, '已从持久化审批继续。');
+    assert.equal(disconnectCalls, 0);
   });
 
   it('keeps the existing approval tool_result plus done contract instead of returning a runtime-specific placeholder error', async () => {

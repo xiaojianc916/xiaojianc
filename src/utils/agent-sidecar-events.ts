@@ -1669,15 +1669,16 @@ export const projectSidecarExecuteResponse = (
   const changedFilePaths = extractSidecarChangedFilePaths(response.events);
   const hasFileMutations = hasSidecarFileMutationEvent(response.events);
   const responseResult = hasMeaningfulText(response.result) ? response.result : null;
+  const pendingConfirmation = extractPendingConfirmation(response);
   const assistantContent = errorMessage
     ? `Agent 执行失败：${errorMessage}`
-    : doneResult ?? responseResult ?? latestDelta ?? 'Agent 已完成。';
+    : doneResult ?? responseResult ?? latestDelta ?? (pendingConfirmation ? '' : 'Agent 已完成。');
 
   return {
     toolCalls: mapSidecarEventsToToolCalls(response.events),
     assistantContent,
     errorMessage,
-    pendingConfirmation: extractPendingConfirmation(response),
+    pendingConfirmation,
     changedFilePaths,
     hasFileMutations,
   };

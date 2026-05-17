@@ -206,6 +206,7 @@ const shouldShowThinkingStatus = computed(
   () =>
     props.message.role === 'assistant' &&
     isRuntimeActive.value &&
+    props.message.stream?.status !== 'waiting-confirmation' &&
     props.message.stream?.finalAnswerStarted !== true &&
     (shouldShowInlineLoader.value || hasToolCalls.value),
 );
@@ -353,7 +354,8 @@ onBeforeUnmount(() => {
       <AiThinkingStatus :label="inlineLoaderLabel" />
     </div>
     <AiAgentRuntimeTimeline v-if="shouldShowRuntimeTimeline" :events="message.stream?.runtimeEvents ?? []"
-      :is-streaming="message.stream?.status === 'streaming'" />
+      :is-streaming="message.stream?.status === 'streaming'"
+      :is-waiting-confirmation="message.stream?.status === 'waiting-confirmation'" />
     <div v-if="shouldShowToolCallList" class="ai-tool-call-list" aria-label="工具活动">
       <div v-for="toolCall in message.toolCalls" :key="toolCall.id" class="ai-tool-call" :data-status="toolCall.status">
         <span class="ai-tool-call__indicator" aria-hidden="true"></span>
