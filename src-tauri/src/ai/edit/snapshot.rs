@@ -1,5 +1,5 @@
-use crate::ai_edit::{atomic_write, errors, storage_lock};
-use crate::ai_edit::pins::PinIndex;
+use crate::ai::edit::{atomic_write, errors, storage_lock};
+use crate::ai::edit::pins::PinIndex;
 use crate::commands::contracts::{AiApplyPatchMetadataRequest, AiSnapshotPayload};
 use chrono::{DateTime, Duration, Utc};
 use fjall::{Database, Keyspace, KeyspaceCreateOptions, PersistMode};

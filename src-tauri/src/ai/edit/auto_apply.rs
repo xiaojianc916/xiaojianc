@@ -1,10 +1,11 @@
 use crate::ai::errors;
-use crate::ai_edit::file_transaction::{self, FileTransactionAction, FileTransactionPlan};
-use crate::ai_edit::path_security;
-use crate::ai_edit::snapshot::{self, SnapshotSourceFile};
-use crate::ai_edit::{self, AiEditState};
-use crate::ai_edit::diff_render;
-use crate::ai_patch::{hash_text, read_text_file_baseline};
+use crate::ai::edit as ai_edit;
+use crate::ai::edit::file_transaction::{self, FileTransactionAction, FileTransactionPlan};
+use crate::ai::edit::path_security;
+use crate::ai::edit::snapshot::{self, SnapshotSourceFile};
+use crate::ai::edit::AiEditState;
+use crate::ai::edit::diff_render;
+use crate::ai::edit::patch::{hash_text, read_text_file_baseline};
 use crate::commands::contracts::{
     AiApplyPatchMetadataRequest, AiEditOperationPayload, AiEditTimelineEntryPayload,
 };
@@ -611,7 +612,8 @@ fn resolve_reason(metadata: Option<&AiApplyPatchMetadataRequest>, summary: &str)
 #[cfg(test)]
 mod tests {
     use super::{apply_operation_plans, AiAutoApplyOperationKind, AiAutoApplyOperationPlan};
-    use crate::ai_edit::{self, AiEditState};
+    use crate::ai::edit as ai_edit;
+    use crate::ai::edit::AiEditState;
     use crate::commands::contracts::{
         AiApplyPatchMetadataRequest, AiEditListTimelineRequest, AiEditSetAuthLevelRequest,
         AiEditTimelineEntryPayload,
@@ -644,7 +646,7 @@ mod tests {
                 kind: AiAutoApplyOperationKind::Modify,
                 path: file_path.to_string_lossy().to_string(),
                 new_path: None,
-                original_hash: Some(crate::ai_patch::hash_text("echo old")),
+                original_hash: Some(crate::ai::edit::patch::hash_text("echo old")),
                 original_modified_at: None,
                 original_content: Some("echo old".to_string()),
                 updated_content: Some("echo new".to_string()),
@@ -746,7 +748,7 @@ mod tests {
                     kind: AiAutoApplyOperationKind::Rename,
                     path: rename_source_path.to_string_lossy().to_string(),
                     new_path: Some(rename_target_path.to_string_lossy().to_string()),
-                    original_hash: Some(crate::ai_patch::hash_text("echo rename")),
+                    original_hash: Some(crate::ai::edit::patch::hash_text("echo rename")),
                     original_modified_at: None,
                     original_content: Some("echo rename".to_string()),
                     updated_content: None,
@@ -755,7 +757,7 @@ mod tests {
                     kind: AiAutoApplyOperationKind::Delete,
                     path: delete_path.to_string_lossy().to_string(),
                     new_path: None,
-                    original_hash: Some(crate::ai_patch::hash_text("echo delete")),
+                    original_hash: Some(crate::ai::edit::patch::hash_text("echo delete")),
                     original_modified_at: None,
                     original_content: Some("echo delete".to_string()),
                     updated_content: None,
@@ -840,7 +842,7 @@ mod tests {
                 kind: AiAutoApplyOperationKind::Modify,
                 path: file_path.to_string_lossy().to_string(),
                 new_path: None,
-                original_hash: Some(crate::ai_patch::hash_text("echo old")),
+                original_hash: Some(crate::ai::edit::patch::hash_text("echo old")),
                 original_modified_at: None,
                 original_content: Some("echo old".to_string()),
                 updated_content: Some("echo new".to_string()),
@@ -885,7 +887,7 @@ mod tests {
                 kind: AiAutoApplyOperationKind::Modify,
                 path: file_path.to_string_lossy().to_string(),
                 new_path: None,
-                original_hash: Some(crate::ai_patch::hash_text("echo old")),
+                original_hash: Some(crate::ai::edit::patch::hash_text("echo old")),
                 original_modified_at: Some(std::time::UNIX_EPOCH),
                 original_content: Some("echo old".to_string()),
                 updated_content: Some("echo new".to_string()),
@@ -940,7 +942,7 @@ mod tests {
                     kind: AiAutoApplyOperationKind::Delete,
                     path: missing_path.to_string_lossy().to_string(),
                     new_path: None,
-                    original_hash: Some(crate::ai_patch::hash_text("echo missing")),
+                    original_hash: Some(crate::ai::edit::patch::hash_text("echo missing")),
                     original_modified_at: None,
                     original_content: Some("echo missing".to_string()),
                     updated_content: None,

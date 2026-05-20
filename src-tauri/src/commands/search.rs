@@ -1,5 +1,5 @@
 use super::{decode_script_bytes, encode_script_content, resolve_workspace_root};
-use crate::ai_patch::hash_text;
+use crate::ai::edit::patch::hash_text;
 use ast_grep_core::Pattern as AstPattern;
 use ast_grep_language::{LanguageExt, SupportLang};
 use globset::{Glob, GlobSet, GlobSetBuilder};

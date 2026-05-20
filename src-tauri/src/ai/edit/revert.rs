@@ -21,10 +21,11 @@
 //!    本文件不依赖 `apply_reverse_hunks` 多 hunk 顺序保护。
 
 use crate::ai::audit::{self, AiAuditEventKind};
-use crate::ai_edit::{
-    self, atomic_write, diff_render, edit_journal, errors, path_security, snapshot, AiEditState,
+use crate::ai::edit as ai_edit;
+use crate::ai::edit::{
+    atomic_write, diff_render, edit_journal, errors, path_security, snapshot, AiEditState,
 };
-use crate::ai_patch;
+use crate::ai::edit::patch;
 use crate::commands::contracts::{
     AiEditDiffHunkPayload, AiEditGetDiffPayload, AiEditGetDiffRequest, AiEditListTimelineRequest,
     AiEditOperationPayload, AiEditRestoreSnapshotPayload, AiEditRestoreSnapshotRequest,
@@ -92,7 +93,7 @@ pub fn restore_snapshot(
             })?;
             Ok(snapshot::StoredSnapshotFile {
                 path: file.path.clone(),
-                content_hash: ai_patch::hash_text(&current_content),
+                content_hash: patch::hash_text(&current_content),
                 content: current_content,
             })
         })
@@ -1175,7 +1176,7 @@ fn read_snapshot_file(path: &str) -> Result<snapshot::StoredSnapshotFile, String
         .map_err(|error| errors::restore_conflict(format!("读取当前文件失败({path}):{error}")))?;
     Ok(snapshot::StoredSnapshotFile {
         path: path.to_string(),
-        content_hash: ai_patch::hash_text(&current_content),
+        content_hash: patch::hash_text(&current_content),
         content: current_content,
     })
 }
@@ -1220,7 +1221,7 @@ mod tests {
     use super::{
         get_diff, restore_snapshot, revert_file, revert_hunk, revert_task, undo_operation,
     };
-    use crate::ai_edit::{
+    use crate::ai::edit::{
         self,
         auto_apply::{apply_operation_plans, AiAutoApplyOperationKind, AiAutoApplyOperationPlan},
         diff_render, edit_journal, errors, snapshot, AiEditState,
@@ -1259,7 +1260,7 @@ mod tests {
         )
         .expect("session auth should be set");
 
-        crate::ai_patch::apply_patch(
+        crate::ai::edit::patch::apply_patch(
             AiApplyPatchRequest {
                 patch: AiPatchSetPayload {
                     summary: "应用 AI 代码块".to_string(),
@@ -1334,7 +1335,7 @@ mod tests {
         )
         .expect("session auth should be set");
 
-        crate::ai_patch::apply_patch(
+        crate::ai::edit::patch::apply_patch(
             AiApplyPatchRequest {
                 patch: AiPatchSetPayload {
                     summary: "应用 AI 代码块".to_string(),
@@ -1417,7 +1418,7 @@ mod tests {
         )
         .expect("session auth should be set");
 
-        crate::ai_patch::apply_patch(
+        crate::ai::edit::patch::apply_patch(
             AiApplyPatchRequest {
                 patch: AiPatchSetPayload {
                     summary: "第一次应用 AI 代码块".to_string(),
@@ -1439,7 +1440,7 @@ mod tests {
         )
         .expect("first patch should apply");
 
-        crate::ai_patch::apply_patch(
+        crate::ai::edit::patch::apply_patch(
             AiApplyPatchRequest {
                 patch: AiPatchSetPayload {
                     summary: "第二次应用 AI 代码块".to_string(),
@@ -1509,7 +1510,7 @@ mod tests {
         )
         .expect("session auth should be set");
 
-        crate::ai_patch::apply_patch(
+        crate::ai::edit::patch::apply_patch(
             AiApplyPatchRequest {
                 patch: AiPatchSetPayload {
                     summary: "包含两个 hunk 的 AI 编辑".to_string(),
@@ -1608,7 +1609,7 @@ mod tests {
         )
         .expect("session auth should be set");
 
-        crate::ai_patch::apply_patch(
+        crate::ai::edit::patch::apply_patch(
             AiApplyPatchRequest {
                 patch: AiPatchSetPayload {
                     summary: "应用 AI 代码块".to_string(),
@@ -1689,7 +1690,7 @@ mod tests {
         )
         .expect("session auth should be set");
 
-        crate::ai_patch::apply_patch(
+        crate::ai::edit::patch::apply_patch(
             AiApplyPatchRequest {
                 patch: AiPatchSetPayload {
                     summary: "应用 AI 代码块".to_string(),
@@ -1851,7 +1852,7 @@ mod tests {
                 kind: AiAutoApplyOperationKind::Delete,
                 path: file_path.to_string_lossy().to_string(),
                 new_path: None,
-                original_hash: Some(crate::ai_patch::hash_text("echo deleted")),
+                original_hash: Some(crate::ai::edit::patch::hash_text("echo deleted")),
                 original_modified_at: None,
                 original_content: Some("echo deleted".to_string()),
                 updated_content: None,
@@ -1942,7 +1943,7 @@ mod tests {
                 kind: AiAutoApplyOperationKind::Rename,
                 path: source_path.to_string_lossy().to_string(),
                 new_path: Some(target_path.to_string_lossy().to_string()),
-                original_hash: Some(crate::ai_patch::hash_text("echo rename")),
+                original_hash: Some(crate::ai::edit::patch::hash_text("echo rename")),
                 original_modified_at: None,
                 original_content: Some("echo rename".to_string()),
                 updated_content: None,
@@ -2039,7 +2040,7 @@ mod tests {
                     kind: AiAutoApplyOperationKind::Modify,
                     path: first_path.to_string_lossy().to_string(),
                     new_path: None,
-                    original_hash: Some(crate::ai_patch::hash_text("echo first-old")),
+                    original_hash: Some(crate::ai::edit::patch::hash_text("echo first-old")),
                     original_modified_at: None,
                     original_content: Some("echo first-old".to_string()),
                     updated_content: Some("echo first-new".to_string()),
@@ -2048,7 +2049,7 @@ mod tests {
                     kind: AiAutoApplyOperationKind::Modify,
                     path: second_path.to_string_lossy().to_string(),
                     new_path: None,
-                    original_hash: Some(crate::ai_patch::hash_text("echo second-old")),
+                    original_hash: Some(crate::ai::edit::patch::hash_text("echo second-old")),
                     original_modified_at: None,
                     original_content: Some("echo second-old".to_string()),
                     updated_content: Some("echo second-new".to_string()),
@@ -2136,7 +2137,7 @@ mod tests {
                 kind: AiAutoApplyOperationKind::Modify,
                 path: file_path.to_string_lossy().to_string(),
                 new_path: None,
-                original_hash: Some(crate::ai_patch::hash_text("echo old")),
+                original_hash: Some(crate::ai::edit::patch::hash_text("echo old")),
                 original_modified_at: None,
                 original_content: Some("echo old".to_string()),
                 updated_content: Some("echo new".to_string()),
@@ -2181,7 +2182,7 @@ mod tests {
     fn patch_file(path: &Path, original: &str, updated: &str) -> AiPatchFilePayload {
         AiPatchFilePayload {
             path: path.to_string_lossy().to_string(),
-            original_hash: crate::ai_patch::hash_text(original),
+            original_hash: crate::ai::edit::patch::hash_text(original),
             original_modified_at_ms: None,
             hunks: diff_render::render_patch_hunks(original, updated).hunks,
         }

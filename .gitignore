@@ -11,3 +11,4 @@ target
 *.log
 .strands-sessions
 agent-sidecar/.strands-sessions
+agent-sidecar/.agent-sidecar/

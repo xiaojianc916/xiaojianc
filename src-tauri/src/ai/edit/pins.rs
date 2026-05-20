@@ -1,4 +1,4 @@
-use crate::ai_edit::{errors, storage_lock};
+use crate::ai::edit::{errors, storage_lock};
 use chrono::Utc;
 use fjall::{Database, Keyspace, KeyspaceCreateOptions, PersistMode};
 use serde::{Deserialize, Serialize};

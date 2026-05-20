@@ -7,7 +7,7 @@ use super::provider::{
 use super::redaction::redact_text;
 use super::stream_manager;
 use super::token_budget;
-use crate::ai_agent::planner::AgentPlanner;
+use crate::ai::agent::planner::AgentPlanner;
 use crate::commands::contracts::{
     AiAgentClassifyTaskPayload, AiAgentClassifyTaskRequest, AiChatRequest, AiCodeActionPayload,
     AiCodeActionRequest, AiConfigPayload, AiContextReferencePayload, AiConversationTitlePayload,

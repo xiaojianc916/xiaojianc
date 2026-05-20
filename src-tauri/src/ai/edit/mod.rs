@@ -5,6 +5,7 @@ pub mod edit_journal;
 pub mod errors;
 pub mod file_transaction;
 pub mod path_security;
+pub mod patch;
 pub mod pins;
 pub mod protected_paths;
 pub mod revert;
@@ -418,7 +419,7 @@ pub fn create_snapshot(
         let content = fs::read_to_string(&path).map_err(|error| {
             errors::snapshot_store_failed(format!("读取手动快照文件失败（{file_ref}）：{error}"))
         })?;
-        let content_hash = crate::ai_patch::hash_text(&content);
+        let content_hash = patch::hash_text(&content);
         file_buffers.push((file_ref.clone(), content_hash, content));
     }
 
@@ -604,7 +605,7 @@ mod tests {
         apply_retention_policy_with_policy, create_snapshot, ensure_patch_authorized, errors,
         set_auth_level, AiEditState,
     };
-    use crate::ai_edit::snapshot;
+    use crate::ai::edit::snapshot;
     use crate::commands::contracts::AiEditTimelineEntryPayload;
     use crate::commands::contracts::{
         AiApplyPatchMetadataRequest, AiEditCreateSnapshotRequest, AiEditSetAuthLevelRequest,

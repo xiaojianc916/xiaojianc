@@ -1,17 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agent_sidecar;
+mod approval_engine;
 mod ai;
-mod ai_agent;
-mod ai_edit;
-mod ai_patch;
-mod ai_tools;
 mod commands;
 mod error;
 mod terminal;
 mod wsl_link;
 
-use ai_edit::AiEditState;
+use ai::edit::AiEditState;
 use commands::{
     agent_sidecar_chat, agent_sidecar_execute, agent_sidecar_health, agent_sidecar_plan,
     agent_sidecar_plan_approve, agent_sidecar_plan_finish, agent_sidecar_plan_query,

@@ -1,5 +1,7 @@
+pub mod agent;
 pub mod audit;
 pub mod credential;
+pub mod edit;
 pub mod errors;
 pub mod favicon;
 pub mod gateway;

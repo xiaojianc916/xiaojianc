@@ -1,4 +1,4 @@
-use crate::ai_edit::errors;
+use crate::ai::edit::errors;
 use std::fs::{self, File, OpenOptions, TryLockError};
 use std::path::Path;
 

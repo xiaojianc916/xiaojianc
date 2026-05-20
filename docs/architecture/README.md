@@ -33,6 +33,7 @@
 | [ADR-20260506](./ADR-20260506-wsl-link-vsock-grpc-quic.md)                   | WSL Link 单通道可靠连接                                          | `proposed`   | 2026-05-06 | WSL Link      |
 | [ADR-20260520](./ADR-20260520-aed-ownership.md)                              | AED 权威层归属                                                   | `proposed`   | 2026-05-20 | T-3.1.1       |
 | [ADR-20260520-B](./ADR-20260520-aed-edit-patch-diff-terminology.md)          | AED edit / patch / diff 术语边界                                 | `proposed`   | 2026-05-20 | T-3.4.2       |
+| [ADR-20260520-C](./ADR-20260520-mcp-hooks-and-capability.md)                 | MCP hooks 与 ai-mcp capability                                   | `proposed`   | 2026-05-20 | T-3.3.1       |
 
 ---
 

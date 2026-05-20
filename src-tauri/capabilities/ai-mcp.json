@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "ai-mcp",
+  "description": "AI MCP 工具能力：允许 sidecar 在 Rust 审批与审计后调用仓库声明的 MCP server。",
+  "windows": [],
+  "permissions": []
+}

@@ -1,1 +1,1 @@
-export { MastraRuntime } from './mastra-runtime-rollback.js';
+export { MastraRuntime } from './rollback.js';
