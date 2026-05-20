@@ -1,5 +1,6 @@
 import {
-    listShellCommandLabels
+    listShellCommandLabels,
+    loadShellCommandSpec,
 } from '@/services/shell-command-catalog';
 import type {
     IShellCommandArgumentSpec,
@@ -8,7 +9,7 @@ import type {
     IShellCommandValueSuggestionSpec,
     IShellCompletionEntry,
 } from '@/types/shell-completion';
-import type * as MonacoEditor from 'monaco-editor/esm/vs/editor/editor.api';
+import type * as MonacoEditor from 'monaco-editor';
 import bashLanguageWasmUrl from 'tree-sitter-bash/tree-sitter-bash.wasm?url';
 import {
     Language,
@@ -21,7 +22,9 @@ import treeSitterWasmUrl from 'web-tree-sitter/web-tree-sitter.wasm?url';
 
 const SHELL_LANGUAGE_ID = 'shell';
 const MAX_SUGGESTIONS = 80;
+
 const textEncoder = new TextEncoder();
+
 const VARIABLE_BRACE_PATTERN = /\$\{([A-Za-z_][A-Za-z0-9_]*)?$/;
 const VARIABLE_DIRECT_PATTERN = /\$([A-Za-z_][A-Za-z0-9_]*)?$/;
 const OPTION_PATTERN = /--?[A-Za-z0-9-]*$/;
@@ -86,7 +89,6 @@ let commandCatalogRootEntriesPromise: Promise<IShellCompletionEntry[]> | null = 
 let lastProviderErrorMessage: string | null = null;
 
 const getPrimarySpecName = (entry: { names: string[] }): string => entry.names[0] ?? '';
-
 const getSpecAliases = (entry: { names: string[] }): string[] => entry.names.slice(1);
 
 const loadCommandCatalogRootEntries = async (): Promise<IShellCompletionEntry[]> => {
@@ -99,7 +101,6 @@ const loadCommandCatalogRootEntries = async (): Promise<IShellCompletionEntry[]>
                 priority: 60,
             })));
     }
-
     return commandCatalogRootEntriesPromise;
 };
 
@@ -284,7 +285,6 @@ const ensureTreeSitterLanguage = async (): Promise<Language> => {
             }
         })();
     }
-
     return runtimePromise;
 };
 
@@ -293,7 +293,6 @@ const reportShellCompletionProviderError = (error: unknown): void => {
     if (lastProviderErrorMessage === nextMessage) {
         return;
     }
-
     lastProviderErrorMessage = nextMessage;
     console.error('Shell completion provider failed', error);
 };
@@ -315,12 +314,10 @@ const parseShellDocument = async (source: string): Promise<IParsedShellDocument>
 const collectAncestors = (node: Node | null): Node[] => {
     const ancestors: Node[] = [];
     let activeNode = node;
-
     while (activeNode) {
         ancestors.push(activeNode);
         activeNode = activeNode.parent;
     }
-
     return ancestors;
 };
 
@@ -344,20 +341,17 @@ const resolveCommandName = (commandNode: Node | null): string | null => {
     if (!commandNode) {
         return null;
     }
-
     const commandNameNode = commandNode.childForFieldName('name');
     return commandNameNode ? normalizeCommandName(commandNameNode.text) : null;
 };
 
 const collectVariableNames = (rootNode: Node): string[] => {
     const names = new Set<string>();
-
     for (const node of rootNode.descendantsOfType('variable_assignment')) {
         const fieldNode = node.childForFieldName('name');
         if (!fieldNode) {
             continue;
         }
-
         const targetNode =
             fieldNode.type === 'variable_name'
                 ? fieldNode
@@ -366,13 +360,11 @@ const collectVariableNames = (rootNode: Node): string[] => {
             names.add(targetNode.text);
         }
     }
-
     return [...names].sort();
 };
 
 const collectFunctionNames = (rootNode: Node): string[] => {
     const names = new Set<string>();
-
     for (const node of rootNode.descendantsOfType('function_definition')) {
         const fieldNode = node.childForFieldName('name');
         const normalizedName = fieldNode ? normalizeCommandName(fieldNode.text) : null;
@@ -380,20 +372,17 @@ const collectFunctionNames = (rootNode: Node): string[] => {
             names.add(normalizedName);
         }
     }
-
     return [...names].sort();
 };
 
 const collectRecentCommandNames = (rootNode: Node): string[] => {
     const names = new Set<string>();
-
     for (const node of rootNode.descendantsOfType('command_name')) {
         const normalizedName = normalizeCommandName(node.text);
         if (normalizedName) {
             names.add(normalizedName);
         }
     }
-
     return [...names].sort();
 };
 
@@ -411,7 +400,6 @@ const resolveVariableContext = (linePrefix: string): IVariableContext | null => 
             withBraces: true,
         };
     }
-
     const directMatch = linePrefix.match(VARIABLE_DIRECT_PATTERN);
     if (directMatch) {
         return {
@@ -419,7 +407,6 @@ const resolveVariableContext = (linePrefix: string): IVariableContext | null => 
             withBraces: false,
         };
     }
-
     return null;
 };
 
@@ -442,7 +429,6 @@ const resolveCompletionContext = (
     const currentToken = resolveCurrentToken(linePrefix);
     const wordPrefix = linePrefix.match(WORD_PATTERN)?.[0] ?? '';
     const optionPrefix = linePrefix.match(OPTION_PATTERN)?.[0] ?? '';
-
     return {
         tree,
         cursorByteOffset,
@@ -470,7 +456,6 @@ const matchesPrefix = (entry: IShellCompletionEntry, partial: string): boolean =
     if (!partial) {
         return true;
     }
-
     const normalizedPartial = partial.toLowerCase();
     const label = entry.label.toLowerCase();
     const detail = entry.detail.toLowerCase();
@@ -538,11 +523,9 @@ const getOptionArgumentSpecs = (entry: IShellCommandOptionSpec): IShellCommandAr
     if (entry.arg) {
         return [entry.arg];
     }
-
     if (entry.args?.length) {
         return entry.args;
     }
-
     return [];
 };
 
@@ -553,11 +536,9 @@ const getArgumentSpecAtIndex = (
     if (argumentSpecs.length === 0) {
         return null;
     }
-
     if (argumentIndex < argumentSpecs.length) {
         return argumentSpecs[argumentIndex];
     }
-
     const lastArgumentSpec = argumentSpecs[argumentSpecs.length - 1] ?? null;
     return lastArgumentSpec?.isVariadic ? lastArgumentSpec : null;
 };
@@ -569,7 +550,6 @@ const buildArgumentValueEntries = (
     if (!argumentSpec?.suggestions?.length) {
         return [];
     }
-
     return filterEntries(
         argumentSpec.suggestions.map((entry) => createValueEntryFromSuggestionSpec(entry, argumentSpec)),
         partial,
@@ -612,28 +592,23 @@ const collectCommandTokensBeforeCursor = (
 ): string[] => {
     const tokens: string[] = [];
     const tokenNodes = collectCommandArgumentNodes(commandNode);
-
     for (const node of tokenNodes) {
         if (node.startIndex >= cursorByteOffset) {
             break;
         }
-
         if (currentTokenPrefix.length > 0 && node.endIndex >= cursorByteOffset) {
             break;
         }
-
         const normalizedToken = normalizeCommandToken(node.text);
         if (normalizedToken) {
             tokens.push(normalizedToken);
         }
     }
-
     return tokens;
 };
 
 const collectAvailableFlags = (nodes: IShellCommandNodeSpec[]): IShellCommandOptionSpec[] => {
     const uniqueEntries = new Map<string, IShellCommandOptionSpec>();
-
     for (const node of nodes) {
         for (const entry of node.flags ?? []) {
             const primaryName = getPrimarySpecName(entry);
@@ -642,7 +617,6 @@ const collectAvailableFlags = (nodes: IShellCommandNodeSpec[]): IShellCommandOpt
             }
         }
     }
-
     return [...uniqueEntries.values()];
 };
 
@@ -670,23 +644,19 @@ const getOptionArgumentCount = (entry: IShellCommandOptionSpec): number => getOp
 
 const stripWrapperTokens = (tokens: string[]): { awaitingCommand: boolean; strippedTokens: string[] } => {
     let remainingTokens = [...tokens];
-
     while (remainingTokens.length > 0 && wrapperCommandSet.has(remainingTokens[0])) {
         const wrapperName = remainingTokens[0];
         const optionSpecs = wrapperOptionsWithValue[wrapperName] ?? new Set<string>();
         let index = 1;
-
         while (index < remainingTokens.length) {
             const token = remainingTokens[index];
             if (wrapperName === 'env' && envAssignmentPattern.test(token)) {
                 index += 1;
                 continue;
             }
-
             if (!token.startsWith('-')) {
                 break;
             }
-
             const normalizedToken = token.split('=')[0];
             const takesValue = optionSpecs.has(normalizedToken);
             index += 1;
@@ -694,17 +664,14 @@ const stripWrapperTokens = (tokens: string[]): { awaitingCommand: boolean; strip
                 index += 1;
             }
         }
-
         if (index >= remainingTokens.length) {
             return {
                 awaitingCommand: true,
                 strippedTokens: [],
             };
         }
-
         remainingTokens = remainingTokens.slice(index);
     }
-
     return {
         awaitingCommand: false,
         strippedTokens: remainingTokens,
@@ -728,23 +695,19 @@ const resolveCommandCatalogContext = async (
             }
             : null;
     }
-
     const rootNode = await loadShellCommandSpec(strippedTokens[0]);
     if (!rootNode) {
         return null;
     }
-
     let activeNode = rootNode;
     const visitedNodes = [rootNode];
     let awaitingFlagValue: IFlagValueContext | null = null;
     let positionalArgumentIndex = 0;
     const argumentTokens = strippedTokens.slice(1);
-
     for (let index = 0; index < argumentTokens.length; index += 1) {
         const token = argumentTokens[index];
         const availableFlags = collectAvailableFlags(visitedNodes);
         const matchedFlag = findFlagSpec(availableFlags, token);
-
         if (matchedFlag) {
             const expectedArgumentCount = getOptionArgumentCount(matchedFlag);
             if (expectedArgumentCount > 0) {
@@ -754,9 +717,7 @@ const resolveCommandCatalogContext = async (
                     remainingArgumentCount,
                     argumentTokens.length - index - 1,
                 );
-
                 index += availableFollowingCount;
-
                 if (remainingArgumentCount > availableFollowingCount && !currentTokenPrefix.startsWith('-')) {
                     awaitingFlagValue = {
                         flag: matchedFlag,
@@ -766,7 +727,6 @@ const resolveCommandCatalogContext = async (
             }
             continue;
         }
-
         const nextNode = findCommandCatalogNode(activeNode.subcommands ?? [], token);
         if (nextNode) {
             activeNode = nextNode;
@@ -774,10 +734,8 @@ const resolveCommandCatalogContext = async (
             positionalArgumentIndex = 0;
             continue;
         }
-
         positionalArgumentIndex += 1;
     }
-
     return {
         activeNode,
         awaitingFlagValue,
@@ -794,18 +752,15 @@ const resolveInlineFlagValueContext = (
     if (!currentToken.startsWith('-')) {
         return null;
     }
-
     const separatorIndex = currentToken.indexOf('=');
     if (separatorIndex === -1) {
         return null;
     }
-
     const flagToken = currentToken.slice(0, separatorIndex);
     const matchedFlag = findFlagSpec(collectAvailableFlags(catalogContext.visitedNodes), flagToken);
     if (!matchedFlag || getOptionArgumentCount(matchedFlag) === 0) {
         return null;
     }
-
     return {
         flag: matchedFlag,
         argumentIndex: 0,
@@ -820,13 +775,11 @@ const collectLookaheadEntries = (
 ): IShellCompletionEntry[] => {
     const stateCandidates = context.ancestors.flatMap((node) => [node.nextParseState, node.parseState]);
     const seenEntries = new Map<string, IShellCompletionEntry>();
-
     for (const stateId of stateCandidates) {
         const iterator = language.lookaheadIterator(stateId);
         if (!iterator) {
             continue;
         }
-
         try {
             for (const symbol of iterator) {
                 const keywordEntry = KEYWORD_ENTRY_MAP.get(symbol);
@@ -834,21 +787,18 @@ const collectLookaheadEntries = (
                     seenEntries.set(`keyword:${keywordEntry.label}`, keywordEntry);
                     continue;
                 }
-
                 if (symbol === 'variable_name' && (context.variableContext || context.isDeclarationContext)) {
                     for (const entry of createVariableEntries(symbols.variableNames, 4)) {
                         seenEntries.set(`variable:${entry.label}`, entry);
                     }
                     continue;
                 }
-
                 if (symbol === 'word' && context.isCommandNameContext) {
                     for (const entry of createCommandEntries(symbols.functionNames, 3)) {
                         seenEntries.set(`command:${entry.label}`, entry);
                     }
                     continue;
                 }
-
                 if (symbol === 'test_operator') {
                     for (const entry of TEST_OPERATOR_ENTRIES) {
                         seenEntries.set(`operator:${entry.label}`, entry);
@@ -858,12 +808,10 @@ const collectLookaheadEntries = (
         } finally {
             iterator.delete();
         }
-
         if (seenEntries.size > 0) {
             break;
         }
     }
-
     return [...seenEntries.values()];
 };
 
@@ -889,7 +837,6 @@ const buildCommandEntries = async (
     const localCommandEntries = createCommandEntries(symbols.functionNames, 1);
     const recentCommandEntries = createCommandEntries(symbols.recentCommandNames, 8);
     const commandCatalogRootEntries = await loadCommandCatalogRootEntries();
-
     return filterEntries(
         [
             ...localCommandEntries,
@@ -908,32 +855,26 @@ const buildArgumentEntries = async (context: ICompletionContext): Promise<IShell
     if (!context.activeCommandName || !context.activeCommandNode) {
         return [];
     }
-
     const normalizedCommandName = context.activeCommandName.toLowerCase();
     const partial = getCurrentTokenPrefix(context);
-
     if (isTestCommand(normalizedCommandName)) {
         return filterEntries(TEST_OPERATOR_ENTRIES, partial);
     }
-
     const commandTokens = collectCommandTokensBeforeCursor(
         context.activeCommandNode,
         context.cursorByteOffset,
         partial,
     );
     const catalogContext = await resolveCommandCatalogContext(commandTokens, partial);
-
     if (!catalogContext) {
         if (wrapperCommandSet.has(normalizedCommandName)) {
             return filterEntries(await loadCommandCatalogRootEntries(), partial);
         }
         return [];
     }
-
     if (catalogContext.wrapperAwaitingCommand) {
         return filterEntries(await loadCommandCatalogRootEntries(), partial);
     }
-
     const inlineFlagValueContext = resolveInlineFlagValueContext(catalogContext, context.currentToken);
     if (inlineFlagValueContext) {
         return buildOptionValueEntries(
@@ -942,7 +883,6 @@ const buildArgumentEntries = async (context: ICompletionContext): Promise<IShell
             inlineFlagValueContext.partial,
         );
     }
-
     if (catalogContext.awaitingFlagValue) {
         return buildOptionValueEntries(
             catalogContext.awaitingFlagValue.flag,
@@ -950,11 +890,9 @@ const buildArgumentEntries = async (context: ICompletionContext): Promise<IShell
             partial,
         );
     }
-
     if (!catalogContext.activeNode) {
         return [];
     }
-
     const positionalArgumentEntries = partial.startsWith('-')
         ? []
         : buildPositionalArgumentValueEntries(
@@ -972,22 +910,18 @@ const buildArgumentEntries = async (context: ICompletionContext): Promise<IShell
 
 const dedupeEntries = (entries: IShellCompletionEntry[]): IShellCompletionEntry[] => {
     const uniqueEntries = new Map<string, IShellCompletionEntry>();
-
     for (const entry of entries) {
         const key = `${entry.kind}:${entry.label}:${entry.insertText ?? entry.label}`;
         const existingEntry = uniqueEntries.get(key);
-
         if (!existingEntry || (entry.priority ?? 99) < (existingEntry.priority ?? 99)) {
             uniqueEntries.set(key, entry);
         }
     }
-
     return [...uniqueEntries.values()].sort((left, right) => {
         const priorityDelta = (left.priority ?? 99) - (right.priority ?? 99);
         if (priorityDelta !== 0) {
             return priorityDelta;
         }
-
         return left.label.localeCompare(right.label);
     });
 };
@@ -999,34 +933,27 @@ const buildCompletionEntries = async (
     if (context.isInComment) {
         return [];
     }
-
     const symbols = collectDocumentSymbols(context.tree.rootNode);
     const lookaheadEntries = collectLookaheadEntries(language, context, symbols);
-
     if (context.variableContext || context.isDeclarationContext) {
         return dedupeEntries([...lookaheadEntries, ...buildVariableEntries(context, symbols)]).slice(
             0,
             MAX_SUGGESTIONS,
         );
     }
-
     const entries: IShellCompletionEntry[] = [...lookaheadEntries];
-
     if (context.isCommandNameContext) {
         entries.push(...await buildCommandEntries(context, symbols));
         entries.push(...buildKeywordEntries(context));
     } else {
         entries.push(...await buildArgumentEntries(context));
-
         if (context.isInString) {
             entries.push(...buildVariableEntries(context, symbols));
         }
     }
-
     if (entries.length === 0 || context.wordPrefix.length > 0) {
         entries.push(...buildKeywordEntries(context));
     }
-
     return dedupeEntries(entries).slice(0, MAX_SUGGESTIONS);
 };
 
@@ -1046,11 +973,9 @@ const resolveInsertText = (
     if (entry.insertText) {
         return entry.insertText;
     }
-
     if (entry.kind !== 'variable' || !context.variableContext?.withBraces) {
         return entry.label;
     }
-
     return context.lineSuffix.startsWith('}') ? entry.label : `${entry.label}}`;
 };
 
@@ -1088,7 +1013,6 @@ const toMonacoSuggestions = (
             ? context.optionPrefix.length
             : context.wordPrefix.length;
     const range = resolveReplaceRange(monaco, position, prefixLength);
-
     return entries.map((entry) => ({
         label: entry.label,
         detail: entry.detail,
@@ -1110,7 +1034,6 @@ export const registerShellCompletionProvider = (monaco: typeof MonacoEditor): vo
     if (providerRegistered) {
         return;
     }
-
     monaco.languages.registerCompletionItemProvider(SHELL_LANGUAGE_ID, {
         triggerCharacters: ['$', '{', '-', '='],
         provideCompletionItems: async (model, position, _context, token) => {
@@ -1126,18 +1049,15 @@ export const registerShellCompletionProvider = (monaco: typeof MonacoEditor): vo
                     column: getUtf8ByteLength(linePrefix),
                 };
                 const parsedDocument = await parseShellDocument(source);
-
                 if (token.isCancellationRequested) {
                     parsedDocument.tree?.delete();
                     parsedDocument.parser.delete();
                     return { suggestions: [] };
                 }
-
                 try {
                     if (!parsedDocument.tree) {
                         return { suggestions: [] };
                     }
-
                     const completionContext = resolveCompletionContext(
                         parsedDocument.tree,
                         cursorByteOffset,
@@ -1150,7 +1070,6 @@ export const registerShellCompletionProvider = (monaco: typeof MonacoEditor): vo
                         completionContext,
                     );
                     lastProviderErrorMessage = null;
-
                     return {
                         suggestions: toMonacoSuggestions(monaco, position, completionContext, entries),
                     };
@@ -1164,6 +1083,5 @@ export const registerShellCompletionProvider = (monaco: typeof MonacoEditor): vo
             }
         },
     });
-
     providerRegistered = true;
 };

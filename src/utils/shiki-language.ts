@@ -1,6 +1,8 @@
-import type { BundledLanguage } from 'shiki';
+import type { BundledLanguage, SpecialLanguage } from 'shiki';
 
-const SHIKI_LANGUAGE_MAP = {
+export type TShikiLanguage = BundledLanguage | SpecialLanguage;
+
+const SHIKI_LANGUAGE_MAP: Readonly<Partial<Record<string, TShikiLanguage>>> = {
   '': 'text',
   text: 'text',
   txt: 'text',
@@ -22,6 +24,7 @@ const SHIKI_LANGUAGE_MAP = {
 
   c: 'c',
   h: 'c',
+
   cpp: 'cpp',
   'c++': 'cpp',
   cc: 'cpp',
@@ -52,7 +55,6 @@ const SHIKI_LANGUAGE_MAP = {
   rust: 'rust',
 
   go: 'go',
-
   java: 'java',
 
   yml: 'yaml',
@@ -68,15 +70,38 @@ const SHIKI_LANGUAGE_MAP = {
   css: 'css',
   scss: 'scss',
   less: 'less',
-
   sql: 'sql',
   xml: 'xml',
+
   dockerfile: 'docker',
+  docker: 'docker',
+
   diff: 'diff',
   patch: 'diff',
-} satisfies Partial<Record<string, BundledLanguage>>;
 
-export const SHIKI_LANGUAGE_LABELS: Partial<Record<BundledLanguage, string>> = {
+  // ── 扩展常用语言（按需保留 / 删除）──
+  toml: 'toml',
+  mermaid: 'mermaid',
+  cs: 'csharp',
+  csharp: 'csharp',
+  kt: 'kotlin',
+  kotlin: 'kotlin',
+  php: 'php',
+  lua: 'lua',
+  swift: 'swift',
+  graphql: 'graphql',
+  gql: 'graphql',
+  proto: 'proto',
+  protobuf: 'proto',
+  dart: 'dart',
+  r: 'r',
+  scala: 'scala',
+  tf: 'terraform',
+  terraform: 'terraform',
+  ini: 'ini',
+};
+
+export const SHIKI_LANGUAGE_LABELS: Partial<Record<TShikiLanguage, string>> = {
   bat: 'Batch',
   shellscript: 'Shell',
   c: 'C',
@@ -105,12 +130,34 @@ export const SHIKI_LANGUAGE_LABELS: Partial<Record<BundledLanguage, string>> = {
   vue: 'Vue',
   xml: 'XML',
   yaml: 'YAML',
+
+  toml: 'TOML',
+  mermaid: 'Mermaid',
+  csharp: 'C#',
+  kotlin: 'Kotlin',
+  php: 'PHP',
+  lua: 'Lua',
+  swift: 'Swift',
+  graphql: 'GraphQL',
+  proto: 'Protocol Buffers',
+  dart: 'Dart',
+  r: 'R',
+  scala: 'Scala',
+  terraform: 'Terraform',
+  ini: 'INI',
 };
 
-export const resolveShikiLanguage = (language: string): BundledLanguage =>
-  SHIKI_LANGUAGE_MAP[language] ?? 'text';
-
 export const normalizeLanguageTag = (value: string): string => {
-  const firstToken = String(value ?? '').trim().split(/\s+/u, 1)[0] ?? '';
-  return firstToken.split(':')[0].trim().toLowerCase();
+  const raw = String(value ?? '').trim();
+  if (!raw) {
+    return '';
+  }
+  const firstToken = raw.split(/\s+/u, 1)[0] ?? '';
+  const beforeColon = firstToken.split(':', 1)[0] ?? '';
+  return beforeColon.trim().toLowerCase();
+};
+
+export const resolveShikiLanguage = (language: string): TShikiLanguage => {
+  const normalized = normalizeLanguageTag(language);
+  return SHIKI_LANGUAGE_MAP[normalized] ?? 'text';
 };

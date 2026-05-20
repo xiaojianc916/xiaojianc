@@ -9,12 +9,15 @@ import type {
   IAiAgentPatchSummary,
   TAiAgentChangedFileStatus,
 } from '@/types/ai/patch';
+
 import { buildAiAedDiffRef } from '@/components/business/ai/edit/diff-ref';
 import { areFileSystemPathsEqual } from '@/utils/path';
 
 const AED_PATCH_REF_PREFIX = 'aed-patch:';
+const PATCH_SUMMARY_ID_PREFIX = 'patch-summary';
 const HASH_OFFSET_BASIS = 2_166_136_261;
 const HASH_PRIME = 16_777_619;
+const HASH_PAD_LENGTH = 7;
 
 export interface IAiPatchFileLineStats {
   additions: number;
@@ -38,6 +41,17 @@ export interface IBuildAiAgentPatchSummaryFromDiffsInput {
   appliedAt: string;
 }
 
+interface IPatchSummaryIdKeys {
+  runId: string;
+  stepId: string;
+  taskId: string;
+  appliedAt: string;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Ref helpers
+// ──────────────────────────────────────────────────────────────────────
+
 export const buildAiAedPatchRef = (taskId: string): string =>
   `${AED_PATCH_REF_PREFIX}${encodeURIComponent(taskId)}`;
 
@@ -45,59 +59,92 @@ export const parseAiAedPatchRef = (patchRef: string): string | null => {
   if (!patchRef.startsWith(AED_PATCH_REF_PREFIX)) {
     return null;
   }
-
   const encodedTaskId = patchRef.slice(AED_PATCH_REF_PREFIX.length);
-
   if (!encodedTaskId) {
     return null;
   }
-
   try {
     const taskId = decodeURIComponent(encodedTaskId).trim();
-
     return taskId || null;
   } catch {
     return null;
   }
 };
 
+// ──────────────────────────────────────────────────────────────────────
+// Hash + ID
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * FNV-1a 32-bit, 以 base36 + 左侧补零输出固定长度，便于在 UI / 日志中视觉对齐。
+ * 注意：仅用于「同会话内 patch summary 去重 / 引用」用途，非加密哈希。
+ */
 const hashString = (value: string): string => {
   let hash = HASH_OFFSET_BASIS;
-
   for (const char of value) {
     hash ^= char.codePointAt(0) ?? 0;
     hash = Math.imul(hash, HASH_PRIME);
   }
-
-  return (hash >>> 0).toString(36);
+  return (hash >>> 0).toString(36).padStart(HASH_PAD_LENGTH, '0');
 };
 
-export const countAiPatchFileLineStats = (file: IAiPatchFile): IAiPatchFileLineStats =>
-  file.hunks.reduce<IAiPatchFileLineStats>(
-    (total, hunk) => hunk.lines.reduce<IAiPatchFileLineStats>(
-      (lineTotal, line) => {
-        if (line.startsWith('+') && !line.startsWith('+++')) {
-          return {
-            additions: lineTotal.additions + 1,
-            deletions: lineTotal.deletions,
-          };
-        }
-
-        if (line.startsWith('-') && !line.startsWith('---')) {
-          return {
-            additions: lineTotal.additions,
-            deletions: lineTotal.deletions + 1,
-          };
-        }
-
-        return lineTotal;
-      },
-      total,
+const buildSummaryIdPayload = (
+  keys: IPatchSummaryIdKeys,
+  files: readonly IAiAgentChangedFile[],
+): string =>
+  [
+    keys.runId,
+    keys.stepId,
+    keys.taskId,
+    keys.appliedAt,
+    ...files.map((file) =>
+      [
+        file.path,
+        file.status,
+        file.additions,
+        file.deletions,
+        file.diffRef,
+      ].join('|'),
     ),
-    { additions: 0, deletions: 0 },
-  );
+  ].join('\n');
 
-const inferChangedFileStatus = (
+const makeSummaryId = (namespace: string, payload: string): string =>
+  namespace
+    ? `${PATCH_SUMMARY_ID_PREFIX}:${namespace}:${hashString(payload)}`
+    : `${PATCH_SUMMARY_ID_PREFIX}:${hashString(payload)}`;
+
+// ──────────────────────────────────────────────────────────────────────
+// Stats / status inference
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * 统计单文件 patch 内的 `+` / `-` 行数。
+ * 显式跳过 `+++` / `---` 头部行，且不计上下文行。
+ */
+export const countAiPatchFileLineStats = (file: IAiPatchFile): IAiPatchFileLineStats => {
+  let additions = 0;
+  let deletions = 0;
+  for (const hunk of file.hunks) {
+    for (const line of hunk.lines) {
+      if (!line) {
+        continue;
+      }
+      // 头部行（文件名标记）不计入
+      if (line.startsWith('+++') || line.startsWith('---')) {
+        continue;
+      }
+      const head = line.charCodeAt(0);
+      if (head === 0x2b /* '+' */) {
+        additions += 1;
+      } else if (head === 0x2d /* '-' */) {
+        deletions += 1;
+      }
+    }
+  }
+  return { additions, deletions };
+};
+
+const inferChangedFileStatusFromPatch = (
   file: IAiPatchFile,
   stats: IAiPatchFileLineStats,
 ): TAiAgentChangedFileStatus => {
@@ -109,7 +156,6 @@ const inferChangedFileStatus = (
   ) {
     return 'added';
   }
-
   if (
     stats.deletions > 0 &&
     stats.additions === 0 &&
@@ -118,7 +164,6 @@ const inferChangedFileStatus = (
   ) {
     return 'deleted';
   }
-
   return 'modified';
 };
 
@@ -138,34 +183,50 @@ const inferChangedFileStatusFromAedKind = (
   }
 };
 
+/**
+ * 合并同一文件在多个 summary 中的状态。
+ *
+ * 优先级（从高到低）：
+ *   - 状态相同：保持不变。
+ *   - 任一为 `deleted`：终态删除。
+ *   - 任一为 `added`：仍视为新建（"新建后修改"在 UI 上仍是"新建"）。
+ *   - 任一为 `renamed`：仍视为重命名。
+ *   - 其余：`modified`。
+ */
+const mergeFileStatus = (
+  prev: TAiAgentChangedFileStatus,
+  next: TAiAgentChangedFileStatus,
+): TAiAgentChangedFileStatus => {
+  if (prev === next) {
+    return prev;
+  }
+  if (prev === 'deleted' || next === 'deleted') {
+    return 'deleted';
+  }
+  if (prev === 'added' || next === 'added') {
+    return 'added';
+  }
+  if (prev === 'renamed' || next === 'renamed') {
+    return 'renamed';
+  }
+  return 'modified';
+};
+
+// ──────────────────────────────────────────────────────────────────────
+// Builders
+// ──────────────────────────────────────────────────────────────────────
+
 const isAppliedPatchFile = (
   file: IAiPatchFile,
   appliedFiles: IAiApplyPatchPayload['appliedFiles'],
 ): boolean =>
   appliedFiles.some((appliedFile) => areFileSystemPathsEqual(appliedFile.path, file.path));
 
-const createPatchSummaryId = (
-  input: IBuildAiAgentPatchSummaryInput,
-  files: IAiAgentChangedFile[],
-): string => {
-  const idPayload = [
-    input.runId,
-    input.stepId,
-    input.taskId,
-    input.appliedAt,
-    ...files.map((file) =>
-      [
-        file.path,
-        file.status,
-        file.additions,
-        file.deletions,
-        file.diffRef,
-      ].join('|'),
-    ),
-  ].join('\n');
+const sumAdditions = (files: readonly IAiAgentChangedFile[]): number =>
+  files.reduce((total, file) => total + file.additions, 0);
 
-  return `patch-summary:${hashString(idPayload)}`;
-};
+const sumDeletions = (files: readonly IAiAgentChangedFile[]): number =>
+  files.reduce((total, file) => total + file.deletions, 0);
 
 export const buildAiAgentPatchSummaryFromApplyResult = (
   input: IBuildAiAgentPatchSummaryInput,
@@ -174,7 +235,6 @@ export const buildAiAgentPatchSummaryFromApplyResult = (
   const runId = input.runId.trim();
   const stepId = input.stepId.trim();
   const appliedAt = input.appliedAt.trim();
-
   if (!taskId || !runId || !stepId || !appliedAt || input.applyResult.appliedFiles.length === 0) {
     return null;
   }
@@ -183,10 +243,9 @@ export const buildAiAgentPatchSummaryFromApplyResult = (
     .filter((file) => isAppliedPatchFile(file, input.applyResult.appliedFiles))
     .map<IAiAgentChangedFile>((file) => {
       const stats = countAiPatchFileLineStats(file);
-
       return {
         path: file.path,
-        status: inferChangedFileStatus(file, stats),
+        status: inferChangedFileStatusFromPatch(file, stats),
         additions: stats.additions,
         deletions: stats.deletions,
         diffRef: buildAiAedDiffRef({ taskId, path: file.path }),
@@ -197,28 +256,32 @@ export const buildAiAgentPatchSummaryFromApplyResult = (
     return null;
   }
 
-  const totalAdditions = files.reduce((total, file) => total + file.additions, 0);
-  const totalDeletions = files.reduce((total, file) => total + file.deletions, 0);
+  const keys: IPatchSummaryIdKeys = { runId, stepId, taskId, appliedAt };
 
   return {
-    id: createPatchSummaryId(input, files),
+    id: makeSummaryId('', buildSummaryIdPayload(keys, files)),
     runId,
     stepId,
     files,
-    totalAdditions,
-    totalDeletions,
+    totalAdditions: sumAdditions(files),
+    totalDeletions: sumDeletions(files),
     patchRef: buildAiAedPatchRef(taskId),
     appliedAt,
   };
 };
 
+/**
+ * 将单条 AED diff 包装成 `IAiPatchSet`。
+ *
+ * 备注：`originalHash` 字段在这里塞的是来源标识 `aed:<operationId>`，
+ * 不是原文件内容指纹。下游若用作内容寻址 / 乐观锁请勿直接信任。
+ */
 export const buildAiPatchSetFromAedDiff = (
   diff: IAiEditGetDiffPayload,
 ): IAiPatchSet | null => {
   if (diff.hunks.length === 0) {
     return null;
   }
-
   return {
     summary: `已修改 ${diff.path}`,
     files: [
@@ -244,7 +307,6 @@ export const buildAiAgentPatchSummaryFromAedDiffs = (
   const runId = input.runId.trim();
   const stepId = input.stepId.trim();
   const appliedAt = input.appliedAt.trim();
-
   if (!taskId || !runId || !stepId || !appliedAt || input.diffs.length === 0) {
     return null;
   }
@@ -263,60 +325,93 @@ export const buildAiAgentPatchSummaryFromAedDiffs = (
     return null;
   }
 
-  const totalAdditions = files.reduce((total, file) => total + file.additions, 0);
-  const totalDeletions = files.reduce((total, file) => total + file.deletions, 0);
-  const idPayload = [
-    runId,
-    stepId,
-    taskId,
-    appliedAt,
-    ...files.map((file) =>
-      [
-        file.path,
-        file.status,
-        file.additions,
-        file.deletions,
-        file.diffRef,
-      ].join('|'),
-    ),
-  ].join('\n');
+  const keys: IPatchSummaryIdKeys = { runId, stepId, taskId, appliedAt };
 
   return {
-    id: `patch-summary:aed-diff:${hashString(idPayload)}`,
+    id: makeSummaryId('aed-diff', buildSummaryIdPayload(keys, files)),
     runId,
     stepId,
     files,
-    totalAdditions,
-    totalDeletions,
+    totalAdditions: sumAdditions(files),
+    totalDeletions: sumDeletions(files),
     patchRef: buildAiAedPatchRef(taskId),
     appliedAt,
   };
 };
 
+// ──────────────────────────────────────────────────────────────────────
+// Merge
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * 按 `path` 查找已合并文件；当 `Map` 命中失败时，回退到
+ * `areFileSystemPathsEqual` 线性比对，兼容大小写不敏感文件系统。
+ */
+const findExistingMergedFileIndex = (
+  files: readonly IAiAgentChangedFile[],
+  indexByPath: Map<string, number>,
+  path: string,
+): number => {
+  const direct = indexByPath.get(path);
+  if (direct !== undefined) {
+    return direct;
+  }
+  for (let i = 0; i < files.length; i += 1) {
+    if (areFileSystemPathsEqual(files[i].path, path)) {
+      return i;
+    }
+  }
+  return -1;
+};
+
+/**
+ * 将多个 `IAiAgentPatchSummary` 按文件维度合并。
+ *
+ * 语义说明（重要，**过程视图**）：
+ *   - `additions` / `deletions` 是各 summary 上对应文件 `+ / -` 的**累加**，
+ *     反映"流水线上一共发生过多少 + / -"，不是与原文件对比的"净增删"。
+ *     如果调用方需要净视图，应基于 `diffRef` 重算，而不是消费此处的数字。
+ *   - `status` 按 `mergeFileStatus` 规则收敛；
+ *   - `diffRef` 始终采用**最新**一次 summary 的值（"最近一次 diff 胜出"）；
+ *   - `patchRef` 取**首条** summary 的值。**前置约束**：所有 summary 应属于同一 task；
+ *     若 dev 模式下检测到 `patchRef` 不一致，会在控制台告警。
+ *   - `appliedAt` / `revertedAt` 优先末条，缺值则回退首条。
+ *   - `runId` / `stepId` 取首条；调用方应保证多 summary 属于同一 run/step。
+ */
 export const mergeAiAgentPatchSummaries = (
   summaries: readonly IAiAgentPatchSummary[],
 ): IAiAgentPatchSummary | null => {
   const firstSummary = summaries[0];
-
   if (!firstSummary) {
     return null;
   }
 
+  if (import.meta.env.DEV) {
+    const patchRefs = new Set(summaries.map((summary) => summary.patchRef));
+    if (patchRefs.size > 1) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[mergeAiAgentPatchSummaries] 输入 summary 的 patchRef 不一致，仅会保留首条:',
+        [...patchRefs],
+      );
+    }
+  }
+
   const files: IAiAgentChangedFile[] = [];
+  const indexByPath = new Map<string, number>();
 
   for (const summary of summaries) {
     for (const file of summary.files) {
-      const existingIndex = files.findIndex((item) => areFileSystemPathsEqual(item.path, file.path));
-      const existingFile = existingIndex >= 0 ? files[existingIndex] : undefined;
-
-      if (!existingFile) {
+      const existingIndex = findExistingMergedFileIndex(files, indexByPath, file.path);
+      if (existingIndex < 0) {
+        indexByPath.set(file.path, files.length);
         files.push({ ...file });
         continue;
       }
-
+      const existingFile = files[existingIndex];
       files[existingIndex] = {
         ...existingFile,
-        status: existingFile.status === file.status ? existingFile.status : 'modified',
+        status: mergeFileStatus(existingFile.status, file.status),
         additions: existingFile.additions + file.additions,
         deletions: existingFile.deletions + file.deletions,
         diffRef: file.diffRef,
@@ -330,18 +425,18 @@ export const mergeAiAgentPatchSummaries = (
   }
 
   const lastSummary = summaries[summaries.length - 1] ?? firstSummary;
-  const totalAdditions = files.reduce((total, file) => total + file.additions, 0);
-  const totalDeletions = files.reduce((total, file) => total + file.deletions, 0);
+  const mergedAppliedAt = lastSummary.appliedAt || firstSummary.appliedAt;
+  const mergedRevertedAt = lastSummary.revertedAt || firstSummary.revertedAt;
 
   return {
-    id: `patch-summary:merged:${hashString(summaries.map((summary) => summary.id).join('\n'))}`,
+    id: makeSummaryId('merged', summaries.map((summary) => summary.id).join('\n')),
     runId: firstSummary.runId,
     stepId: firstSummary.stepId,
     files,
-    totalAdditions,
-    totalDeletions,
+    totalAdditions: sumAdditions(files),
+    totalDeletions: sumDeletions(files),
     patchRef: firstSummary.patchRef,
-    ...(lastSummary.appliedAt ? { appliedAt: lastSummary.appliedAt } : {}),
-    ...(lastSummary.revertedAt ? { revertedAt: lastSummary.revertedAt } : {}),
+    ...(mergedAppliedAt ? { appliedAt: mergedAppliedAt } : {}),
+    ...(mergedRevertedAt ? { revertedAt: mergedRevertedAt } : {}),
   };
 };

@@ -1,14 +1,14 @@
-const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
+const TIME_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
   hour: '2-digit',
   minute: '2-digit',
   second: '2-digit',
+  hourCycle: 'h23',
 });
 
-export const formatTime = (value: string): string => {
-  const date = new Date(value);
+export const formatTime = (value: string | number | Date): string => {
+  const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return value;
+    return typeof value === 'string' ? value : '';
   }
-
-  return dateFormatter.format(date);
+  return TIME_FORMATTER.format(date);
 };
