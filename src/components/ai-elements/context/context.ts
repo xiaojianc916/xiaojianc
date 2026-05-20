@@ -1,7 +1,7 @@
 import type { LanguageModelUsage } from 'ai';
 import type { ComputedRef, InjectionKey } from 'vue';
 import { inject } from 'vue';
-import type { TAiTokenUsageSource } from '@/composables/useAiTokenContext';
+import type { TAiTokenUsageSource } from '@/composables/ai/useAiTokenContext';
 
 export type TContextModelId = string;
 

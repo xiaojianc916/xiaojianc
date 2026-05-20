@@ -4,7 +4,7 @@ import type {
     IAgentContextReferenceInput,
     IAgentRuntimeInput,
     TAgentMode,
-} from './runtime-input.js';
+} from './contracts/runtime-input.js';
 
 const CONTEXT_REFERENCE_PREVIEW_MAX_CHARS = 1_200;
 const UNSPECIFIED_MODEL_LABEL = '未指定';

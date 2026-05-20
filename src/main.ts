@@ -107,7 +107,7 @@ const bootstrap = async (): Promise<void> => {
     renderFatalBootstrapError(error)
 
     markStartup('window-stage-main-start')
-    await import('./services/modules/window')
+    await import('./services/ipc/window.service')
       .then(({ applyWindowStage }) => applyWindowStage({ stage: 'main' }))
       .then(() => {
         markStartup('window-stage-main-done')

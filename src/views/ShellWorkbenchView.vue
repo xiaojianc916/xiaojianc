@@ -195,12 +195,12 @@ import type { IGitDiffPreviewRequest } from '@/types/git';
 import { computed, defineAsyncComponent, nextTick } from 'vue';
 
 const DeferredAiWorkspaceSurface = defineAsyncComponent({
-    loader: () => import('@/components/business/ai/AiWorkspaceSurface.vue'),
+    loader: () => import('@/components/business/ai/shell/AiWorkspaceSurface.vue'),
     suspensible: false,
 });
 
 const DeferredAiDiffPreviewEditor = defineAsyncComponent({
-    loader: () => import('@/components/editor/AiDiffPreviewEditor.vue'),
+    loader: () => import('@/components/business/ai/edit/AiDiffPreviewEditor.vue'),
     suspensible: false,
 });
 

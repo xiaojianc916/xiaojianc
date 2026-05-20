@@ -51,7 +51,7 @@ describe('agent sidecar event contract', () => {
           output: {
             files: [
               'src/services/tauri.contracts.ts',
-              'src/services/modules/ai.ts',
+              'src/services/ipc/ai.service.ts',
               'src-tauri/src/commands/mod.rs',
             ],
           },

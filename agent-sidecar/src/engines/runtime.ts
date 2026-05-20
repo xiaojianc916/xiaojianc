@@ -2,7 +2,7 @@ import { MastraRuntime } from './mastra-runtime.js';
 import type {
     IAgentRuntimeResponse,
     IAgentRuntimeRunOptions,
-} from './runtime-contracts.js';
+} from './contracts/runtime-contracts.js';
 import type {
     IAgentRuntimeInput,
     IApprovalResolutionInput,
@@ -11,14 +11,14 @@ import type {
     IPlanFinishInput,
     IPlanQueryInput,
     IPlanRejectInput,
-} from './runtime-input.js';
+} from './contracts/runtime-input.js';
 
 export type {
     IAgentRuntimeContext,
     IAgentRuntimeResponse,
     IAgentRuntimeRunOptions,
     TAgentRuntimeOutputEvent
-} from './runtime-contracts.js';
+} from './contracts/runtime-contracts.js';
 
 // -----------------------------------------------------------------------------
 // Constants

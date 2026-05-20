@@ -1,4 +1,4 @@
-import { setWindowBackground } from '@/services/modules/window';
+import { setWindowBackground } from '@/services/ipc/window.service';
 import { useAppStore } from '@/store/app';
 import { applyResolvedThemeEffect } from '@/themes/effects';
 import { resolveTheme } from '@/themes/manager';

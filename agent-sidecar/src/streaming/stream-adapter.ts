@@ -1,4 +1,4 @@
-import type { TAgentRuntimeOutputEvent } from '../engines/runtime-contracts.js';
+import type { TAgentRuntimeOutputEvent } from '../engines/contracts/runtime-contracts.js';
 import type { TJsonValue } from '../schemas/events.js';
 import type { AgentStreamEventBus } from './stream-event-bus.js';
 import { extractRuntimeModelTextDelta, normalizeAgentRuntimeStreamEvent } from './stream-normalizer.js';

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { TAgentRuntimeOutputEvent } from '../engines/runtime-contracts.js';
+import type { TAgentRuntimeOutputEvent } from '../engines/contracts/runtime-contracts.js';
 import type { TJsonValue } from '../schemas/events.js';
 import { AgentStreamEventBus } from './stream-event-bus.js';
 import { normalizeAgentRuntimeStreamEvent } from './stream-normalizer.js';

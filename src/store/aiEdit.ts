@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 
-import { aiEditService } from '@/services/modules/ai-edit';
+import { aiEditService } from '@/services/ipc/ai.service-edit';
 import type {
     IAiEditAuthState,
     IAiEditListTimelineRequest,

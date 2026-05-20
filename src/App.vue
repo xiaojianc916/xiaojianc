@@ -3,7 +3,7 @@ import AppDialogHost from '@/components/common/AppDialogHost.vue';
 import BrowserContextMenuHost from '@/components/common/BrowserContextMenuHost.vue';
 import FatalErrorScreen from '@/components/common/FatalErrorScreen.vue';
 import { Toaster } from '@/components/ui/sonner';
-import { applyWindowStage } from '@/services/modules/window';
+import { applyWindowStage } from '@/services/ipc/window.service';
 import { runtimeErrorState } from '@/utils/runtime-diagnostics';
 import { markStartup, reportStartupTimings } from '@/utils/startup-profiler';
 import { watch } from 'vue';

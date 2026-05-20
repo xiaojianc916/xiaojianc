@@ -1,4 +1,4 @@
-import { aiService } from '@/services/modules/ai';
+import { aiService } from '@/services/ipc/ai.service';
 import type {
   IAiConfigPayload,
   IAiProviderConnectionPayload,
@@ -9,7 +9,7 @@ import type {
   TAiProviderType,
   TAiStatus,
 } from '@/types/ai';
-import { createDefaultAiConfigPayload } from '@/utils/ai-config';
+import { createDefaultAiConfigPayload } from '@/services/ipc/ai-config.service';
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 

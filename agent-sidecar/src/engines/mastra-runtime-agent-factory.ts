@@ -6,9 +6,9 @@ import { LibSQLStore } from '@mastra/libsql';
 import { createMastraModelConfigFromRequest, createMastraObserverModelConfig, createMastraReflectorModelConfig, type IMastraResolvedModelConfig } from '../models/mastra-model-config.js';
 import { createMastraFileLogger, type IMastraLogToolsRef } from '../tools/log.js';
 import { createMastraAgentMemory, resolveMastraStorageUrl } from './mastra-memory.js';
-import { createMastraObservability } from './mastra-runtime-workspace.js';
-import { DEFAULT_MASTRA_LOG_FILE, type IMastraAgentConfig, type IMastraAgentLike, type IMastraAgentStreamLike, type IMastraApprovalOptions, type IMastraDurableAgentLike, type IMastraExecutionHandle, type IMastraRegisteredAgentLike, type IMastraResumableAgentHandle, type IMastraStorageLike, type TMastraStreamChunk, type TMastraToolResumeData } from './mastra-runtime-types.js';
-import type { IAgentRuntimeModelConfigInput } from './runtime-input.js';
+import { createMastraObservability } from './workspace.js';
+import { DEFAULT_MASTRA_LOG_FILE, type IMastraAgentConfig, type IMastraAgentLike, type IMastraAgentStreamLike, type IMastraApprovalOptions, type IMastraDurableAgentLike, type IMastraExecutionHandle, type IMastraRegisteredAgentLike, type IMastraResumableAgentHandle, type IMastraStorageLike, type TMastraStreamChunk, type TMastraToolResumeData } from './types.js';
+import type { IAgentRuntimeModelConfigInput } from './contracts/runtime-input.js';
 
 export const createMastraModelConfig = (
     model: IMastraResolvedModelConfig,

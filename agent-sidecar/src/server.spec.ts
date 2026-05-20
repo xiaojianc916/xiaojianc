@@ -27,14 +27,14 @@ import {
 import {
   MastraRuntime,
 } from './engines/mastra-runtime.js';
-import { decodeApprovalRequestId } from './engines/mastra-runtime-approval-utils.js';
-import { allowWorkspaceWriteAfterVerifiedRead } from './engines/mastra-runtime-workspace.js';
+import { decodeApprovalRequestId } from './engines/approval-client/utils.js';
+import { allowWorkspaceWriteAfterVerifiedRead } from './engines/workspace.js';
 import {
   LibsqlAgentPlanStore,
   type IAgentPlanStore,
   type TAgentPlanRecord,
-} from './engines/plan-store.js';
-import { LibsqlAgentPlanWorkflowStore } from './engines/plan-workflow-store.js';
+} from './engines/plan/plan-store.js';
+import { LibsqlAgentPlanWorkflowStore } from './engines/plan/plan-workflow-store.js';
 import {
   createConfiguredRuntime,
   resolveConfiguredRuntimeName,
@@ -2360,7 +2360,7 @@ describe('Mastra runtime chat', () => {
     writeFileSync(join(workspaceRoot, 'other.sh'), '#!/usr/bin/env bash\nprintf other\n', 'utf8');
 
     try {
-      const { createMastraWorkspace } = await import('./engines/mastra-runtime-workspace.js');
+      const { createMastraWorkspace } = await import('./engines/workspace.js');
       const workspace = await createMastraWorkspace(workspaceRoot, 'write');
       assert.notEqual(workspace, undefined);
 

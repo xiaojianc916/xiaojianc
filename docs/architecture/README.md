@@ -31,6 +31,8 @@
 | [ADR-20260423-W](./ADR-20260423-welcome-smil-svg.md)                          | 欢迎页改为 SMIL SVG + 受限 welcome 路由                          | `accepted`   | 2026-04-23 | Welcome       |
 | [ADR-20260425](./ADR-20260425-terminal-dual-pty.md)                           | 终端双 PTY 模型                                                  | `superseded` | 2026-04-25 | Terminal      |
 | [ADR-20260506](./ADR-20260506-wsl-link-vsock-grpc-quic.md)                   | WSL Link 单通道可靠连接                                          | `proposed`   | 2026-05-06 | WSL Link      |
+| [ADR-20260520](./ADR-20260520-aed-ownership.md)                              | AED 权威层归属                                                   | `proposed`   | 2026-05-20 | T-3.1.1       |
+| [ADR-20260520-B](./ADR-20260520-aed-edit-patch-diff-terminology.md)          | AED edit / patch / diff 术语边界                                 | `proposed`   | 2026-05-20 | T-3.4.2       |
 
 ---
 

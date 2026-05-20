@@ -1,8 +1,8 @@
-import { aiService } from '@/services/modules/ai';
+import { aiService } from '@/services/ipc/ai.service';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAiStore } from './ai';
-import { createDefaultAiModelEndpointConfig } from '@/utils/ai-config';
+import { createDefaultAiModelEndpointConfig } from '@/services/ipc/ai-config.service';
 
 const tauriServiceMock = vi.hoisted(() => ({
   aiGetConfig: vi.fn(),

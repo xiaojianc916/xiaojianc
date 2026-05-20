@@ -7,7 +7,7 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 
 const applyWindowStageMock = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 
-vi.mock('@/services/modules/window', () => ({
+vi.mock('@/services/ipc/window.service', () => ({
     applyWindowStage: applyWindowStageMock,
 }));
 

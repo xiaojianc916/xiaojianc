@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { LanguageModelUsage } from 'ai';
 import { HoverCard } from '@/components/ui/hover-card';
-import type { TAiTokenUsageSource } from '@/composables/useAiTokenContext';
+import type { TAiTokenUsageSource } from '@/composables/ai/useAiTokenContext';
 import { computed, provide } from 'vue';
 import { ContextKey, type TContextModelId } from './context';
 

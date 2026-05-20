@@ -9,8 +9,8 @@ import {
   type IAgentRuntimeResponse,
   type IAgentRuntimeRunOptions,
   type TAgentRuntimeOutputEvent,
-} from './engines/runtime-contracts.js';
-import type { IAgentRuntimeInput, TAgentMode } from './engines/runtime-input.js';
+} from './engines/contracts/runtime-contracts.js';
+import type { IAgentRuntimeInput, TAgentMode } from './engines/contracts/runtime-input.js';
 import { createConfiguredRuntime, type IAgentSidecarRuntime } from './engines/runtime.js';
 import type { TAgentSidecarResponse } from './schemas/events.js';
 import { agentSidecarResponseSchema } from './schemas/events.js';
