@@ -1,4 +1,3 @@
-use super::connection::{resolve_direct_upstream_endpoint, should_try_direct_upstream_fallback};
 use super::config::resolve_retained_profile_id;
 use super::conversation::{
     build_conversation_title_prompt, build_identity_system_prompt, normalize_conversation_title,
@@ -7,63 +6,18 @@ use super::conversation::{
 use super::suggestions::{normalize_suggestion_text, parse_suggestion_pool_response};
 use super::{
     default_base_url, default_model, validate_provider, AiModelEndpointRuntimeConfig,
-    AiProviderProfile, AiResolvedModelRole, AiRuntimeConfig, DEFAULT_LITELLM_BASE_URL,
-    DEFAULT_LITELLM_MODEL, DEFAULT_NARRATOR_MODEL, MAX_GENERATED_TITLE_CHARS,
+    AiProviderProfile, AiResolvedModelRole, AiRuntimeConfig, DEFAULT_MASTRA_MODEL,
+    DEFAULT_NARRATOR_MODEL, MAX_GENERATED_TITLE_CHARS,
 };
 use crate::ai::provider::AiProviderMessage;
 
 #[test]
-fn litellm_provider_uses_local_proxy_defaults() {
-    assert!(validate_provider("litellm").is_ok());
-    assert_eq!(default_model("litellm").as_deref(), Some("openai/gpt-5.5"));
-    assert_eq!(
-        default_base_url("litellm").as_deref(),
-        Some("http://127.0.0.1:4000/v1")
-    );
+fn mastra_provider_uses_current_defaults() {
+    assert!(validate_provider("mastra").is_ok());
+    assert_eq!(default_model("mastra").as_deref(), Some(DEFAULT_MASTRA_MODEL));
+    assert_eq!(default_base_url("mastra"), None);
+    assert!(validate_provider("litellm").is_err());
     assert!(validate_provider("openai").is_err());
-}
-
-#[test]
-fn deepseek_model_routes_to_direct_upstream_when_default_litellm_is_unavailable() {
-    let endpoint =
-        resolve_direct_upstream_endpoint(DEFAULT_LITELLM_BASE_URL, "deepseek/deepseek-v4-pro")
-            .expect("deepseek route should resolve");
-
-    assert_eq!(endpoint.provider_name, "DeepSeek");
-    assert_eq!(endpoint.base_url, "https://api.deepseek.com");
-    assert_eq!(endpoint.model, "deepseek-v4-pro");
-}
-
-#[test]
-fn zhipu_model_routes_to_direct_upstream_when_default_litellm_is_unavailable() {
-    let endpoint = resolve_direct_upstream_endpoint(
-        DEFAULT_LITELLM_BASE_URL,
-        "zhipuai/glm-4.7-flash",
-    )
-        .expect("zhipu route should resolve");
-
-    assert_eq!(endpoint.provider_name, "智谱 GLM");
-    assert_eq!(endpoint.base_url, "https://open.bigmodel.cn/api/paas/v4");
-    assert_eq!(endpoint.model, "glm-4.7-flash");
-}
-
-#[test]
-fn direct_upstream_fallback_only_handles_default_proxy_transport_errors() {
-    assert!(should_try_direct_upstream_fallback(
-        DEFAULT_LITELLM_BASE_URL,
-        "deepseek/deepseek-v4-pro",
-        "error sending request for url (http://127.0.0.1:4000/v1/chat/completions)",
-    ));
-    assert!(!should_try_direct_upstream_fallback(
-        "https://api.deepseek.com",
-        "deepseek/deepseek-v4-pro",
-        "error sending request for url (https://api.deepseek.com/chat/completions)",
-    ));
-    assert!(!should_try_direct_upstream_fallback(
-        DEFAULT_LITELLM_BASE_URL,
-        "anthropic/claude-sonnet-4-6",
-        "error sending request for url (http://127.0.0.1:4000/v1/chat/completions)",
-    ));
 }
 
 #[test]
@@ -140,7 +94,7 @@ fn conversation_title_generation_prefers_narrator_model() {
         config
             .selected_model
             .as_deref()
-            .unwrap_or(DEFAULT_LITELLM_MODEL)
+            .unwrap_or(DEFAULT_MASTRA_MODEL)
     );
 }
 
@@ -174,7 +128,7 @@ fn model_switch_does_not_retain_profile_without_matching_profile_secret() {
 #[test]
 fn suggestion_pool_parser_accepts_wrapped_json_object() {
     let suggestions = (1..=9)
-        .map(|index| format!("\"提示词{index}测试\""))
+        .map(|index| format!("\"介绍提示词{index}测试\""))
         .collect::<Vec<_>>()
         .join(",");
     let raw = format!("```json\n{{\"suggestions\":[{suggestions}]}}\n```");
@@ -182,19 +136,19 @@ fn suggestion_pool_parser_accepts_wrapped_json_object() {
     let parsed = parse_suggestion_pool_response(&raw, 9);
 
     assert_eq!(parsed.len(), 9);
-    assert_eq!(parsed[0], "提示词1测试");
+    assert_eq!(parsed[0], "介绍提示词1测试");
 }
 
 #[test]
 fn suggestion_pool_parser_normalizes_numbered_lines() {
     let raw = [
-        "1. “解释潮汐变化”",
+        "1. “解释潮汐形成原因”",
         "2. 给我一个睡前放松建议",
         "3. 推荐一本短篇小说",
         "4. 讲一个数学冷知识",
         "5. 帮我拆解今天的任务",
         "6. 介绍一个天文现象",
-        "7. 用类比解释 DNA",
+        "7. 用类比解释基因",
         "8. 给我一个沟通练习",
         "9. 讲讲古诗词意象",
     ]
@@ -203,7 +157,7 @@ fn suggestion_pool_parser_normalizes_numbered_lines() {
     let parsed = parse_suggestion_pool_response(&raw, 9);
 
     assert_eq!(parsed.len(), 9);
-    assert_eq!(parsed[0], "解释潮汐变化");
+    assert_eq!(parsed[0], "解释潮汐形成原因");
 }
 
 #[test]

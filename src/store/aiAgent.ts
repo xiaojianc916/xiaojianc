@@ -3,7 +3,7 @@ import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { z } from 'zod';
 
-import { AGENT_PLAN_STATUSES } from '@/types/agent-sidecar';
+import { AGENT_PLAN_STATUSES } from '@/types/ai/sidecar';
 import type {
     IAiAgentClassifyTaskPayload,
     IAiAgentPatchSummary,
@@ -29,10 +29,10 @@ import {
     aiAgentTaskClassificationSchema,
     aiTaskPlanStepSchema,
     aiToolConfirmationRequestSchema,
-} from '@/types/ai-agent.schema';
-import { aiContextReferenceSchema } from '@/types/ai-context.schema';
-import { aiToolActivityInlineSchema } from '@/types/ai-stream.schema';
-import { aiChatMessageSchema, aiLanguageModelUsageSchema } from '@/types/ai.schema';
+} from '@/types/ai/agent.schema';
+import { aiContextReferenceSchema } from '@/types/ai/context.schema';
+import { aiToolActivityInlineSchema } from '@/types/ai/stream.schema';
+import { aiChatMessageSchema, aiLanguageModelUsageSchema } from '@/types/ai/schema';
 
 // ---------------------------------------------------------------------------
 // Public types

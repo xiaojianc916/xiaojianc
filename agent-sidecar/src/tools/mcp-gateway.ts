@@ -2,7 +2,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import { compactModelOutput } from '../models/model-output-budget.js';
+import { compactModelOutput } from '../models/output-budget.js';
 import {
   MCP_SERVER_NAMES,
   type IMcpServerConfig,

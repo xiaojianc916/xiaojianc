@@ -10,7 +10,7 @@ import type {
     IAiEditSetAuthLevelRequest,
     IAiEditTimelineEntry,
     TAiEditAuthLevel,
-} from '@/types/ai-edit';
+} from '@/types/ai/edit';
 
 type TAiEditStoreStatus = 'idle' | 'loading' | 'error';
 

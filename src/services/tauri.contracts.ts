@@ -12,7 +12,7 @@ import {
   agentSidecarPlanRejectRequestSchema,
   agentSidecarPlanValidateRequestSchema,
   agentSidecarResponsePayloadSchema,
-} from '@/types/agent-sidecar.schema';
+} from '@/types/ai/sidecar.schema';
 import {
   aiEditAuthStateSchema,
   aiEditCreateSnapshotPayloadSchema,
@@ -34,7 +34,7 @@ import {
   aiEditSetPinRequestSchema,
   aiEditUndoOperationPayloadSchema,
   aiEditUndoOperationRequestSchema,
-} from '@/types/ai-edit.schema';
+} from '@/types/ai/edit.schema';
 import {
   aiAgentClassifyTaskPayloadSchema,
   aiAgentClassifyTaskRequestSchema,
@@ -62,7 +62,7 @@ import {
   aiWebFetchPayloadSchema,
   aiWebSearchInputSchema,
   aiWebSearchPayloadSchema
-} from '@/types/ai.schema';
+} from '@/types/ai/schema';
 import {
   installWslLinkAgentPayloadSchema,
   installWslLinkAgentRequestSchema,
@@ -74,7 +74,7 @@ import {
   wslLinkEnvironmentReportSchema,
   wslLinkSupervisorControlPayloadSchema,
   wslLinkStatusPayloadSchema,
-} from '@/types/wsl-link.schema';
+} from '@/types/wsl-link/schema';
 import { z } from 'zod';
 
 export const zTauriVoid = z

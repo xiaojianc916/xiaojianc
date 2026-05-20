@@ -294,7 +294,8 @@ mod tests {
     use super::{apply_patch, hash_text, propose_patch, validate_writable_path};
     use crate::ai::edit::apply::diff_render;
     use crate::ai::edit::history::edit_journal;
-    use crate::ai::edit::{self, AiEditState};
+    use crate::ai::edit as ai_edit;
+    use crate::ai::edit::AiEditState;
     use crate::commands::contracts::{
         AiApplyPatchMetadataRequest, AiApplyPatchRequest, AiEditListTimelineRequest,
         AiEditSetAuthLevelRequest, AiEditTimelineEntryPayload, AiPatchFilePayload,

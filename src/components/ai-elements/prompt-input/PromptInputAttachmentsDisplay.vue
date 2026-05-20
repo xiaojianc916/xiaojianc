@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AiImageAttachmentPreviewGrid } from '@/components/ai-elements/image';
+import { ImageAttachmentPreviewGrid } from '@/components/ai-elements/image';
 import type { IAiAttachedFile } from '@/types/ai';
 import { computed } from 'vue';
 
@@ -31,7 +31,7 @@ const resolveAttachmentMediaType = (attachment: IAiAttachedFile): string =>
 
 <template>
   <div class="prompt-input-attachments-display" aria-label="已添加附件">
-    <AiImageAttachmentPreviewGrid
+    <ImageAttachmentPreviewGrid
       v-if="attachmentItems.length"
       :items="attachmentItems"
       aria-label="已添加附件"

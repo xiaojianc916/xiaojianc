@@ -1,9 +1,9 @@
 import { MastraRuntimeChat } from '../chat/chat.js';
-import { createDeepSeekReasoningRunPrefix, evictDeepSeekReasoningByPrefix, runWithDeepSeekReasoningContext } from '../../models/deepseek-reasoning-fetch.js';
+import { createDeepSeekReasoningRunPrefix, evictDeepSeekReasoningByPrefix, runWithDeepSeekReasoningContext } from '../../models/providers/deepseek-reasoning-fetch.js';
 import { agentPlanGenerationSchema } from '../../schemas/plan.js';
-import { buildSystemPrompt } from '../agent-runtime-helpers.js';
-import { createMastraMemoryReference, createMastraMemoryScope } from '../mastra-memory.js';
-import { createMastraMemoryForModel, createMastraModelConfig, resolveMastraModelConfig } from '../mastra-runtime-agent-factory.js';
+import { buildSystemPrompt } from '../prompts/system-prompt.js';
+import { createMastraMemoryReference, createMastraMemoryScope } from '../context/memory.js';
+import { createMastraMemoryForModel, createMastraModelConfig, resolveMastraModelConfig } from '../agent/factory.js';
 import { createAcontextTokenEventDraft, createDeepSeekPayloadEventSink } from '../budget/budget.js';
 import { buildMastraMessages, normalizeMastraError } from '../messages.js';
 import { normalizeGeneratedAgentPlan } from './plan-utils.js';

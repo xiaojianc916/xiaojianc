@@ -688,8 +688,8 @@ mod tests {
         assert_eq!(outcome.pruned_blob_count, 3);
         assert_eq!(stored_snapshots.len(), 3);
         assert_eq!(timeline_snapshot_ids.len(), 0);
-        assert_eq!(outcome.pruned_operation_ids.len(), 0);
-        assert_eq!(outcome.pruned_snapshot_ids.len(), 0);
+        assert_eq!(outcome.pruned_operation_count, 0);
+        assert_eq!(outcome.pruned_snapshot_count, 0);
 
         let _ = fs::remove_dir_all(&storage_root);
     }

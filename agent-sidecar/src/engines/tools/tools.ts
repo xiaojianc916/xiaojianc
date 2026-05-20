@@ -3,7 +3,7 @@ import type { MastraBrowser } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import type { AnyWorkspace } from '@mastra/core/workspace';
 import { z } from 'zod';
-import { compactModelOutput, truncateModelOutputText } from '../../models/model-output-budget.js';
+import { compactModelOutput, truncateModelOutputText } from '../../models/output-budget.js';
 import { createMcpGatewayRunBundle, type McpGatewayMetricBuffer, type McpGatewayWarmPool } from '../../tools/mcp-gateway.js';
 import { createMastraLogTools, type IMastraLogToolsRef } from '../../tools/log.js';
 import { createMastraTimeTools } from '../../tools/time.js';

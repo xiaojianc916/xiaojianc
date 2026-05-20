@@ -1,6 +1,6 @@
-import type { TAgentRuntimeEvent } from '@/types/agent-sidecar';
+import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
 import type { IAiChatMessage } from '@/types/ai';
-import type { IAiContextReference } from '@/types/ai-context';
+import type { IAiContextReference } from '@/types/ai/context';
 import type { LanguageModelUsage } from 'ai';
 import { getContext } from 'tokenlens';
 import type { ComputedRef } from 'vue';

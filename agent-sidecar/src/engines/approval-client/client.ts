@@ -1,5 +1,5 @@
 import { MastraRuntimeExecution } from '../execution.js';
-import { createDeepSeekReasoningRunPrefix, evictDeepSeekReasoningByPrefix, runWithDeepSeekReasoningContext } from '../../models/deepseek-reasoning-fetch.js';
+import { createDeepSeekReasoningRunPrefix, evictDeepSeekReasoningByPrefix, runWithDeepSeekReasoningContext } from '../../models/providers/deepseek-reasoning-fetch.js';
 import { decodeApprovalRequestId, isApprovedDecision } from './utils.js';
 import { createDeepSeekPayloadEventSink } from '../budget/budget.js';
 import { createExecutionRequestContext } from '../context/context.js';

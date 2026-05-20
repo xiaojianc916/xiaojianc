@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion';
 import { cn } from '@/lib/utils';
-import { groupSuggestionsByEstimatedWidth } from '@/utils/suggestion-layout';
+import { groupSuggestionsByEstimatedWidth } from '@/components/business/ai/suggestion/layout';
 import { computed, type HTMLAttributes } from 'vue';
 
 interface IAiSuggestionRow {

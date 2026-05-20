@@ -1,9 +1,9 @@
 import { MastraRuntimeBase } from '../base.js';
-import { createDeepSeekReasoningRunPrefix, evictDeepSeekReasoningByPrefix, runWithDeepSeekReasoningContext } from '../../models/deepseek-reasoning-fetch.js';
+import { createDeepSeekReasoningRunPrefix, evictDeepSeekReasoningByPrefix, runWithDeepSeekReasoningContext } from '../../models/providers/deepseek-reasoning-fetch.js';
 import { createMcpGatewayRunBundle } from '../../tools/mcp-gateway.js';
-import { buildSystemPrompt } from '../agent-runtime-helpers.js';
-import { createMastraMemoryReference, createMastraMemoryScope } from '../mastra-memory.js';
-import { createMastraMemoryForModel, createMastraModelConfig, resolveMastraModelConfig } from '../mastra-runtime-agent-factory.js';
+import { buildSystemPrompt } from '../prompts/system-prompt.js';
+import { createMastraMemoryReference, createMastraMemoryScope } from '../context/memory.js';
+import { createMastraMemoryForModel, createMastraModelConfig, resolveMastraModelConfig } from '../agent/factory.js';
 import { createAcontextTokenEventDraft, createDeepSeekPayloadEventSink } from '../budget/budget.js';
 import { createExecutionRequestContext } from '../context/context.js';
 import { buildMastraMessages, normalizeMastraError } from '../messages.js';

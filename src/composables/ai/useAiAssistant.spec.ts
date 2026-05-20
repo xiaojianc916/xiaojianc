@@ -13,8 +13,8 @@ import type {
   IAgentSidecarResponsePayload,
   IAgentSidecarStreamEventPayload,
   TJsonValue,
-} from '@/types/agent-sidecar';
-import { agentSidecarPlanRequestSchema } from '@/types/agent-sidecar.schema';
+} from '@/types/ai/sidecar';
+import { agentSidecarPlanRequestSchema } from '@/types/ai/sidecar.schema';
 import type {
   IAiAgentRun,
   IAiApplyPatchPayload,
@@ -34,7 +34,7 @@ import type {
   IAiEditUndoOperationPayload,
   IAiEditUndoOperationRequest,
   IAiSnapshot,
-} from '@/types/ai-edit';
+} from '@/types/ai/edit';
 import type { IAnalyzeScriptPayload, IEditorDocument } from '@/types/editor';
 import type { IGitRepositoryStatusPayload } from '@/types/git';
 

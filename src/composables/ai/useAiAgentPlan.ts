@@ -1,6 +1,6 @@
 import { aiService } from '@/services/ipc/ai.service';
 import { useAiAgentStore } from '@/store/aiAgent';
-import type { IAgentSidecarResponsePayload } from '@/types/agent-sidecar';
+import type { IAgentSidecarResponsePayload } from '@/types/ai/sidecar';
 import type {
   IAiAgentPlanMetadata,
   IAiContextReference,
@@ -12,7 +12,7 @@ import {
   projectSidecarPlanRecordResponse,
   projectSidecarPlanResponse,
   resolveSidecarOfficialUsage,
-} from '@/utils/agent-sidecar-events';
+} from '@/composables/ai/sidecar-events';
 import { toErrorMessage } from '@/utils/error';
 import { logger } from '@/utils/logger';
 import { ref } from 'vue';

@@ -127,7 +127,7 @@ export type TLanguageModelUsage = z.infer<typeof languageModelUsageSchema>;
  * 工具事件契约：
  * - `tool_start.input` 和 `tool_result.output` 是 **JSON value** 类型。
  *   生产端必须先把 `Date` / `BigInt` / `undefined` / class 实例等非 JSON 类型
- *   通过 `compactModelOutput`（见 ../models/model-output-budget.js）
+ *   通过 `compactModelOutput`（见 ../models/output-budget.js）
  *   或自定义 serializer 转换后再发出，否则 schema 会拒绝。
  */
 export const agentUiEventSchema = z.discriminatedUnion('type', [

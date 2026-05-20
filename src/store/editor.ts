@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 
 import { tauriSessionStorage } from '@/store/plugins/tauriSessionStorage';
-import type { IAiDiffEditorPreview } from '@/types/ai-patch';
+import type { IAiDiffEditorPreview } from '@/types/ai/patch';
 import type {
   IActiveRunSummary,
   IAnalyzeScriptPayload,

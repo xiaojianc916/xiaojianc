@@ -3,12 +3,12 @@ import type {
   IAiPatchFile,
   IAiPatchSet,
 } from '@/types/ai';
-import type { IAiEditGetDiffPayload, TAiEditOperationKind } from '@/types/ai-edit';
+import type { IAiEditGetDiffPayload, TAiEditOperationKind } from '@/types/ai/edit';
 import type {
   IAiAgentChangedFile,
   IAiAgentPatchSummary,
   TAiAgentChangedFileStatus,
-} from '@/types/ai-patch';
+} from '@/types/ai/patch';
 import { buildAiAedDiffRef } from '@/components/business/ai/edit/diff-ref';
 import { areFileSystemPathsEqual } from '@/utils/path';
 

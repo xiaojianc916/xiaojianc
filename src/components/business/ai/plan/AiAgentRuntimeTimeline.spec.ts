@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import AiAgentRuntimeTimeline from '@/components/business/ai/plan/AiAgentRuntimeTimeline.vue';
 
-import type { TAgentRuntimeEvent } from '@/types/agent-sidecar';
+import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
 
 const createEvent = (overrides: Partial<TAgentRuntimeEvent>): TAgentRuntimeEvent => ({
     id: overrides.id ?? 'event-1',

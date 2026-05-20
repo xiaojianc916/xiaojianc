@@ -1,5 +1,5 @@
 import AiAssistantPanel from '@/components/business/ai/shell/AiAssistantPanel.vue';
-import type { TAgentRuntimeEvent } from '@/types/agent-sidecar';
+import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
 import type {
     IAiAgentPlanMetadata,
     IAiAgentRun,

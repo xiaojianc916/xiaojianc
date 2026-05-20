@@ -970,10 +970,8 @@ mod tests {
     use super::{
         get_diff, restore_snapshot, revert_file, revert_hunk, revert_task, undo_operation,
     };
-    use crate::ai::edit::{
-        self,
-        errors, AiEditState,
-    };
+    use crate::ai::edit as ai_edit;
+    use crate::ai::edit::{errors, AiEditState};
     use crate::ai::edit::apply::{
         auto_apply::{apply_operation_plans, AiAutoApplyOperationPlan},
         diff_render,

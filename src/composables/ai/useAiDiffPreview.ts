@@ -5,7 +5,7 @@ import type {
   IAiDiffPreviewLine,
   TAiDiffPreviewLineKind,
 } from '@/types/ai';
-import type { IAiEditDiffHunk, IAiEditGetDiffPayload } from '@/types/ai-edit';
+import type { IAiEditDiffHunk, IAiEditGetDiffPayload } from '@/types/ai/edit';
 import { parseAiAedDiffRef } from '@/components/business/ai/edit/diff-ref';
 import { computed, ref, type Ref } from 'vue';
 

@@ -255,7 +255,7 @@ pub fn reject_existing_symlink(path: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_path_for_compare, reject_existing_symlink, validate_ai_writable_path,
+        normalize_path_for_compare_path, reject_existing_symlink, validate_ai_writable_path,
         validate_ai_writable_path_with_root,
     };
     use std::fs;
@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn normalize_compare_handles_windows_separators_and_unicode() {
         assert_eq!(
-            normalize_path_for_compare(r"src\脚本\🔧.sh/"),
+            normalize_path_for_compare_path(std::path::Path::new(r"src\脚本\🔧.sh/")),
             "src/脚本/🔧.sh"
         );
     }

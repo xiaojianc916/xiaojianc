@@ -12,7 +12,7 @@ import { createTool } from '@mastra/core/tools';
 import type { WorkspaceToolsConfig } from '@mastra/core/workspace';
 import { z } from 'zod';
 
-import { buildSystemPrompt, extractVisibleAgentResultText } from './engines/agent-runtime-helpers.js';
+import { buildSystemPrompt, extractVisibleAgentResultText } from './engines/prompts/system-prompt.js';
 import {
   createMastraMemoryScope,
   mastraWorkingMemorySchema,
@@ -23,7 +23,7 @@ import {
   resolveObservationalMemoryEnabled,
   resolveProjectUuid,
   resolveSemanticRecallEnabled,
-} from './engines/mastra-memory.js';
+} from './engines/context/memory.js';
 import {
   MastraRuntime,
 } from './engines/mastra-runtime.js';
@@ -40,20 +40,20 @@ import {
   resolveConfiguredRuntimeName,
   type IAgentSidecarRuntime,
 } from './engines/runtime.js';
-import type { IMastraResolvedModelConfig } from './models/mastra-model-config.js';
+import type { IMastraResolvedModelConfig } from './models/config.js';
 import {
   createMastraObserverModelConfig,
   createMastraReflectorModelConfig,
-} from './models/mastra-model-config.js';
+} from './models/config.js';
 import {
   clearDeepSeekReasoningStoreForTest,
   deepseekReasoningFetch,
   runWithDeepSeekReasoningContext,
-} from './models/deepseek-reasoning-fetch.js';
+} from './models/providers/deepseek-reasoning-fetch.js';
 import {
   createDeepSeekMastraGateway,
-} from './models/deepseek-mastra-gateway.js';
-import { compactModelOutput } from './models/model-output-budget.js';
+} from './models/providers/deepseek-mastra-gateway.js';
+import { compactModelOutput } from './models/output-budget.js';
 import {
   agentPlanDeltaSchema,
   agentPlanValidationReportSchema,

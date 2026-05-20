@@ -1,6 +1,6 @@
 import type { ToolsInput } from '@mastra/core/agent';
 import { z } from 'zod';
-import type { IDeepSeekRequestPayloadStats } from '../../models/deepseek-reasoning-fetch.js';
+import type { IDeepSeekRequestPayloadStats } from '../../models/providers/deepseek-reasoning-fetch.js';
 import type { IAgentRuntimeRunOptions, TAgentRuntimeOutputEvent } from '../contracts/runtime-contracts.js';
 import type { IAgentContextReferenceInput } from '../contracts/runtime-input.js';
 import { pushUiEvent, toRecord } from '../utils.js';

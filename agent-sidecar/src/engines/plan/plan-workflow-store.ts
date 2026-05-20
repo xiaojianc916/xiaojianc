@@ -22,7 +22,7 @@ import {
 } from '../../schemas/plan.js';
 import type { JSONValue } from '../../types/json-value.js';
 
-import { resolveMastraStorageUrl } from '../mastra-memory.js';
+import { resolveMastraStorageUrl } from '../context/memory.js';
 
 // -----------------------------------------------------------------------------
 // Schema constants

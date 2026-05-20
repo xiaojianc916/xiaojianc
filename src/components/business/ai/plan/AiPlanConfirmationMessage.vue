@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { AiPlan } from '@/components/ai-elements/plan';
 import { Message } from '@/components/ai-elements/message';
-import type { TAgentPlanStatus } from '@/types/agent-sidecar';
+import type { TAgentPlanStatus } from '@/types/ai/sidecar';
 import type { IAiTaskPlanStep } from '@/types/ai';
 
 defineProps<{

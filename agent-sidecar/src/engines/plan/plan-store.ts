@@ -11,7 +11,7 @@ import {
     type TAgentPlanStep,
 } from '../../schemas/plan.js';
 
-import { resolveMastraStorageUrl } from '../mastra-memory.js';
+import { resolveMastraStorageUrl } from '../context/memory.js';
 
 // -----------------------------------------------------------------------------
 // Schema constants

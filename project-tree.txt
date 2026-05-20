@@ -14,7 +14,8 @@
 │   ├── .agent-sidecar
 │   │   ├── mastra.db
 │   │   ├── mastra.db-shm
-│   │   └── mastra.db-wal
+│   │   ├── mastra.db-wal
+│   │   └── mastra.log
 │   ├── MATURITY.md
 │   ├── package.json
 │   ├── src
@@ -23,37 +24,47 @@
 │   │   ├── context
 │   │   ├── engines
 │   │   │   ├── agent-runtime-helpers.ts
+│   │   │   ├── approval-client
+│   │   │   │   ├── client.ts
+│   │   │   │   └── utils.ts
+│   │   │   ├── base.ts
+│   │   │   ├── budget
+│   │   │   │   └── budget.ts
+│   │   │   ├── chat
+│   │   │   │   └── chat.ts
+│   │   │   ├── context
+│   │   │   │   └── context.ts
+│   │   │   ├── contracts
+│   │   │   │   ├── runtime-contracts.ts
+│   │   │   │   └── runtime-input.ts
+│   │   │   ├── execution.ts
 │   │   │   ├── mastra-memory.ts
 │   │   │   ├── mastra-runtime-agent-factory.ts
-│   │   │   ├── mastra-runtime-approval-utils.ts
-│   │   │   ├── mastra-runtime-approval.ts
-│   │   │   ├── mastra-runtime-base.ts
-│   │   │   ├── mastra-runtime-budget.ts
-│   │   │   ├── mastra-runtime-chat.ts
-│   │   │   ├── mastra-runtime-context.ts
-│   │   │   ├── mastra-runtime-execution.ts
-│   │   │   ├── mastra-runtime-messages.ts
-│   │   │   ├── mastra-runtime-plan-utils.ts
-│   │   │   ├── mastra-runtime-plan.ts
-│   │   │   ├── mastra-runtime-responses.ts
-│   │   │   ├── mastra-runtime-rollback.ts
-│   │   │   ├── mastra-runtime-stream-utils.ts
-│   │   │   ├── mastra-runtime-tools.ts
-│   │   │   ├── mastra-runtime-types.ts
-│   │   │   ├── mastra-runtime-utils.ts
-│   │   │   ├── mastra-runtime-validation.ts
-│   │   │   ├── mastra-runtime-workspace.ts
 │   │   │   ├── mastra-runtime.ts
-│   │   │   ├── plan-store.ts
-│   │   │   ├── plan-workflow-store.ts
-│   │   │   ├── runtime-contracts.ts
-│   │   │   ├── runtime-input.ts
-│   │   │   └── runtime.ts
+│   │   │   ├── messages.ts
+│   │   │   ├── plan
+│   │   │   │   ├── plan-store.ts
+│   │   │   │   ├── plan-utils.ts
+│   │   │   │   ├── plan-workflow-store.ts
+│   │   │   │   └── plan.ts
+│   │   │   ├── responses.ts
+│   │   │   ├── rollback.ts
+│   │   │   ├── runtime.ts
+│   │   │   ├── stream
+│   │   │   │   └── stream-utils.ts
+│   │   │   ├── tools
+│   │   │   │   └── tools.ts
+│   │   │   ├── types.ts
+│   │   │   ├── utils.ts
+│   │   │   ├── validation.ts
+│   │   │   └── workspace.ts
 │   │   ├── models
-│   │   │   ├── deepseek-mastra-gateway.ts
-│   │   │   ├── deepseek-reasoning-fetch.ts
-│   │   │   ├── mastra-model-config.ts
-│   │   │   └── model-output-budget.ts
+│   │   │   ├── config.ts
+│   │   │   ├── index.ts
+│   │   │   ├── output-budget.ts
+│   │   │   └── providers
+│   │   │       ├── deepseek-mastra-gateway.ts
+│   │   │       └── deepseek-reasoning-fetch.ts
 │   │   ├── rollback
 │   │   ├── schemas
 │   │   │   ├── events.ts
@@ -71,6 +82,7 @@
 │   │   │   ├── stream-types.ts
 │   │   │   └── streaming.spec.ts
 │   │   ├── tools
+│   │   │   ├── generated.ts
 │   │   │   ├── log.ts
 │   │   │   ├── mcp-gateway.ts
 │   │   │   ├── mcp.spec.ts
@@ -118,6 +130,9 @@
 │   │   ├── ADR-20260429-agent-plan-mode-web-search.md
 │   │   ├── ADR-20260506-wsl-link-vsock-grpc-quic.md
 │   │   ├── ADR-20260513-aed-rust-infrastructure.md
+│   │   ├── ADR-20260520-aed-edit-patch-diff-terminology.md
+│   │   ├── ADR-20260520-aed-ownership.md
+│   │   ├── ADR-20260520-mcp-hooks-and-capability.md
 │   │   └── README.md
 │   ├── audit-events.md
 │   ├── env-vars.md
@@ -154,6 +169,8 @@
 │   └── Messages_zh.json
 ├── rust_out.exe
 ├── rust_out.pdb
+├── schemas
+│   └── ai-tools-manifest.json
 ├── scripts
 │   ├── baselines
 │   │   ├── capability-domains.json
@@ -172,6 +189,7 @@
 │   ├── check-terminal-singleton.ts
 │   ├── check-versions.ts
 │   ├── check-workbench-facade.ts
+│   ├── gen-tools.mjs
 │   ├── generate-shell-command-catalog.mjs
 │   ├── guard-utils.ts
 │   ├── run-all-guards.ts
@@ -395,6 +413,7 @@
 │   ├── boot
 │   ├── components
 │   │   ├── ai-elements
+│   │   │   ├── AGENTS.md
 │   │   │   ├── attachments
 │   │   │   │   ├── Attachment.vue
 │   │   │   │   ├── AttachmentEmpty.vue
@@ -422,7 +441,8 @@
 │   │   │   ├── checkpoint
 │   │   │   │   ├── Checkpoint.vue
 │   │   │   │   ├── CheckpointIcon.vue
-│   │   │   │   └── CheckpointTrigger.vue
+│   │   │   │   ├── CheckpointTrigger.vue
+│   │   │   │   └── index.ts
 │   │   │   ├── code-block
 │   │   │   │   ├── CodeBlock.vue
 │   │   │   │   ├── CodeBlockActions.vue
@@ -453,8 +473,6 @@
 │   │   │   │   ├── ContextOutputUsage.vue
 │   │   │   │   ├── ContextReasoningUsage.vue
 │   │   │   │   ├── ContextTrigger.vue
-│   │   │   │   ├── deepseek-pricing.spec.ts
-│   │   │   │   ├── deepseek-pricing.ts
 │   │   │   │   ├── index.ts
 │   │   │   │   ├── token-format.ts
 │   │   │   │   └── TokensWithCost.vue
@@ -474,8 +492,8 @@
 │   │   │   │   ├── FileTreeName.vue
 │   │   │   │   └── index.ts
 │   │   │   ├── image
-│   │   │   │   ├── AiImageAttachmentPreviewGrid.vue
 │   │   │   │   ├── Image.vue
+│   │   │   │   ├── ImageAttachmentPreviewGrid.vue
 │   │   │   │   └── index.ts
 │   │   │   ├── loader
 │   │   │   │   ├── index.ts
@@ -558,43 +576,13 @@
 │   │   │       └── TerminalTitle.vue
 │   │   ├── business
 │   │   │   └── ai
-│   │   │       ├── AiAgentRuntimeTimeline.spec.ts
-│   │   │       ├── AiAgentRuntimeTimeline.vue
-│   │   │       ├── AiAssistantPanel.spec.ts
-│   │   │       ├── AiAssistantPanel.vue
-│   │   │       ├── AiChangedFilesSummary.spec.ts
-│   │   │       ├── AiChangedFilesSummary.vue
-│   │   │       ├── AiChatThread.spec.ts
-│   │   │       ├── AiChatThread.vue
-│   │   │       ├── AiDiffHunkViewer.spec.ts
-│   │   │       ├── AiDiffHunkViewer.vue
-│   │   │       ├── AiFloatingSuggestions.spec.ts
-│   │   │       ├── AiFloatingSuggestions.vue
-│   │   │       ├── AiMarkdown.spec.ts
-│   │   │       ├── AiMarkdown.vue
-│   │   │       ├── AiMarkdownCodeBlock.vue
-│   │   │       ├── AiMarkdownTable.vue
-│   │   │       ├── AiMessageItem.spec.ts
-│   │   │       ├── AiMessageItem.vue
-│   │   │       ├── AiPatchPreview.spec.ts
-│   │   │       ├── AiPatchPreview.vue
-│   │   │       ├── AiPlanConfirmationMessage.vue
-│   │   │       ├── AiPlanModePanel.spec.ts
-│   │   │       ├── AiPlanModePanel.vue
-│   │   │       ├── AiPromptInput.spec.ts
-│   │   │       ├── AiPromptInput.vue
-│   │   │       ├── AiProviderIcon.spec.ts
-│   │   │       ├── AiProviderIcon.vue
-│   │   │       ├── AiProviderSettings.spec.ts
-│   │   │       ├── AiProviderSettings.vue
-│   │   │       ├── AiReasoningCodeBlock.vue
-│   │   │       ├── AiThinkingStatus.vue
-│   │   │       ├── AiToolConfirmationCard.vue
-│   │   │       ├── AiWebSearchActivity.vue
-│   │   │       ├── AiWebSourceCard.vue
-│   │   │       ├── AiWebSourcesPanel.spec.ts
-│   │   │       ├── AiWebSourcesPanel.vue
-│   │   │       └── AiWorkspaceSurface.vue
+│   │   │       ├── chat
+│   │   │       ├── edit
+│   │   │       ├── plan
+│   │   │       ├── provider
+│   │   │       ├── shell
+│   │   │       ├── suggestion
+│   │   │       └── web
 │   │   ├── common
 │   │   │   ├── AppDialogHost.vue
 │   │   │   ├── BrowserContextMenuHost.vue
@@ -608,8 +596,6 @@
 │   │   │   ├── LinearContextMenu.vue
 │   │   │   └── LinearContextMenuIcon.vue
 │   │   ├── editor
-│   │   │   ├── AiDiffPreviewEditor.spec.ts
-│   │   │   ├── AiDiffPreviewEditor.vue
 │   │   │   ├── editor-context-menu.types.ts
 │   │   │   ├── EditorContextMenu.vue
 │   │   │   ├── EmptyEditorState.vue
@@ -793,23 +779,24 @@
 │   │   │   ├── editor-context-menu.spec.ts
 │   │   │   ├── integrated-terminal.state.spec.ts
 │   │   │   └── workbench.facade.spec.ts
-│   │   ├── useAiAgentNetwork.ts
-│   │   ├── useAiAgentPlan.spec.ts
-│   │   ├── useAiAgentPlan.ts
-│   │   ├── useAiAgentRun.spec.ts
-│   │   ├── useAiAgentRun.ts
-│   │   ├── useAiAssistant.spec.ts
-│   │   ├── useAiAssistant.ts
-│   │   ├── useAiDiffPreview.spec.ts
-│   │   ├── useAiDiffPreview.ts
-│   │   ├── useAiStream.spec.ts
-│   │   ├── useAiStream.ts
-│   │   ├── useAiSuggestionPool.spec.ts
-│   │   ├── useAiSuggestionPool.ts
-│   │   ├── useAiTokenContext.spec.ts
-│   │   ├── useAiTokenContext.ts
-│   │   ├── useAiWebSources.spec.ts
-│   │   ├── useAiWebSources.ts
+│   │   ├── ai
+│   │   │   ├── useAiAgentNetwork.ts
+│   │   │   ├── useAiAgentPlan.spec.ts
+│   │   │   ├── useAiAgentPlan.ts
+│   │   │   ├── useAiAgentRun.spec.ts
+│   │   │   ├── useAiAgentRun.ts
+│   │   │   ├── useAiAssistant.spec.ts
+│   │   │   ├── useAiAssistant.ts
+│   │   │   ├── useAiDiffPreview.spec.ts
+│   │   │   ├── useAiDiffPreview.ts
+│   │   │   ├── useAiStream.spec.ts
+│   │   │   ├── useAiStream.ts
+│   │   │   ├── useAiSuggestionPool.spec.ts
+│   │   │   ├── useAiSuggestionPool.ts
+│   │   │   ├── useAiTokenContext.spec.ts
+│   │   │   ├── useAiTokenContext.ts
+│   │   │   ├── useAiWebSources.spec.ts
+│   │   │   └── useAiWebSources.ts
 │   │   ├── useBrowserContextMenu.ts
 │   │   ├── useDialog.ts
 │   │   ├── useDocumentLifecycle.ts
@@ -833,6 +820,7 @@
 │   ├── constants
 │   │   ├── ai-provider-icons.ts
 │   │   ├── ai-providers.ts
+│   │   ├── ai-runtime-tools.generated.ts
 │   │   ├── ai-runtime-tools.spec.ts
 │   │   ├── ai-runtime-tools.ts
 │   │   ├── ai-suggestions.ts
@@ -898,13 +886,14 @@
 │   ├── schemas
 │   │   └── ssh-connection.ts
 │   ├── services
+│   │   ├── ipc
+│   │   │   ├── ai-config.service.ts
+│   │   │   ├── ai-context.service.ts
+│   │   │   ├── ai-edit.service.ts
+│   │   │   ├── ai.service.ts
+│   │   │   ├── window.service.spec.ts
+│   │   │   └── window.service.ts
 │   │   ├── ipc.ts
-│   │   ├── modules
-│   │   │   ├── ai-context.ts
-│   │   │   ├── ai-edit.ts
-│   │   │   ├── ai.ts
-│   │   │   ├── window.spec.ts
-│   │   │   └── window.ts
 │   │   ├── monaco-shiki.ts
 │   │   ├── sessionStore.spec.ts
 │   │   ├── sessionStore.ts
@@ -970,15 +959,21 @@
 │   │   ├── ai-agent.ts
 │   │   ├── ai-context.schema.ts
 │   │   ├── ai-context.ts
+│   │   ├── ai-conversation.schema.spec.ts
+│   │   ├── ai-conversation.schema.ts
 │   │   ├── ai-edit.schema.spec.ts
 │   │   ├── ai-edit.schema.ts
 │   │   ├── ai-edit.ts
 │   │   ├── ai-patch.schema.spec.ts
 │   │   ├── ai-patch.schema.ts
 │   │   ├── ai-patch.ts
+│   │   ├── ai-provider.schema.spec.ts
+│   │   ├── ai-provider.schema.ts
 │   │   ├── ai-stream.schema.spec.ts
 │   │   ├── ai-stream.schema.ts
 │   │   ├── ai-stream.ts
+│   │   ├── ai-suggestion.schema.spec.ts
+│   │   ├── ai-suggestion.schema.ts
 │   │   ├── ai-tools.ts
 │   │   ├── ai-web.schema.spec.ts
 │   │   ├── ai-web.schema.ts
@@ -1007,14 +1002,6 @@
 │   ├── utils
 │   │   ├── agent-sidecar-events.spec.ts
 │   │   ├── agent-sidecar-events.ts
-│   │   ├── ai-config.ts
-│   │   ├── ai-diff-ref.spec.ts
-│   │   ├── ai-diff-ref.ts
-│   │   ├── ai-patch-preview.ts
-│   │   ├── ai-patch-summary.spec.ts
-│   │   ├── ai-patch-summary.ts
-│   │   ├── ai-suggestion-selection.spec.ts
-│   │   ├── ai-suggestion-selection.ts
 │   │   ├── app-tooltip.spec.ts
 │   │   ├── app-tooltip.ts
 │   │   ├── app-window.ts
@@ -1040,7 +1027,6 @@
 │   │   ├── file-icons.ts
 │   │   ├── logger.ts
 │   │   ├── monaco.ts
-│   │   ├── normalize-ai-math.ts
 │   │   ├── path.spec.ts
 │   │   ├── path.ts
 │   │   ├── runtime-diagnostics.ts
@@ -1078,6 +1064,7 @@
 │   ├── capabilities
 │   │   ├── ai-edit.json
 │   │   ├── ai-index.json
+│   │   ├── ai-mcp.json
 │   │   ├── ai-tools-readonly.json
 │   │   ├── ai-tools-write.json
 │   │   ├── ai.json
@@ -1166,54 +1153,63 @@
 │   │   ├── agent_sidecar
 │   │   │   └── mod.rs
 │   │   ├── ai
-│   │   │   ├── audit.rs
-│   │   │   ├── credential.rs
+│   │   │   ├── agent
+│   │   │   │   ├── mod.rs
+│   │   │   │   ├── planner.rs
+│   │   │   │   └── policy.rs
+│   │   │   ├── audit
+│   │   │   │   └── mod.rs
+│   │   │   ├── budget
+│   │   │   │   └── mod.rs
+│   │   │   ├── credential
+│   │   │   │   └── mod.rs
+│   │   │   ├── edit
+│   │   │   │   ├── apply
+│   │   │   │   ├── errors.rs
+│   │   │   │   ├── history
+│   │   │   │   ├── io
+│   │   │   │   ├── mod.rs
+│   │   │   │   ├── patch.rs
+│   │   │   │   └── security
 │   │   │   ├── errors.rs
-│   │   │   ├── favicon.rs
 │   │   │   ├── gateway
 │   │   │   │   ├── config.rs
 │   │   │   │   ├── connection.rs
 │   │   │   │   ├── conversation.rs
+│   │   │   │   ├── mod.rs
 │   │   │   │   ├── suggestions.rs
 │   │   │   │   └── tests.rs
-│   │   │   ├── gateway.rs
 │   │   │   ├── mod.rs
-│   │   │   ├── network_permission.rs
-│   │   │   ├── provider.rs
-│   │   │   ├── redaction.rs
-│   │   │   ├── stream_manager.rs
-│   │   │   ├── token_budget.rs
+│   │   │   ├── provider
+│   │   │   │   └── mod.rs
+│   │   │   ├── security
+│   │   │   │   ├── mod.rs
+│   │   │   │   ├── network_permission.rs
+│   │   │   │   └── redaction.rs
+│   │   │   ├── stream
+│   │   │   │   └── mod.rs
 │   │   │   └── transport
 │   │   │       └── mod.rs
-│   │   ├── ai_agent
+│   │   ├── approval_engine
+│   │   │   ├── decision.rs
+│   │   │   ├── journal.rs
 │   │   │   ├── mod.rs
-│   │   │   ├── planner.rs
 │   │   │   └── policy.rs
-│   │   ├── ai_edit
-│   │   │   ├── atomic_write.rs
-│   │   │   ├── auto_apply.rs
-│   │   │   ├── diff_render.rs
-│   │   │   ├── edit_journal.rs
-│   │   │   ├── errors.rs
-│   │   │   ├── file_transaction.rs
-│   │   │   ├── mod.rs
-│   │   │   ├── path_security.rs
-│   │   │   ├── pins.rs
-│   │   │   ├── protected_paths.rs
-│   │   │   ├── revert.rs
-│   │   │   ├── snapshot.rs
-│   │   │   ├── storage_lock.rs
-│   │   │   └── timeline.rs
-│   │   ├── ai_patch
+│   │   ├── assets
+│   │   │   ├── favicon.rs
 │   │   │   └── mod.rs
-│   │   ├── ai_tools
-│   │   │   ├── mod.rs
-│   │   │   └── web_safety.rs
 │   │   ├── bin
 │   │   │   └── wsl_link_agent.rs
 │   │   ├── commands
 │   │   │   ├── agent_sidecar.rs
-│   │   │   ├── ai.rs
+│   │   │   ├── ai
+│   │   │   │   ├── agent.rs
+│   │   │   │   ├── edit.rs
+│   │   │   │   ├── gateway.rs
+│   │   │   │   ├── mod.rs
+│   │   │   │   ├── storage.rs
+│   │   │   │   ├── tools.rs
+│   │   │   │   └── tools_generated.rs
 │   │   │   ├── contracts.rs
 │   │   │   ├── git
 │   │   │   │   ├── branches.rs
@@ -1469,4 +1465,5 @@
 │               ├── synthetic_mouse_events.rs
 │               └── util.rs
 ├── vite.config.ts
-└── vitest.config.ts
+├── vitest.config.ts
+└── 改造计划.md

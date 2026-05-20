@@ -1,5 +1,5 @@
 import { MastraRuntimeApproval } from './approval-client/client.js';
-import { createMastraModelConfig, resolveMastraModelConfig } from './mastra-runtime-agent-factory.js';
+import { createMastraModelConfig, resolveMastraModelConfig } from './agent/factory.js';
 import { extractRestoreResultText, resolveSystemPromptFromSnapshot, resolveWorkspaceRootPathFromSnapshot } from './context/context.js';
 import { normalizeMastraError } from './messages.js';
 import { createErrorResponse } from './responses.js';

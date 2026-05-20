@@ -53,11 +53,11 @@ describe('sessionStore', () => {
     expect(warnSpy).toHaveBeenCalled();
   });
 
-  it('saveSession 入参非法时抛出 AppError(SESSION_SAVE_FAILED)', async () => {
+  it('saveSession 入参非法时抛出 AppError(SESSION_VALIDATION_FAILED)', async () => {
     const { saveSession } = await import('@/services/sessionStore');
 
     await expect(saveSession({} as never)).rejects.toMatchObject<AppError>({
-      code: 'SESSION_SAVE_FAILED',
+      code: 'SESSION_VALIDATION_FAILED',
       scope: 'ipc',
     });
   });

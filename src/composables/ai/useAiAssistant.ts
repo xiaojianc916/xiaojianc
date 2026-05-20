@@ -25,7 +25,7 @@ import {
   projectSidecarExecuteResponse,
   type IAgentSidecarExecuteProjection,
   type TAgentSidecarToolStreamStatus,
-} from '@/utils/agent-sidecar-events';
+} from '@/composables/ai/sidecar-events';
 import { createDefaultAiConfigPayload } from '@/services/ipc/ai-config.service';
 import {
   buildAiAgentPatchSummaryFromAedDiffs,
@@ -41,7 +41,7 @@ import {
   type IAgentSidecarMessage,
   type TAgentRuntimeEvent,
   type TAgentUiEvent,
-} from '@/types/agent-sidecar';
+} from '@/types/ai/sidecar';
 import type {
   IAiAgentPatchSummary,
   IAiApplyPatchMetadata,
@@ -64,7 +64,7 @@ import type {
   IAiEditGetDiffPayload,
   IAiEditOperation,
   IAiEditTimelineEntry,
-} from '@/types/ai-edit';
+} from '@/types/ai/edit';
 import type {
   IActiveRunSummary,
   IAnalyzeScriptPayload,

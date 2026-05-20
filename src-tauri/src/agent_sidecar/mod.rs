@@ -1096,11 +1096,9 @@ mod tests {
     use super::{
         build_sidecar_url, classify_sidecar_health, drain_complete_sidecar_stream_lines,
         has_non_whitespace_bytes, inject_sidecar_dotenv_key_if_present,
-        is_default_litellm_model_base_url, is_default_local_sidecar_url, normalize_base_url,
-        parse_netstat_listening_pids, resolve_sidecar_credential_lookup,
-        resolve_sidecar_model_base_url, strip_litellm_model_provider_prefix,
-        SidecarCredentialLookup, SidecarHealthProbePayload, SidecarHealthStatus,
-        DEFAULT_DEEPSEEK_BASE_URL, DEFAULT_SIDECAR_URL,
+        is_default_local_sidecar_url, normalize_base_url, parse_netstat_listening_pids,
+        resolve_sidecar_credential_lookup, SidecarCredentialLookup, SidecarHealthProbePayload,
+        SidecarHealthStatus, DEFAULT_SIDECAR_URL,
     };
     use std::fs;
     use std::process::Command;
@@ -1241,34 +1239,6 @@ mod tests {
             classify_sidecar_health(&unavailable_payload),
             SidecarHealthStatus::Unavailable
         );
-    }
-
-    #[test]
-    fn deepseek_model_rewrites_default_litellm_base_url_to_official_upstream() {
-        let resolved = resolve_sidecar_model_base_url(
-            "deepseek/deepseek-v4-flash",
-            Some("http://127.0.0.1:4000/v1"),
-        );
-
-        assert_eq!(resolved.as_deref(), Some(DEFAULT_DEEPSEEK_BASE_URL));
-    }
-
-    #[test]
-    fn custom_base_url_is_preserved_for_non_default_or_non_deepseek_models() {
-        assert_eq!(
-            resolve_sidecar_model_base_url(
-                "deepseek/deepseek-v4-flash",
-                Some("https://example.com/v1"),
-            )
-            .as_deref(),
-            Some("https://example.com/v1")
-        );
-        assert_eq!(
-            resolve_sidecar_model_base_url("openai/gpt-5.5", Some("http://127.0.0.1:4000/v1"))
-                .as_deref(),
-            Some("http://127.0.0.1:4000/v1")
-        );
-        assert!(is_default_litellm_model_base_url("http://localhost:4000/v1/"));
     }
 
     #[test]

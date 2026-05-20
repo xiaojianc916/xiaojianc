@@ -14,7 +14,7 @@ import type {
   IAgentSidecarPlanValidateRequest,
   IAgentSidecarResponsePayload,
   IAgentSidecarStreamEventPayload,
-} from '@/types/agent-sidecar';
+} from '@/types/ai/sidecar';
 import type {
   IAiAgentClassifyTaskPayload,
   IAiAgentClassifyTaskRequest,
@@ -52,7 +52,7 @@ import type {
 import type {
   IAiEditGetDiffPayload,
   IAiEditGetDiffRequest,
-} from '@/types/ai-edit';
+} from '@/types/ai/edit';
 import { normalizeFileSystemPath } from '@/utils/path';
 
 const SIDECAR_DOTENV_RELATIVE_PATH = 'agent-sidecar/.env';

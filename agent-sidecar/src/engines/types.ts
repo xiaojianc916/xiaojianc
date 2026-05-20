@@ -6,11 +6,11 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastr
 import { RequestContext } from '@mastra/core/request-context';
 import type { AgentChunkType, DataChunkType, DynamicToolResultPayload, ReasoningDeltaPayload, ToolResultPayload } from '@mastra/core/stream';
 import { WORKSPACE_TOOLS, type AnyWorkspace } from '@mastra/core/workspace';
-import type { IMastraResolvedModelConfig } from '../models/mastra-model-config.js';
+import type { IMastraResolvedModelConfig } from '../models/config.js';
 import type { TAgentRuntimeEventDraft } from '../streaming/stream-types.js';
 import type { IMcpGatewayBundle, TMcpGatewayToolProfile } from '../tools/mcp-gateway.js';
 import type { TMcpServerName } from '../tools/mcp.js';
-import type { createMastraAgentMemory } from './mastra-memory.js';
+import type { createMastraAgentMemory } from './context/memory.js';
 import type { IAgentPlanStore, TAgentPlanRecord } from './plan/plan-store.js';
 import type { IAgentPlanWorkflowStore } from './plan/plan-workflow-store.js';
 import type { TAgentRuntimeOutputEvent } from './contracts/runtime-contracts.js';

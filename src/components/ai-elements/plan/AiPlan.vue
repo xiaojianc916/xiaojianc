@@ -7,7 +7,7 @@ import Trash2 from '~icons/lucide/trash2';
 import X from '~icons/lucide/x';
 import { computed, ref } from 'vue';
 
-import type { TAgentPlanStatus } from '@/types/agent-sidecar';
+import type { TAgentPlanStatus } from '@/types/ai/sidecar';
 import type { IAiTaskPlanStep } from '@/types/ai';
 
 const props = defineProps<{

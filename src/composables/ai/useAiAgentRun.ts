@@ -11,10 +11,10 @@ import {
   projectSidecarPlanResponse,
   projectSidecarPlanValidationResponse,
   resolveSidecarOfficialUsage,
-} from '@/utils/agent-sidecar-events';
+} from '@/composables/ai/sidecar-events';
 import { toErrorMessage } from '@/utils/error';
 
-import type { IAgentSidecarMessage, TAgentUiEvent } from '@/types/agent-sidecar';
+import type { IAgentSidecarMessage, TAgentUiEvent } from '@/types/ai/sidecar';
 import type {
   IAiAgentRun,
   IAiAgentStepFinalAnswer,

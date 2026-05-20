@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AiImageAttachmentPreviewGrid } from '@/components/ai-elements/image';
+import { ImageAttachmentPreviewGrid } from '@/components/ai-elements/image';
 import {
   Message,
   MessageAction,
@@ -13,7 +13,7 @@ import AiMarkdown from '@/components/business/ai/chat/AiMarkdown.vue';
 import AiPatchPreview from '@/components/business/ai/edit/AiPatchPreview.vue';
 import { useMessage } from '@/composables/useMessage';
 import type { TAiServicePlatformId } from '@/constants/ai-providers';
-import type { TAgentRuntimeEvent } from '@/types/agent-sidecar';
+import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
 import type {
   IAiChatMessage,
   IAiContextReference,
@@ -365,7 +365,7 @@ onBeforeUnmount(() => {
         <span class="ai-tool-call__status">{{ getToolCallStatusLabel(toolCall) }}</span>
       </div>
     </div>
-    <AiImageAttachmentPreviewGrid v-if="userAttachmentItems.length" class="ai-message-image-attachments"
+    <ImageAttachmentPreviewGrid v-if="userAttachmentItems.length" class="ai-message-image-attachments"
       :items="userAttachmentItems" aria-label="已发送附件" variant="message" />
     <div v-if="hasInlinePatches" class="ai-message-patch-list" aria-label="已编辑的文件">
       <AiPatchPreview v-for="(patch, index) in message.patches" :key="`${message.id}:patch:${index}`" :patch="patch"

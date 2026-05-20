@@ -25,7 +25,7 @@ import {
   normalizeRuntimeToolName,
   type TAiRuntimeToolKind,
 } from '@/constants/ai-runtime-tools';
-import type { TAgentRuntimeEvent } from '@/types/agent-sidecar';
+import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
 import Activity from '~icons/lucide/activity';
 import BadgeCheck from '~icons/lucide/badge-check';
 import BookOpen from '~icons/lucide/book-open';

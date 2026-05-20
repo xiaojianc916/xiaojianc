@@ -20,7 +20,7 @@ import type {
     IAiEditSetPinRequest,
     IAiEditUndoOperationPayload,
     IAiEditUndoOperationRequest,
-} from '@/types/ai-edit';
+} from '@/types/ai/edit';
 
 export const aiEditService = {
     getAuthLevel(): Promise<IAiEditAuthState> {

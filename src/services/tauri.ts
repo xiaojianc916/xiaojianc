@@ -1,8 +1,8 @@
-import { agentSidecarStreamEventPayloadSchema } from '@/types/agent-sidecar.schema';
-import { aiChatStreamEventPayloadSchema } from '@/types/ai.schema';
+import { agentSidecarStreamEventPayloadSchema } from '@/types/ai/sidecar.schema';
+import { aiChatStreamEventPayloadSchema } from '@/types/ai/schema';
 import { AppError, isAppError } from '@/types/app-error';
 import type { ITauriService } from '@/types/tauri';
-import { wslLinkStatusPayloadSchema } from '@/types/wsl-link.schema';
+import { wslLinkStatusPayloadSchema } from '@/types/wsl-link/schema';
 import { assertDesktopRuntime } from '@/utils/desktop-runtime';
 import { toErrorMessage } from '@/utils/error';
 import { z } from 'zod';

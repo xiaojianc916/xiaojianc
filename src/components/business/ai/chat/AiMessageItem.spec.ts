@@ -1,5 +1,5 @@
 import AiMessageItem from '@/components/business/ai/chat/AiMessageItem.vue';
-import type { TAgentRuntimeEvent } from '@/types/agent-sidecar';
+import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
 import type { IAiChatMessage } from '@/types/ai';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

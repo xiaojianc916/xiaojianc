@@ -4,7 +4,7 @@ import Play from '~icons/lucide/play';
 import { computed, ref } from 'vue';
 
 import { AiQueue, type IAiQueueItem } from '@/components/ai-elements/queue';
-import type { TAgentPlanStatus } from '@/types/agent-sidecar';
+import type { TAgentPlanStatus } from '@/types/ai/sidecar';
 import type {
     IAiAgentPlanVersionSummary,
     IAiAgentRun,

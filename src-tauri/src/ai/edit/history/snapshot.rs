@@ -953,7 +953,7 @@ mod tests {
             &temp_dir,
             &PinIndex::default(),
             SnapshotRetentionPolicy {
-                now: chrono::Utc::now() + chrono::Duration::days(FULL_BLOB_TTL_DAYS + 1),
+                now: chrono::Utc::now() + chrono::Duration::days(super::FULL_BLOB_TTL_DAYS + 1),
                 total_blob_quota_bytes: 0,
                 ..SnapshotRetentionPolicy::default()
             },

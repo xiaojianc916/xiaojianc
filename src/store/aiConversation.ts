@@ -5,7 +5,7 @@ import type { IAiChatMessage } from '@/types/ai';
 import {
   aiConversationLegacyPersistSchema,
   aiConversationPersistSchema,
-} from '@/types/ai-conversation.schema';
+} from '@/types/ai/conversation.schema';
 
 // ---------------------------------------------------------------------------
 // Public constants & types
