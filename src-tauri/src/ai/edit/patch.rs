@@ -1,9 +1,9 @@
 use crate::ai::audit::{self, AiAuditEventKind};
-use crate::ai::errors;
 use crate::ai::edit::apply::auto_apply::{self, AiAutoApplyOperationPlan};
 use crate::ai::edit::apply::diff_render;
 use crate::ai::edit::security::path_security;
 use crate::ai::edit::AiEditState;
+use crate::ai::errors;
 use crate::commands::contracts::{
     AiApplyPatchFilePayload, AiApplyPatchPayload, AiApplyPatchRequest, AiPatchFilePayload,
     AiPatchSetPayload, AiProposePatchPayload, AiProposePatchRequest,
@@ -292,9 +292,9 @@ fn validate_patch_line(line: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{apply_patch, hash_text, propose_patch, validate_writable_path};
+    use crate::ai::edit as ai_edit;
     use crate::ai::edit::apply::diff_render;
     use crate::ai::edit::history::edit_journal;
-    use crate::ai::edit as ai_edit;
     use crate::ai::edit::AiEditState;
     use crate::commands::contracts::{
         AiApplyPatchMetadataRequest, AiApplyPatchRequest, AiEditListTimelineRequest,

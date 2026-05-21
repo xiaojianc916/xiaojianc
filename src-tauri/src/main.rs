@@ -7,7 +7,6 @@ mod assets;
 mod commands;
 mod tauri_bindings;
 mod terminal;
-use commands::{window, window_stage};
 mod wsl_link;
 
 use ai::edit::AiEditState;
@@ -16,23 +15,22 @@ use commands::{
     agent_sidecar_plan_approve, agent_sidecar_plan_finish, agent_sidecar_plan_query,
     agent_sidecar_plan_reject, agent_sidecar_plan_replan, agent_sidecar_plan_validate,
     agent_sidecar_resolve_approval, agent_sidecar_restart, agent_sidecar_restore_checkpoint,
-    ai_agent_classify_task, ai_agent_set_network_permission, ai_apply_patch,
-    ai_cancel, ai_chat_stream, ai_clear_credentials, ai_code_action, ai_connect_provider,
+    ai_agent_classify_task, ai_agent_set_network_permission, ai_apply_patch, ai_cancel,
+    ai_chat_stream, ai_clear_credentials, ai_code_action, ai_connect_provider,
     ai_edit_create_snapshot, ai_edit_get_auth_level, ai_edit_get_diff, ai_edit_list_timeline,
     ai_edit_restore_snapshot, ai_edit_revert_file, ai_edit_revert_hunk, ai_edit_revert_task,
     ai_edit_set_auth_level, ai_edit_set_pin, ai_edit_undo_operation,
-    ai_generate_conversation_title,
-    ai_generate_suggestion_pool, ai_get_config, ai_get_provider_profile_detail,
-    ai_get_suggestion_pool_cache, ai_inline_complete, ai_list_provider_profiles,
-    ai_propose_patch, ai_save_config, ai_save_credentials, ai_switch_provider_profile,
-    ai_test_provider, ai_test_provider_config, ai_web_fetch, ai_web_search, analyze_script,
-    apply_git_stash,
-    apply_window_stage, apply_workspace_replacement, cancel_terminal_run,
-    check_wsl_link_environment, checkout_git_branch, close_terminal_session, commit_git_index,
-    create_git_branch, create_ssh_directory, create_workspace_path, delete_ssh_path,
-    delete_workspace_path, detect_execution_environment, discard_git_paths,
-    dispatch_script_to_terminal, download_ssh_file, drop_git_stash, ensure_terminal_session,
-    format_script, get_git_diff_preview, get_git_file_baseline, get_git_pull_request_support,
+    ai_generate_conversation_title, ai_generate_suggestion_pool, ai_get_config,
+    ai_get_provider_profile_detail, ai_get_suggestion_pool_cache, ai_inline_complete,
+    ai_list_provider_profiles, ai_propose_patch, ai_save_config, ai_save_credentials,
+    ai_switch_provider_profile, ai_test_provider, ai_test_provider_config, ai_web_fetch,
+    ai_web_search, analyze_script, apply_git_stash, apply_window_stage,
+    apply_workspace_replacement, cancel_terminal_run, check_wsl_link_environment,
+    checkout_git_branch, close_terminal_session, commit_git_index, create_git_branch,
+    create_ssh_directory, create_workspace_path, delete_ssh_path, delete_workspace_path,
+    detect_execution_environment, discard_git_paths, dispatch_script_to_terminal,
+    download_ssh_file, drop_git_stash, ensure_terminal_session, format_script,
+    get_git_diff_preview, get_git_file_baseline, get_git_pull_request_support,
     get_git_repository_status, get_ssh_password, get_wsl_link_agent_artifact_status,
     get_wsl_link_status, init_git_repository, install_wsl_link_agent, list_git_branches,
     list_git_commit_history, list_git_stashes, list_ssh_config_hosts, list_ssh_directory,
@@ -215,8 +213,7 @@ fn main() {
         .register_asynchronous_uri_scheme_protocol("favicon", |context, request, responder| {
             let app_handle = context.app_handle().clone();
             tauri::async_runtime::spawn(async move {
-                let response =
-                    assets::favicon::handle_protocol_request(&app_handle, request).await;
+                let response = assets::favicon::handle_protocol_request(&app_handle, request).await;
                 responder.respond(response);
             });
         })

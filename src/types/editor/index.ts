@@ -1,19 +1,36 @@
 import type { IAiDiffEditorPreview } from '@/types/ai/patch';
 import type { IGitDiffPreviewPayload } from '@/types/git';
+import type {
+  AnalyzeScriptPayload,
+  AnalyzeScriptRequest,
+  DocumentEncoding,
+  ExecutionEnvironment,
+  ExecutionOption,
+  ExecutorKind,
+  FormatScriptPayload,
+  FormatScriptRequest,
+  ImageAssetPayload,
+  SaveScriptRequest,
+  ScriptDiagnosticPayload,
+  ScriptDiagnosticSeverity,
+  ScriptFilePayload,
+  WorkspaceDirectoryPayload,
+  WorkspaceEntry,
+  WorkspacePathCreatePayload,
+  WorkspacePathCreateRequest,
+  WorkspacePathDeletePayload,
+  WorkspacePathDeleteRequest,
+  WorkspacePathRenamePayload,
+  WorkspacePathRenameRequest,
+} from '@/bindings/tauri';
 
-export type TDocumentEncoding =
-  | 'utf-8'
-  | 'utf-8-bom'
-  | 'gbk'
-  | 'gb18030'
-  | 'utf-16le'
-  | 'utf-16be';
+export type TDocumentEncoding = DocumentEncoding;
 
 export type TDocumentKind = 'text' | 'image' | 'ai-diff' | 'git-diff';
-export type TExecutorKind = 'wsl';
+export type TExecutorKind = ExecutorKind;
 export type TLogLevel = 'info' | 'success' | 'error';
 export type TRunLogScope = 'run' | 'workspace' | 'editor' | 'system';
-export type TScriptDiagnosticSeverity = 'error' | 'warning' | 'info' | 'style';
+export type TScriptDiagnosticSeverity = ScriptDiagnosticSeverity;
 export type TRunHistoryStatus = 'success' | 'failed' | 'canceled';
 
 export interface IEditorDocument {
@@ -49,19 +66,9 @@ export interface ICommandTemplate {
   cursorOffset?: number;
 }
 
-export interface IExecutionOption {
-  type: TExecutorKind;
-  label: string;
-  available: boolean;
-  description: string;
-  commandPath: string | null;
-}
+export type IExecutionOption = ExecutionOption;
 
-export interface IExecutionEnvironment {
-  recommended: TExecutorKind;
-  hasAny: boolean;
-  executors: IExecutionOption[];
-}
+export type IExecutionEnvironment = ExecutionEnvironment;
 
 export interface IRunLogEntry {
   id: string;
@@ -106,52 +113,21 @@ export interface IRunHistoryEntry {
   usedTempFile: boolean;
 }
 
-export interface IWorkspaceEntry {
-  path: string;
-  name: string;
-  kind: 'directory' | 'file';
-  hasChildren: boolean;
-}
+export type IWorkspaceEntry = WorkspaceEntry;
 
-export interface IWorkspaceDirectoryPayload {
-  rootPath: string;
-  rootName: string;
-  entries: IWorkspaceEntry[];
-}
+export type IWorkspaceDirectoryPayload = WorkspaceDirectoryPayload;
 
-export interface IWorkspacePathCreateRequest {
-  parentPath: string;
-  rootPath: string;
-  name: string;
-  kind: 'directory' | 'file';
-}
+export type IWorkspacePathCreateRequest = WorkspacePathCreateRequest;
 
-export interface IWorkspacePathCreatePayload {
-  path: string;
-  name: string;
-  kind: 'directory' | 'file';
-}
+export type IWorkspacePathCreatePayload = WorkspacePathCreatePayload;
 
-export interface IWorkspacePathRenameRequest {
-  path: string;
-  rootPath: string;
-  newName: string;
-}
+export type IWorkspacePathRenameRequest = WorkspacePathRenameRequest;
 
-export interface IWorkspacePathRenamePayload {
-  oldPath: string;
-  newPath: string;
-  name: string;
-}
+export type IWorkspacePathRenamePayload = WorkspacePathRenamePayload;
 
-export interface IWorkspacePathDeleteRequest {
-  path: string;
-  rootPath: string;
-}
+export type IWorkspacePathDeleteRequest = WorkspacePathDeleteRequest;
 
-export interface IWorkspacePathDeletePayload {
-  path: string;
-}
+export type IWorkspacePathDeletePayload = WorkspacePathDeletePayload;
 
 export interface IRunResult {
   runId: string | null;
@@ -170,61 +146,18 @@ export interface IRunResult {
   usedTempFile: boolean;
 }
 
-export interface IScriptDiagnostic {
-  line: number;
-  endLine: number;
-  column: number;
-  endColumn: number;
-  level: TScriptDiagnosticSeverity;
-  code: string;
-  message: string;
-}
+export type IScriptDiagnostic = ScriptDiagnosticPayload;
 
-export interface IAnalyzeScriptRequest {
-  path: string | null;
-  name?: string | null;
-  content: string;
-}
+export type IAnalyzeScriptRequest = AnalyzeScriptRequest;
 
-export interface IAnalyzeScriptPayload {
-  available: boolean;
-  message: string | null;
-  dialect: string;
-  diagnostics: IScriptDiagnostic[];
-}
+export type IAnalyzeScriptPayload = AnalyzeScriptPayload;
 
-export interface IImageAssetPayload {
-  path: string;
-  name: string;
-  mimeType: string;
-  dataUrl: string;
-  byteSize: number;
-}
+export type IImageAssetPayload = ImageAssetPayload;
 
-export interface IScriptFilePayload {
-  path: string;
-  name: string;
-  content: string;
-  encoding: TDocumentEncoding;
-  lineCount: number;
-  charCount: number;
-}
+export type IScriptFilePayload = ScriptFilePayload;
 
-export interface ISaveScriptRequest {
-  path: string;
-  content: string;
-  encoding: TDocumentEncoding;
-}
+export type ISaveScriptRequest = SaveScriptRequest;
 
-export interface IFormatScriptRequest {
-  path: string | null;
-  content: string;
-  encoding: TDocumentEncoding;
-}
+export type IFormatScriptRequest = FormatScriptRequest;
 
-export interface IFormatScriptPayload {
-  content: string;
-  encoding: TDocumentEncoding;
-  lineCount: number;
-  charCount: number;
-}
+export type IFormatScriptPayload = FormatScriptPayload;

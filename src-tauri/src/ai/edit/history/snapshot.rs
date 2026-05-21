@@ -325,12 +325,16 @@ fn apply_snapshot_retention_locked(
         let manifest_json = serde_json::to_vec(&manifest).map_err(|error| {
             errors::snapshot_store_failed(format!("序列化快照清单失败：{error}"))
         })?;
-        batch.insert(&store.snapshots, manifest.id.as_bytes().to_vec(), manifest_json);
+        batch.insert(
+            &store.snapshots,
+            manifest.id.as_bytes().to_vec(),
+            manifest_json,
+        );
     }
 
-    batch
-        .commit()
-        .map_err(|error| errors::snapshot_store_failed(format!("执行 AED 快照 GC 失败：{error}")))?;
+    batch.commit().map_err(|error| {
+        errors::snapshot_store_failed(format!("执行 AED 快照 GC 失败：{error}"))
+    })?;
     persist(&store.db)?;
 
     Ok(outcome)
@@ -405,17 +409,17 @@ fn store_snapshot_locked(
     persist(&store.db)?;
 
     Ok(AiSnapshotPayload {
-            id: snapshot_id,
-            scope: scope.to_string(),
-            task_id: task_id.to_string(),
-            created_at: timestamp.to_rfc3339(),
-            label: label.to_string(),
-            file_refs,
-            storage_key: manifest.storage_key(),
-            size_bytes,
-            content_available: true,
-            pinned: false,
-        })
+        id: snapshot_id,
+        scope: scope.to_string(),
+        task_id: task_id.to_string(),
+        created_at: timestamp.to_rfc3339(),
+        label: label.to_string(),
+        file_refs,
+        storage_key: manifest.storage_key(),
+        size_bytes,
+        content_available: true,
+        pinned: false,
+    })
 }
 
 fn store_blob(
@@ -548,7 +552,11 @@ fn list_manifests(snapshots: &Keyspace) -> Result<Vec<SnapshotManifest>, String>
 fn build_blob_ref_counts(manifests: &[SnapshotManifest]) -> HashMap<String, usize> {
     let mut counts = HashMap::new();
     for manifest in manifests {
-        for blob_key in manifest.files.iter().filter_map(|file| file.blob_key.as_ref()) {
+        for blob_key in manifest
+            .files
+            .iter()
+            .filter_map(|file| file.blob_key.as_ref())
+        {
             *counts.entry(blob_key.clone()).or_insert(0) += 1;
         }
     }
@@ -560,7 +568,9 @@ fn build_active_blob_bytes(manifests: &[SnapshotManifest]) -> HashMap<String, u6
     for manifest in manifests {
         for file in &manifest.files {
             if let Some(blob_key) = file.blob_key.as_ref() {
-                bytes_by_key.entry(blob_key.clone()).or_insert(file.byte_size);
+                bytes_by_key
+                    .entry(blob_key.clone())
+                    .or_insert(file.byte_size);
             }
         }
     }
@@ -965,9 +975,7 @@ mod tests {
         assert_eq!(snapshots.len(), 2);
         assert!(snapshots.iter().any(|snapshot| snapshot.id == first.id));
         assert!(snapshots.iter().any(|snapshot| snapshot.id == second.id));
-        assert!(snapshots
-            .iter()
-            .all(|snapshot| !snapshot.content_available));
+        assert!(snapshots.iter().all(|snapshot| !snapshot.content_available));
         assert!(outcome.removed_snapshot_ids.is_empty());
         assert_eq!(outcome.downgraded_snapshot_count, 2);
         assert_eq!(outcome.removed_blob_count, 2);

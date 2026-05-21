@@ -2,7 +2,9 @@ use super::*;
 use crate::agent_sidecar;
 use crate::commands::contracts::{AgentSidecarChatRequest, AgentSidecarMessagePayload};
 
-fn to_sidecar_message_payloads(messages: Vec<AiProviderMessage>) -> Vec<AgentSidecarMessagePayload> {
+fn to_sidecar_message_payloads(
+    messages: Vec<AiProviderMessage>,
+) -> Vec<AgentSidecarMessagePayload> {
     messages
         .into_iter()
         .map(|message| AgentSidecarMessagePayload {
@@ -12,7 +14,9 @@ fn to_sidecar_message_payloads(messages: Vec<AiProviderMessage>) -> Vec<AgentSid
         .collect()
 }
 
-fn sidecar_events_result_text(payload: &crate::commands::contracts::AgentSidecarResponsePayload) -> String {
+fn sidecar_events_result_text(
+    payload: &crate::commands::contracts::AgentSidecarResponsePayload,
+) -> String {
     payload.result.clone().unwrap_or_default()
 }
 
@@ -46,18 +50,16 @@ pub async fn generate_conversation_title(
             &assistant_message,
         )),
     ]);
-    let sidecar_response = agent_sidecar::narrator_model_chat_once(
-        AgentSidecarChatRequest {
-            session_id: None,
-            mode: Some("ask".to_string()),
-            goal: Some("生成会话标题".to_string()),
-            messages: to_sidecar_message_payloads(request.messages),
-            workspace_root_path: None,
-            context: Vec::new(),
-            model_config: None,
-            thread_id: None,
-        },
-    )
+    let sidecar_response = agent_sidecar::narrator_model_chat_once(AgentSidecarChatRequest {
+        session_id: None,
+        mode: Some("ask".to_string()),
+        goal: Some("生成会话标题".to_string()),
+        messages: to_sidecar_message_payloads(request.messages),
+        workspace_root_path: None,
+        context: Vec::new(),
+        model_config: None,
+        thread_id: None,
+    })
     .await?;
     let title = normalize_conversation_title(&sidecar_events_result_text(&sidecar_response));
 
@@ -137,12 +139,14 @@ pub async fn chat_stream(
                 AgentSidecarChatRequest {
                     session_id: Some(task_stream_id.clone()),
                     mode: Some("ask".to_string()),
-                    goal: Some(task_messages
-                        .iter()
-                        .rev()
-                        .find(|message| message.role == "user")
-                        .map(|message| message.content.clone())
-                        .unwrap_or_else(|| "继续当前任务".to_string())),
+                    goal: Some(
+                        task_messages
+                            .iter()
+                            .rev()
+                            .find(|message| message.role == "user")
+                            .map(|message| message.content.clone())
+                            .unwrap_or_else(|| "继续当前任务".to_string()),
+                    ),
                     messages: to_sidecar_message_payloads(task_messages.clone()),
                     workspace_root_path: None,
                     context: task_context.clone(),
@@ -284,18 +288,16 @@ pub async fn inline_complete(
         content: prompt,
     }]);
 
-    let response = agent_sidecar::model_chat_once(
-        AgentSidecarChatRequest {
-            session_id: None,
-            mode: Some("ask".to_string()),
-            goal: Some("生成行内补全".to_string()),
-            messages: to_sidecar_message_payloads(request.messages),
-            workspace_root_path: None,
-            context: Vec::new(),
-            model_config: None,
-            thread_id: None,
-        },
-    )
+    let response = agent_sidecar::model_chat_once(AgentSidecarChatRequest {
+        session_id: None,
+        mode: Some("ask".to_string()),
+        goal: Some("生成行内补全".to_string()),
+        messages: to_sidecar_message_payloads(request.messages),
+        workspace_root_path: None,
+        context: Vec::new(),
+        model_config: None,
+        thread_id: None,
+    })
     .await?;
 
     Ok(AiInlineCompletionResult {
@@ -332,18 +334,16 @@ pub async fn code_action(payload: AiCodeActionRequest) -> Result<AiCodeActionPay
         content: redacted_prompt.text,
     }]);
 
-    let response = agent_sidecar::model_chat_once(
-        AgentSidecarChatRequest {
-            session_id: None,
-            mode: Some("ask".to_string()),
-            goal: Some("执行代码动作".to_string()),
-            messages: to_sidecar_message_payloads(request.messages),
-            workspace_root_path: None,
-            context: Vec::new(),
-            model_config: None,
-            thread_id: None,
-        },
-    )
+    let response = agent_sidecar::model_chat_once(AgentSidecarChatRequest {
+        session_id: None,
+        mode: Some("ask".to_string()),
+        goal: Some("执行代码动作".to_string()),
+        messages: to_sidecar_message_payloads(request.messages),
+        workspace_root_path: None,
+        context: Vec::new(),
+        model_config: None,
+        thread_id: None,
+    })
     .await?;
 
     Ok(AiCodeActionPayload {

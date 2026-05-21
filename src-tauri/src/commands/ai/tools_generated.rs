@@ -39,5 +39,5 @@ pub const AI_RUNTIME_TOOLS_MANIFEST: &[AiRuntimeToolManifestEntry] = &[
         layer: "rust",
         capability: "ai-mcp",
         approval: "required",
-    }
+    },
 ];

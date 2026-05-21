@@ -14,7 +14,10 @@ use crate::ai::provider::AiProviderMessage;
 #[test]
 fn mastra_provider_uses_current_defaults() {
     assert!(validate_provider("mastra").is_ok());
-    assert_eq!(default_model("mastra").as_deref(), Some(DEFAULT_MASTRA_MODEL));
+    assert_eq!(
+        default_model("mastra").as_deref(),
+        Some(DEFAULT_MASTRA_MODEL)
+    );
     assert_eq!(default_base_url("mastra"), None);
     assert!(validate_provider("litellm").is_err());
     assert!(validate_provider("openai").is_err());

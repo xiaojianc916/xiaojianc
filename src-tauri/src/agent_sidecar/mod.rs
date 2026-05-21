@@ -11,11 +11,10 @@ use crate::ai::credential::CredentialStore;
 use crate::commands::contracts::{
     AgentSidecarApprovalResolveRequest, AgentSidecarChatRequest,
     AgentSidecarCheckpointRestoreRequest, AgentSidecarExecuteRequest, AgentSidecarHealthPayload,
-    AgentSidecarModelConfigPayload, AgentSidecarPlanApproveRequest,
-    AgentSidecarPlanFinishRequest, AgentSidecarPlanQueryRequest, AgentSidecarPlanRejectRequest,
-    AgentSidecarPlanReplanRequest, AgentSidecarPlanRequest, AgentSidecarPlanValidateRequest,
-    AgentSidecarResponsePayload, AiWebFetchInput, AiWebFetchPayload, AiWebSearchInput,
-    AiWebSearchPayload,
+    AgentSidecarModelConfigPayload, AgentSidecarPlanApproveRequest, AgentSidecarPlanFinishRequest,
+    AgentSidecarPlanQueryRequest, AgentSidecarPlanRejectRequest, AgentSidecarPlanReplanRequest,
+    AgentSidecarPlanRequest, AgentSidecarPlanValidateRequest, AgentSidecarResponsePayload,
+    AiWebFetchInput, AiWebFetchPayload, AiWebSearchInput, AiWebSearchPayload,
 };
 
 const DEFAULT_SIDECAR_URL: &str = "http://127.0.0.1:39871";
@@ -803,9 +802,7 @@ fn current_sidecar_model_config() -> Result<AgentSidecarModelConfigPayload, Stri
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            "AI 模型未配置：请先在 AI 设置中选择模型并保存。".to_string()
-        })?;
+        .ok_or_else(|| "AI 模型未配置：请先在 AI 设置中选择模型并保存。".to_string())?;
     let api_key = load_sidecar_api_key(
         config.active_profile_id.as_deref(),
         &config.provider_type,

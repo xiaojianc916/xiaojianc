@@ -706,11 +706,7 @@ fn parse_stored_unified_diff_hunks(
 }
 
 fn parse_unified_hunk_header(header: &str) -> Result<(u32, u32, u32, u32), String> {
-    let range_part = header
-        .split(" @@")
-        .next()
-        .unwrap_or(header)
-        .trim();
+    let range_part = header.split(" @@").next().unwrap_or(header).trim();
     let mut parts = range_part.split_whitespace();
     let old_range = parts
         .next()
@@ -971,12 +967,12 @@ mod tests {
         get_diff, restore_snapshot, revert_file, revert_hunk, revert_task, undo_operation,
     };
     use crate::ai::edit as ai_edit;
-    use crate::ai::edit::{errors, AiEditState};
     use crate::ai::edit::apply::{
         auto_apply::{apply_operation_plans, AiAutoApplyOperationPlan},
         diff_render,
     };
     use crate::ai::edit::history::{edit_journal, snapshot};
+    use crate::ai::edit::{errors, AiEditState};
     use crate::commands::contracts::{
         AiApplyPatchMetadataRequest, AiApplyPatchRequest, AiEditGetDiffRequest,
         AiEditListTimelineRequest, AiEditRestoreSnapshotRequest, AiEditRevertFileRequest,

@@ -757,8 +757,8 @@ fn parse_image_dimensions(content: &str) -> Option<(u32, u32)> {
 mod tests {
     use super::{
         estimate_chat_prompt_tokens, estimate_image_tokens_from_content,
-        estimate_openai_tiled_image_tokens, render_deepseek_v4_prompt,
-        TokenizerFamily, DEEPSEEK_ASSISTANT_TOKEN, DEEPSEEK_BOS_TOKEN, DEEPSEEK_THINKING_END_TOKEN,
+        estimate_openai_tiled_image_tokens, render_deepseek_v4_prompt, TokenizerFamily,
+        DEEPSEEK_ASSISTANT_TOKEN, DEEPSEEK_BOS_TOKEN, DEEPSEEK_THINKING_END_TOKEN,
         DEEPSEEK_THINKING_START_TOKEN, DEEPSEEK_USER_TOKEN,
     };
     use crate::ai::provider::{AiProviderChatRequest, AiProviderMessage, AiProviderToolSpec};

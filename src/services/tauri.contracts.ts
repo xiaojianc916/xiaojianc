@@ -85,15 +85,6 @@ export const zTauriVoid = z
   .union([z.null(), z.undefined(), z.void()])
   .transform(() => undefined as void);
 
-const documentEncodingSchema = z.enum([
-  'utf-8',
-  'utf-8-bom',
-  'gbk',
-  'gb18030',
-  'utf-16le',
-  'utf-16be',
-]);
-
 const executorKindSchema = z.enum(['wsl']);
 
 const gitChangeKindSchema = z.enum([
@@ -107,88 +98,6 @@ const gitChangeKindSchema = z.enum([
 ]);
 
 const gitDiffModeSchema = z.enum(['worktree', 'staged']);
-
-const workspaceEntrySchema = z.object({
-  path: z.string(),
-  name: z.string(),
-  kind: z.enum(['directory', 'file']),
-  hasChildren: z.boolean(),
-});
-
-const workspacePathKindSchema = z.enum(['directory', 'file']);
-
-const workspaceSearchScopeSchema = z.enum(['all', 'file-name', 'symbol', 'content']);
-
-const workspaceSearchResultSchema = z.object({
-  path: z.string(),
-  relativePath: z.string(),
-  name: z.string(),
-  kind: z.enum(['file-name', 'content', 'symbol']),
-  lineNumber: z.number().int().positive().nullable(),
-  lineText: z.string().nullable(),
-  matchStart: z.number().int().nonnegative().nullable(),
-  matchEnd: z.number().int().nonnegative().nullable(),
-  score: z.number(),
-});
-
-const workspaceReplacementRequestSchema = z.object({
-  workspaceRootPath: z.string().min(1),
-  query: z.string(),
-  replacement: z.string(),
-  matchCase: z.boolean(),
-  wholeWord: z.boolean(),
-  useRegex: z.boolean(),
-  useStructural: z.boolean(),
-  includePatterns: z.array(z.string()),
-  excludePatterns: z.array(z.string()),
-  limit: z.number().int().positive().max(500).optional(),
-});
-
-const workspaceReplacementLinePreviewSchema = z.object({
-  id: z.string(),
-  lineNumber: z.number().int().positive(),
-  beforeLine: z.string(),
-  afterLine: z.string(),
-  replacementCount: z.number().int().positive(),
-});
-
-const workspaceReplacementFilePreviewSchema = z.object({
-  path: z.string(),
-  relativePath: z.string(),
-  replacementCount: z.number().int().positive(),
-  beforeHash: z.string(),
-  afterHash: z.string(),
-  diff: z.string(),
-  diffTruncated: z.boolean(),
-  linePreviews: z.array(workspaceReplacementLinePreviewSchema),
-});
-
-const workspaceReplacementPreviewPayloadSchema = z.object({
-  rootPath: z.string(),
-  fileCount: z.number().int().nonnegative(),
-  replacementCount: z.number().int().nonnegative(),
-  files: z.array(workspaceReplacementFilePreviewSchema),
-});
-
-const workspaceReplacementExpectedFileSchema = z.object({
-  path: z.string().min(1),
-  beforeHash: z.string().min(1),
-  includedMatchIds: z.array(z.string().min(1)).optional(),
-});
-
-const workspaceReplacementApplyPayloadSchema = z.object({
-  rootPath: z.string(),
-  changedFileCount: z.number().int().nonnegative(),
-  replacementCount: z.number().int().nonnegative(),
-  files: z.array(
-    z.object({
-      path: z.string(),
-      relativePath: z.string(),
-      replacementCount: z.number().int().positive(),
-      byteSize: z.number().int().nonnegative(),
-    }),
-  ),
-});
 
 const sshConfigHostPayloadSchema = z.object({
   id: z.string(),
@@ -217,47 +126,6 @@ const sshPasswordIdentitySchema = z.object({
 
 const sshPreviewEncodingSchema = z.enum(['utf-8', 'utf-8-bom']);
 const sshPreviewLineEndingSchema = z.enum(['lf', 'crlf', 'cr', 'mixed', 'none']);
-
-const executionOptionSchema = z.object({
-  type: executorKindSchema,
-  label: z.string(),
-  available: z.boolean(),
-  description: z.string(),
-  commandPath: z.string().nullable(),
-});
-
-const executionOptionSnakeSchema = z.object({
-  type: executorKindSchema,
-  label: z.string(),
-  available: z.boolean(),
-  description: z.string(),
-  command_path: z.string().nullable(),
-}).transform((value) => ({
-  type: value.type,
-  label: value.label,
-  available: value.available,
-  description: value.description,
-  commandPath: value.command_path,
-}));
-
-const scriptDiagnosticSchema = z.object({
-  line: z.number().int().nonnegative(),
-  endLine: z.number().int().nonnegative(),
-  column: z.number().int().nonnegative(),
-  endColumn: z.number().int().nonnegative(),
-  level: z.enum(['error', 'warning', 'info', 'style']),
-  code: z.string(),
-  message: z.string(),
-});
-
-const scriptFilePayloadSchema = z.object({
-  path: z.string(),
-  name: z.string(),
-  content: z.string(),
-  encoding: documentEncodingSchema,
-  lineCount: z.number().int().nonnegative(),
-  charCount: z.number().int().nonnegative(),
-});
 
 const gitCommitSummaryPayloadSchema = z.object({
   id: z.string(),
@@ -397,22 +265,6 @@ const dispatchTerminalScriptPayloadSnakeSchema = z.object({
   startedAt: value.started_at,
 }));
 
-const executionEnvironmentPayloadSchema = z.object({
-  recommended: executorKindSchema,
-  hasAny: z.boolean(),
-  executors: z.array(z.union([executionOptionSchema, executionOptionSnakeSchema])),
-});
-
-const executionEnvironmentPayloadSnakeSchema = z.object({
-  recommended: executorKindSchema,
-  has_any: z.boolean(),
-  executors: z.array(z.union([executionOptionSchema, executionOptionSnakeSchema])),
-}).transform((value) => ({
-  recommended: value.recommended,
-  hasAny: value.has_any,
-  executors: value.executors,
-}));
-
 export const tauriContracts = {
   agentSidecarHealth: {
     inSchema: z.void(),
@@ -466,62 +318,6 @@ export const tauriContracts = {
     inSchema: agentSidecarCheckpointRestoreRequestSchema,
     outSchema: agentSidecarResponsePayloadSchema,
   },
-  analyzeScript: {
-    inSchema: z.object({
-      path: z.string().nullable(),
-      name: z.string().nullable().optional(),
-      content: z.string(),
-    }),
-    outSchema: z.object({
-      available: z.boolean(),
-      message: z.string().nullable(),
-      dialect: z.string(),
-      diagnostics: z.array(scriptDiagnosticSchema),
-    }),
-  },
-  formatScript: {
-    inSchema: z.object({
-      path: z.string().nullable(),
-      content: z.string(),
-      encoding: documentEncodingSchema,
-    }),
-    outSchema: z.object({
-      content: z.string(),
-      encoding: documentEncodingSchema,
-      lineCount: z.number().int().nonnegative(),
-      charCount: z.number().int().nonnegative(),
-    }),
-  },
-  loadScript: {
-    inSchema: z.object({
-      path: z.string().min(1),
-    }),
-    outSchema: scriptFilePayloadSchema,
-  },
-  loadImageAsset: {
-    inSchema: z.object({
-      path: z.string().min(1),
-    }),
-    outSchema: z.object({
-      path: z.string(),
-      name: z.string(),
-      mimeType: z.string(),
-      dataUrl: z.string(),
-      byteSize: z.number().int().nonnegative(),
-    }),
-  },
-  saveScript: {
-    inSchema: z.object({
-      path: z.string().min(1),
-      content: z.string(),
-      encoding: documentEncodingSchema,
-    }),
-    outSchema: scriptFilePayloadSchema,
-  },
-  detectEnvironment: {
-    inSchema: z.void(),
-    outSchema: z.union([executionEnvironmentPayloadSchema, executionEnvironmentPayloadSnakeSchema]),
-  },
   getWslLinkStatus: {
     inSchema: z.void(),
     outSchema: wslLinkStatusPayloadSchema,
@@ -553,81 +349,6 @@ export const tauriContracts = {
   probeWslLinkPrimary: {
     inSchema: z.void(),
     outSchema: probeWslLinkPrimaryPayloadSchema,
-  },
-  listWorkspaceEntries: {
-    inSchema: z.object({
-      path: z.string().optional(),
-      rootPath: z.string().optional(),
-    }),
-    outSchema: z.object({
-      rootPath: z.string(),
-      rootName: z.string(),
-      entries: z.array(workspaceEntrySchema),
-    }),
-  },
-  createWorkspacePath: {
-    inSchema: z.object({
-      parentPath: z.string().min(1),
-      rootPath: z.string().min(1),
-      name: z.string().min(1),
-      kind: workspacePathKindSchema,
-    }),
-    outSchema: z.object({
-      path: z.string(),
-      name: z.string(),
-      kind: workspacePathKindSchema,
-    }),
-  },
-  renameWorkspacePath: {
-    inSchema: z.object({
-      path: z.string().min(1),
-      rootPath: z.string().min(1),
-      newName: z.string().min(1),
-    }),
-    outSchema: z.object({
-      oldPath: z.string(),
-      newPath: z.string(),
-      name: z.string(),
-    }),
-  },
-  deleteWorkspacePath: {
-    inSchema: z.object({
-      path: z.string().min(1),
-      rootPath: z.string().min(1),
-    }),
-    outSchema: z.object({
-      path: z.string(),
-    }),
-  },
-  searchWorkspace: {
-    inSchema: z.object({
-      workspaceRootPath: z.string().min(1),
-      query: z.string(),
-      scope: workspaceSearchScopeSchema,
-      matchCase: z.boolean(),
-      wholeWord: z.boolean(),
-      useRegex: z.boolean(),
-      useStructural: z.boolean(),
-      includePatterns: z.array(z.string()),
-      excludePatterns: z.array(z.string()),
-      limit: z.number().int().positive().max(500).optional(),
-    }),
-    outSchema: z.object({
-      rootPath: z.string(),
-      scannedFileCount: z.number().int().nonnegative(),
-      results: z.array(workspaceSearchResultSchema),
-    }),
-  },
-  previewWorkspaceReplacement: {
-    inSchema: workspaceReplacementRequestSchema,
-    outSchema: workspaceReplacementPreviewPayloadSchema,
-  },
-  applyWorkspaceReplacement: {
-    inSchema: z.object({
-      request: workspaceReplacementRequestSchema,
-      expectedFiles: z.array(workspaceReplacementExpectedFileSchema).min(1),
-    }),
-    outSchema: workspaceReplacementApplyPayloadSchema,
   },
   getGitRepositoryStatus: {
     inSchema: z.object({

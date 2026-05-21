@@ -6,7 +6,9 @@ use super::*;
 use crate::agent_sidecar;
 use crate::commands::contracts::{AgentSidecarChatRequest, AgentSidecarMessagePayload};
 
-fn build_test_request(candidate: &AiProviderConnectionCandidate) -> Result<AgentSidecarChatRequest, String> {
+fn build_test_request(
+    candidate: &AiProviderConnectionCandidate,
+) -> Result<AgentSidecarChatRequest, String> {
     let model_id = candidate
         .selected_model
         .as_deref()
@@ -55,7 +57,10 @@ pub async fn test_provider() -> Result<(), String> {
     let config = current_config()?;
     let candidate = AiProviderConnectionCandidate {
         provider_type: config.provider_type.clone(),
-        selected_model: config.selected_model.clone().or_else(|| default_model(&config.provider_type)),
+        selected_model: config
+            .selected_model
+            .clone()
+            .or_else(|| default_model(&config.provider_type)),
         base_url: config.base_url.clone(),
         api_key_for_test: Some(get_api_key_for_config(&config)?),
         api_key_for_save: None,

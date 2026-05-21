@@ -3,7 +3,7 @@ mod ai;
 pub(crate) mod contracts;
 mod git;
 pub(crate) mod script_run;
-mod search;
+pub(crate) mod search;
 pub(crate) mod shell_tools;
 mod ssh;
 mod terminal;
@@ -22,31 +22,31 @@ pub use agent_sidecar::{
     agent_sidecar_resolve_approval, agent_sidecar_restart, agent_sidecar_restore_checkpoint,
 };
 pub use ai::{
-    ai_agent_classify_task, ai_agent_set_network_permission, ai_apply_patch,
-    ai_cancel, ai_chat_stream, ai_clear_credentials, ai_code_action, ai_connect_provider,
+    ai_agent_classify_task, ai_agent_set_network_permission, ai_apply_patch, ai_cancel,
+    ai_chat_stream, ai_clear_credentials, ai_code_action, ai_connect_provider,
     ai_edit_create_snapshot, ai_edit_get_auth_level, ai_edit_get_diff, ai_edit_list_timeline,
     ai_edit_restore_snapshot, ai_edit_revert_file, ai_edit_revert_hunk, ai_edit_revert_task,
     ai_edit_set_auth_level, ai_edit_set_pin, ai_edit_undo_operation,
-    ai_generate_conversation_title,
-    ai_generate_suggestion_pool, ai_get_config, ai_get_provider_profile_detail,
-    ai_get_suggestion_pool_cache, ai_inline_complete, ai_list_provider_profiles,
-    ai_propose_patch, ai_save_config, ai_save_credentials, ai_switch_provider_profile,
-    ai_test_provider, ai_test_provider_config, ai_web_fetch, ai_web_search,
+    ai_generate_conversation_title, ai_generate_suggestion_pool, ai_get_config,
+    ai_get_provider_profile_detail, ai_get_suggestion_pool_cache, ai_inline_complete,
+    ai_list_provider_profiles, ai_propose_patch, ai_save_config, ai_save_credentials,
+    ai_switch_provider_profile, ai_test_provider, ai_test_provider_config, ai_web_fetch,
+    ai_web_search,
 };
 pub use contracts::{
     AnalyzeScriptPayload, AnalyzeScriptRequest, DocumentEncoding, ExecutionEnvironment,
-    ExecutionOption, FormatScriptPayload, FormatScriptRequest, ImageAssetPayload,
-    SaveScriptRequest, ScriptDiagnosticPayload, ScriptFilePayload, SshConfigHostPayload,
-    SshConnectionTestPayload, SshConnectionTestRequest, SshDirectoryCreatePayload,
-    SshDirectoryCreateRequest, SshDirectoryEntryPayload, SshDirectoryListPayload,
-    SshDirectoryListRequest, SshFileDownloadPayload, SshFileDownloadRequest,
-    SshFileReadPayload, SshFileReadRequest, SshFileUploadPayload, SshFileUploadRequest,
-    SshFileWritePayload, SshFileWriteRequest, SshPasswordGetRequest, SshPasswordPayload,
-    SshPasswordSaveRequest, SshPasswordStatusPayload, SshPathDeletePayload,
-    SshPathDeleteRequest, SshPathRenamePayload, SshPathRenameRequest,
-    WorkspaceDirectoryPayload, WorkspaceEntry, WorkspacePathCreatePayload,
-    WorkspacePathCreateRequest, WorkspacePathDeletePayload, WorkspacePathDeleteRequest,
-    WorkspacePathKind, WorkspacePathRenamePayload, WorkspacePathRenameRequest,
+    ExecutionOption, ExecutorKind, FormatScriptPayload, FormatScriptRequest, ImageAssetPayload,
+    SaveScriptRequest, ScriptDiagnosticPayload, ScriptDiagnosticSeverity, ScriptFilePayload,
+    SshConfigHostPayload, SshConnectionTestPayload, SshConnectionTestRequest,
+    SshDirectoryCreatePayload, SshDirectoryCreateRequest, SshDirectoryEntryPayload,
+    SshDirectoryListPayload, SshDirectoryListRequest, SshFileDownloadPayload,
+    SshFileDownloadRequest, SshFileReadPayload, SshFileReadRequest, SshFileUploadPayload,
+    SshFileUploadRequest, SshFileWritePayload, SshFileWriteRequest, SshPasswordGetRequest,
+    SshPasswordPayload, SshPasswordSaveRequest, SshPasswordStatusPayload, SshPathDeletePayload,
+    SshPathDeleteRequest, SshPathRenamePayload, SshPathRenameRequest, WorkspaceDirectoryPayload,
+    WorkspaceEntry, WorkspacePathCreatePayload, WorkspacePathCreateRequest,
+    WorkspacePathDeletePayload, WorkspacePathDeleteRequest, WorkspacePathKind,
+    WorkspacePathRenamePayload, WorkspacePathRenameRequest,
 };
 pub use git::{
     apply_git_stash, checkout_git_branch, commit_git_index, create_git_branch, discard_git_paths,

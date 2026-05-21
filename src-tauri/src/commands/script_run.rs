@@ -1,4 +1,4 @@
-use super::{DocumentEncoding, ExecutionEnvironment, ExecutionOption};
+use super::{DocumentEncoding, ExecutionEnvironment, ExecutionOption, ExecutorKind};
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -10,7 +10,7 @@ const EXECUTOR_CACHE_TTL: Duration = Duration::from_secs(30);
 
 #[derive(Clone)]
 struct ExecutorCandidate {
-    kind: &'static str,
+    kind: ExecutorKind,
     label: &'static str,
     description: &'static str,
     path: Option<PathBuf>,
@@ -26,6 +26,7 @@ struct CachedExecutorCandidates {
 static EXECUTOR_CANDIDATES_CACHE: Mutex<Option<CachedExecutorCandidates>> = Mutex::new(None);
 
 #[tauri::command]
+#[specta::specta]
 pub async fn detect_execution_environment() -> Result<ExecutionEnvironment, String> {
     let executors = collect_executor_candidates().await;
     Ok(build_execution_environment(&executors))
@@ -106,7 +107,7 @@ async fn collect_executor_candidates() -> Vec<ExecutorCandidate> {
 
 fn build_executor_candidates() -> Vec<ExecutorCandidate> {
     vec![ExecutorCandidate {
-        kind: "wsl",
+        kind: ExecutorKind::Wsl,
         label: "WSL2",
         description: "唯一执行环境，所有脚本统一通过 WSL2 Linux 子系统运行。",
         path: find_command_path("wsl.exe", &["C:\\Windows\\System32\\wsl.exe"]),
@@ -137,12 +138,12 @@ fn build_execution_environment(executors: &[ExecutorCandidate]) -> ExecutionEnvi
     let has_any = executors.iter().any(|item| item.available);
 
     ExecutionEnvironment {
-        recommended: "wsl".to_string(),
+        recommended: ExecutorKind::Wsl,
         has_any,
         executors: executors
             .iter()
             .map(|item| ExecutionOption {
-                r#type: item.kind.to_string(),
+                r#type: item.kind.clone(),
                 label: item.label.to_string(),
                 available: item.available,
                 description: item.description.to_string(),
@@ -156,7 +157,7 @@ fn build_execution_environment(executors: &[ExecutorCandidate]) -> ExecutionEnvi
 }
 
 async fn probe_executor(candidate: &ExecutorCandidate) -> bool {
-    if candidate.kind != "wsl" {
+    if !matches!(candidate.kind, ExecutorKind::Wsl) {
         return false;
     }
 

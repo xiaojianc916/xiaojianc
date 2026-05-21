@@ -63,7 +63,12 @@ pub fn render_patch_hunks(before: &str, after: &str) -> RenderedDiff {
     }
 }
 
-pub fn render_unified_diff_text(before_path: &str, after_path: &str, before: &str, after: &str) -> String {
+pub fn render_unified_diff_text(
+    before_path: &str,
+    after_path: &str,
+    before: &str,
+    after: &str,
+) -> String {
     let mut options = DiffOptions::new();
     options.set_context_len(3);
     let patch = options.create_patch(before, after);

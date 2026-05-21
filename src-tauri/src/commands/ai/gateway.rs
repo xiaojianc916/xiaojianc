@@ -2,13 +2,13 @@ use crate::ai::audit::{self, AiAuditEventKind};
 use crate::ai::gateway;
 use crate::ai::stream as stream_manager;
 use crate::commands::contracts::{
-    AiCancelRequest, AiChatRequest, AiChatStreamPayload, AiCodeActionPayload,
-    AiCodeActionRequest, AiConfigPayload, AiConversationTitlePayload,
-    AiConversationTitleRequest, AiInlineCompletionRangePayload, AiInlineCompletionRequest,
-    AiInlineCompletionResult, AiProviderConnectionPayload, AiProviderConnectionRequest,
-    AiProviderProfileDetailPayload, AiProviderProfilePayload, AiProviderProfileSwitchRequest,
-    AiProviderTestPayload, AiSaveConfigRequest, AiSaveCredentialsRequest,
-    AiSuggestionPoolPayload, AiSuggestionPoolRequest,
+    AiCancelRequest, AiChatRequest, AiChatStreamPayload, AiCodeActionPayload, AiCodeActionRequest,
+    AiConfigPayload, AiConversationTitlePayload, AiConversationTitleRequest,
+    AiInlineCompletionRangePayload, AiInlineCompletionRequest, AiInlineCompletionResult,
+    AiProviderConnectionPayload, AiProviderConnectionRequest, AiProviderProfileDetailPayload,
+    AiProviderProfilePayload, AiProviderProfileSwitchRequest, AiProviderTestPayload,
+    AiSaveConfigRequest, AiSaveCredentialsRequest, AiSuggestionPoolPayload,
+    AiSuggestionPoolRequest,
 };
 use tauri::AppHandle;
 

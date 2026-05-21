@@ -77,10 +77,8 @@ pub async fn generate_suggestion_pool(
         thread_id: None,
     })
     .await?;
-    let suggestions = parse_suggestion_pool_response(
-        response.result.as_deref().unwrap_or_default(),
-        count,
-    );
+    let suggestions =
+        parse_suggestion_pool_response(response.result.as_deref().unwrap_or_default(), count);
 
     // 软约束:只要达到展示下限即接受。前端 MMR + 兜底池负责把残缺池子凑成 9 个多样按钮。
     if suggestions.len() < MIN_SUGGESTION_POOL_SIZE {

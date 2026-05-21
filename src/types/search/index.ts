@@ -1,98 +1,50 @@
-export type TWorkspaceSearchScope = 'all' | 'file-name' | 'symbol' | 'content';
+import type {
+  WorkspaceReplacementAppliedFile,
+  WorkspaceReplacementApplyPayload,
+  WorkspaceReplacementApplyRequest,
+  WorkspaceReplacementExpectedFile,
+  WorkspaceReplacementFilePreview,
+  WorkspaceReplacementLinePreview,
+  WorkspaceReplacementPreviewPayload,
+  WorkspaceReplacementRequest,
+  WorkspaceSearchPayload,
+  WorkspaceSearchRequest,
+  WorkspaceSearchResult,
+  WorkspaceSearchResultKind,
+  WorkspaceSearchScope,
+} from '@/bindings/tauri';
 
-export type TWorkspaceSearchResultKind = 'file-name' | 'content' | 'symbol';
+export type TWorkspaceSearchScope = WorkspaceSearchScope;
 
-export interface IWorkspaceSearchRequest {
-  workspaceRootPath: string;
-  query: string;
-  scope: TWorkspaceSearchScope;
-  matchCase: boolean;
-  wholeWord: boolean;
-  useRegex: boolean;
-  useStructural: boolean;
-  includePatterns: string[];
-  excludePatterns: string[];
+export type TWorkspaceSearchResultKind = WorkspaceSearchResultKind;
+
+export type IWorkspaceSearchRequest = Omit<WorkspaceSearchRequest, 'limit'> & {
   limit?: number;
-}
+};
 
-export interface IWorkspaceSearchResult {
-  path: string;
-  relativePath: string;
-  name: string;
-  kind: TWorkspaceSearchResultKind;
-  lineNumber: number | null;
-  lineText: string | null;
-  matchStart: number | null;
-  matchEnd: number | null;
-  score: number;
-}
+export type IWorkspaceSearchResult = WorkspaceSearchResult;
 
-export interface IWorkspaceSearchPayload {
-  rootPath: string;
-  scannedFileCount: number;
-  results: IWorkspaceSearchResult[];
-}
+export type IWorkspaceSearchPayload = WorkspaceSearchPayload;
 
-export interface IWorkspaceReplacementRequest {
-  workspaceRootPath: string;
-  query: string;
-  replacement: string;
-  matchCase: boolean;
-  wholeWord: boolean;
-  useRegex: boolean;
-  useStructural: boolean;
-  includePatterns: string[];
-  excludePatterns: string[];
+export type IWorkspaceReplacementRequest = Omit<WorkspaceReplacementRequest, 'limit'> & {
   limit?: number;
-}
+};
 
-export interface IWorkspaceReplacementExpectedFile {
-  path: string;
-  beforeHash: string;
-  includedMatchIds?: string[];
-}
+export type IWorkspaceReplacementExpectedFile = WorkspaceReplacementExpectedFile;
 
-export interface IWorkspaceReplacementApplyRequest {
+export type IWorkspaceReplacementApplyRequest = Omit<
+  WorkspaceReplacementApplyRequest,
+  'request'
+> & {
   request: IWorkspaceReplacementRequest;
-  expectedFiles: IWorkspaceReplacementExpectedFile[];
-}
+};
 
-export interface IWorkspaceReplacementFilePreview {
-  path: string;
-  relativePath: string;
-  replacementCount: number;
-  beforeHash: string;
-  afterHash: string;
-  diff: string;
-  diffTruncated: boolean;
-  linePreviews: IWorkspaceReplacementLinePreview[];
-}
+export type IWorkspaceReplacementFilePreview = WorkspaceReplacementFilePreview;
 
-export interface IWorkspaceReplacementLinePreview {
-  id: string;
-  lineNumber: number;
-  beforeLine: string;
-  afterLine: string;
-  replacementCount: number;
-}
+export type IWorkspaceReplacementLinePreview = WorkspaceReplacementLinePreview;
 
-export interface IWorkspaceReplacementPreviewPayload {
-  rootPath: string;
-  fileCount: number;
-  replacementCount: number;
-  files: IWorkspaceReplacementFilePreview[];
-}
+export type IWorkspaceReplacementPreviewPayload = WorkspaceReplacementPreviewPayload;
 
-export interface IWorkspaceReplacementAppliedFile {
-  path: string;
-  relativePath: string;
-  replacementCount: number;
-  byteSize: number;
-}
+export type IWorkspaceReplacementAppliedFile = WorkspaceReplacementAppliedFile;
 
-export interface IWorkspaceReplacementApplyPayload {
-  rootPath: string;
-  changedFileCount: number;
-  replacementCount: number;
-  files: IWorkspaceReplacementAppliedFile[];
-}
+export type IWorkspaceReplacementApplyPayload = WorkspaceReplacementApplyPayload;

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[macro_use]
 #[path = "../commands/window.rs"]
 mod window;
@@ -8,29 +10,29 @@ mod window_stage;
 mod contracts;
 #[path = "../commands/script_run.rs"]
 mod script_run;
+#[path = "../commands/search.rs"]
+mod search;
 #[path = "../commands/shell_tools.rs"]
 mod shell_tools;
-#[path = "../commands/workspace_fs.rs"]
-mod workspace_fs;
 #[path = "../tauri_bindings.rs"]
 mod tauri_bindings;
+#[path = "../commands/workspace_fs.rs"]
+mod workspace_fs;
 
 mod commands {
-    pub(crate) use crate::{shell_tools, window, window_stage, workspace_fs};
+    pub(crate) use crate::{script_run, search, shell_tools, window, window_stage, workspace_fs};
 }
 
 pub use contracts::{
     AnalyzeScriptPayload, AnalyzeScriptRequest, DocumentEncoding, ExecutionEnvironment,
-    ExecutionOption, FormatScriptPayload, FormatScriptRequest, ImageAssetPayload,
-    SaveScriptRequest, ScriptDiagnosticPayload, ScriptFilePayload, WorkspaceDirectoryPayload,
-    WorkspaceEntry, WorkspacePathCreatePayload, WorkspacePathCreateRequest,
-    WorkspacePathDeletePayload, WorkspacePathDeleteRequest, WorkspacePathKind,
-    WorkspacePathRenamePayload, WorkspacePathRenameRequest,
+    ExecutionOption, ExecutorKind, FormatScriptPayload, FormatScriptRequest, ImageAssetPayload,
+    SaveScriptRequest, ScriptDiagnosticPayload, ScriptDiagnosticSeverity, ScriptFilePayload,
+    WorkspaceDirectoryPayload, WorkspaceEntry, WorkspacePathCreatePayload,
+    WorkspacePathCreateRequest, WorkspacePathDeletePayload, WorkspacePathDeleteRequest,
+    WorkspacePathKind, WorkspacePathRenamePayload, WorkspacePathRenameRequest,
 };
 pub(crate) use script_run::{create_temp_script, find_command_path, line_count};
-pub(crate) use workspace_fs::{
-    decode_script_bytes, encode_script_content, resolve_workspace_root, workspace_name,
-};
+pub(crate) use workspace_fs::{decode_script_bytes, encode_script_content, resolve_workspace_root};
 
 pub(crate) fn build_temp_file_suffix() -> Result<String, String> {
     Ok(format!(

@@ -47,7 +47,6 @@ impl RedactionResult {
             blocked: false,
         }
     }
-
 }
 
 pub fn redact_text(value: &str) -> RedactionResult {

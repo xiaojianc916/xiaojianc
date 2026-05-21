@@ -82,13 +82,18 @@ impl From<SecretString> for String {
 // ============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
-#[serde(rename_all = "kebab-case")]
 pub enum DocumentEncoding {
+    #[serde(rename = "utf-8")]
     Utf8,
+    #[serde(rename = "utf-8-bom")]
     Utf8Bom,
+    #[serde(rename = "gbk")]
     Gbk,
+    #[serde(rename = "gb18030")]
     Gb18030,
+    #[serde(rename = "utf-16le")]
     Utf16le,
+    #[serde(rename = "utf-16be")]
     Utf16be,
 }
 
@@ -127,6 +132,29 @@ impl WorkspacePathKind {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "lowercase")]
+pub enum ScriptDiagnosticSeverity {
+    Error,
+    Warning,
+    Info,
+    Style,
+}
+
+impl TryFrom<&str> for ScriptDiagnosticSeverity {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, String> {
+        match value {
+            "error" => Ok(Self::Error),
+            "warning" => Ok(Self::Warning),
+            "info" => Ok(Self::Info),
+            "style" => Ok(Self::Style),
+            other => Err(format!("ShellCheck 返回了未知诊断级别：{other}")),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ScriptFilePayload {
@@ -134,8 +162,8 @@ pub struct ScriptFilePayload {
     pub(crate) name: String,
     pub(crate) content: String,
     pub(crate) encoding: DocumentEncoding,
-    pub(crate) line_count: usize,
-    pub(crate) char_count: usize,
+    pub(crate) line_count: u32,
+    pub(crate) char_count: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -145,7 +173,7 @@ pub struct ImageAssetPayload {
     pub(crate) name: String,
     pub(crate) mime_type: String,
     pub(crate) data_url: String,
-    pub(crate) byte_size: usize,
+    pub(crate) byte_size: u32,
 }
 
 #[derive(Debug, Clone, Deserialize, Type)]
@@ -170,8 +198,8 @@ pub struct FormatScriptRequest {
 pub struct FormatScriptPayload {
     pub(crate) content: String,
     pub(crate) encoding: DocumentEncoding,
-    pub(crate) line_count: usize,
-    pub(crate) char_count: usize,
+    pub(crate) line_count: u32,
+    pub(crate) char_count: u32,
 }
 
 #[derive(Debug, Clone, Deserialize, Type)]
@@ -185,12 +213,11 @@ pub struct AnalyzeScriptRequest {
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ScriptDiagnosticPayload {
-    pub(crate) line: usize,
-    pub(crate) end_line: usize,
-    pub(crate) column: usize,
-    pub(crate) end_column: usize,
-    /// 严重程度，已知值："error" | "warning" | "info" | "hint"。
-    pub(crate) level: String,
+    pub(crate) line: u32,
+    pub(crate) end_line: u32,
+    pub(crate) column: u32,
+    pub(crate) end_column: u32,
+    pub(crate) level: ScriptDiagnosticSeverity,
     pub(crate) code: String,
     pub(crate) message: String,
 }
@@ -209,10 +236,15 @@ pub struct AnalyzeScriptPayload {
 // ============================================================================
 
 #[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "lowercase")]
+pub enum ExecutorKind {
+    Wsl,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecutionOption {
-    /// 执行器种类标识，例如："bash" | "zsh" | "pwsh" | "node" | …。
-    pub(crate) r#type: String,
+    pub(crate) r#type: ExecutorKind,
     pub(crate) label: String,
     pub(crate) available: bool,
     pub(crate) description: String,
@@ -222,7 +254,7 @@ pub struct ExecutionOption {
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecutionEnvironment {
-    pub(crate) recommended: String,
+    pub(crate) recommended: ExecutorKind,
     pub(crate) has_any: bool,
     pub(crate) executors: Vec<ExecutionOption>,
 }

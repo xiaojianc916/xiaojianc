@@ -17,9 +17,8 @@ use crate::commands::contracts::{
     AiEditRestoreSnapshotPayload, AiEditRestoreSnapshotRequest, AiEditRevertFilePayload,
     AiEditRevertFileRequest, AiEditRevertHunkPayload, AiEditRevertHunkRequest,
     AiEditRevertTaskPayload, AiEditRevertTaskRequest, AiEditSetAuthLevelRequest,
-    AiEditSetPinPayload, AiEditSetPinRequest,
-    AiEditTimelineEntryPayload, AiEditUndoOperationPayload, AiEditUndoOperationRequest,
-    AiSnapshotPayload,
+    AiEditSetPinPayload, AiEditSetPinRequest, AiEditTimelineEntryPayload,
+    AiEditUndoOperationPayload, AiEditUndoOperationRequest, AiSnapshotPayload,
 };
 use chrono::Utc;
 use std::collections::HashSet;
@@ -588,8 +587,8 @@ fn parse_rfc3339_utc(value: &str) -> Option<chrono::DateTime<Utc>> {
 mod tests {
     use super::{apply_retention_policy_with_policy, create_snapshot, AiEditState};
     use crate::ai::edit::history::snapshot;
-    use crate::commands::contracts::AiEditTimelineEntryPayload;
     use crate::commands::contracts::AiEditCreateSnapshotRequest;
+    use crate::commands::contracts::AiEditTimelineEntryPayload;
     use std::fs;
 
     #[test]
@@ -671,8 +670,8 @@ mod tests {
                 ..snapshot::SnapshotRetentionPolicy::default()
             },
         )
-            .expect("retention should succeed")
-            .expect("retention should prune stale snapshots");
+        .expect("retention should succeed")
+        .expect("retention should prune stale snapshots");
         let stored_snapshots =
             snapshot::list_stored_snapshots(&storage_root).expect("snapshots should be listed");
         let guard = state.timeline.lock().expect("timeline lock should succeed");

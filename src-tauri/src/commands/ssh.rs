@@ -973,7 +973,9 @@ fn write_sftp_text_file(
     Ok(encoded_content.len() as u64)
 }
 
-fn decode_remote_preview_text(buffer: Vec<u8>) -> Result<(String, &'static str, &'static str), String> {
+fn decode_remote_preview_text(
+    buffer: Vec<u8>,
+) -> Result<(String, &'static str, &'static str), String> {
     if buffer.contains(&0) {
         return Err("暂不支持预览二进制文件，请下载到本地查看。".into());
     }

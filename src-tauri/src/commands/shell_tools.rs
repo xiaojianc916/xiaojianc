@@ -1,7 +1,7 @@
 use super::{
     configure_std_command_for_background, configure_tokio_command_for_background,
     AnalyzeScriptPayload, AnalyzeScriptRequest, FormatScriptPayload, FormatScriptRequest,
-    ScriptDiagnosticPayload,
+    ScriptDiagnosticPayload, ScriptDiagnosticSeverity,
 };
 use serde::Deserialize;
 use std::{
@@ -137,8 +137,8 @@ pub async fn format_script(payload: FormatScriptRequest) -> Result<FormatScriptP
 
     if payload.content.trim().is_empty() {
         return Ok(FormatScriptPayload {
-            line_count: super::line_count(&payload.content),
-            char_count: payload.content.chars().count(),
+            line_count: count_to_u32(super::line_count(&payload.content), "脚本行数")?,
+            char_count: count_to_u32(payload.content.chars().count(), "脚本字符数")?,
             content: payload.content,
             encoding: payload.encoding,
         });
@@ -147,8 +147,8 @@ pub async fn format_script(payload: FormatScriptRequest) -> Result<FormatScriptP
     let formatted = run_shfmt(&shfmt, &payload.content, payload.path.as_deref()).await?;
 
     Ok(FormatScriptPayload {
-        line_count: super::line_count(&formatted),
-        char_count: formatted.chars().count(),
+        line_count: count_to_u32(super::line_count(&formatted), "脚本行数")?,
+        char_count: count_to_u32(formatted.chars().count(), "脚本字符数")?,
         content: formatted,
         encoding: payload.encoding,
     })
@@ -168,17 +168,21 @@ fn parse_shellcheck_diagnostics(output: &str) -> Result<Vec<ScriptDiagnosticPayl
         .map(|item| {
             let code = format!("SC{}", item.code);
 
-            ScriptDiagnosticPayload {
-                line: item.line.max(1),
-                end_line: item.end_line.max(item.line).max(1),
-                column: item.column.max(1),
-                end_column: item.end_column.max(item.column).max(1),
-                level: item.level,
+            Ok(ScriptDiagnosticPayload {
+                line: count_to_u32(item.line.max(1), "诊断行号")?,
+                end_line: count_to_u32(item.end_line.max(item.line).max(1), "诊断结束行号")?,
+                column: count_to_u32(item.column.max(1), "诊断列号")?,
+                end_column: count_to_u32(item.end_column.max(item.column).max(1), "诊断结束列号")?,
+                level: ScriptDiagnosticSeverity::try_from(item.level.as_str())?,
                 message: translate_shellcheck_message(&code, item.message),
                 code,
-            }
+            })
         })
-        .collect())
+        .collect::<Result<Vec<_>, String>>()?)
+}
+
+fn count_to_u32(value: usize, label: &str) -> Result<u32, String> {
+    u32::try_from(value).map_err(|_| format!("{label}超出支持范围。"))
 }
 
 fn shellcheck_translation_map() -> &'static HashMap<String, String> {

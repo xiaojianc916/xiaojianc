@@ -23,7 +23,6 @@ impl AiProviderMessage {
     pub fn system(content: impl Into<String>) -> Self {
         Self::new("system", content)
     }
-
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

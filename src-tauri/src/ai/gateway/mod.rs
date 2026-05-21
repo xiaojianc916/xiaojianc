@@ -1,10 +1,8 @@
 use super::audit::{self, AiAuditEventKind};
+use super::budget as token_budget;
 use super::credential::CredentialStore;
 use super::errors;
-use super::provider::{
-    AiProviderChatRequest, AiProviderMessage, AiProviderUsage,
-};
-use super::budget as token_budget;
+use super::provider::{AiProviderChatRequest, AiProviderMessage, AiProviderUsage};
 use super::security::redaction::redact_text;
 use super::stream as stream_manager;
 use crate::ai::agent::planner::AgentPlanner;
@@ -353,9 +351,7 @@ fn build_profile_name(selected_model: Option<&str>, base_url: Option<&str>) -> S
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or("未选择模型");
-    let base_url = base_url
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
+    let base_url = base_url.map(str::trim).filter(|value| !value.is_empty());
 
     match base_url {
         Some(value) => format!("{model} · {value}"),

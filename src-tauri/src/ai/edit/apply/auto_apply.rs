@@ -1,13 +1,11 @@
-use crate::ai::errors;
 use crate::ai::edit as ai_edit;
 use crate::ai::edit::apply::diff_render;
 use crate::ai::edit::history::snapshot::{self, SnapshotSourceFile};
-use crate::ai::edit::io::file_transaction::{
-    self, FileTransactionAction, FileTransactionPlan,
-};
+use crate::ai::edit::io::file_transaction::{self, FileTransactionAction, FileTransactionPlan};
 use crate::ai::edit::patch::{hash_text, read_text_file_baseline};
 use crate::ai::edit::security::path_security;
 use crate::ai::edit::AiEditState;
+use crate::ai::errors;
 use crate::commands::contracts::{
     AiApplyPatchMetadataRequest, AiEditOperationPayload, AiEditTimelineEntryPayload,
 };
@@ -153,8 +151,11 @@ fn validate_operation_conflicts(
     workspace_root: Option<&str>,
 ) -> Result<(), String> {
     for plan in plans {
-        let path =
-            validate_existing_file_for_original_hash(plan, workspace_root, "modify 目标文件不存在。")?;
+        let path = validate_existing_file_for_original_hash(
+            plan,
+            workspace_root,
+            "modify 目标文件不存在。",
+        )?;
 
         if !path.is_file() {
             return Err(errors::error(

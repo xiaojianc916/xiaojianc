@@ -3,14 +3,14 @@ use crate::ai::edit as ai_edit;
 use crate::ai::edit::patch;
 use crate::ai::edit::AiEditState;
 use crate::commands::contracts::{
-    AiApplyPatchPayload, AiApplyPatchRequest, AiEditAuthStatePayload,
-    AiEditCreateSnapshotPayload, AiEditCreateSnapshotRequest, AiEditGetDiffPayload,
-    AiEditGetDiffRequest, AiEditListTimelinePayload, AiEditListTimelineRequest,
-    AiEditRestoreSnapshotPayload, AiEditRestoreSnapshotRequest, AiEditRevertFilePayload,
-    AiEditRevertFileRequest, AiEditRevertHunkPayload, AiEditRevertHunkRequest,
-    AiEditRevertTaskPayload, AiEditRevertTaskRequest, AiEditSetAuthLevelRequest,
-    AiEditSetPinPayload, AiEditSetPinRequest, AiEditUndoOperationPayload,
-    AiEditUndoOperationRequest, AiProposePatchPayload, AiProposePatchRequest,
+    AiApplyPatchPayload, AiApplyPatchRequest, AiEditAuthStatePayload, AiEditCreateSnapshotPayload,
+    AiEditCreateSnapshotRequest, AiEditGetDiffPayload, AiEditGetDiffRequest,
+    AiEditListTimelinePayload, AiEditListTimelineRequest, AiEditRestoreSnapshotPayload,
+    AiEditRestoreSnapshotRequest, AiEditRevertFilePayload, AiEditRevertFileRequest,
+    AiEditRevertHunkPayload, AiEditRevertHunkRequest, AiEditRevertTaskPayload,
+    AiEditRevertTaskRequest, AiEditSetAuthLevelRequest, AiEditSetPinPayload, AiEditSetPinRequest,
+    AiEditUndoOperationPayload, AiEditUndoOperationRequest, AiProposePatchPayload,
+    AiProposePatchRequest,
 };
 use tauri::{AppHandle, State};
 

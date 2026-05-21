@@ -197,7 +197,10 @@ mod tests {
             "http://[::ffff:127.0.0.1]",
             "http://[::ffff:10.0.0.1]",
         ] {
-            assert!(validate_public_http_url(value).is_err(), "{value} should be blocked");
+            assert!(
+                validate_public_http_url(value).is_err(),
+                "{value} should be blocked"
+            );
         }
     }
 

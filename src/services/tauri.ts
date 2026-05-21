@@ -1,3 +1,4 @@
+import { commands } from '@/bindings/tauri';
 import { agentSidecarStreamEventPayloadSchema } from '@/types/ai/sidecar.schema';
 import { aiChatStreamEventPayloadSchema } from '@/types/ai/schema';
 import { AppError, isAppError } from '@/types/app-error';
@@ -314,6 +315,95 @@ const raceWithTimeoutAndAbort = async <T>(
       (error) => finish(() => reject(error)),
     );
   });
+};
+
+interface ISpectaCommandOptions {
+  command: string;
+  guardHint: string;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  idempotent?: boolean;
+  audit?: TIpcAuditLevel;
+  input?: unknown;
+  measureInput?: (input: Record<string, unknown>) => IPayloadMetrics;
+}
+
+const callSpectaCommand = async <T>(
+  options: ISpectaCommandOptions,
+  run: () => Promise<T>,
+): Promise<T> => {
+  const traceId = createTraceId();
+  const startedAt = Date.now();
+  const audit = options.audit ?? 'info';
+  const shouldAudit = audit !== 'none';
+  let inputBytes = 0;
+  let outputBytes = 0;
+
+  if (shouldAudit) {
+    const input = options.input ?? {};
+    const inputMetrics =
+      options.measureInput && input && typeof input === 'object' && !Array.isArray(input)
+        ? options.measureInput(input as Record<string, unknown>)
+        : buildPayloadMetrics(input);
+    inputBytes = inputMetrics.bytes;
+  }
+
+  try {
+    if (options.signal?.aborted) {
+      throw createCanceledError(traceId);
+    }
+
+    await assertDesktopRuntime(options.guardHint);
+    const invocation = run();
+    invocation.catch(() => undefined);
+    const output = await raceWithTimeoutAndAbort(invocation, {
+      timeoutMs: options.timeoutMs ?? TAURI_IPC_DEFAULT_TIMEOUT_MS,
+      signal: options.signal,
+      traceId,
+    });
+
+    if (shouldAudit) {
+      outputBytes = buildPayloadMetrics(output).bytes;
+      emitIpcLog({
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        scope: 'ipc',
+        event: 'tauri.invoke',
+        traceId,
+        command: options.command,
+        audit,
+        idempotent: options.idempotent ?? false,
+        durationMs: Date.now() - startedAt,
+        inputBytes,
+        outputBytes,
+        outcome: 'ok',
+      });
+    }
+
+    return output;
+  } catch (error) {
+    const normalizedError = normalizeIpcError(error, { traceId, errorMap: {} });
+
+    if (shouldAudit) {
+      emitIpcLog({
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        scope: 'ipc',
+        event: 'tauri.invoke',
+        traceId,
+        command: options.command,
+        audit,
+        idempotent: options.idempotent ?? false,
+        durationMs: Date.now() - startedAt,
+        inputBytes,
+        outputBytes,
+        outcome: 'error',
+        errorCode: normalizedError.code,
+      });
+    }
+
+    throw normalizedError;
+  }
 };
 
 const invokeTauriCommand = async <T>(
@@ -646,39 +736,6 @@ const agentSidecarRestoreCheckpointIpc = definePayloadIpc(
   { audit: 'sensitive', timeoutMs: AGENT_SIDECAR_TASK_TIMEOUT_MS },
 );
 
-const analyzeScriptIpc = definePayloadIpc(
-  'analyze_script',
-  '执行 ShellCheck 实时诊断',
-  tauriContracts.analyzeScript,
-  { idempotent: true },
-);
-
-const formatScriptIpc = definePayloadIpc(
-  'format_script',
-  '使用 shfmt 格式化脚本',
-  tauriContracts.formatScript,
-);
-
-const loadScriptIpc = defineContractIpc('load_script', '读取脚本文件', tauriContracts.loadScript, {
-  idempotent: true,
-});
-
-const loadImageAssetIpc = defineContractIpc(
-  'load_image_asset',
-  '读取图片资源',
-  tauriContracts.loadImageAsset,
-  { idempotent: true },
-);
-
-const saveScriptIpc = definePayloadIpc('save_script', '写入脚本文件', tauriContracts.saveScript);
-
-const detectEnvironmentIpc = defineContractIpc(
-  'detect_execution_environment',
-  '检测执行环境',
-  tauriContracts.detectEnvironment,
-  { idempotent: true },
-);
-
 const getWslLinkStatusIpc = defineContractIpc(
   'get_wsl_link_status',
   '读取 WSL Link 状态',
@@ -733,55 +790,6 @@ const probeWslLinkPrimaryIpc = defineContractIpc(
   '探测 WSL Link 主通道',
   tauriContracts.probeWslLinkPrimary,
   { idempotent: false, audit: 'sensitive', timeoutMs: 8_000 },
-);
-
-const listWorkspaceEntriesIpc = defineContractIpc(
-  'list_workspace_entries',
-  '读取工作区目录',
-  tauriContracts.listWorkspaceEntries,
-  { idempotent: true },
-);
-
-const createWorkspacePathIpc = definePayloadIpc(
-  'create_workspace_path',
-  '创建工作区资源',
-  tauriContracts.createWorkspacePath,
-  { audit: 'sensitive' },
-);
-
-const renameWorkspacePathIpc = definePayloadIpc(
-  'rename_workspace_path',
-  '重命名工作区资源',
-  tauriContracts.renameWorkspacePath,
-  { audit: 'sensitive' },
-);
-
-const deleteWorkspacePathIpc = definePayloadIpc(
-  'delete_workspace_path',
-  '删除工作区资源',
-  tauriContracts.deleteWorkspacePath,
-  { audit: 'sensitive' },
-);
-
-const searchWorkspaceIpc = definePayloadIpc(
-  'search_workspace',
-  '搜索工作区',
-  tauriContracts.searchWorkspace,
-  { idempotent: true, timeoutMs: 30_000 },
-);
-
-const previewWorkspaceReplacementIpc = definePayloadIpc(
-  'preview_workspace_replacement',
-  '预览工作区替换',
-  tauriContracts.previewWorkspaceReplacement,
-  { idempotent: true, audit: 'sensitive', timeoutMs: 30_000 },
-);
-
-const applyWorkspaceReplacementIpc = definePayloadIpc(
-  'apply_workspace_replacement',
-  '应用工作区替换',
-  tauriContracts.applyWorkspaceReplacement,
-  { audit: 'sensitive', timeoutMs: 30_000 },
 );
 
 const getGitRepositoryStatusIpc = defineContractIpc(
@@ -1315,9 +1323,29 @@ export const tauriService: ITauriService & {
 
   agentSidecarRestoreCheckpoint: agentSidecarRestoreCheckpointIpc,
 
-  analyzeScript: analyzeScriptIpc,
+  analyzeScript(payload) {
+    return callSpectaCommand(
+      {
+        command: 'analyze_script',
+        guardHint: '执行 ShellCheck 实时诊断',
+        idempotent: true,
+        input: payload,
+      },
+      () => commands.analyzeScript(payload),
+    );
+  },
 
-  formatScript: formatScriptIpc,
+  formatScript(payload) {
+    return callSpectaCommand(
+      {
+        command: 'format_script',
+        guardHint: '使用 shfmt 格式化脚本',
+        input: payload,
+        measureInput: measureScriptContentInput,
+      },
+      () => commands.formatScript(payload),
+    );
+  },
 
   pickOpenPath() {
     return pickDialogPath('打开本地脚本', ({ open }) =>
@@ -1365,16 +1393,47 @@ export const tauriService: ITauriService & {
   },
 
   loadScript(path) {
-    return loadScriptIpc({ path });
+    return callSpectaCommand(
+      { command: 'load_script', guardHint: '读取脚本文件', idempotent: true, input: { path } },
+      () => commands.loadScript(path),
+    );
   },
 
   loadImageAsset(path) {
-    return loadImageAssetIpc({ path });
+    return callSpectaCommand(
+      {
+        command: 'load_image_asset',
+        guardHint: '读取图片资源',
+        idempotent: true,
+        input: { path },
+      },
+      () => commands.loadImageAsset(path),
+    );
   },
 
-  saveScript: saveScriptIpc,
+  saveScript(payload) {
+    return callSpectaCommand(
+      {
+        command: 'save_script',
+        guardHint: '写入脚本文件',
+        input: payload,
+        measureInput: measureScriptContentInput,
+      },
+      () => commands.saveScript(payload),
+    );
+  },
 
-  detectEnvironment: () => detectEnvironmentIpc(undefined),
+  detectEnvironment() {
+    return callSpectaCommand(
+      {
+        command: 'detect_execution_environment',
+        guardHint: '检测执行环境',
+        idempotent: true,
+        input: undefined,
+      },
+      () => commands.detectExecutionEnvironment(),
+    );
+  },
 
   getWslLinkStatus: () => getWslLinkStatusIpc(undefined),
 
@@ -1393,20 +1452,114 @@ export const tauriService: ITauriService & {
   probeWslLinkPrimary: () => probeWslLinkPrimaryIpc(undefined),
 
   listWorkspaceEntries(path, rootPath) {
-    return listWorkspaceEntriesIpc({ path, rootPath });
+    return callSpectaCommand(
+      {
+        command: 'list_workspace_entries',
+        guardHint: '读取工作区目录',
+        idempotent: true,
+        input: { path, rootPath },
+      },
+      () => commands.listWorkspaceEntries(path ?? null, rootPath ?? null),
+    );
   },
 
-  createWorkspacePath: createWorkspacePathIpc,
+  createWorkspacePath(payload) {
+    return callSpectaCommand(
+      {
+        command: 'create_workspace_path',
+        guardHint: '创建工作区资源',
+        audit: 'sensitive',
+        input: payload,
+      },
+      () => commands.createWorkspacePath(payload),
+    );
+  },
 
-  renameWorkspacePath: renameWorkspacePathIpc,
+  renameWorkspacePath(payload) {
+    return callSpectaCommand(
+      {
+        command: 'rename_workspace_path',
+        guardHint: '重命名工作区资源',
+        audit: 'sensitive',
+        input: payload,
+      },
+      () => commands.renameWorkspacePath(payload),
+    );
+  },
 
-  deleteWorkspacePath: deleteWorkspacePathIpc,
+  deleteWorkspacePath(payload) {
+    return callSpectaCommand(
+      {
+        command: 'delete_workspace_path',
+        guardHint: '删除工作区资源',
+        audit: 'sensitive',
+        input: payload,
+      },
+      () => commands.deleteWorkspacePath(payload),
+    );
+  },
 
-  searchWorkspace: searchWorkspaceIpc,
+  searchWorkspace(payload, options) {
+    const commandPayload = {
+      ...payload,
+      includePatterns: payload.includePatterns,
+      excludePatterns: payload.excludePatterns,
+      limit: payload.limit ?? null,
+    };
+    return callSpectaCommand(
+      {
+        command: 'search_workspace',
+        guardHint: '搜索工作区',
+        idempotent: true,
+        timeoutMs: 30_000,
+        signal: options?.signal,
+        input: commandPayload,
+      },
+      () => commands.searchWorkspace(commandPayload),
+    );
+  },
 
-  previewWorkspaceReplacement: previewWorkspaceReplacementIpc,
+  previewWorkspaceReplacement(payload) {
+    const commandPayload = {
+      ...payload,
+      includePatterns: payload.includePatterns,
+      excludePatterns: payload.excludePatterns,
+      limit: payload.limit ?? null,
+    };
+    return callSpectaCommand(
+      {
+        command: 'preview_workspace_replacement',
+        guardHint: '预览工作区替换',
+        idempotent: true,
+        audit: 'sensitive',
+        timeoutMs: 30_000,
+        input: commandPayload,
+      },
+      () => commands.previewWorkspaceReplacement(commandPayload),
+    );
+  },
 
-  applyWorkspaceReplacement: applyWorkspaceReplacementIpc,
+  applyWorkspaceReplacement(payload) {
+    const commandPayload = {
+      request: {
+        ...payload.request,
+        includePatterns: payload.request.includePatterns,
+        excludePatterns: payload.request.excludePatterns,
+        limit: payload.request.limit ?? null,
+      },
+      expectedFiles: payload.expectedFiles,
+    };
+    return callSpectaCommand(
+      {
+        command: 'apply_workspace_replacement',
+        guardHint: '应用工作区替换',
+        audit: 'sensitive',
+        timeoutMs: 30_000,
+        input: commandPayload,
+      },
+      () => commands.applyWorkspaceReplacement(commandPayload),
+    );
+  },
 
   getGitRepositoryStatus(workspaceRootPath) {
     return getGitRepositoryStatusIpc({ workspaceRootPath });

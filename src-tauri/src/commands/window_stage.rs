@@ -1,6 +1,6 @@
-use std::time::Instant;
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use std::time::Instant;
 use tauri::{AppHandle, LogicalSize, Manager, Size, WebviewWindow};
 
 const MAIN_WINDOW_LABEL: &str = "main";

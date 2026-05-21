@@ -1,5 +1,4 @@
 use super::{decode_script_bytes, encode_script_content, resolve_workspace_root, DocumentEncoding};
-use crate::ai::edit::patch::hash_text;
 use ast_grep_core::Pattern as AstPattern;
 use ast_grep_language::{LanguageExt, SupportLang};
 use globset::{Glob, GlobSet, GlobSetBuilder};
@@ -14,6 +13,7 @@ use nucleo_matcher::{
 };
 use serde::{Deserialize, Serialize};
 use similar::TextDiff;
+use specta::Type;
 use std::{
     collections::{HashMap, HashSet},
     fs, io,
@@ -61,12 +61,52 @@ const SKIPPED_SEARCH_EXTENSIONS: &[&str] = &[
     "xz", "zip", "zst",
 ];
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Type)]
+pub enum WorkspaceSearchScope {
+    #[serde(rename = "all")]
+    All,
+    #[serde(rename = "file-name")]
+    FileName,
+    #[serde(rename = "symbol")]
+    Symbol,
+    #[serde(rename = "content")]
+    Content,
+}
+
+impl WorkspaceSearchScope {
+    fn includes_file_name(&self) -> bool {
+        matches!(self, Self::All | Self::FileName)
+    }
+
+    fn includes_content(&self) -> bool {
+        matches!(self, Self::All | Self::Content)
+    }
+
+    fn includes_symbol(&self) -> bool {
+        matches!(self, Self::All | Self::Symbol)
+    }
+
+    fn is_all(&self) -> bool {
+        matches!(self, Self::All)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub enum WorkspaceSearchResultKind {
+    #[serde(rename = "file-name")]
+    FileName,
+    #[serde(rename = "content")]
+    Content,
+    #[serde(rename = "symbol")]
+    Symbol,
+}
+
+#[derive(Debug, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceSearchRequest {
     pub(crate) workspace_root_path: String,
     pub(crate) query: String,
-    pub(crate) scope: String,
+    pub(crate) scope: WorkspaceSearchScope,
     pub(crate) match_case: bool,
     pub(crate) whole_word: bool,
     pub(crate) use_regex: bool,
@@ -76,32 +116,32 @@ pub struct WorkspaceSearchRequest {
     pub(crate) include_patterns: Vec<String>,
     #[serde(default)]
     pub(crate) exclude_patterns: Vec<String>,
-    pub(crate) limit: Option<usize>,
+    pub(crate) limit: Option<u32>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceSearchPayload {
     pub(crate) root_path: String,
-    pub(crate) scanned_file_count: usize,
+    pub(crate) scanned_file_count: u32,
     pub(crate) results: Vec<WorkspaceSearchResult>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceSearchResult {
     pub(crate) path: String,
     pub(crate) relative_path: String,
     pub(crate) name: String,
-    pub(crate) kind: String,
-    pub(crate) line_number: Option<u64>,
+    pub(crate) kind: WorkspaceSearchResultKind,
+    pub(crate) line_number: Option<u32>,
     pub(crate) line_text: Option<String>,
-    pub(crate) match_start: Option<usize>,
-    pub(crate) match_end: Option<usize>,
-    pub(crate) score: i64,
+    pub(crate) match_start: Option<u32>,
+    pub(crate) match_end: Option<u32>,
+    pub(crate) score: i32,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceReplacementRequest {
     pub(crate) workspace_root_path: String,
@@ -116,10 +156,10 @@ pub struct WorkspaceReplacementRequest {
     pub(crate) include_patterns: Vec<String>,
     #[serde(default)]
     pub(crate) exclude_patterns: Vec<String>,
-    pub(crate) limit: Option<usize>,
+    pub(crate) limit: Option<u32>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceReplacementExpectedFile {
     pub(crate) path: String,
@@ -128,28 +168,28 @@ pub struct WorkspaceReplacementExpectedFile {
     pub(crate) included_match_ids: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceReplacementApplyRequest {
     pub(crate) request: WorkspaceReplacementRequest,
     pub(crate) expected_files: Vec<WorkspaceReplacementExpectedFile>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceReplacementPreviewPayload {
     pub(crate) root_path: String,
-    pub(crate) file_count: usize,
-    pub(crate) replacement_count: usize,
+    pub(crate) file_count: u32,
+    pub(crate) replacement_count: u32,
     pub(crate) files: Vec<WorkspaceReplacementFilePreview>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceReplacementFilePreview {
     pub(crate) path: String,
     pub(crate) relative_path: String,
-    pub(crate) replacement_count: usize,
+    pub(crate) replacement_count: u32,
     pub(crate) before_hash: String,
     pub(crate) after_hash: String,
     pub(crate) diff: String,
@@ -157,32 +197,32 @@ pub struct WorkspaceReplacementFilePreview {
     pub(crate) line_previews: Vec<WorkspaceReplacementLinePreview>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceReplacementLinePreview {
     pub(crate) id: String,
-    pub(crate) line_number: u64,
+    pub(crate) line_number: u32,
     pub(crate) before_line: String,
     pub(crate) after_line: String,
-    pub(crate) replacement_count: usize,
+    pub(crate) replacement_count: u32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceReplacementApplyPayload {
     pub(crate) root_path: String,
-    pub(crate) changed_file_count: usize,
-    pub(crate) replacement_count: usize,
+    pub(crate) changed_file_count: u32,
+    pub(crate) replacement_count: u32,
     pub(crate) files: Vec<WorkspaceReplacementAppliedFile>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceReplacementAppliedFile {
     pub(crate) path: String,
     pub(crate) relative_path: String,
-    pub(crate) replacement_count: usize,
-    pub(crate) byte_size: u64,
+    pub(crate) replacement_count: u32,
+    pub(crate) byte_size: u32,
 }
 
 #[derive(Clone)]
@@ -221,7 +261,7 @@ struct SymbolEntry {
     path: PathBuf,
     relative_path: String,
     name: String,
-    line_number: u64,
+    line_number: u32,
 }
 
 struct RegexReplacement {
@@ -244,11 +284,13 @@ static WORKSPACE_FILE_CACHES: OnceLock<Mutex<HashMap<String, WorkspaceFileCache>
     OnceLock::new();
 
 #[tauri::command]
+#[specta::specta]
 pub fn search_workspace(payload: WorkspaceSearchRequest) -> Result<WorkspaceSearchPayload, String> {
     let workspace_root = resolve_workspace_root(Some(payload.workspace_root_path.clone()))?;
     let query = payload.query.trim().to_string();
     let limit = payload
         .limit
+        .map(|value| value as usize)
         .unwrap_or(DEFAULT_SEARCH_LIMIT)
         .min(MAX_SEARCH_LIMIT);
     let filters = build_path_filters(&payload.include_patterns, &payload.exclude_patterns)?;
@@ -257,24 +299,27 @@ pub fn search_workspace(payload: WorkspaceSearchRequest) -> Result<WorkspaceSear
     if query.is_empty() {
         return Ok(WorkspaceSearchPayload {
             root_path: workspace_root.to_string_lossy().to_string(),
-            scanned_file_count: files.len(),
+            scanned_file_count: count_to_u32(files.len(), "扫描文件数")?,
             results: Vec::new(),
         });
     }
 
     let mut results = Vec::new();
-    let include_file_results =
-        !payload.use_structural && (payload.scope == "all" || payload.scope == "file-name");
-    let include_content_results = payload.scope == "all" || payload.scope == "content";
-    let include_symbol_results =
-        !payload.use_structural && (payload.scope == "all" || payload.scope == "symbol");
+    let include_file_results = !payload.use_structural && payload.scope.includes_file_name();
+    let include_content_results = payload.scope.includes_content();
+    let include_symbol_results = !payload.use_structural && payload.scope.includes_symbol();
 
     if include_file_results {
-        results.extend(search_file_names(&files, &query, payload.match_case, limit));
+        results.extend(search_file_names(
+            &files,
+            &query,
+            payload.match_case,
+            limit,
+        )?);
     }
 
-    if include_content_results && (payload.scope == "all" || results.len() < limit) {
-        let content_limit = if payload.scope == "all" {
+    if include_content_results && (payload.scope.is_all() || results.len() < limit) {
+        let content_limit = if payload.scope.is_all() {
             limit
         } else {
             limit - results.len()
@@ -291,8 +336,8 @@ pub fn search_workspace(payload: WorkspaceSearchRequest) -> Result<WorkspaceSear
         }
     }
 
-    if include_symbol_results && (payload.scope == "all" || results.len() < limit) {
-        let symbol_limit = if payload.scope == "all" {
+    if include_symbol_results && (payload.scope.is_all() || results.len() < limit) {
+        let symbol_limit = if payload.scope.is_all() {
             limit
         } else {
             limit - results.len()
@@ -314,12 +359,13 @@ pub fn search_workspace(payload: WorkspaceSearchRequest) -> Result<WorkspaceSear
 
     Ok(WorkspaceSearchPayload {
         root_path: workspace_root.to_string_lossy().to_string(),
-        scanned_file_count: files.len(),
+        scanned_file_count: count_to_u32(files.len(), "扫描文件数")?,
         results,
     })
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn preview_workspace_replacement(
     payload: WorkspaceReplacementRequest,
 ) -> Result<WorkspaceReplacementPreviewPayload, String> {
@@ -327,6 +373,7 @@ pub fn preview_workspace_replacement(
     let query = require_replacement_query(&payload.query)?;
     let limit = payload
         .limit
+        .map(|value| value as usize)
         .unwrap_or(DEFAULT_REPLACEMENT_FILE_LIMIT)
         .min(MAX_REPLACEMENT_FILE_LIMIT);
     let filters = build_path_filters(&payload.include_patterns, &payload.exclude_patterns)?;
@@ -334,10 +381,11 @@ pub fn preview_workspace_replacement(
 
     let plan = build_replacement_plan(&payload, &query)?;
     let previews = build_replacement_previews(&workspace_root, &files, &payload, &plan, limit)?;
-    Ok(build_replacement_preview_payload(workspace_root, previews))
+    build_replacement_preview_payload(workspace_root, previews)
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn apply_workspace_replacement(
     payload: WorkspaceReplacementApplyRequest,
 ) -> Result<WorkspaceReplacementApplyPayload, String> {
@@ -386,7 +434,7 @@ pub fn apply_workspace_replacement(
         let included_match_ids = expected_included_match_ids
             .get(&file.path)
             .ok_or_else(|| "替换预览状态不完整，请重新生成预览后再应用。".to_string())?;
-        let selected_edits = select_replacement_edits(&replacement, included_match_ids);
+        let selected_edits = select_replacement_edits(&replacement, included_match_ids)?;
         if selected_edits.is_empty() {
             continue;
         }
@@ -405,16 +453,16 @@ pub fn apply_workspace_replacement(
         applied_files.push(WorkspaceReplacementAppliedFile {
             path: replacement.path.to_string_lossy().to_string(),
             relative_path: replacement.relative_path,
-            replacement_count: selected_replacement_count,
-            byte_size,
+            replacement_count: count_to_u32(selected_replacement_count, "替换数量")?,
+            byte_size: u64_to_u32(byte_size, "文件字节数")?,
         });
     }
 
     applied_files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
     Ok(WorkspaceReplacementApplyPayload {
         root_path: workspace_root.to_string_lossy().to_string(),
-        changed_file_count: applied_files.len(),
-        replacement_count,
+        changed_file_count: count_to_u32(applied_files.len(), "变更文件数")?,
+        replacement_count: count_to_u32(replacement_count, "替换数量")?,
         files: applied_files,
     })
 }
@@ -456,6 +504,18 @@ fn require_replacement_query(query: &str) -> Result<String, String> {
         return Err("替换前请先输入搜索内容。".to_string());
     }
     Ok(query)
+}
+
+fn count_to_u32(value: usize, label: &str) -> Result<u32, String> {
+    u32::try_from(value).map_err(|_| format!("{label}超出支持范围。"))
+}
+
+fn u64_to_u32(value: u64, label: &str) -> Result<u32, String> {
+    u32::try_from(value).map_err(|_| format!("{label}超出支持范围。"))
+}
+
+fn i64_to_i32(value: i64, label: &str) -> Result<i32, String> {
+    i32::try_from(value).map_err(|_| format!("{label}超出支持范围。"))
 }
 
 fn build_replacement_previews(
@@ -513,7 +573,7 @@ fn build_file_replacement_preview(
     if after_content == content {
         return Ok(None);
     }
-    let line_previews = build_line_previews(&content, &edits);
+    let line_previews = build_line_previews(&content, &edits)?;
     let replacement_count = edits.len();
 
     let before_hash = hash_text(&content);
@@ -539,28 +599,35 @@ fn build_file_replacement_preview(
 fn build_replacement_preview_payload(
     workspace_root: PathBuf,
     previews: Vec<FileReplacementPreview>,
-) -> WorkspaceReplacementPreviewPayload {
-    let replacement_count = previews.iter().map(|file| file.replacement_count).sum();
+) -> Result<WorkspaceReplacementPreviewPayload, String> {
+    let replacement_count = previews
+        .iter()
+        .try_fold(0usize, |total, file| {
+            total.checked_add(file.replacement_count)
+        })
+        .ok_or_else(|| "替换数量超出支持范围。".to_string())?;
     let files = previews
         .into_iter()
-        .map(|file| WorkspaceReplacementFilePreview {
-            path: file.path.to_string_lossy().to_string(),
-            relative_path: file.relative_path,
-            replacement_count: file.replacement_count,
-            before_hash: file.before_hash,
-            after_hash: file.after_hash,
-            diff: file.diff,
-            diff_truncated: file.diff_truncated,
-            line_previews: file.line_previews,
+        .map(|file| {
+            Ok(WorkspaceReplacementFilePreview {
+                path: file.path.to_string_lossy().to_string(),
+                relative_path: file.relative_path,
+                replacement_count: count_to_u32(file.replacement_count, "替换数量")?,
+                before_hash: file.before_hash,
+                after_hash: file.after_hash,
+                diff: file.diff,
+                diff_truncated: file.diff_truncated,
+                line_previews: file.line_previews,
+            })
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, String>>()?;
 
-    WorkspaceReplacementPreviewPayload {
+    Ok(WorkspaceReplacementPreviewPayload {
         root_path: workspace_root.to_string_lossy().to_string(),
-        file_count: files.len(),
-        replacement_count,
+        file_count: count_to_u32(files.len(), "文件数量")?,
+        replacement_count: count_to_u32(replacement_count, "替换数量")?,
         files,
-    }
+    })
 }
 
 fn build_replacement_plan(
@@ -709,36 +776,39 @@ fn retain_non_overlapping_edits(mut edits: Vec<ReplacementEdit>) -> Vec<Replacem
 fn select_replacement_edits(
     replacement: &FileReplacementPreview,
     included_match_ids: &[String],
-) -> Vec<ReplacementEdit> {
+) -> Result<Vec<ReplacementEdit>, String> {
     if included_match_ids.is_empty() {
-        return replacement.edits.clone();
+        return Ok(replacement.edits.clone());
     }
 
     let included = included_match_ids
         .iter()
         .map(String::as_str)
         .collect::<HashSet<_>>();
-    replacement
+    let selected = replacement
         .edits
         .iter()
-        .filter(|edit| {
+        .map(|edit| {
             let line_number =
-                line_number_at_byte_offset(&replacement.before_content, edit.range.start);
+                line_number_at_byte_offset(&replacement.before_content, edit.range.start)?;
             let id = replacement_edit_preview_id(line_number, edit);
-            included.contains(id.as_str())
+            Ok(included.contains(id.as_str()).then(|| edit.clone()))
         })
-        .cloned()
-        .collect()
+        .collect::<Result<Vec<_>, String>>()?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    Ok(selected)
 }
 
 fn build_line_previews(
     before_content: &str,
     edits: &[ReplacementEdit],
-) -> Vec<WorkspaceReplacementLinePreview> {
+) -> Result<Vec<WorkspaceReplacementLinePreview>, String> {
     edits
         .iter()
-        .filter_map(|edit| {
-            let line_number = line_number_at_byte_offset(before_content, edit.range.start);
+        .map(|edit| {
+            let line_number = line_number_at_byte_offset(before_content, edit.range.start)?;
             let line_range = line_range_at_byte_offset(before_content, edit.range.start);
             let line = &before_content[line_range.clone()];
             let match_start = edit.range.start.saturating_sub(line_range.start);
@@ -748,8 +818,9 @@ fn build_line_previews(
                 .saturating_sub(line_range.start)
                 .min(line.len());
             let (before_line, after_line) =
-                build_single_match_preview(line, match_start, match_end, &edit.inserted_text)?;
-            Some(WorkspaceReplacementLinePreview {
+                build_single_match_preview(line, match_start, match_end, &edit.inserted_text)
+                    .ok_or_else(|| "构建替换预览失败。".to_string())?;
+            Ok(WorkspaceReplacementLinePreview {
                 id: replacement_edit_preview_id(line_number, edit),
                 line_number,
                 before_line,
@@ -760,13 +831,14 @@ fn build_line_previews(
         .collect()
 }
 
-fn line_number_at_byte_offset(content: &str, byte_offset: usize) -> u64 {
+fn line_number_at_byte_offset(content: &str, byte_offset: usize) -> Result<u32, String> {
     let safe_offset = byte_offset.min(content.len());
-    content[..safe_offset]
+    let line_number = content[..safe_offset]
         .bytes()
         .filter(|byte| *byte == b'\n')
-        .count() as u64
-        + 1
+        .count()
+        + 1;
+    count_to_u32(line_number, "行号")
 }
 
 fn line_range_at_byte_offset(content: &str, byte_offset: usize) -> Range<usize> {
@@ -844,7 +916,7 @@ fn single_line_preview_text(value: &str) -> String {
     value.replace('\r', "").replace('\n', "\\n")
 }
 
-fn replacement_edit_preview_id(line_number: u64, edit: &ReplacementEdit) -> String {
+fn replacement_edit_preview_id(line_number: u32, edit: &ReplacementEdit) -> String {
     format!(
         "match:{line_number}:{}:{}:{}",
         edit.range.start,
@@ -1059,12 +1131,16 @@ fn relative_path(root: &Path, path: &Path) -> String {
         .replace('\\', "/")
 }
 
+fn hash_text(value: &str) -> String {
+    format!("blake3:{}", blake3::hash(value.as_bytes()).to_hex())
+}
+
 fn search_file_names(
     files: &[ScannedFile],
     query: &str,
     match_case: bool,
     limit: usize,
-) -> Vec<WorkspaceSearchResult> {
+) -> Result<Vec<WorkspaceSearchResult>, String> {
     let case_matching = if match_case {
         CaseMatching::Respect
     } else {
@@ -1082,12 +1158,12 @@ fn search_file_names(
                 path: file.path.to_string_lossy().to_string(),
                 relative_path: file.relative_path.clone(),
                 name: file.name.clone(),
-                kind: "file-name".into(),
+                kind: WorkspaceSearchResultKind::FileName,
                 line_number: None,
                 line_text: None,
                 match_start: None,
                 match_end: None,
-                score: -(score as i64),
+                score: i64_to_i32(-(score as i64), "搜索评分")?,
             });
         }
     }
@@ -1098,7 +1174,7 @@ fn search_file_names(
             .then_with(|| left.relative_path.cmp(&right.relative_path))
     });
     results.truncate(limit);
-    results
+    Ok(results)
 }
 
 fn search_file_contents(
@@ -1175,12 +1251,21 @@ fn search_structural_contents(
                 path: file.path.to_string_lossy().to_string(),
                 relative_path: file.relative_path.clone(),
                 name: file.name.clone(),
-                kind: "content".into(),
-                line_number: Some((start.line() + 1) as u64),
+                kind: WorkspaceSearchResultKind::Content,
+                line_number: Some(count_to_u32(start.line() + 1, "行号")?),
                 line_text: Some(trim_line(line)),
-                match_start: Some(byte_to_char_offset(line, match_start)),
-                match_end: Some(byte_to_char_offset(line, match_end)),
-                score: ((start.line() + 1) as i64 * 4) + start.byte_point().1 as i64,
+                match_start: Some(count_to_u32(
+                    byte_to_char_offset(line, match_start),
+                    "匹配起始列",
+                )?),
+                match_end: Some(count_to_u32(
+                    byte_to_char_offset(line, match_end),
+                    "匹配结束列",
+                )?),
+                score: i64_to_i32(
+                    ((start.line() + 1) as i64 * 4) + start.byte_point().1 as i64,
+                    "搜索评分",
+                )?,
             });
 
             if results.len() >= limit {
@@ -1217,12 +1302,12 @@ fn search_symbols(
                 path: symbol.path.to_string_lossy().to_string(),
                 relative_path: symbol.relative_path,
                 name: symbol.name.clone(),
-                kind: "symbol".into(),
+                kind: WorkspaceSearchResultKind::Symbol,
                 line_number: Some(symbol.line_number),
                 line_text: Some(format!("函数 {}", symbol.name)),
                 match_start: None,
                 match_end: None,
-                score: -(score as i64) + symbol.line_number as i64,
+                score: i64_to_i32(-(score as i64) + symbol.line_number as i64, "搜索评分")?,
             });
         }
     }
@@ -1270,12 +1355,15 @@ fn collect_symbols_from_node(
     if node.kind() == "function_definition" {
         if let Some(name_node) = node.child_by_field_name("name") {
             if let Ok(name) = name_node.utf8_text(source) {
-                symbols.push(SymbolEntry {
-                    path: file.path.clone(),
-                    relative_path: file.relative_path.clone(),
-                    name: name.to_string(),
-                    line_number: (name_node.start_position().row + 1) as u64,
-                });
+                if let Ok(line_number) = count_to_u32(name_node.start_position().row + 1, "行号")
+                {
+                    symbols.push(SymbolEntry {
+                        path: file.path.clone(),
+                        relative_path: file.relative_path.clone(),
+                        name: name.to_string(),
+                        line_number,
+                    });
+                }
             }
         }
     }
@@ -1309,6 +1397,7 @@ fn search_one_file_content(
     results: &mut Vec<WorkspaceSearchResult>,
 ) -> Result<(), String> {
     let mut matched_in_file = 0usize;
+    let mut conversion_error: Option<String> = None;
     let mut searcher = SearcherBuilder::new()
         .line_number(true)
         .binary_detection(BinaryDetection::quit(b'\x00'))
@@ -1324,16 +1413,51 @@ fn search_one_file_content(
                 matcher
                     .find_iter(line.as_bytes(), |found| {
                         let column = found.start() as i64;
+                        let line_number = match u64_to_u32(line_number, "行号") {
+                            Ok(value) => value,
+                            Err(error) => {
+                                conversion_error = Some(error);
+                                return false;
+                            }
+                        };
+                        let match_start = match count_to_u32(
+                            byte_to_char_offset(line, found.start()),
+                            "匹配起始列",
+                        ) {
+                            Ok(value) => value,
+                            Err(error) => {
+                                conversion_error = Some(error);
+                                return false;
+                            }
+                        };
+                        let match_end = match count_to_u32(
+                            byte_to_char_offset(line, found.end()),
+                            "匹配结束列",
+                        ) {
+                            Ok(value) => value,
+                            Err(error) => {
+                                conversion_error = Some(error);
+                                return false;
+                            }
+                        };
+                        let score = match i64_to_i32((line_number as i64 * 4) + column, "搜索评分")
+                        {
+                            Ok(value) => value,
+                            Err(error) => {
+                                conversion_error = Some(error);
+                                return false;
+                            }
+                        };
                         results.push(WorkspaceSearchResult {
                             path: file.path.to_string_lossy().to_string(),
                             relative_path: file.relative_path.clone(),
                             name: file.name.clone(),
-                            kind: "content".into(),
+                            kind: WorkspaceSearchResultKind::Content,
                             line_number: Some(line_number),
                             line_text: Some(line_text.clone()),
-                            match_start: Some(byte_to_char_offset(line, found.start())),
-                            match_end: Some(byte_to_char_offset(line, found.end())),
-                            score: (line_number as i64 * 4) + column,
+                            match_start: Some(match_start),
+                            match_end: Some(match_end),
+                            score,
                         });
                         matched_in_file += 1;
                         keep_going = matched_in_file < limit;
@@ -1344,6 +1468,10 @@ fn search_one_file_content(
             }),
         )
         .map_err(|error| format!("内容搜索失败：{error}"))?;
+
+    if let Some(error) = conversion_error {
+        return Err(error);
+    }
 
     Ok(())
 }
@@ -1551,7 +1679,7 @@ mod tests {
         let payload = search_workspace(WorkspaceSearchRequest {
             workspace_root_path: root.to_string_lossy().to_string(),
             query: "needle".to_string(),
-            scope: "content".to_string(),
+            scope: WorkspaceSearchScope::Content,
             match_case: true,
             whole_word: false,
             use_regex: false,
@@ -1581,7 +1709,7 @@ mod tests {
         let payload = search_workspace(WorkspaceSearchRequest {
             workspace_root_path: root.to_string_lossy().to_string(),
             query: "foo $A".to_string(),
-            scope: "content".to_string(),
+            scope: WorkspaceSearchScope::Content,
             match_case: true,
             whole_word: false,
             use_regex: false,
@@ -1611,7 +1739,7 @@ mod tests {
         let payload = search_workspace(WorkspaceSearchRequest {
             workspace_root_path: root.to_string_lossy().to_string(),
             query: "needle".to_string(),
-            scope: "all".to_string(),
+            scope: WorkspaceSearchScope::All,
             match_case: true,
             whole_word: false,
             use_regex: false,

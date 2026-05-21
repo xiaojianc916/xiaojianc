@@ -221,8 +221,7 @@ fn profile_account(profile_id: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        profile_account, provider_account, provider_role_account, MASTRA_NARRATOR_USER,
-        MASTRA_USER,
+        profile_account, provider_account, provider_role_account, MASTRA_NARRATOR_USER, MASTRA_USER,
     };
 
     #[test]

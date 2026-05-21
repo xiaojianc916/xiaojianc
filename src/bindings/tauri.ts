@@ -4,11 +4,105 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 
 /** Commands */
 export const commands = {
+	detectExecutionEnvironment: () => __TAURI_INVOKE<ExecutionEnvironment>("detect_execution_environment"),
+	applyWorkspaceReplacement: (payload: WorkspaceReplacementApplyRequest) => __TAURI_INVOKE<WorkspaceReplacementApplyPayload>("apply_workspace_replacement", { payload }),
+	previewWorkspaceReplacement: (payload: WorkspaceReplacementRequest) => __TAURI_INVOKE<WorkspaceReplacementPreviewPayload>("preview_workspace_replacement", { payload }),
+	searchWorkspace: (payload: WorkspaceSearchRequest) => __TAURI_INVOKE<WorkspaceSearchPayload>("search_workspace", { payload }),
+	analyzeScript: (payload: AnalyzeScriptRequest) => __TAURI_INVOKE<AnalyzeScriptPayload>("analyze_script", { payload }),
+	formatScript: (payload: FormatScriptRequest) => __TAURI_INVOKE<FormatScriptPayload>("format_script", { payload }),
 	applyWindowStage: (stage: WindowStage) => __TAURI_INVOKE<null>("apply_window_stage", { stage }),
 	setWindowBackground: (input: SetWindowBackgroundInput, traceId: string | null) => __TAURI_INVOKE<null>("set_window_background", { input, traceId }),
+	createWorkspacePath: (payload: WorkspacePathCreateRequest) => __TAURI_INVOKE<WorkspacePathCreatePayload>("create_workspace_path", { payload }),
+	deleteWorkspacePath: (payload: WorkspacePathDeleteRequest) => __TAURI_INVOKE<WorkspacePathDeletePayload>("delete_workspace_path", { payload }),
+	listWorkspaceEntries: (path: string | null, rootPath: string | null) => __TAURI_INVOKE<WorkspaceDirectoryPayload>("list_workspace_entries", { path, rootPath }),
+	loadImageAsset: (path: string) => __TAURI_INVOKE<ImageAssetPayload>("load_image_asset", { path }),
+	loadScript: (path: string) => __TAURI_INVOKE<ScriptFilePayload>("load_script", { path }),
+	renameWorkspacePath: (payload: WorkspacePathRenameRequest) => __TAURI_INVOKE<WorkspacePathRenamePayload>("rename_workspace_path", { payload }),
+	saveScript: (payload: SaveScriptRequest) => __TAURI_INVOKE<ScriptFilePayload>("save_script", { payload }),
 };
 
 /* Types */
+export type AnalyzeScriptPayload = {
+	available: boolean,
+	message: string | null,
+	dialect: string,
+	diagnostics: ScriptDiagnosticPayload[],
+};
+
+export type AnalyzeScriptRequest = {
+	path: string | null,
+	name: string | null,
+	content: string,
+};
+
+export type DocumentEncoding = "utf-8" | "utf-8-bom" | "gbk" | "gb18030" | "utf-16le" | "utf-16be";
+
+export type ExecutionEnvironment = {
+	recommended: ExecutorKind,
+	hasAny: boolean,
+	executors: ExecutionOption[],
+};
+
+export type ExecutionOption = {
+	type: ExecutorKind,
+	label: string,
+	available: boolean,
+	description: string,
+	commandPath: string | null,
+};
+
+export type ExecutorKind = "wsl";
+
+export type FormatScriptPayload = {
+	content: string,
+	encoding: DocumentEncoding,
+	lineCount: number,
+	charCount: number,
+};
+
+export type FormatScriptRequest = {
+	path: string | null,
+	content: string,
+	/**  文本编码，已知值："utf-8" | "utf-8-bom" | "gbk" | …。 */
+	encoding: DocumentEncoding,
+};
+
+export type ImageAssetPayload = {
+	path: string,
+	name: string,
+	mimeType: string,
+	dataUrl: string,
+	byteSize: number,
+};
+
+export type SaveScriptRequest = {
+	path: string,
+	content: string,
+	/**  文本编码，已知值："utf-8" | "utf-8-bom" | "gbk" | …（保持字符串以便扩展）。 */
+	encoding: DocumentEncoding,
+};
+
+export type ScriptDiagnosticPayload = {
+	line: number,
+	endLine: number,
+	column: number,
+	endColumn: number,
+	level: ScriptDiagnosticSeverity,
+	code: string,
+	message: string,
+};
+
+export type ScriptDiagnosticSeverity = "error" | "warning" | "info" | "style";
+
+export type ScriptFilePayload = {
+	path: string,
+	name: string,
+	content: string,
+	encoding: DocumentEncoding,
+	lineCount: number,
+	charCount: number,
+};
+
 export type SetWindowBackgroundInput = {
 	label?: string | null,
 	r: number,
@@ -18,4 +112,154 @@ export type SetWindowBackgroundInput = {
 };
 
 export type WindowStage = "main";
+
+export type WorkspaceDirectoryPayload = {
+	rootPath: string,
+	rootName: string,
+	entries: WorkspaceEntry[],
+};
+
+export type WorkspaceEntry = {
+	path: string,
+	name: string,
+	/**  已知值："file" | "directory" | "symlink" | …。 */
+	kind: WorkspacePathKind,
+	hasChildren: boolean,
+};
+
+export type WorkspacePathCreatePayload = {
+	path: string,
+	name: string,
+	kind: WorkspacePathKind,
+};
+
+export type WorkspacePathCreateRequest = {
+	parentPath: string,
+	rootPath: string,
+	name: string,
+	/**  已知值："file" | "directory"。 */
+	kind: WorkspacePathKind,
+};
+
+export type WorkspacePathDeletePayload = {
+	path: string,
+};
+
+export type WorkspacePathDeleteRequest = {
+	path: string,
+	rootPath: string,
+};
+
+export type WorkspacePathKind = "directory" | "file";
+
+export type WorkspacePathRenamePayload = {
+	oldPath: string,
+	newPath: string,
+	name: string,
+};
+
+export type WorkspacePathRenameRequest = {
+	path: string,
+	rootPath: string,
+	newName: string,
+};
+
+export type WorkspaceReplacementAppliedFile = {
+	path: string,
+	relativePath: string,
+	replacementCount: number,
+	byteSize: number,
+};
+
+export type WorkspaceReplacementApplyPayload = {
+	rootPath: string,
+	changedFileCount: number,
+	replacementCount: number,
+	files: WorkspaceReplacementAppliedFile[],
+};
+
+export type WorkspaceReplacementApplyRequest = {
+	request: WorkspaceReplacementRequest,
+	expectedFiles: WorkspaceReplacementExpectedFile[],
+};
+
+export type WorkspaceReplacementExpectedFile = {
+	path: string,
+	beforeHash: string,
+	includedMatchIds?: string[],
+};
+
+export type WorkspaceReplacementFilePreview = {
+	path: string,
+	relativePath: string,
+	replacementCount: number,
+	beforeHash: string,
+	afterHash: string,
+	diff: string,
+	diffTruncated: boolean,
+	linePreviews: WorkspaceReplacementLinePreview[],
+};
+
+export type WorkspaceReplacementLinePreview = {
+	id: string,
+	lineNumber: number,
+	beforeLine: string,
+	afterLine: string,
+	replacementCount: number,
+};
+
+export type WorkspaceReplacementPreviewPayload = {
+	rootPath: string,
+	fileCount: number,
+	replacementCount: number,
+	files: WorkspaceReplacementFilePreview[],
+};
+
+export type WorkspaceReplacementRequest = {
+	workspaceRootPath: string,
+	query: string,
+	replacement: string,
+	matchCase: boolean,
+	wholeWord: boolean,
+	useRegex: boolean,
+	useStructural?: boolean,
+	includePatterns?: string[],
+	excludePatterns?: string[],
+	limit: number | null,
+};
+
+export type WorkspaceSearchPayload = {
+	rootPath: string,
+	scannedFileCount: number,
+	results: WorkspaceSearchResult[],
+};
+
+export type WorkspaceSearchRequest = {
+	workspaceRootPath: string,
+	query: string,
+	scope: WorkspaceSearchScope,
+	matchCase: boolean,
+	wholeWord: boolean,
+	useRegex: boolean,
+	useStructural?: boolean,
+	includePatterns?: string[],
+	excludePatterns?: string[],
+	limit: number | null,
+};
+
+export type WorkspaceSearchResult = {
+	path: string,
+	relativePath: string,
+	name: string,
+	kind: WorkspaceSearchResultKind,
+	lineNumber: number | null,
+	lineText: string | null,
+	matchStart: number | null,
+	matchEnd: number | null,
+	score: number,
+};
+
+export type WorkspaceSearchResultKind = "file-name" | "content" | "symbol";
+
+export type WorkspaceSearchScope = "all" | "file-name" | "symbol" | "content";
 

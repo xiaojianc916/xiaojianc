@@ -1,12 +1,16 @@
-use crate::commands::{shell_tools, window, window_stage, workspace_fs};
-use std::path::PathBuf;
+use crate::commands::{script_run, search, shell_tools, window, window_stage, workspace_fs};
 use specta_typescript::Typescript;
+use std::path::PathBuf;
 use tauri_specta::{collect_commands, Builder, ErrorHandlingMode};
 
 pub fn builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .error_handling(ErrorHandlingMode::Throw)
         .commands(collect_commands![
+            script_run::detect_execution_environment,
+            search::apply_workspace_replacement,
+            search::preview_workspace_replacement,
+            search::search_workspace,
             shell_tools::analyze_script,
             shell_tools::format_script,
             window_stage::apply_window_stage,
@@ -22,8 +26,7 @@ pub fn builder() -> Builder<tauri::Wry> {
 }
 
 pub fn export(builder: &Builder<tauri::Wry>) {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../src/bindings/tauri.ts");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../src/bindings/tauri.ts");
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).expect("failed to create tauri binding directory");
     }

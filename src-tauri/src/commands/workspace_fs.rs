@@ -18,7 +18,7 @@ pub fn load_script(path: String) -> Result<ScriptFilePayload, String> {
     let file_path = PathBuf::from(&path);
     let bytes = fs::read(&file_path).map_err(|error| format!("读取脚本失败：{error}"))?;
     let (content, encoding) = decode_script_bytes(&bytes)?;
-    Ok(build_script_payload(file_path, content, encoding))
+    build_script_payload(file_path, content, encoding)
 }
 
 #[tauri::command]
@@ -46,11 +46,7 @@ pub fn save_script(payload: SaveScriptRequest) -> Result<ScriptFilePayload, Stri
 
     let bytes = encode_script_content(&payload.content, &payload.encoding)?;
     fs::write(&file_path, bytes).map_err(|error| format!("保存脚本失败：{error}"))?;
-    Ok(build_script_payload(
-        file_path,
-        payload.content,
-        payload.encoding,
-    ))
+    build_script_payload(file_path, payload.content, payload.encoding)
 }
 
 #[tauri::command]
@@ -321,21 +317,21 @@ fn build_script_payload(
     path: PathBuf,
     content: String,
     encoding: DocumentEncoding,
-) -> ScriptFilePayload {
+) -> Result<ScriptFilePayload, String> {
     let name = path
         .file_name()
         .and_then(|value| value.to_str())
         .unwrap_or("untitled.sh")
         .to_string();
 
-    ScriptFilePayload {
+    Ok(ScriptFilePayload {
         path: path.to_string_lossy().to_string(),
         name,
-        line_count: line_count(&content),
-        char_count: content.chars().count(),
+        line_count: count_to_u32(line_count(&content), "脚本行数")?,
+        char_count: count_to_u32(content.chars().count(), "脚本字符数")?,
         content,
         encoding,
-    }
+    })
 }
 
 fn build_image_asset_payload(path: PathBuf, bytes: Vec<u8>) -> Result<ImageAssetPayload, String> {
@@ -345,7 +341,7 @@ fn build_image_asset_payload(path: PathBuf, bytes: Vec<u8>) -> Result<ImageAsset
         .and_then(|value| value.to_str())
         .unwrap_or("image")
         .to_string();
-    let byte_size = bytes.len();
+    let byte_size = count_to_u32(bytes.len(), "图片字节数")?;
     let data_url = format!("data:{mime_type};base64,{}", STANDARD.encode(&bytes));
 
     Ok(ImageAssetPayload {
@@ -355,6 +351,10 @@ fn build_image_asset_payload(path: PathBuf, bytes: Vec<u8>) -> Result<ImageAsset
         data_url,
         byte_size,
     })
+}
+
+fn count_to_u32(value: usize, label: &str) -> Result<u32, String> {
+    u32::try_from(value).map_err(|_| format!("{label}超出支持范围。"))
 }
 
 fn resolve_image_mime_type(path: &Path) -> Result<&'static str, String> {
@@ -405,7 +405,7 @@ fn read_workspace_entries(directory: &Path) -> Result<Vec<WorkspaceEntry>, Strin
         });
     }
 
-        entries.sort_by_cached_key(|entry| {
+    entries.sort_by_cached_key(|entry| {
         (
             entry.kind.as_str() != "directory",
             entry.name.to_lowercase(),
