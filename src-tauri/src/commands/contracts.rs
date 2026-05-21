@@ -2,6 +2,7 @@ use std::fmt;
 use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
 // ============================================================================
 // Secret newtype
@@ -13,7 +14,7 @@ use serde::{Deserialize, Serialize};
 //   只读用法（如 `&req.api_key` 当作 `&str`、`req.api_key.is_empty()`、
 //   `req.api_key.len()`、`req.api_key.to_string()`）保持源码级兼容。
 // ============================================================================
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize, Type)]
 #[serde(transparent)]
 pub struct SecretString(String);
 
@@ -80,18 +81,64 @@ impl From<SecretString> for String {
 // Script payloads
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum DocumentEncoding {
+    Utf8,
+    Utf8Bom,
+    Gbk,
+    Gb18030,
+    Utf16le,
+    Utf16be,
+}
+
+impl DocumentEncoding {
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            Self::Utf8 => "utf-8",
+            Self::Utf8Bom => "utf-8-bom",
+            Self::Gbk => "gbk",
+            Self::Gb18030 => "gb18030",
+            Self::Utf16le => "utf-16le",
+            Self::Utf16be => "utf-16be",
+        }
+    }
+}
+
+impl fmt::Display for DocumentEncoding {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum WorkspacePathKind {
+    Directory,
+    File,
+}
+
+impl WorkspacePathKind {
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            Self::Directory => "directory",
+            Self::File => "file",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ScriptFilePayload {
     pub(crate) path: String,
     pub(crate) name: String,
     pub(crate) content: String,
-    pub(crate) encoding: String,
+    pub(crate) encoding: DocumentEncoding,
     pub(crate) line_count: usize,
     pub(crate) char_count: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageAssetPayload {
     pub(crate) path: String,
@@ -101,33 +148,33 @@ pub struct ImageAssetPayload {
     pub(crate) byte_size: usize,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Type)]
 pub struct SaveScriptRequest {
     pub(crate) path: String,
     pub(crate) content: String,
     /// 文本编码，已知值："utf-8" | "utf-8-bom" | "gbk" | …（保持字符串以便扩展）。
-    pub(crate) encoding: String,
+    pub(crate) encoding: DocumentEncoding,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct FormatScriptRequest {
     pub(crate) path: Option<String>,
     pub(crate) content: String,
     /// 文本编码，已知值："utf-8" | "utf-8-bom" | "gbk" | …。
-    pub(crate) encoding: String,
+    pub(crate) encoding: DocumentEncoding,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct FormatScriptPayload {
     pub(crate) content: String,
-    pub(crate) encoding: String,
+    pub(crate) encoding: DocumentEncoding,
     pub(crate) line_count: usize,
     pub(crate) char_count: usize,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AnalyzeScriptRequest {
     pub(crate) path: Option<String>,
@@ -135,7 +182,7 @@ pub struct AnalyzeScriptRequest {
     pub(crate) content: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ScriptDiagnosticPayload {
     pub(crate) line: usize,
@@ -148,7 +195,7 @@ pub struct ScriptDiagnosticPayload {
     pub(crate) message: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AnalyzeScriptPayload {
     pub(crate) available: bool,
@@ -161,7 +208,7 @@ pub struct AnalyzeScriptPayload {
 // Execution environment
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecutionOption {
     /// 执行器种类标识，例如："bash" | "zsh" | "pwsh" | "node" | …。
@@ -172,7 +219,7 @@ pub struct ExecutionOption {
     pub(crate) command_path: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecutionEnvironment {
     pub(crate) recommended: String,
@@ -184,17 +231,17 @@ pub struct ExecutionEnvironment {
 // Workspace tree
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceEntry {
     pub(crate) path: String,
     pub(crate) name: String,
     /// 已知值："file" | "directory" | "symlink" | …。
-    pub(crate) kind: String,
+    pub(crate) kind: WorkspacePathKind,
     pub(crate) has_children: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceDirectoryPayload {
     pub(crate) root_path: String,
@@ -202,25 +249,25 @@ pub struct WorkspaceDirectoryPayload {
     pub(crate) entries: Vec<WorkspaceEntry>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspacePathCreateRequest {
     pub(crate) parent_path: String,
     pub(crate) root_path: String,
     pub(crate) name: String,
     /// 已知值："file" | "directory"。
-    pub(crate) kind: String,
+    pub(crate) kind: WorkspacePathKind,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspacePathCreatePayload {
     pub(crate) path: String,
     pub(crate) name: String,
-    pub(crate) kind: String,
+    pub(crate) kind: WorkspacePathKind,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspacePathRenameRequest {
     pub(crate) path: String,
@@ -228,7 +275,7 @@ pub struct WorkspacePathRenameRequest {
     pub(crate) new_name: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspacePathRenamePayload {
     pub(crate) old_path: String,
@@ -236,14 +283,14 @@ pub struct WorkspacePathRenamePayload {
     pub(crate) name: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspacePathDeleteRequest {
     pub(crate) path: String,
     pub(crate) root_path: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspacePathDeletePayload {
     pub(crate) path: String,

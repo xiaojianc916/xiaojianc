@@ -26,7 +26,7 @@ describe('sessionStore', () => {
 
   it('loadSession 文件不存在时返回 null', async () => {
     mockStore.get.mockResolvedValueOnce(null);
-    const { loadSession } = await import('@/services/sessionStore');
+    const { loadSession } = await import('@/services/session/store');
 
     const result = await loadSession();
 
@@ -46,7 +46,7 @@ describe('sessionStore', () => {
       savedAt: new Date().toISOString(),
     });
 
-    const { loadSession } = await import('@/services/sessionStore');
+    const { loadSession } = await import('@/services/session/store');
     const result = await loadSession();
 
     expect(result).toBeNull();
@@ -54,7 +54,7 @@ describe('sessionStore', () => {
   });
 
   it('saveSession 入参非法时抛出 AppError(SESSION_VALIDATION_FAILED)', async () => {
-    const { saveSession } = await import('@/services/sessionStore');
+    const { saveSession } = await import('@/services/session/store');
 
     await expect(saveSession({} as never)).rejects.toMatchObject<AppError>({
       code: 'SESSION_VALIDATION_FAILED',
@@ -66,7 +66,7 @@ describe('sessionStore', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     mockStore.get.mockResolvedValueOnce({ schemaVersion: 2 });
 
-    const { loadSession } = await import('@/services/sessionStore');
+    const { loadSession } = await import('@/services/session/store');
 
     await expect(loadSession()).resolves.toBeNull();
     expect(warnSpy).toHaveBeenCalled();

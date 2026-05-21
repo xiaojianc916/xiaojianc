@@ -1,4 +1,4 @@
-use super::{decode_script_bytes, encode_script_content, resolve_workspace_root};
+use super::{decode_script_bytes, encode_script_content, resolve_workspace_root, DocumentEncoding};
 use crate::ai::edit::patch::hash_text;
 use ast_grep_core::Pattern as AstPattern;
 use ast_grep_language::{LanguageExt, SupportLang};
@@ -204,7 +204,7 @@ struct FileReplacementPreview {
     before_hash: String,
     after_hash: String,
     before_content: String,
-    encoding: String,
+    encoding: DocumentEncoding,
     diff: String,
     diff_truncated: bool,
     edits: Vec<ReplacementEdit>,

@@ -1,7 +1,7 @@
 import {
     listShellCommandLabels,
     loadShellCommandSpec,
-} from '@/services/shell-command-catalog';
+} from '@/services/shell/command-catalog';
 import type {
     IShellCommandArgumentSpec,
     IShellCommandNodeSpec,

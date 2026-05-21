@@ -84,7 +84,7 @@ vi.mock('@/services/tauri', () => ({
 
 vi.mock('@/services/ipc/window.service', () => mockWindowService);
 
-vi.mock('@/services/sessionStore', () => ({
+vi.mock('@/services/session/store', () => ({
   saveSession: mockSessionStore.saveSession,
 }));
 

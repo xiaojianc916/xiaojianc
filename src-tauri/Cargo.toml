@@ -98,6 +98,9 @@ atomic-write-file = { version = "0.3.0", optional = true }
 camino = { version = "1.2.2", optional = true }
 cap-std = { version = "4.0.2", optional = true }
 normpath = { version = "1.5.1", optional = true }
+specta = "=2.0.0-rc.25"
+specta-typescript = "0.0.12"
+tauri-specta = { version = "=2.0.0-rc.25", features = ["typescript"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Networking_WinSock", "Win32_System_Hypervisor"] }

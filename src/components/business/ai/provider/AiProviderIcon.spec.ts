@@ -1,5 +1,5 @@
 import AiProviderIcon from '@/components/business/ai/provider/AiProviderIcon.vue';
-import { findAiProviderIconDefinition } from '@/constants/ai-provider-icons';
+import { findAiProviderIconDefinition } from '@/constants/ai/provider-icons';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 

@@ -1,4 +1,4 @@
-import type { TAiServicePlatformId } from '@/constants/ai-providers';
+import type { TAiServicePlatformId } from '@/constants/ai/providers';
 import anthropicIconUrl from '@/assets/icons/ai-providers/anthropic.svg';
 import deepseekIconUrl from '@/assets/icons/ai-providers/deepseek.ico';
 import geminiIconUrl from '@/assets/icons/ai-providers/google-gemini.svg';

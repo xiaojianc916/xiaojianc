@@ -17,7 +17,7 @@ vi.mock('web-tree-sitter/web-tree-sitter.wasm?url', () => ({
     default: '/mock/web-tree-sitter.wasm',
 }));
 
-vi.mock('@/services/shell-command-catalog', () => ({
+vi.mock('@/services/shell/command-catalog', () => ({
     listShellCommandLabels: mocks.listShellCommandLabels,
 }));
 

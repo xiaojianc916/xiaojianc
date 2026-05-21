@@ -5,7 +5,7 @@ import {
   AI_SUGGESTION_POOL_SIZE,
   AI_SUGGESTION_REFRESH_INTERVAL_MS,
   AI_SUGGESTION_TOPICS,
-} from '@/constants/ai-suggestions';
+} from '@/constants/ai/suggestions';
 import { aiService } from '@/services/ipc/ai.service';
 import type { IAiSuggestionPoolPayload, IAiSuggestionPoolRequest } from '@/types/ai';
 import { toErrorMessage } from '@/utils/error';

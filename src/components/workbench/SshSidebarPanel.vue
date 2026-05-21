@@ -38,7 +38,7 @@ import {
   type SshAuthMode,
   type SshConnectionFormValues,
   type SshConnectionPayload
-} from '@/schemas/ssh-connection'
+} from '@/types/ssh/connection.schema'
 import { tauriService } from '@/services/tauri'
 import { useSshStore } from '@/store/ssh'
 import type {

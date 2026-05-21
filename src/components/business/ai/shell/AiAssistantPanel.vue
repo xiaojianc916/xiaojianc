@@ -19,7 +19,7 @@ import { useAiAssistant, type IAiConversationCheckpoint } from '@/composables/ai
 import { useAiSuggestionPool } from '@/composables/ai/useAiSuggestionPool';
 import { useAiTokenContext } from '@/composables/ai/useAiTokenContext';
 import { useAiWebSources } from '@/composables/ai/useAiWebSources';
-import { findAiServicePlatformByModel } from '@/constants/ai-providers';
+import { findAiServicePlatformByModel } from '@/constants/ai/providers';
 import type {
   IAiAgentRun,
   IAiAgentStepFinalAnswer,

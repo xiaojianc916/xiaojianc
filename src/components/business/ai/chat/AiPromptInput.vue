@@ -42,11 +42,11 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import type { IAiTokenContextProps } from '@/composables/ai/useAiTokenContext';
-import type { TAiServicePlatformId } from '@/constants/ai-providers';
+import type { TAiServicePlatformId } from '@/constants/ai/providers';
 import {
   AI_SERVICE_PLATFORM_PRESETS,
   findAiServicePlatformByModel,
-} from '@/constants/ai-providers';
+} from '@/constants/ai/providers';
 import type { IAiAttachedFile, IAiConfigPayload, TAiAgentNetworkPermission } from '@/types/ai';
 import { computed, ref, useAttrs } from 'vue';
 import ArrowUpIcon from '~icons/lucide/arrow-up';

@@ -60,6 +60,7 @@ struct ShellCheckComment {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn analyze_script(payload: AnalyzeScriptRequest) -> Result<AnalyzeScriptPayload, String> {
     let normalized_content = normalize_shellcheck_content(&payload.content);
     let should_check_with_shellcheck = should_run_shellcheck(
@@ -104,8 +105,12 @@ pub async fn analyze_script(payload: AnalyzeScriptRequest) -> Result<AnalyzeScri
     let script_name =
         resolve_analysis_script_name(payload.path.as_deref(), payload.name.as_deref());
     let temporary_root = env::temp_dir().join("sh-editor-shellcheck");
-    let temporary_script =
-        super::create_temp_script(&temporary_root, &script_name, &normalized_content, "utf-8")?;
+    let temporary_script = super::create_temp_script(
+        &temporary_root,
+        &script_name,
+        &normalized_content,
+        super::DocumentEncoding::Utf8,
+    )?;
     let output = run_shellcheck(&shellcheck, &temporary_script, &dialect).await;
     let _ = std::fs::remove_file(&temporary_script);
 
@@ -122,6 +127,7 @@ pub async fn analyze_script(payload: AnalyzeScriptRequest) -> Result<AnalyzeScri
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn format_script(payload: FormatScriptRequest) -> Result<FormatScriptPayload, String> {
     let Some(shfmt) = resolve_shfmt_candidate() else {
         return Err(

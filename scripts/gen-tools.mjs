@@ -141,6 +141,6 @@ const writeGenerated = (relativePath, content) => {
   writeFileSync(target, content, 'utf8');
 };
 
-writeGenerated('src/constants/ai-runtime-tools.generated.ts', frontendOutput);
+writeGenerated('src/constants/ai/runtime-tools.generated.ts', frontendOutput);
 writeGenerated('agent-sidecar/src/tools/generated.ts', sidecarOutput);
 writeGenerated('src-tauri/src/commands/ai/tools_generated.rs', rustOutput);

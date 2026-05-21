@@ -1,4 +1,4 @@
-use super::{ExecutionEnvironment, ExecutionOption};
+use super::{DocumentEncoding, ExecutionEnvironment, ExecutionOption};
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -72,7 +72,7 @@ pub(crate) fn create_temp_script(
     preferred_directory: &Path,
     original_name: &str,
     content: &str,
-    encoding: &str,
+    encoding: DocumentEncoding,
 ) -> Result<PathBuf, String> {
     let directory = preferred_directory.to_path_buf();
     fs::create_dir_all(&directory).map_err(|error| format!("创建临时目录失败：{error}"))?;
@@ -84,7 +84,7 @@ pub(crate) fn create_temp_script(
         .filter(|value| !value.is_empty())
         .unwrap_or("untitled");
     let temp_path = directory.join(format!("{stem}-{suffix}.tmp.sh"));
-    let bytes = super::encode_script_content(content, encoding)?;
+    let bytes = super::encode_script_content(content, &encoding)?;
     fs::write(&temp_path, bytes).map_err(|error| format!("写入临时脚本失败：{error}"))?;
     Ok(temp_path)
 }

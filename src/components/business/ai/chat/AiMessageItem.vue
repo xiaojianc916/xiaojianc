@@ -12,7 +12,7 @@ import AiChangedFilesSummary from '@/components/business/ai/edit/AiChangedFilesS
 import AiMarkdown from '@/components/business/ai/chat/AiMarkdown.vue';
 import AiPatchPreview from '@/components/business/ai/edit/AiPatchPreview.vue';
 import { useMessage } from '@/composables/useMessage';
-import type { TAiServicePlatformId } from '@/constants/ai-providers';
+import type { TAiServicePlatformId } from '@/constants/ai/providers';
 import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
 import type {
   IAiChatMessage,

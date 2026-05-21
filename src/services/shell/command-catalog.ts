@@ -1,7 +1,7 @@
 import {
     LOCAL_SHELL_COMMAND_CATALOG,
     mergeCommandCatalogs,
-} from '@/constants/shell-command-catalog';
+} from '@/constants/shell/command-catalog';
 import type { IShellCommandNodeSpec } from '@/types/shell-completion';
 
 interface IShellCommandCatalogIndexEntry {

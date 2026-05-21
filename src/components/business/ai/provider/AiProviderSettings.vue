@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AiProviderIcon from '@/components/business/ai/provider/AiProviderIcon.vue';
 import FieldError from '@/components/common/FieldError.vue';
-import type { TAiServicePlatformId } from '@/constants/ai-providers';
+import type { TAiServicePlatformId } from '@/constants/ai/providers';
 import {
   AI_SERVICE_PLATFORM_PRESETS,
   DEFAULT_MASTRA_BASE_URL,
@@ -9,7 +9,7 @@ import {
   findAiServicePlatformByModel,
   findAiServicePlatformPreset,
   isAiServicePlatformModel,
-} from '@/constants/ai-providers';
+} from '@/constants/ai/providers';
 import type {
   IAiConfigPayload,
   IAiModelEndpointConfigPayload,

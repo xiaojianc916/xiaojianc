@@ -1,5 +1,5 @@
-import { SHIKI_THEME } from '@/constants/shiki';
-import { ensureMonacoShikiReady, ensureShikiLanguageLoaded, getShikiHighlighter } from '@/services/monaco-shiki';
+import { SHIKI_THEME } from '@/constants/editor/shiki';
+import { ensureMonacoShikiReady, ensureShikiLanguageLoaded, getShikiHighlighter } from '@/services/editor/monaco-shiki';
 import type { BundledLanguage, ThemedToken } from 'shiki';
 
 export interface ITokenizedCode {

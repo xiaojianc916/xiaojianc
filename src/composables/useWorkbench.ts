@@ -5,7 +5,7 @@ import { useTerminalRun } from '@/composables/useTerminalRun';
 import { useTheme } from '@/composables/useTheme';
 import { useWindowResizeState } from '@/composables/useWindowResizeState';
 import { useWorkbenchDocumentIO } from '@/composables/useWorkbenchDocumentIO';
-import { saveSession } from '@/services/sessionStore';
+import { saveSession } from '@/services/session/store';
 import { tauriService } from '@/services/tauri';
 import { useAppStore } from '@/store/app';
 import { useEditorStore } from '@/store/editor';

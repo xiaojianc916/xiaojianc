@@ -4,4 +4,4 @@ export {
   normalizeRuntimeToolName,
   type IAiRuntimeToolManifestEntry,
   type TAiRuntimeToolKind,
-} from './ai-runtime-tools.generated'
+} from './runtime-tools.generated'

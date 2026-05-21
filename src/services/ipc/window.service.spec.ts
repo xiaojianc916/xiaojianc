@@ -2,11 +2,9 @@ import { AppError } from '@/types/app-error';
 import { invoke } from '@tauri-apps/api/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  SetWindowBackgroundInput,
-  WindowStageInput,
   applyWindowStage,
   setWindowBackground,
-} from './window';
+} from './window.service';
 
 declare global {
   interface Window {
@@ -34,44 +32,14 @@ describe('services/ipc/window.service', () => {
     delete window.__TAURI_INTERNALS__;
   });
 
-  it('Zod 入参允许合法边界并补齐默认 alpha', () => {
-    expect(
-      SetWindowBackgroundInput.parse({
-        r: 0,
-        g: 255,
-        b: 16,
-      }),
-    ).toEqual({
-      r: 0,
-      g: 255,
-      b: 16,
-      a: 255,
-    });
-  });
-
-  it('Zod 入参拒绝越界通道值', () => {
-    expect(() =>
-      SetWindowBackgroundInput.parse({
-        r: -1,
-        g: 0,
-        b: 0,
-        a: 255,
-      }),
-    ).toThrow();
-  });
-
-  it('Zod 窗口阶段只允许主窗口阶段', () => {
-    expect(WindowStageInput.parse({ stage: 'main' })).toEqual({ stage: 'main' });
-    expect(() => WindowStageInput.parse({ stage: 'bootstrap' })).toThrow();
-  });
-
-  it('成功路径通过统一 IPC 层传递 input 与 traceId', async () => {
+  it('成功路径通过 tauri-specta binding 传递 input 与 traceId', async () => {
     invokeMock.mockResolvedValue(null);
 
     await expect(setWindowBackground({ r: 10, g: 20, b: 30 })).resolves.toBeUndefined();
 
     expect(invokeMock).toHaveBeenCalledWith('set_window_background', {
       input: {
+        label: null,
         r: 10,
         g: 20,
         b: 30,

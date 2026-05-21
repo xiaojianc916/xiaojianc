@@ -4,7 +4,7 @@ const mockLoadSession = vi.fn();
 const mockSaveSession = vi.fn();
 const mockClearSession = vi.fn();
 
-vi.mock('@/services/sessionStore', () => ({
+vi.mock('@/services/session/store', () => ({
   clearSession: mockClearSession,
   loadSession: mockLoadSession,
   saveSession: mockSaveSession,

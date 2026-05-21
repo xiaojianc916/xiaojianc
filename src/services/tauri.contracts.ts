@@ -77,6 +77,10 @@ import {
 } from '@/types/wsl-link/schema';
 import { z } from 'zod';
 
+/**
+ * @deprecated Tauri invoke 契约正在迁移到 tauri-specta 生成绑定。
+ * 新增或迁移后的 Tauri invoke 路径不得在这里继续维护手写 Zod contract。
+ */
 export const zTauriVoid = z
   .union([z.null(), z.undefined(), z.void()])
   .transform(() => undefined as void);

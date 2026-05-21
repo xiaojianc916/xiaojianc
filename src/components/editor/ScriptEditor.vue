@@ -31,7 +31,7 @@ import type { IEditorContextMenuItem } from '@/components/editor/editor-context-
 import EditorContextMenu from '@/components/editor/EditorContextMenu.vue';
 import { useEditorContextMenu } from '@/composables/useEditorContextMenu';
 import { aiService } from '@/services/ipc/ai.service';
-import { applyShikiTheme, ensureShikiLanguageLoaded } from '@/services/monaco-shiki';
+import { applyShikiTheme, ensureShikiLanguageLoaded } from '@/services/editor/monaco-shiki';
 import { useEditorStore } from '@/store/editor';
 import type { IAiCodeActionRequest, IAiCodeActionResult } from '@/types/ai';
 import type { TThemeMode } from '@/types/app';

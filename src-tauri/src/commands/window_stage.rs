@@ -1,9 +1,17 @@
 use std::time::Instant;
+use serde::{Deserialize, Serialize};
+use specta::Type;
 use tauri::{AppHandle, LogicalSize, Manager, Size, WebviewWindow};
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const MAIN_WINDOW_MIN_WIDTH: f64 = 1220.0;
 const MAIN_WINDOW_MIN_HEIGHT: f64 = 760.0;
+
+#[derive(Debug, Clone, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum WindowStage {
+    Main,
+}
 
 fn window_stage_elapsed_ms(started_at: Instant) -> f64 {
     started_at.elapsed().as_secs_f64() * 1000.0
@@ -77,21 +85,30 @@ fn show_main_window(window: &WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-pub fn apply_window_stage(app: AppHandle, stage: String) -> Result<(), String> {
-    let started_at = Instant::now();
-    emit_window_stage_start(&stage);
+impl WindowStage {
+    fn as_wire_value(&self) -> &'static str {
+        match self {
+            Self::Main => "main",
+        }
+    }
+}
 
-    let result = match stage.as_str() {
-        "main" => {
+#[tauri::command]
+#[specta::specta]
+pub fn apply_window_stage(app: AppHandle, stage: WindowStage) -> Result<(), String> {
+    let started_at = Instant::now();
+    let stage_name = stage.as_wire_value();
+    emit_window_stage_start(stage_name);
+
+    let result = match stage {
+        WindowStage::Main => {
             resolve_window(&app, MAIN_WINDOW_LABEL).and_then(|window| show_main_window(&window))
         }
-        _ => Err(format!("unsupported window stage: {stage}")),
     };
 
     match &result {
-        Ok(()) => emit_window_stage_done(&stage, started_at),
-        Err(error) => emit_window_stage_error(&stage, started_at, error),
+        Ok(()) => emit_window_stage_done(stage_name, started_at),
+        Err(error) => emit_window_stage_error(stage_name, started_at, error),
     }
 
     result

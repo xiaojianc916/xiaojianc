@@ -2,14 +2,14 @@ mod agent_sidecar;
 mod ai;
 pub(crate) mod contracts;
 mod git;
-mod script_run;
+pub(crate) mod script_run;
 mod search;
-mod shell_tools;
+pub(crate) mod shell_tools;
 mod ssh;
 mod terminal;
-mod window;
-mod window_stage;
-mod workspace_fs;
+pub(crate) mod window;
+pub(crate) mod window_stage;
+pub(crate) mod workspace_fs;
 mod wsl_link;
 
 #[cfg(windows)]
@@ -34,18 +34,19 @@ pub use ai::{
     ai_test_provider, ai_test_provider_config, ai_web_fetch, ai_web_search,
 };
 pub use contracts::{
-    AnalyzeScriptPayload, AnalyzeScriptRequest, ExecutionEnvironment, ExecutionOption,
-    FormatScriptPayload, FormatScriptRequest, ImageAssetPayload, SaveScriptRequest,
-    ScriptDiagnosticPayload, ScriptFilePayload, SshConfigHostPayload, SshConnectionTestPayload,
-    SshConnectionTestRequest, SshDirectoryCreatePayload, SshDirectoryCreateRequest,
-    SshDirectoryEntryPayload, SshDirectoryListPayload, SshDirectoryListRequest,
-    SshFileDownloadPayload, SshFileDownloadRequest, SshFileReadPayload, SshFileReadRequest,
-    SshFileUploadPayload, SshFileUploadRequest, SshFileWritePayload, SshFileWriteRequest,
-    SshPasswordGetRequest, SshPasswordPayload, SshPasswordSaveRequest, SshPasswordStatusPayload,
-    SshPathDeletePayload, SshPathDeleteRequest, SshPathRenamePayload, SshPathRenameRequest,
+    AnalyzeScriptPayload, AnalyzeScriptRequest, DocumentEncoding, ExecutionEnvironment,
+    ExecutionOption, FormatScriptPayload, FormatScriptRequest, ImageAssetPayload,
+    SaveScriptRequest, ScriptDiagnosticPayload, ScriptFilePayload, SshConfigHostPayload,
+    SshConnectionTestPayload, SshConnectionTestRequest, SshDirectoryCreatePayload,
+    SshDirectoryCreateRequest, SshDirectoryEntryPayload, SshDirectoryListPayload,
+    SshDirectoryListRequest, SshFileDownloadPayload, SshFileDownloadRequest,
+    SshFileReadPayload, SshFileReadRequest, SshFileUploadPayload, SshFileUploadRequest,
+    SshFileWritePayload, SshFileWriteRequest, SshPasswordGetRequest, SshPasswordPayload,
+    SshPasswordSaveRequest, SshPasswordStatusPayload, SshPathDeletePayload,
+    SshPathDeleteRequest, SshPathRenamePayload, SshPathRenameRequest,
     WorkspaceDirectoryPayload, WorkspaceEntry, WorkspacePathCreatePayload,
     WorkspacePathCreateRequest, WorkspacePathDeletePayload, WorkspacePathDeleteRequest,
-    WorkspacePathRenamePayload, WorkspacePathRenameRequest,
+    WorkspacePathKind, WorkspacePathRenamePayload, WorkspacePathRenameRequest,
 };
 pub use git::{
     apply_git_stash, checkout_git_branch, commit_git_index, create_git_branch, discard_git_paths,

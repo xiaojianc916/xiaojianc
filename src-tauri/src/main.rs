@@ -3,9 +3,11 @@
 mod agent_sidecar;
 mod ai;
 mod assets;
+#[macro_use]
 mod commands;
-mod error;
+mod tauri_bindings;
 mod terminal;
+use commands::{window, window_stage};
 mod wsl_link;
 
 use ai::edit::AiEditState;
@@ -203,6 +205,10 @@ fn disable_webview_default_context_menu<R: tauri::Runtime>(
 fn main() {
     let app_started_at = Instant::now();
     emit_startup_event("tauri.main.start", app_started_at);
+    let tauri_bindings = tauri_bindings::builder();
+
+    #[cfg(debug_assertions)]
+    tauri_bindings::export(&tauri_bindings);
 
     let builder_started_at = Instant::now();
     let app = tauri::Builder::default()

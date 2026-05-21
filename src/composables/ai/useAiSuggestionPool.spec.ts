@@ -12,7 +12,7 @@ vi.mock('@/services/ipc/ai.service', () => ({
 import {
   AI_SUGGESTION_BATCH_SIZE,
   AI_SUGGESTION_POOL_SIZE,
-} from '@/constants/ai-suggestions';
+} from '@/constants/ai/suggestions';
 import { useAiSuggestionPool } from '@/composables/ai/useAiSuggestionPool';
 import type { IAiSuggestionPoolPayload, IAiSuggestionPoolRequest } from '@/types/ai';
 import { flushPromises, mount } from '@vue/test-utils';

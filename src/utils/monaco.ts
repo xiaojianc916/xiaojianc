@@ -1,4 +1,4 @@
-import { SHIKI_THEME } from '@/constants/shiki';
+import { SHIKI_THEME } from '@/constants/editor/shiki';
 import type { TThemeMode } from '@/types/app';
 
 import 'monaco-editor/esm/nls.messages.zh-cn.js';

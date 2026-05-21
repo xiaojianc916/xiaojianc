@@ -511,7 +511,7 @@ const runTauri = (env) => {
     );
 
     if (!existsSync(cliScriptPath)) {
-        console.error('未找到本地 Tauri CLI，请先执行 npm install。');
+        console.error('未找到本地 Tauri CLI，请先执行 pnpm install。');
         process.exit(1);
     }
 

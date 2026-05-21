@@ -4,7 +4,7 @@ import {
   DEFAULT_NARRATOR_MODEL_ID,
   DEFAULT_PROVIDER_TYPE,
   findAiServicePlatformByModel,
-} from '@/constants/ai-providers';
+} from '@/constants/ai/providers';
 import type {
   IAiConfigPayload,
   IAiModelEndpointConfigPayload,

@@ -13,7 +13,7 @@
 import type { TThemeMode } from '@/types/app';
 import type { IGitDiffPreviewPayload } from '@/types/git';
 import type { IEditorSettings } from '@/types/settings';
-import { applyShikiTheme, ensureShikiLanguageLoaded } from '@/services/monaco-shiki';
+import { applyShikiTheme, ensureShikiLanguageLoaded } from '@/services/editor/monaco-shiki';
 import { applyMonacoTheme, monaco, resolveLanguageForPath } from '@/utils/monaco';
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 

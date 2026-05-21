@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { findAiProviderIconDefinition } from '@/constants/ai-provider-icons';
-import type { TAiServicePlatformId } from '@/constants/ai-providers';
+import { findAiProviderIconDefinition } from '@/constants/ai/provider-icons';
+import type { TAiServicePlatformId } from '@/constants/ai/providers';
 import { computed, ref, watch } from 'vue';
 
 const props = withDefaults(defineProps<{

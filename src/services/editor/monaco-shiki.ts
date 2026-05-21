@@ -1,4 +1,4 @@
-import { SHIKI_THEME } from '@/constants/shiki'
+import { SHIKI_THEME } from '@/constants/editor/shiki'
 import { monaco } from '@/utils/monaco'
 import { shikiToMonaco } from '@shikijs/monaco'
 import type * as MonacoApi from 'monaco-editor'

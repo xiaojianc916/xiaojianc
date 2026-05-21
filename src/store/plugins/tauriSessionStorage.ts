@@ -1,7 +1,7 @@
 import type { StorageLike } from 'pinia-plugin-persistedstate';
 import { z } from 'zod';
 
-import { clearSession, loadSession, saveSession } from '@/services/sessionStore';
+import { clearSession, loadSession, saveSession } from '@/services/session/store';
 import { SessionSnapshotSchema, type TSessionSnapshot } from '@/types/session';
 
 // ---------------------------------------------------------------------------

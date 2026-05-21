@@ -1,8 +1,8 @@
 use super::{
-    line_count, ImageAssetPayload, SaveScriptRequest, ScriptFilePayload, WorkspaceDirectoryPayload,
-    WorkspaceEntry, WorkspacePathCreatePayload, WorkspacePathCreateRequest,
-    WorkspacePathDeletePayload, WorkspacePathDeleteRequest, WorkspacePathRenamePayload,
-    WorkspacePathRenameRequest,
+    line_count, DocumentEncoding, ImageAssetPayload, SaveScriptRequest, ScriptFilePayload,
+    WorkspaceDirectoryPayload, WorkspaceEntry, WorkspacePathCreatePayload,
+    WorkspacePathCreateRequest, WorkspacePathDeletePayload, WorkspacePathDeleteRequest,
+    WorkspacePathKind, WorkspacePathRenamePayload, WorkspacePathRenameRequest,
 };
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use encoding_rs::{GB18030, UTF_16BE, UTF_16LE, UTF_8};
@@ -13,6 +13,7 @@ use std::{
 };
 
 #[tauri::command]
+#[specta::specta]
 pub fn load_script(path: String) -> Result<ScriptFilePayload, String> {
     let file_path = PathBuf::from(&path);
     let bytes = fs::read(&file_path).map_err(|error| format!("读取脚本失败：{error}"))?;
@@ -21,6 +22,7 @@ pub fn load_script(path: String) -> Result<ScriptFilePayload, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn load_image_asset(path: String) -> Result<ImageAssetPayload, String> {
     let file_path = PathBuf::from(&path)
         .canonicalize()
@@ -35,6 +37,7 @@ pub fn load_image_asset(path: String) -> Result<ImageAssetPayload, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn save_script(payload: SaveScriptRequest) -> Result<ScriptFilePayload, String> {
     let file_path = PathBuf::from(&payload.path);
     if let Some(parent) = file_path.parent() {
@@ -51,6 +54,7 @@ pub fn save_script(payload: SaveScriptRequest) -> Result<ScriptFilePayload, Stri
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_workspace_entries(
     path: Option<String>,
     root_path: Option<String>,
@@ -78,6 +82,7 @@ pub fn list_workspace_entries(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn create_workspace_path(
     payload: WorkspacePathCreateRequest,
 ) -> Result<WorkspacePathCreatePayload, String> {
@@ -93,14 +98,13 @@ pub fn create_workspace_path(
         return Err("同名文件或文件夹已存在。".into());
     }
 
-    match payload.kind.as_str() {
-        "file" => {
+    match payload.kind {
+        WorkspacePathKind::File => {
             fs::File::create(&target_path).map_err(|error| format!("创建文件失败：{error}"))?;
         }
-        "directory" => {
+        WorkspacePathKind::Directory => {
             fs::create_dir(&target_path).map_err(|error| format!("创建文件夹失败：{error}"))?;
         }
-        _ => return Err("不支持的资源类型。".into()),
     }
 
     Ok(WorkspacePathCreatePayload {
@@ -111,6 +115,7 @@ pub fn create_workspace_path(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn rename_workspace_path(
     payload: WorkspacePathRenameRequest,
 ) -> Result<WorkspacePathRenamePayload, String> {
@@ -142,6 +147,7 @@ pub fn rename_workspace_path(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn delete_workspace_path(
     payload: WorkspacePathDeleteRequest,
 ) -> Result<WorkspacePathDeletePayload, String> {
@@ -258,18 +264,18 @@ fn validate_workspace_entry_name(raw_name: &str) -> Result<String, String> {
     Ok(name.to_string())
 }
 
-pub(crate) fn decode_script_bytes(bytes: &[u8]) -> Result<(String, String), String> {
+pub(crate) fn decode_script_bytes(bytes: &[u8]) -> Result<(String, DocumentEncoding), String> {
     if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
         let content = String::from_utf8(bytes[3..].to_vec()).map_err(|error| error.to_string())?;
-        return Ok((content, "utf-8-bom".into()));
+        return Ok((content, DocumentEncoding::Utf8Bom));
     }
 
     if bytes.starts_with(&[0xFF, 0xFE]) {
-        return decode_with_encoding(&bytes[2..], UTF_16LE, "utf-16le");
+        return decode_with_encoding(&bytes[2..], UTF_16LE, DocumentEncoding::Utf16le);
     }
 
     if bytes.starts_with(&[0xFE, 0xFF]) {
-        return decode_with_encoding(&bytes[2..], UTF_16BE, "utf-16be");
+        return decode_with_encoding(&bytes[2..], UTF_16BE, DocumentEncoding::Utf16be);
     }
 
     if bytes.contains(&0) {
@@ -278,34 +284,44 @@ pub(crate) fn decode_script_bytes(bytes: &[u8]) -> Result<(String, String), Stri
 
     let (utf8, _, utf8_errors) = UTF_8.decode(bytes);
     if !utf8_errors {
-        return Ok((utf8.into_owned(), "utf-8".into()));
+        return Ok((utf8.into_owned(), DocumentEncoding::Utf8));
     }
 
     let (gb18030, _, gb_errors) = GB18030.decode(bytes);
     if !gb_errors {
-        return Ok((gb18030.into_owned(), "gb18030".into()));
+        return Ok((gb18030.into_owned(), DocumentEncoding::Gb18030));
     }
 
     Err("无法识别文件编码，请确认脚本是否为常见 UTF-8 / GB 编码。".into())
 }
 
-pub(crate) fn encode_script_content(content: &str, encoding: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn encode_script_content(
+    content: &str,
+    encoding: &DocumentEncoding,
+) -> Result<Vec<u8>, String> {
     match encoding {
-        "utf-8" => Ok(content.as_bytes().to_vec()),
-        "utf-8-bom" => {
+        DocumentEncoding::Utf8 => Ok(content.as_bytes().to_vec()),
+        DocumentEncoding::Utf8Bom => {
             let mut bytes = vec![0xEF, 0xBB, 0xBF];
             bytes.extend_from_slice(content.as_bytes());
             Ok(bytes)
         }
-        "utf-16le" => encode_with_encoding(content, UTF_16LE, "utf-16le", true),
-        "utf-16be" => encode_with_encoding(content, UTF_16BE, "utf-16be", true),
-        "gbk" => encode_with_encoding_name(content, "gbk"),
-        "gb18030" => encode_with_encoding_name(content, "gb18030"),
-        _ => Err(format!("暂不支持编码：{encoding}")),
+        DocumentEncoding::Utf16le => {
+            encode_with_encoding(content, UTF_16LE, DocumentEncoding::Utf16le, true)
+        }
+        DocumentEncoding::Utf16be => {
+            encode_with_encoding(content, UTF_16BE, DocumentEncoding::Utf16be, true)
+        }
+        DocumentEncoding::Gbk => encode_with_encoding_name(content, "gbk"),
+        DocumentEncoding::Gb18030 => encode_with_encoding_name(content, "gb18030"),
     }
 }
 
-fn build_script_payload(path: PathBuf, content: String, encoding: String) -> ScriptFilePayload {
+fn build_script_payload(
+    path: PathBuf,
+    content: String,
+    encoding: DocumentEncoding,
+) -> ScriptFilePayload {
     let name = path
         .file_name()
         .and_then(|value| value.to_str())
@@ -381,17 +397,17 @@ fn read_workspace_entries(directory: &Path) -> Result<Vec<WorkspaceEntry>, Strin
             path: path.to_string_lossy().to_string(),
             name: entry.file_name().to_string_lossy().to_string(),
             kind: if is_directory {
-                "directory".into()
+                WorkspacePathKind::Directory
             } else {
-                "file".into()
+                WorkspacePathKind::File
             },
             has_children: is_directory && directory_has_entries(&path),
         });
     }
 
-    entries.sort_by_cached_key(|entry| {
+        entries.sort_by_cached_key(|entry| {
         (
-            entry.kind != "directory",
+            entry.kind.as_str() != "directory",
             entry.name.to_lowercase(),
             entry.name.clone(),
         )
@@ -408,32 +424,32 @@ fn directory_has_entries(path: &Path) -> bool {
 fn decode_with_encoding(
     bytes: &[u8],
     encoding: &'static encoding_rs::Encoding,
-    encoding_name: &str,
-) -> Result<(String, String), String> {
+    document_encoding: DocumentEncoding,
+) -> Result<(String, DocumentEncoding), String> {
     let (content, _, had_errors) = encoding.decode(bytes);
     if had_errors {
-        return Err(format!("使用 {encoding_name} 解码脚本失败。"));
+        return Err(format!("使用 {document_encoding} 解码脚本失败。"));
     }
 
-    Ok((content.into_owned(), encoding_name.to_string()))
+    Ok((content.into_owned(), document_encoding))
 }
 
 fn encode_with_encoding(
     content: &str,
     encoding: &'static encoding_rs::Encoding,
-    label: &str,
+    document_encoding: DocumentEncoding,
     with_bom: bool,
 ) -> Result<Vec<u8>, String> {
     let (bytes, _, had_errors) = encoding.encode(content);
     if had_errors {
-        return Err(format!("将内容编码为 {label} 失败。"));
+        return Err(format!("将内容编码为 {document_encoding} 失败。"));
     }
 
     let mut result = Vec::new();
     if with_bom {
-        if label == "utf-16le" {
+        if matches!(document_encoding, DocumentEncoding::Utf16le) {
             result.extend_from_slice(&[0xFF, 0xFE]);
-        } else if label == "utf-16be" {
+        } else if matches!(document_encoding, DocumentEncoding::Utf16be) {
             result.extend_from_slice(&[0xFE, 0xFF]);
         }
     }

@@ -24,7 +24,7 @@ import {
   classifyRuntimeToolKind,
   normalizeRuntimeToolName,
   type TAiRuntimeToolKind,
-} from '@/constants/ai-runtime-tools';
+} from '@/constants/ai/runtime-tools';
 import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
 import Activity from '~icons/lucide/activity';
 import BadgeCheck from '~icons/lucide/badge-check';
