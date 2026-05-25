@@ -1,6 +1,6 @@
 <template>
     <div class="app-surface h-screen" :style="shellThemeStyle">
-        <div class="app-window-shell relative flex h-full flex-col overflow-hidden border border-(--shell-divider)">
+        <div class="app-window-shell relative flex h-full flex-col overflow-hidden border" :style="shellBorderStyle">
             <template v-if="isDesktopRuntime">
                 <div
 v-for="handle in resizeHandles" :key="handle.direction" class="window-resize-handle"
@@ -140,6 +140,13 @@ const shellThemeStyle = computed(() => ({
     '--surface-hover': '#818b981f',
     '--surface-soft': '#818b981f',
     '--surface-soft-strong': '#d1d9e0b3',
+}));
+
+const shellBorderStyle = computed(() => ({
+    borderLeftColor: '#dbdbdc',
+    borderTopColor: '#dfdfe0',
+    borderRightColor: '#e7e7e8',
+    borderBottomColor: '#e7e7e8',
 }));
 
 const getAppWindow = async () => {

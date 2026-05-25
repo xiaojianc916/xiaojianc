@@ -20,6 +20,7 @@ import { useAiSuggestionPool } from '@/composables/ai/useAiSuggestionPool';
 import { useAiTokenContext } from '@/composables/ai/useAiTokenContext';
 import { useAiWebSources } from '@/composables/ai/useAiWebSources';
 import { findAiServicePlatformByModel } from '@/constants/ai/providers';
+import { aiService } from '@/services/ipc/ai.service';
 import type {
   IAiAgentRun,
   IAiAgentStepFinalAnswer,

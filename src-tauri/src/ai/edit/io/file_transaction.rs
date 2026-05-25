@@ -1,9 +1,10 @@
+﻿use jiff::Timestamp;
 use crate::ai::edit::errors;
 use crate::ai::edit::history::edit_journal;
 use crate::ai::edit::io::{atomic_write, storage_lock};
 use crate::ai::edit::security::path_security;
 use crate::commands::contracts::AiEditOperationPayload;
-use chrono::Utc;
+
 use fjall::{Database, Keyspace, KeyspaceCreateOptions, PersistMode};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -80,11 +81,10 @@ struct PreparedFileTransaction {
 
 impl PreparedFileTransaction {
     fn new(storage_root: &Path, plan: FileTransactionPlan) -> Result<Self, String> {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let id = format!(
             "ai-edit-tx-{}",
-            now.timestamp_nanos_opt()
-                .unwrap_or_else(|| now.timestamp_micros() * 1_000)
+            now.as_nanosecond()
         );
         let entries = plan
             .actions
@@ -96,7 +96,7 @@ impl PreparedFileTransaction {
             version: MANIFEST_VERSION,
             id,
             status: TransactionStatus::Prepared,
-            created_at: now.to_rfc3339(),
+            created_at: now.to_string(),
             entries,
             operations: plan.operations,
         };

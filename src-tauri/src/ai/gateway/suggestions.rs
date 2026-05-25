@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fs, path::PathBuf};
+﻿use std::{collections::HashSet, fs, path::PathBuf};
 
 use super::*;
 use crate::agent_sidecar;
@@ -95,7 +95,7 @@ pub async fn generate_suggestion_pool(
     let payload = AiSuggestionPoolPayload {
         suggestions,
         model: model.to_string(),
-        generated_at: chrono::Utc::now().to_rfc3339(),
+        generated_at: jiff::Timestamp::now().to_string(),
     };
 
     persist_suggestion_pool_cache(&payload)?;

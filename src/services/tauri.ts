@@ -1,3 +1,4 @@
+import { v7 as uuidv7 } from 'uuid';
 import { commands } from '@/bindings/tauri';
 import { agentSidecarStreamEventPayloadSchema } from '@/types/ai/sidecar.schema';
 import { aiChatStreamEventPayloadSchema } from '@/types/ai/schema';
@@ -120,10 +121,7 @@ const loadTauriEvent = (): Promise<TauriEventModule> => {
 };
 
 const createTraceId = (): string => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-
+  return uuidv7();
   return `trace-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
 

@@ -1,4 +1,4 @@
-use chrono::Utc;
+﻿use jiff::Timestamp;
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -357,7 +357,7 @@ pub fn dispatch_script_to_terminal(
     let terminal_state = state.inner().clone();
     let session = get_terminal_session(&terminal_state, &payload.session_id)?
         .ok_or_else(|| "目标终端会话不存在，请先打开集成终端。".to_string())?;
-    let started_at = Utc::now();
+    let started_at = Timestamp::now();
     let desktop_material = load_required_desktop_noise_material()?;
     let (command, wsl_link_script_content) =
         build_terminal_run_command_for_wsl_link(&payload, &session.working_directory)?;
@@ -388,7 +388,7 @@ pub fn dispatch_script_to_terminal(
         cwd: session.working_directory.clone(),
         command_line,
         used_temp_file,
-        started_at: started_at.to_rfc3339(),
+        started_at: started_at.to_string(),
     })
 }
 
@@ -1059,7 +1059,7 @@ fn spawn_wsl_link_terminal_run(
                 session_id,
                 run_id,
                 exit_code,
-                finished_at: Utc::now().to_rfc3339(),
+                finished_at: Timestamp::now().to_string(),
             },
         );
     });

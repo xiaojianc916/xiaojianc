@@ -1,163 +1,334 @@
-import type { BundledLanguage, SpecialLanguage } from 'shiki';
+/**
+ * Shiki 语言的规范化、解析与标签映射。
+ *
+ * 设计原则：
+ * - normalizeLanguageTag 负责将用户的 fence-info 转换为标准小写标签；
+ * - resolveShikiLanguage 通过 shiki 内置 bundledLanguagesInfo 查找匹配的 BundledLanguage；
+ * - SHIKI_LANGUAGE_LABELS 为常用语言提供中文/可读标签，找不到时回退到语言 ID。
+ */
 
-export type TShikiLanguage = BundledLanguage | SpecialLanguage;
+import { bundledLanguagesInfo } from 'shiki';
+import type { BundledLanguage } from 'shiki';
 
-const SHIKI_LANGUAGE_MAP: Readonly<Partial<Record<string, TShikiLanguage>>> = {
-  '': 'text',
-  text: 'text',
-  txt: 'text',
-  plain: 'text',
-  plaintext: 'text',
+/** shiki 支持的语言 ID → 别名 的快速查找表 */
+const SHIKI_ALIAS_MAP: ReadonlyMap<string, BundledLanguage> = (() => {
+  const map = new Map<string, BundledLanguage>();
+  for (const info of bundledLanguagesInfo) {
+    const id = info.id as BundledLanguage;
+    map.set(id.toLowerCase(), id);
+    for (const alias of info.aliases ?? []) {
+      if (!map.has(alias.toLowerCase())) {
+        map.set(alias.toLowerCase(), id);
+      }
+    }
+  }
+  return map;
+})();
 
-  shell: 'shellscript',
-  sh: 'shellscript',
-  zsh: 'shellscript',
-  bash: 'shellscript',
-
-  ps: 'powershell',
-  pwsh: 'powershell',
-  powershell: 'powershell',
-
-  cmd: 'bat',
-  batch: 'bat',
-  bat: 'bat',
-
-  c: 'c',
-  h: 'c',
-
-  cpp: 'cpp',
-  'c++': 'cpp',
-  cc: 'cpp',
-  cxx: 'cpp',
-  hpp: 'cpp',
-
-  js: 'javascript',
-  mjs: 'javascript',
-  cjs: 'javascript',
-  javascript: 'javascript',
-  jsx: 'jsx',
-
-  ts: 'typescript',
-  mts: 'typescript',
-  cts: 'typescript',
-  typescript: 'typescript',
-  tsx: 'tsx',
-
-  vue: 'vue',
-
-  py: 'python',
-  python: 'python',
-
-  rb: 'ruby',
-  ruby: 'ruby',
-
-  rs: 'rust',
-  rust: 'rust',
-
-  go: 'go',
-  java: 'java',
-
-  yml: 'yaml',
-  yaml: 'yaml',
-
-  md: 'markdown',
-  markdown: 'markdown',
-
-  jsonc: 'jsonc',
-  json: 'json',
-
-  html: 'html',
-  css: 'css',
-  scss: 'scss',
-  less: 'less',
-  sql: 'sql',
-  xml: 'xml',
-
-  dockerfile: 'docker',
-  docker: 'docker',
-
-  diff: 'diff',
-  patch: 'diff',
-
-  // ── 扩展常用语言（按需保留 / 删除）──
-  toml: 'toml',
-  mermaid: 'mermaid',
-  cs: 'csharp',
-  csharp: 'csharp',
-  kt: 'kotlin',
-  kotlin: 'kotlin',
-  php: 'php',
-  lua: 'lua',
-  swift: 'swift',
-  graphql: 'graphql',
-  gql: 'graphql',
-  proto: 'proto',
-  protobuf: 'proto',
-  dart: 'dart',
-  r: 'r',
-  scala: 'scala',
-  tf: 'terraform',
-  terraform: 'terraform',
-  ini: 'ini',
-};
-
-export const SHIKI_LANGUAGE_LABELS: Partial<Record<TShikiLanguage, string>> = {
-  bat: 'Batch',
-  shellscript: 'Shell',
-  c: 'C',
-  cpp: 'C++',
-  css: 'CSS',
-  diff: 'Diff',
-  docker: 'Dockerfile',
-  go: 'Go',
-  html: 'HTML',
-  java: 'Java',
+/** shiki 语言 ID 的显示标签 */
+export const SHIKI_LANGUAGE_LABELS: Readonly<Record<string, string>> = {
+  typescript: 'TypeScript',
   javascript: 'JavaScript',
+  tsx: 'TSX',
+  jsx: 'JSX',
+  vue: 'Vue',
+  html: 'HTML',
+  css: 'CSS',
+  scss: 'SCSS',
+  sass: 'Sass',
+  less: 'Less',
   json: 'JSON',
   jsonc: 'JSONC',
-  jsx: 'JSX',
-  less: 'Less',
-  markdown: 'Markdown',
-  powershell: 'PowerShell',
-  python: 'Python',
-  ruby: 'Ruby',
-  rust: 'Rust',
-  scss: 'SCSS',
-  sql: 'SQL',
-  text: 'Text',
-  tsx: 'TSX',
-  typescript: 'TypeScript',
-  vue: 'Vue',
-  xml: 'XML',
   yaml: 'YAML',
-
   toml: 'TOML',
-  mermaid: 'Mermaid',
-  csharp: 'C#',
+  markdown: 'Markdown',
+  mdx: 'MDX',
+  python: 'Python',
+  rust: 'Rust',
+  go: 'Go',
+  java: 'Java',
   kotlin: 'Kotlin',
-  php: 'PHP',
-  lua: 'Lua',
   swift: 'Swift',
+  c: 'C',
+  cpp: 'C++',
+  csharp: 'C#',
+  ruby: 'Ruby',
+  php: 'PHP',
+  shell: 'Shell',
+  bash: 'Bash',
+  sh: 'Shell',
+  zsh: 'Zsh',
+  powershell: 'PowerShell',
+  bat: 'Batch',
+  cmd: 'Batch',
+  dockerfile: 'Dockerfile',
+  docker: 'Dockerfile',
+  makefile: 'Makefile',
+  make: 'Makefile',
+  sql: 'SQL',
   graphql: 'GraphQL',
-  proto: 'Protocol Buffers',
-  dart: 'Dart',
+  protobuf: 'Protobuf',
+  proto: 'Protobuf',
+  lua: 'Lua',
+  perl: 'Perl',
   r: 'R',
+  dart: 'Dart',
+  elixir: 'Elixir',
+  elm: 'Elm',
+  erlang: 'Erlang',
+  haskell: 'Haskell',
+  ocaml: 'OCaml',
   scala: 'Scala',
-  terraform: 'Terraform',
+  clojure: 'Clojure',
+  fsharp: 'F#',
+  zig: 'Zig',
+  nim: 'Nim',
+  groovy: 'Groovy',
+  julia: 'Julia',
+  viml: 'Vim Script',
+  vim: 'Vim Script',
+  vimscript: 'Vim Script',
+  xml: 'XML',
+  svg: 'SVG',
+  astro: 'Astro',
+  svelte: 'Svelte',
+  angular: 'Angular',
+  solidity: 'Solidity',
+  diff: 'Diff',
+  log: 'Log',
+  txt: 'Plain Text',
+  text: 'Plain Text',
+  plaintext: 'Plain Text',
   ini: 'INI',
+  env: 'Env',
+  properties: 'Properties',
+  ignore: 'Ignore File',
+  gitignore: 'Gitignore',
+  editorconfig: 'EditorConfig',
+  nginx: 'Nginx',
+  apache: 'Apache',
+  csv: 'CSV',
+  latex: 'LaTeX',
+  tex: 'LaTeX',
+  matlab: 'MATLAB',
+  stata: 'Stata',
+  sas: 'SAS',
+  wasm: 'WebAssembly',
+  wgsl: 'WGSL',
+  hlsl: 'HLSL',
+  glsl: 'GLSL',
+  cmake: 'CMake',
+  meson: 'Meson',
+  ninja: 'Ninja',
+  gdscript: 'GDScript',
+  gdresource: 'GDResource',
+  tcl: 'Tcl',
+  pascal: 'Pascal',
+  fortran: 'Fortran',
+  cobol: 'COBOL',
+  ada: 'Ada',
+  vhdl: 'VHDL',
+  verilog: 'Verilog',
+  systemverilog: 'SystemVerilog',
+  regexp: 'RegExp',
+  regex: 'RegExp',
+  cython: 'Cython',
+  coffee: 'CoffeeScript',
+  livescript: 'LiveScript',
+  pug: 'Pug',
+  jade: 'Jade',
+  stylus: 'Stylus',
+  handlebars: 'Handlebars',
+  hbs: 'Handlebars',
+  ejs: 'EJS',
+  twig: 'Twig',
+  nunjucks: 'Nunjucks',
+  liquid: 'Liquid',
+  murphy: 'Murphy',
+  prisma: 'Prisma',
+  cypher: 'Cypher',
+  sparql: 'SPARQL',
+  turtle: 'Turtle',
+  ntriples: 'N-Triples',
+  n3: 'Notation3',
+  rdf: 'RDF',
+  owl: 'OWL',
+  reason: 'Reason',
+  rescript: 'ReScript',
+  purescript: 'PureScript',
+  idris: 'Idris',
+  agda: 'Agda',
+  lean: 'Lean',
+  coq: 'Coq',
+  isabelle: 'Isabelle',
+  alloy: 'Alloy',
+  tla: 'TLA+',
+  promela: 'Promela',
+  spin: 'Spin',
+  nu: 'Nu',
+  move: 'Move',
+  cadence: 'Cadence',
+  tact: 'Tact',
+  func: 'FunC',
+  forth: 'Forth',
+  factor: 'Factor',
+  q: 'Q',
+  k: 'K',
+  apl: 'APL',
+  j: 'J',
+  bqn: 'BQN',
+  uiua: 'Uiua',
+  mermaid: 'Mermaid',
+  dot: 'Graphviz',
+  plantuml: 'PlantUML',
+  d2: 'D2',
+  excalidraw: 'Excalidraw',
 };
 
-export const normalizeLanguageTag = (value: string): string => {
-  const raw = String(value ?? '').trim();
-  if (!raw) {
-    return '';
+/**
+ * 将 fence-info 中的语言标识规范化为小写字符串。
+ * 处理常见的别名与后缀（例如 `ts` → `typescript`）。
+ */
+export function normalizeLanguageTag(raw: string): string {
+  const tag = raw.trim().toLowerCase();
+
+  if (!tag) {
+    return 'text';
   }
-  const firstToken = raw.split(/\s+/u, 1)[0] ?? '';
-  const beforeColon = firstToken.split(':', 1)[0] ?? '';
-  return beforeColon.trim().toLowerCase();
-};
 
-export const resolveShikiLanguage = (language: string): TShikiLanguage => {
-  const normalized = normalizeLanguageTag(language);
-  return SHIKI_LANGUAGE_MAP[normalized] ?? 'text';
-};
+  // 已知别名快速映射
+  const alias: Record<string, string> = {
+    ts: 'typescript',
+    js: 'javascript',
+    py: 'python',
+    rb: 'ruby',
+    rs: 'rust',
+    go: 'go',
+    java: 'java',
+    kt: 'kotlin',
+    swift: 'swift',
+    cs: 'csharp',
+    cpp: 'cpp',
+    'c++': 'cpp',
+    h: 'c',
+    bash: 'bash',
+    sh: 'bash',
+    shell: 'bash',
+    zsh: 'bash',
+    ps1: 'powershell',
+    ps: 'powershell',
+    pwsh: 'powershell',
+    pl: 'perl',
+    lua: 'lua',
+    r: 'r',
+    dart: 'dart',
+    ex: 'elixir',
+    exs: 'elixir',
+    erl: 'erlang',
+    hs: 'haskell',
+    ml: 'ocaml',
+    fs: 'fsharp',
+    fsi: 'fsharp',
+    fsx: 'fsharp',
+    vue: 'vue',
+    svelte: 'svelte',
+    astro: 'astro',
+    jsx: 'jsx',
+    tsx: 'tsx',
+    mdx: 'mdx',
+    md: 'markdown',
+    yml: 'yaml',
+    json5: 'jsonc',
+    hjson: 'jsonc',
+    dockerfile: 'dockerfile',
+    docker: 'dockerfile',
+    makefile: 'makefile',
+    gql: 'graphql',
+    graphql: 'graphql',
+    proto: 'protobuf',
+    prisma: 'prisma',
+    tf: 'hcl',
+    hcl: 'hcl',
+    nix: 'nix',
+    scala: 'scala',
+    sc: 'scala',
+    clj: 'clojure',
+    cljs: 'clojure',
+    cljc: 'clojure',
+    edn: 'clojure',
+    nginx: 'nginx',
+    conf: 'ini',
+    cfg: 'ini',
+    toml: 'toml',
+    ini: 'ini',
+    env: 'env',
+    editorconfig: 'editorconfig',
+    gitignore: 'gitignore',
+    dockerignore: 'gitignore',
+    log: 'log',
+    txt: 'text',
+    text: 'text',
+    plaintext: 'text',
+    diff: 'diff',
+    patch: 'diff',
+    bat: 'bat',
+    cmd: 'bat',
+    reg: 'ini',
+    csv: 'csv',
+    tsv: 'csv',
+    sql: 'sql',
+    psql: 'sql',
+    mysql: 'sql',
+    pgsql: 'sql',
+    latex: 'latex',
+    tex: 'latex',
+    bib: 'bibtex',
+    bibtex: 'bibtex',
+    styl: 'stylus',
+    stylus: 'stylus',
+    less: 'less',
+    scss: 'scss',
+    sass: 'sass',
+    css: 'css',
+    wasm: 'wasm',
+    wat: 'wat',
+    wgsl: 'wgsl',
+    glsl: 'glsl',
+    hlsl: 'hlsl',
+    cmake: 'cmake',
+    cmakecache: 'cmake',
+    zig: 'zig',
+    nim: 'nim',
+    sol: 'solidity',
+    solidity: 'solidity',
+    vy: 'vyper',
+    vyper: 'vyper',
+    move: 'move',
+    php: 'php',
+    phtml: 'html',
+    twig: 'twig',
+    html: 'html',
+    htm: 'html',
+    xml: 'xml',
+    svg: 'svg',
+    xsd: 'xml',
+    xsl: 'xml',
+    wsdl: 'xml',
+    // code fence 中有些用户直接写路径，尝试提取 basename 再 fallback
+  };
+
+  if (alias[tag]) {
+    return alias[tag];
+  }
+
+  return tag;
+}
+
+/**
+ * 将规范化后的语言标签解析为 shiki 的 BundledLanguage。
+ * 找不到匹配的语言时返回 `null`。
+ */
+export function resolveShikiLanguage(tag: string): string {
+  const normalized = normalizeLanguageTag(tag);
+  return SHIKI_ALIAS_MAP.get(normalized) ?? 'text';
+}

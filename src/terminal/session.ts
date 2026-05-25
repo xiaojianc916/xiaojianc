@@ -1631,6 +1631,7 @@ export class TerminalSession {
 
     // ── 私有：渲染器 ─────────────────────────────────────────────────────────────
 
+    private _canUseWebglRenderer(): boolean {
         return (
             TERMINAL_ENABLE_WEBGL_RENDERER &&
             !this._webglRendererBlocked &&
@@ -1639,13 +1640,39 @@ export class TerminalSession {
         );
     }
 
+    private _ensurePreferredRenderer(): void {
+        const terminal = this._terminalRef.value;
+        if (!terminal || this._webglAddonRef.value || !this._canUseWebglRenderer()) return;
+        try {
+            const addon = markRaw(new WebglAddon());
+            this._webglContextLossCleanup = addon.onContextLoss(() => {
+                this._disposeWebglRenderer();
+                window.setTimeout(() => {
+                    this._ensurePreferredRenderer();
+                    this._scheduleLayoutSync();
+                    this._scheduleViewportSync({
+                        clearTextureAtlas: true,
+                        refresh: true,
+                        scrollToBottom: true,
+                    });
+                }, TERMINAL_WEBGL_RECOVERY_DELAY_MS);
+            });
+            terminal.loadAddon(addon);
+            this._webglAddonRef.value = addon;
+        } catch (error) {
+            this._webglRendererBlocked = true;
+            console.warn('WebGL 终端渲染器初始化失败，已回退默认渲染。', error);
+        }
     }
 
+    private _disposeWebglRenderer(): void {
+        this._webglContextLossCleanup?.dispose();
+        this._webglContextLossCleanup = null;
+        this._webglAddonRef.value?.dispose();
+        this._webglAddonRef.value = null;
+    }
 
     private _clearTerminalTextureAtlas(): void {
-        this._terminalRef.value?.clearTextureAtlas();
-    }
-
         this._terminalRef.value?.clearTextureAtlas();
     }
 

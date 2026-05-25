@@ -75,7 +75,7 @@ pub use workspace_fs::{
     load_script, rename_workspace_path, save_script,
 };
 pub(crate) use workspace_fs::{
-    decode_script_bytes, encode_script_content, resolve_workspace_root, workspace_name,
+    decode_script_bytes, encode_script_content, resolve_workspace_root,
 };
 pub use wsl_link::{
     check_wsl_link_environment, get_wsl_link_agent_artifact_status, get_wsl_link_status,

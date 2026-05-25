@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+﻿#![allow(dead_code)]
 
 pub mod decision;
 pub mod journal;
@@ -6,7 +6,7 @@ pub mod policy;
 
 pub use decision::{ApprovalDecision, ApprovalRequest};
 
-use chrono::Utc;
+use jiff::Timestamp;
 use std::path::Path;
 
 pub fn deny_by_default(
@@ -20,7 +20,7 @@ pub fn deny_by_default(
         scope: request.scope,
         kind,
         reason,
-        created_at: Utc::now().to_rfc3339(),
+        created_at: Timestamp::now().to_string(),
     };
     journal::append_decision(storage_root, &decision)?;
     Ok(decision)

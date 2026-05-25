@@ -1,4 +1,5 @@
 use super::*;
+use gix::bstr::ByteSlice;
 
 const AUTHORITY_PATH_REMOTE_SCHEMES: &[&str] =
     &["ssh://", "https://", "http://", "git://"];
@@ -50,26 +51,26 @@ pub fn get_git_pull_request_support(
 }
 
 fn find_preferred_git_remote(repository: &Repository) -> Result<Option<(String, String)>, String> {
-    let remotes = repository
-        .remotes()
-        .map_err(|error| format!("读取 Git 远程仓库失败：{error}"))?;
-    let mut remote_names = remotes
+    let names = repository.remote_names();
+    let mut remote_list: Vec<String> = names
         .iter()
-        .flatten()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    remote_names.sort_by_key(|name| if name == "origin" { 0 } else { 1 });
-    for remote_name in remote_names {
-        let remote = repository
-            .find_remote(&remote_name)
-            .map_err(|error| format!("读取 Git 远程仓库失败：{error}"))?;
-        let Some(remote_url) = remote.url() else {
+        .map(|n| n.as_bstr().to_str_lossy().into_owned())
+        .collect();
+    remote_list.sort_by_key(|name| if name == "origin" { 0 } else { 1 });
+
+    for name in &remote_list {
+        let remote = match repository.find_remote(name.as_str()) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        let Some(remote_url) = remote.url(gix::remote::Direction::Fetch) else {
             continue;
         };
-        if remote_url.trim().is_empty() {
+        let url_str = remote_url.to_bstring().to_str_lossy().into_owned();
+        if url_str.trim().is_empty() {
             continue;
         }
-        return Ok(Some((remote_name, remote_url.to_string())));
+        return Ok(Some((name.clone(), url_str)));
     }
     Ok(None)
 }

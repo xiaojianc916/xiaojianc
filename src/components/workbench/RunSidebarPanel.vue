@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import '@/assets/css/run-sidebar.css';
-import RunSidebarTemplatesSection from '@/components/workbench/run-sidebar/RunSidebarTemplatesSection.vue';
+import "@/assets/css/run-sidebar.css";
+import RunSidebarTemplatesSection from "@/components/workbench/run-sidebar/RunSidebarTemplatesSection.vue";
 import type {
     IActiveRunSummary,
     ICommandTemplate,
     IEditorDocument,
     IRunHistoryEntry,
     TExecutorKind,
-} from '@/types/editor';
+} from "@/types/editor";
 
 defineProps<{
     document: IEditorDocument;
@@ -24,17 +24,15 @@ defineProps<{
 
 defineEmits<{
     run: [];
-    'create-document': [];
-    'open-terminal': [];
-    'insert-template': [template: ICommandTemplate];
-    'clear-run-history': [];
+    "create-document": [];
+    "open-terminal": [];
+    "insert-template": [template: ICommandTemplate];
+    "clear-run-history": [];
 }>();
 </script>
 
 <template>
     <section class="run-sidebar-shell" aria-label="运行侧边栏">
-        <div class="run-sidebar-scroll">
-            <RunSidebarTemplatesSection />
-        </div>
+        <RunSidebarTemplatesSection />
     </section>
 </template>

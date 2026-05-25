@@ -242,9 +242,9 @@ fn noise_builder() -> Result<Builder<'static>, WslLinkNoiseError> {
     Ok(Builder::new(params))
 }
 
-fn noise_builder_with_config(
-    config: &WslLinkNoiseHandshakeConfig,
-) -> Result<Builder<'static>, WslLinkNoiseError> {
+fn noise_builder_with_config<'a>(
+    config: &'a WslLinkNoiseHandshakeConfig,
+) -> Result<Builder<'a>, WslLinkNoiseError> {
     Ok(noise_builder()?
         .local_private_key(config.local_static_private())?
         .remote_public_key(config.remote_static_public())?

@@ -1,19 +1,13 @@
-use super::{
-    configure_std_command_for_background, decode_script_bytes, find_command_path,
-    resolve_workspace_root, workspace_name,
-};
-use chrono::{TimeZone, Utc};
-use git2::{
-    build::CheckoutBuilder, Branch, BranchType, ErrorCode, ObjectType, Repository, StashFlags,
-    Status, StatusEntry, StatusOptions,
-};
+use super::{ decode_script_bytes, resolve_workspace_root };
+
+use gix::bstr::ByteSlice;
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
     path::{Component, Path, PathBuf},
-    process::{Command, Stdio},
 };
 
+mod cli;
 mod branches;
 mod diff;
 mod history;
@@ -38,6 +32,8 @@ const GIT_DIFF_MODE_WORKTREE: &str = "worktree";
 const GIT_DIFF_MODE_STAGED: &str = "staged";
 const DEFAULT_GIT_HISTORY_LIMIT: usize = 20;
 const MAX_GIT_HISTORY_LIMIT: usize = 200;
+
+type Repository = gix::Repository;
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -186,18 +182,22 @@ struct GitDiffContentPair {
 #[serde(rename_all = "camelCase")]
 pub struct GitCommitResultPayload {
     status: GitRepositoryStatusPayload,
-    commit: GitCommitSummaryPayload,
+    commit_id: Option<String>,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GitStashFilePayload {
-    relative_path: String,
-    file_name: String,
-    previous_relative_path: Option<String>,
-    status: String,
-    additions: u32,
-    deletions: u32,
+pub struct GitCommitRequest {
+    repository_root_path: String,
+    message: String,
+    paths: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitPathOperationRequest {
+    repository_root_path: String,
+    paths: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -217,22 +217,19 @@ pub struct GitStashEntryPayload {
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct GitStashFilePayload {
+    relative_path: String,
+    file_name: String,
+    previous_relative_path: Option<String>,
+    status: String,
+    additions: u32,
+    deletions: u32,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct GitStashListPayload {
     entries: Vec<GitStashEntryPayload>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GitPathOperationRequest {
-    repository_root_path: String,
-    paths: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GitCommitRequest {
-    repository_root_path: String,
-    message: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -269,179 +266,77 @@ pub struct GitPullRequestSupportPayload {
     create_pull_request_url: Option<String>,
 }
 
-fn open_repository_from_root(repository_root_path: &str) -> Result<Repository, String> {
-    let repository_root = normalize_path_for_git(Path::new(repository_root_path));
-    Repository::discover(repository_root).map_err(|error| format!("读取 Git 仓库失败：{error}"))
+fn open_repository_from_root(root: &str) -> Result<Repository, String> {
+    let root = normalize_path_for_git(Path::new(root));
+    gix::open(&root).map_err(|error| format!("打开 Git 仓库失败：{error}"))
 }
 
-fn resolve_single_relative_path(repository_root: &Path, path: &str) -> Result<PathBuf, String> {
-    if path.trim().is_empty() {
-        return Err("Git Diff 路径不能为空。".to_string());
-    }
-
-    let relative_path = resolve_relative_path(repository_root, Path::new(path))?;
-
-    if relative_path
-        .components()
-        .any(|component| matches!(component, Component::ParentDir))
-    {
-        return Err(format!("Git Diff 路径不合法：{path}"));
-    }
-
-    if relative_path.as_os_str().is_empty() {
-        return Err("Git Diff 路径不能为空。".to_string());
-    }
-
-    Ok(relative_path)
-}
-
-fn resolve_git_workspace_root(workspace_root_path: Option<String>) -> Result<PathBuf, String> {
-    resolve_workspace_root(workspace_root_path).map(|path| normalize_path_for_git(&path))
-}
-
-fn build_unavailable_git_status(message: &str) -> GitRepositoryStatusPayload {
-    GitRepositoryStatusPayload {
-        available: false,
-        message: Some(message.into()),
-        repository_root_path: None,
-        repository_name: None,
-        git_dir_path: None,
-        head_branch_name: None,
-        head_short_name: None,
-        head_short_oid: None,
-        is_detached: false,
-        is_clean: true,
-        ahead: 0,
-        behind: 0,
-        staged_count: 0,
-        unstaged_count: 0,
-        untracked_count: 0,
-        conflicted_count: 0,
-        files: Vec::new(),
-        last_commit: None,
-    }
-}
-
-fn resolve_repository_root(repository: &Repository) -> Result<PathBuf, String> {
+pub(super) fn resolve_repository_root(repository: &Repository) -> Result<PathBuf, String> {
     repository
         .workdir()
-        .ok_or_else(|| "当前 Git 仓库为 bare 模式，暂不支持工作区版本控制。".to_string())
-        .and_then(|path| {
-            path.canonicalize()
-                .map_err(|error| format!("读取 Git 工作区根目录失败：{error}"))
-        })
-        .map(|path| normalize_path_for_git(&path))
+        .map(Path::to_path_buf)
+        .ok_or_else(|| "当前 Git 仓库没有工作区。".to_string())
 }
 
-fn resolve_head_commit(repository: &Repository) -> Result<Option<git2::Commit<'_>>, String> {
-    match repository.head() {
-        Ok(head) => match head.peel_to_commit() {
-            Ok(commit) => Ok(Some(commit)),
-            Err(error) if matches!(error.code(), ErrorCode::NotFound | ErrorCode::UnbornBranch) => {
+fn resolve_git_workspace_root(
+    workspace_root_path: Option<String>,
+) -> Result<PathBuf, String> {
+    match workspace_root_path {
+        Some(value) if !value.trim().is_empty() => {
+            let path = normalize_path_for_git(Path::new(value.trim()));
+            Ok(path)
+        }
+        _ => resolve_workspace_root(None),
+    }
+}
+
+fn resolve_head_commit(repository: &Repository) -> Result<Option<gix::Commit<'_>>, String> {
+    match repository.head_commit() {
+        Ok(commit) => Ok(Some(commit)),
+        Err(error) => {
+            let err_str = format!("{error}");
+            if err_str.contains("unborn")
+                || err_str.contains("does not exist")
+                || err_str.contains("not found")
+            {
                 Ok(None)
+            } else {
+                Err(format!("读取 Git HEAD 提交失败：{error}"))
             }
-            Err(error) => Err(format!("读取 Git HEAD 提交失败：{error}")),
-        },
-        Err(error) if matches!(error.code(), ErrorCode::NotFound | ErrorCode::UnbornBranch) => {
-            Ok(None)
         }
-        Err(error) => Err(format!("读取 Git HEAD 失败：{error}")),
     }
 }
 
-fn resolve_head_object(repository: &Repository) -> Result<Option<git2::Object<'_>>, String> {
-    match repository.head() {
-        Ok(head) => head
-            .peel(ObjectType::Commit)
-            .map(Some)
-            .or_else(|error| {
-                if matches!(error.code(), ErrorCode::NotFound | ErrorCode::UnbornBranch) {
-                    Ok(None)
-                } else {
-                    Err(error)
-                }
-            })
-            .map_err(|error| format!("读取 Git HEAD 对象失败：{error}")),
-        Err(error) if matches!(error.code(), ErrorCode::NotFound | ErrorCode::UnbornBranch) => {
-            Ok(None)
-        }
-        Err(error) => Err(format!("读取 Git HEAD 失败：{error}")),
-    }
-}
 
-fn resolve_head_branch_name(repository: &Repository) -> Result<Option<String>, String> {
-    match repository.head() {
-        Ok(head) => {
-            if !head.is_branch() {
-                return Ok(None);
-            }
 
-            Ok(head.shorthand().map(str::to_string))
-        }
-        Err(error) if matches!(error.code(), ErrorCode::NotFound | ErrorCode::UnbornBranch) => {
-            Ok(None)
-        }
-        Err(error) => Err(format!("读取 Git 分支信息失败：{error}")),
-    }
-}
+fn build_git_commit_summary(commit: &gix::Commit<'_>) -> GitCommitSummaryPayload {
+    let authored_at = jiff::Timestamp::from_second(
+        commit.time().unwrap_or_default().seconds as i64,
+    )
+    .unwrap_or_else(|_| jiff::Timestamp::now())
+    .to_string();
 
-fn resolve_head_detached(repository: &Repository) -> Result<bool, String> {
-    repository
-        .head_detached()
-        .map_err(|error| format!("读取 Git 分支状态失败：{error}"))
-}
-
-fn resolve_ahead_behind(
-    repository: &Repository,
-    branch_name: Option<&str>,
-) -> Result<(usize, usize), String> {
-    let Some(branch_name) = branch_name else {
-        return Ok((0, 0));
-    };
-
-    let local_branch = match repository.find_branch(branch_name, BranchType::Local) {
-        Ok(branch) => branch,
-        Err(error) if error.code() == ErrorCode::NotFound => return Ok((0, 0)),
-        Err(error) => return Err(format!("读取 Git 本地分支失败：{error}")),
-    };
-
-    let upstream_branch = match local_branch.upstream() {
-        Ok(branch) => branch,
-        Err(error) if error.code() == ErrorCode::NotFound => return Ok((0, 0)),
-        Err(error) => return Err(format!("读取 Git 上游分支失败：{error}")),
-    };
-
-    let Some(local_oid) = local_branch.get().target() else {
-        return Ok((0, 0));
-    };
-    let Some(upstream_oid) = upstream_branch.get().target() else {
-        return Ok((0, 0));
-    };
-
-    repository
-        .graph_ahead_behind(local_oid, upstream_oid)
-        .map_err(|error| format!("读取 Git ahead/behind 失败：{error}"))
-}
-
-fn build_git_commit_summary(commit: &git2::Commit<'_>) -> GitCommitSummaryPayload {
-    let authored_at = Utc
-        .timestamp_opt(commit.time().seconds(), 0)
-        .single()
-        .unwrap_or_else(Utc::now)
-        .to_rfc3339();
+    let summary = commit
+        .message()
+        .ok()
+        .map(|m| m.summary().to_str_lossy().into_owned())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "无提交说明".to_string());
 
     GitCommitSummaryPayload {
         id: commit.id().to_string(),
-        short_id: short_commit_id(commit.id()),
-        summary: commit.summary().unwrap_or("无提交说明").to_string(),
-        author_name: commit.author().name().unwrap_or("未知作者").to_string(),
+        short_id: short_commit_id(commit.id().detach()),
+        summary,
+        author_name: commit
+            .author()
+            .map(|a| a.name.to_string())
+            .unwrap_or_else(|_| "未知作者".to_string()),
         authored_at,
     }
 }
 
-fn short_commit_id(oid: git2::Oid) -> String {
-    let value = oid.to_string();
-    value.chars().take(7).collect()
+fn short_commit_id(id: gix::ObjectId) -> String {
+    id.to_string().chars().take(7).collect()
 }
 
 fn resolve_relative_path(repository_root: &Path, path: &Path) -> Result<PathBuf, String> {
@@ -501,11 +396,11 @@ fn normalize_path_for_git(path: &Path) -> PathBuf {
     }
 
     if let Some(stripped) = value.strip_prefix("//?/UNC/") {
-        return PathBuf::from(format!("//{stripped}").replace('/', r"\"));
+        return PathBuf::from(format!("//{stripped}").replace('/', r"\\"));
     }
 
     if let Some(stripped) = value.strip_prefix("//?/") {
-        return PathBuf::from(stripped.replace('/', r"\"));
+        return PathBuf::from(stripped.replace('/', r"\\"));
     }
 
     path.to_path_buf()

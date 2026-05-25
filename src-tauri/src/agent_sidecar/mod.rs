@@ -1,4 +1,4 @@
-use serde::de::DeserializeOwned;
+﻿use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
@@ -225,7 +225,7 @@ where
 fn create_sidecar_session_id(prefix: &str) -> String {
     format!(
         "{prefix}-{}",
-        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        jiff::Timestamp::now().as_nanosecond() as i128
     )
 }
 

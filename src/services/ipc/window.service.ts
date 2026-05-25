@@ -1,3 +1,4 @@
+import { v7 as uuidv7 } from 'uuid';
 import { commands, type SetWindowBackgroundInput, type WindowStage } from '@/bindings/tauri';
 import { AppError, isAppError } from '@/types/app-error';
 import { assertDesktopRuntime } from '@/utils/desktop-runtime';
@@ -17,10 +18,7 @@ export type TWindowStageRequest = {
 };
 
 const createTraceId = (): string => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-
+  return uuidv7();
   return `trace-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
 

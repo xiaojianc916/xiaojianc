@@ -1,28 +1,55 @@
 use super::*;
+use super::cli;
+use gix::bstr::ByteSlice;
 
 #[tauri::command]
 pub fn list_git_branches(
     payload: GitRepositoryRootRequest,
 ) -> Result<GitBranchListPayload, String> {
     let repository = open_repository_from_root(&payload.repository_root_path)?;
+    let repository_root = resolve_repository_root(&repository)?;
     let mut branches = Vec::new();
-    let iterator = repository
-        .branches(None)
+
+    let references_platform = repository
+        .references()
         .map_err(|error| format!("读取 Git 分支列表失败：{error}"))?;
-    for branch_result in iterator {
-        let (branch, branch_type) =
-            branch_result.map_err(|error| format!("读取 Git 分支失败：{error}"))?;
-        let shorthand = resolve_branch_shorthand(&branch)?;
-        if branch_type == BranchType::Remote && shorthand.ends_with("/HEAD") {
+    let references = references_platform
+        .all()
+        .map_err(|error| format!("读取 Git 分支列表失败：{error}"))?;
+
+    for reference in references {
+        let reference = reference.map_err(|error| format!("读取 Git 分支失败：{error}"))?;
+        let name = reference.name();
+        let (category, shorthand) = match name.category_and_short_name() {
+            Some((cat, short)) => (cat, short.to_string()),
+            None => continue,
+        };
+
+        let branch_kind = match category {
+            gix::refs::Category::LocalBranch => "local",
+            gix::refs::Category::RemoteBranch => "remote",
+            _ => continue,
+        };
+
+        if branch_kind == "remote" && shorthand.ends_with("/HEAD") {
             continue;
         }
-        branches.push(build_git_branch_payload(&repository, &branch, branch_type)?);
+
+        if let Some(branch_payload) = build_git_branch_payload_from_ref(
+            &repository,
+            &repository_root,
+            &reference,
+            branch_kind,
+            &shorthand,
+        )? {
+            branches.push(branch_payload);
+        }
     }
+
     branches.sort_by(|left, right| {
-        resolve_branch_sort_key(left)
-            .cmp(&resolve_branch_sort_key(right))
-            .then_with(|| left.shorthand.cmp(&right.shorthand))
+        resolve_branch_sort_key(left).cmp(&resolve_branch_sort_key(right))
     });
+
     Ok(GitBranchListPayload { branches })
 }
 
@@ -31,33 +58,16 @@ pub fn checkout_git_branch(
     payload: GitBranchCheckoutRequest,
 ) -> Result<GitRepositoryStatusPayload, String> {
     let repository = open_repository_from_root(&payload.repository_root_path)?;
+    let repository_root = resolve_repository_root(&repository)?;
     assert_repository_is_clean_for_switch(&repository, "切换分支")?;
 
-    if let Some(local_branch) = find_local_branch(&repository, &payload.branch_name)? {
-        checkout_branch_reference(&repository, &local_branch)?;
-        return super::status::build_git_repository_status_payload(&repository);
-    }
+    cli::run_git_ok(
+        &repository_root,
+        &["checkout", payload.branch_name.trim()],
+        "切换分支",
+    )?;
 
-    let remote_branch = find_remote_branch(&repository, &payload.branch_name)?
-        .ok_or_else(|| format!("未找到 Git 分支：{}", payload.branch_name))?;
-    let remote_shorthand = resolve_branch_shorthand(&remote_branch)?;
-    let local_branch_name = derive_local_branch_name(&remote_shorthand);
-
-    let mut local_branch = match repository.find_branch(&local_branch_name, BranchType::Local) {
-        Ok(existing_branch) => existing_branch,
-        Err(error) if error.code() == ErrorCode::NotFound => {
-            let target_commit = resolve_branch_commit(&repository, &remote_branch)?;
-            repository
-                .branch(&local_branch_name, &target_commit, false)
-                .map_err(|create_error| format!("基于远程分支创建本地分支失败：{create_error}"))?
-        }
-        Err(error) => return Err(format!("读取本地 Git 分支失败：{error}")),
-    };
-
-    local_branch
-        .set_upstream(Some(&remote_shorthand))
-        .map_err(|error| format!("设置 Git 分支上游失败：{error}"))?;
-    checkout_branch_reference(&repository, &local_branch)?;
+    let repository = open_repository_from_root(&payload.repository_root_path)?;
     super::status::build_git_repository_status_payload(&repository)
 }
 
@@ -66,33 +76,40 @@ pub fn create_git_branch(
     payload: GitBranchCreateRequest,
 ) -> Result<GitRepositoryStatusPayload, String> {
     let repository = open_repository_from_root(&payload.repository_root_path)?;
+    let repository_root = resolve_repository_root(&repository)?;
     let branch_name = payload.branch_name.trim();
     if branch_name.is_empty() {
         return Err("Git 分支名称不能为空。".into());
     }
-    let is_valid_branch_name = Branch::name_is_valid(branch_name)
-        .map_err(|error| format!("校验 Git 分支名称失败：{error}"))?;
-    if !is_valid_branch_name {
+    if !is_valid_git_branch_name(branch_name) {
         return Err(format!("Git 分支名称不合法：{branch_name}"));
     }
     if payload.checkout {
         assert_repository_is_clean_for_switch(&repository, "创建并切换分支")?;
     }
-    let head_commit = resolve_head_commit(&repository)?
-        .ok_or_else(|| "当前仓库还没有提交记录，无法创建分支。".to_string())?;
-    let branch = repository
-        .branch(branch_name, &head_commit, false)
-        .map_err(|error| {
-            if error.code() == ErrorCode::Exists {
-                format!("Git 分支已存在：{branch_name}")
-            } else {
-                format!("创建 Git 分支失败：{error}")
-            }
-        })?;
+
+    cli::run_git_ok(&repository_root, &["branch", branch_name], "创建分支")?;
+
     if payload.checkout {
-        checkout_branch_reference(&repository, &branch)?;
+        cli::run_git_ok(&repository_root, &["checkout", branch_name], "切换分支")?;
     }
+
+    let repository = open_repository_from_root(&payload.repository_root_path)?;
     super::status::build_git_repository_status_payload(&repository)
+}
+
+fn is_valid_git_branch_name(name: &str) -> bool {
+    if name.is_empty() { return false; }
+    if name.starts_with('.') || name.ends_with('.') { return false; }
+    if name.ends_with(".lock") { return false; }
+    if name.contains("..") { return false; }
+    if name.contains(' ') || name.contains('~') || name.contains('^')
+        || name.contains(':') || name.contains('?') || name.contains('*')
+        || name.contains('[') { return false; }
+    if name.contains("@{") { return false; }
+    if name.as_bytes().iter().any(|&b| b == 0x7f || b < 0x20) { return false; }
+    if name.starts_with('/') || name.ends_with('/') { return false; }
+    true
 }
 
 fn resolve_branch_sort_key(branch: &GitBranchPayload) -> (usize, usize, &str) {
@@ -103,163 +120,70 @@ fn resolve_branch_sort_key(branch: &GitBranchPayload) -> (usize, usize, &str) {
     )
 }
 
-fn build_git_branch_payload(
+fn build_git_branch_payload_from_ref(
     repository: &Repository,
-    branch: &Branch<'_>,
-    branch_type: BranchType,
-) -> Result<GitBranchPayload, String> {
-    let shorthand = resolve_branch_shorthand(branch)?;
-    let name = branch
-        .get()
-        .name()
-        .map(str::to_string)
-        .unwrap_or_else(|| shorthand.clone());
+    repository_root: &Path,
+    reference: &gix::Reference<'_>,
+    kind: &str,
+    shorthand: &str,
+) -> Result<Option<GitBranchPayload>, String> {
+    let name = reference.name().as_bstr().to_str_lossy().into_owned();
+    let target_id = reference.id().detach();
 
-    let upstream_branch = if branch_type == BranchType::Local {
-        match branch.upstream() {
-            Ok(upstream) => Some(upstream),
-            Err(error) if error.code() == ErrorCode::NotFound => None,
-            Err(error) => return Err(format!("读取 Git 分支上游失败：{error}")),
-        }
+    let is_current = is_current_branch(repository, reference);
+
+    let (ahead, behind) = if kind == "local" {
+        resolve_ahead_behind_cli(repository_root, shorthand)?
     } else {
-        None
+        (0, 0)
     };
 
-    let upstream_name = match upstream_branch.as_ref() {
-        Some(upstream) => Some(resolve_branch_shorthand(upstream)?),
-        None => None,
-    };
-
-    let (ahead, behind) = match upstream_branch.as_ref() {
-        Some(upstream) => resolve_ahead_behind_with_upstream(repository, branch, upstream)?,
-        None => (0, 0),
-    };
-
-    let last_commit = branch
-        .get()
-        .target()
-        .and_then(|oid| repository.find_commit(oid).ok())
+    let last_commit = repository
+        .find_commit(target_id)
+        .ok()
         .map(|commit| build_git_commit_summary(&commit));
 
-    Ok(GitBranchPayload {
+    Ok(Some(GitBranchPayload {
         name,
-        shorthand,
-        kind: resolve_branch_kind(branch_type).to_string(),
-        upstream_name,
-        is_current: branch.is_head(),
-        is_head: branch.is_head(),
+        shorthand: shorthand.to_string(),
+        kind: kind.to_string(),
+        upstream_name: None,
+        is_current,
+        is_head: is_current,
         ahead,
         behind,
         last_commit,
-    })
+    }))
 }
 
-fn resolve_branch_kind(branch_type: BranchType) -> &'static str {
-    match branch_type {
-        BranchType::Local => "local",
-        BranchType::Remote => "remote",
-    }
+fn is_current_branch(repository: &Repository, reference: &gix::Reference<'_>) -> bool {
+    let Ok(Some(head_ref)) = repository.head_ref() else {
+        return false;
+    };
+    head_ref.name().as_bstr() == reference.name().as_bstr()
 }
 
-fn resolve_branch_shorthand(branch: &Branch<'_>) -> Result<String, String> {
-    if let Ok(Some(name)) = branch.name() {
-        return Ok(name.to_string());
-    }
-    if let Some(shorthand) = branch.get().shorthand() {
-        return Ok(shorthand.to_string());
-    }
-    Err("读取 Git 分支名称失败：分支名不是有效的 UTF-8。".into())
-}
-
-fn resolve_ahead_behind_with_upstream(
-    repository: &Repository,
-    branch: &Branch<'_>,
-    upstream_branch: &Branch<'_>,
+fn resolve_ahead_behind_cli(
+    repository_root: &Path,
+    branch_name: &str,
 ) -> Result<(usize, usize), String> {
-    let Some(local_oid) = branch.get().target() else {
-        return Ok((0, 0));
-    };
-    let Some(upstream_oid) = upstream_branch.get().target() else {
-        return Ok((0, 0));
-    };
-    repository
-        .graph_ahead_behind(local_oid, upstream_oid)
-        .map_err(|error| format!("读取 Git 分支 ahead/behind 失败：{error}"))
-}
+    let output = cli::run_git_text_allow_exit_one(
+        repository_root,
+        &["rev-list", "--count", "--left-right", &format!("{branch_name}...@{{upstream}}")],
+        "读取 ahead/behind",
+    );
 
-fn resolve_branch_commit<'repo>(
-    repository: &'repo Repository,
-    branch: &Branch<'repo>,
-) -> Result<git2::Commit<'repo>, String> {
-    if let Some(oid) = branch.get().target() {
-        return repository
-            .find_commit(oid)
-            .map_err(|error| format!("读取 Git 分支提交失败：{error}"));
-    }
-    branch
-        .get()
-        .peel_to_commit()
-        .map_err(|error| format!("读取 Git 分支提交失败：{error}"))
-}
-
-fn find_local_branch<'repo>(
-    repository: &'repo Repository,
-    branch_name: &str,
-) -> Result<Option<Branch<'repo>>, String> {
-    find_branch_by_candidates(repository, branch_name, BranchType::Local, "refs/heads/")
-}
-
-fn find_remote_branch<'repo>(
-    repository: &'repo Repository,
-    branch_name: &str,
-) -> Result<Option<Branch<'repo>>, String> {
-    find_branch_by_candidates(repository, branch_name, BranchType::Remote, "refs/remotes/")
-}
-
-fn find_branch_by_candidates<'repo>(
-    repository: &'repo Repository,
-    branch_name: &str,
-    branch_type: BranchType,
-    prefix: &str,
-) -> Result<Option<Branch<'repo>>, String> {
-    for candidate in build_branch_name_candidates(branch_name, prefix) {
-        match repository.find_branch(candidate.as_str(), branch_type) {
-            Ok(branch) => return Ok(Some(branch)),
-            Err(error) if error.code() == ErrorCode::NotFound => continue,
-            Err(error) => return Err(format!("读取 Git 分支失败：{error}")),
+    match output {
+        Ok(Some(output)) => {
+            let parts: Vec<&str> = output.trim().split('\t').collect();
+            if parts.len() >= 2 {
+                Ok((parts[0].parse::<usize>().unwrap_or(0), parts[1].parse::<usize>().unwrap_or(0)))
+            } else {
+                Ok((0, 0))
+            }
         }
+        _ => Ok((0, 0)),
     }
-    Ok(None)
-}
-
-fn build_branch_name_candidates(branch_name: &str, prefix: &str) -> Vec<String> {
-    let trimmed = branch_name.trim();
-    let mut candidates = Vec::new();
-    for candidate in [Some(trimmed), trimmed.strip_prefix(prefix)]
-        .into_iter()
-        .flatten()
-    {
-        if candidate.is_empty() || candidates.iter().any(|value| value == candidate) {
-            continue;
-        }
-        candidates.push(candidate.to_string());
-    }
-    candidates
-}
-
-fn checkout_branch_reference(repository: &Repository, branch: &Branch<'_>) -> Result<(), String> {
-    let reference_name = branch
-        .get()
-        .name()
-        .ok_or_else(|| "读取 Git 分支引用名失败。".to_string())?;
-    repository
-        .set_head(reference_name)
-        .map_err(|error| format!("切换 Git HEAD 失败：{error}"))?;
-    let mut checkout_builder = CheckoutBuilder::new();
-    checkout_builder.safe();
-    repository
-        .checkout_head(Some(&mut checkout_builder))
-        .map_err(|error| format!("切换 Git 工作区失败：{error}"))
 }
 
 pub(super) fn assert_repository_is_clean_for_switch(
@@ -276,11 +200,4 @@ pub(super) fn assert_repository_is_clean_for_switch(
         ));
     }
     Ok(())
-}
-
-fn derive_local_branch_name(remote_branch_name: &str) -> String {
-    remote_branch_name
-        .split_once('/')
-        .map(|(_remote_name, local_name)| local_name.to_string())
-        .unwrap_or_else(|| remote_branch_name.to_string())
 }

@@ -1,6 +1,6 @@
-use crate::ai::edit::errors;
+﻿use crate::ai::edit::errors;
 use crate::ai::edit::io::storage_lock;
-use chrono::Utc;
+use jiff::Timestamp;
 use fjall::{Database, Keyspace, KeyspaceCreateOptions, PersistMode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -94,7 +94,7 @@ fn set_pin_locked(
         target_type: target_type.to_string(),
         target_id: target_id.to_string(),
         pinned,
-        pinned_at: pinned.then(|| Utc::now().to_rfc3339()),
+        pinned_at: pinned.then(|| Timestamp::now().to_string()),
     };
     let store = open_store(storage_root)?;
     let value = serde_json::to_vec(&record)

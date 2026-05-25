@@ -1,3 +1,4 @@
+import { v7 as uuidv7 } from 'uuid';
 import { unref } from 'vue';
 
 import { useSidecarChangedDocumentRefresh } from '@/composables/useSidecarChangedDocumentRefresh';
@@ -67,9 +68,7 @@ const SIDECAR_STEP_CONFIRMATION_PREFIX = 'sidecar-step-tool-confirmation:';
 const TERMINAL_RUN_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
 const createSidecarRunId = (): string => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `sidecar-plan:${crypto.randomUUID()}`;
-  }
+  return `sidecar-plan:${uuidv7()}`;
 
   return `sidecar-plan:${Date.now()}`;
 };

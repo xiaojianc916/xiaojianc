@@ -1,8 +1,8 @@
-use crate::ai::edit::errors;
+﻿use crate::ai::edit::errors;
 use crate::ai::edit::history::pins::PinIndex;
 use crate::ai::edit::io::{atomic_write, storage_lock};
 use crate::commands::contracts::{AiApplyPatchMetadataRequest, AiSnapshotPayload};
-use chrono::{DateTime, Duration, Utc};
+use jiff::{SignedDuration, Timestamp};
 use fjall::{Database, Keyspace, KeyspaceCreateOptions, PersistMode};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -34,18 +34,18 @@ pub struct SnapshotPruneOutcome {
 
 #[derive(Debug, Clone, Copy)]
 pub struct SnapshotRetentionPolicy {
-    pub now: DateTime<Utc>,
-    pub full_blob_ttl: Duration,
-    pub pinned_full_blob_ttl: Duration,
+    pub now: Timestamp,
+    pub full_blob_ttl: SignedDuration,
+    pub pinned_full_blob_ttl: SignedDuration,
     pub total_blob_quota_bytes: u64,
 }
 
 impl Default for SnapshotRetentionPolicy {
     fn default() -> Self {
         Self {
-            now: Utc::now(),
-            full_blob_ttl: Duration::days(FULL_BLOB_TTL_DAYS),
-            pinned_full_blob_ttl: Duration::days(PINNED_FULL_BLOB_TTL_DAYS),
+            now: Timestamp::now(),
+            full_blob_ttl: SignedDuration::from_secs((FULL_BLOB_TTL_DAYS as i64) * 86400),
+            pinned_full_blob_ttl: SignedDuration::from_secs((PINNED_FULL_BLOB_TTL_DAYS as i64) * 86400),
             total_blob_quota_bytes: DEFAULT_TOTAL_BLOB_QUOTA_BYTES,
         }
     }
@@ -360,12 +360,11 @@ fn store_snapshot_locked(
     files: &[SnapshotSourceFile<'_>],
 ) -> Result<AiSnapshotPayload, String> {
     let store = open_store(storage_root)?;
-    let timestamp = Utc::now();
+    let timestamp = Timestamp::now();
     let snapshot_id = format!(
         "ai-edit-snapshot-{}",
         timestamp
-            .timestamp_nanos_opt()
-            .unwrap_or_else(|| timestamp.timestamp_micros() * 1_000)
+            .as_nanosecond()
     );
 
     let mut manifest_files = Vec::with_capacity(files.len());
@@ -391,7 +390,7 @@ fn store_snapshot_locked(
         id: snapshot_id.clone(),
         scope: scope.to_string(),
         task_id: task_id.to_string(),
-        created_at: timestamp.to_rfc3339(),
+        created_at: timestamp.to_string(),
         label: label.to_string(),
         size_bytes,
         files: manifest_files,
@@ -412,7 +411,7 @@ fn store_snapshot_locked(
         id: snapshot_id,
         scope: scope.to_string(),
         task_id: task_id.to_string(),
-        created_at: timestamp.to_rfc3339(),
+        created_at: timestamp.to_string(),
         label: label.to_string(),
         file_refs,
         storage_key: manifest.storage_key(),
@@ -610,14 +609,12 @@ fn is_snapshot_pinned(manifest: &SnapshotManifest, pin_index: &PinIndex) -> bool
         || pin_index.pinned_tasks.contains(&manifest.task_id)
 }
 
-fn snapshot_age(manifest: &SnapshotManifest, now: DateTime<Utc>) -> Option<Duration> {
-    parse_rfc3339_utc(&manifest.created_at).map(|created_at| now - created_at)
+fn snapshot_age(manifest: &SnapshotManifest, now: Timestamp) -> Option<SignedDuration> {
+    parse_rfc3339_utc(&manifest.created_at).map(|created_at| now.duration_since(created_at))
 }
 
-fn parse_rfc3339_utc(value: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(value)
-        .map(|value| value.with_timezone(&Utc))
-        .ok()
+fn parse_rfc3339_utc(value: &str) -> Option<Timestamp> {
+    value.parse::<Timestamp>().ok()
 }
 
 fn strip_manifest_blobs(
@@ -963,7 +960,7 @@ mod tests {
             &temp_dir,
             &PinIndex::default(),
             SnapshotRetentionPolicy {
-                now: chrono::Utc::now() + chrono::Duration::days(super::FULL_BLOB_TTL_DAYS + 1),
+                now: jiff::Timestamp::now() + jiff::SignedDuration::from_secs((super::FULL_BLOB_TTL_DAYS + 1) as i64 * 86400),
                 total_blob_quota_bytes: 0,
                 ..SnapshotRetentionPolicy::default()
             },

@@ -1,4 +1,4 @@
-use std::{
+﻿use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -63,45 +63,14 @@ impl TerminalRunVisualTracker {
     /// - **scroll region 变更**：`CSI [无 ? 前缀] ... r`（DECSTBM）
     ///
     /// ESC (0x1B) 在 UTF-8 中不会作为多字节字符的内部字节出现，故纯字节扫描是安全的。
-    /// 取代了原先 `vt100::Parser::new(24, 80, 0)` 的每次分配 + 全 VT 解析。
+    /// 使用 vte crate 的 ECMA-48 标准 CSI 解析，替代手工字节扫描。
     fn scan_csi_events(&mut self, data: &str) {
-        let bytes = data.as_bytes();
-        let mut i = 0;
-        while i + 1 < bytes.len() {
-            if bytes[i] != 0x1b || bytes[i + 1] != b'[' {
-                i += 1;
-                continue;
-            }
-            let mut cursor = i + 2;
-            let private = cursor < bytes.len() && bytes[cursor] == b'?';
-            if private {
-                cursor += 1;
-            }
-            let param_start = cursor;
-            // 参数字节 0x30..=0x3F + 中间字节 0x20..=0x2F
-            while cursor < bytes.len() && (0x20..=0x3F).contains(&bytes[cursor]) {
-                cursor += 1;
-            }
-            if cursor >= bytes.len() {
-                break;
-            }
-            let final_byte = bytes[cursor];
-            if !(0x40..=0x7e).contains(&final_byte) {
-                // 不是合法 CSI final，跳过这个 ESC，从下一字节重新匹配
-                i = cursor + 1;
-                continue;
-            }
-            let params = &bytes[param_start..cursor];
-
-            if private && (final_byte == b'h' || final_byte == b'l') {
-                if matches!(params, b"47" | b"1047" | b"1049") {
-                    self.alt_screen_active = final_byte == b'h';
-                }
-            } else if !private && final_byte == b'r' {
-                // DECSTBM；显式排除私有模式 reset (`CSI ? Ps r`)
-                self.scroll_region_changed = true;
-            }
-            i = cursor + 1;
+        let events = super::vte_detect::scan_ansi_csi_events(data);
+        if events.alt_screen_switched {
+            self.alt_screen_active = events.alt_screen_active;
+        }
+        if events.scroll_region_changed {
+            self.scroll_region_changed = true;
         }
     }
 }

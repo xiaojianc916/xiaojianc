@@ -1,4 +1,4 @@
-use super::audit::{self, AiAuditEventKind};
+﻿use super::audit::{self, AiAuditEventKind};
 use super::budget as token_budget;
 use super::credential::CredentialStore;
 use super::errors;
@@ -411,7 +411,7 @@ fn next_runtime_id(prefix: &str) -> String {
     format!(
         "{}-{}-{}",
         prefix,
-        chrono::Utc::now().timestamp_millis(),
+        jiff::Timestamp::now().as_millisecond(),
         sequence
     )
 }

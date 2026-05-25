@@ -1,3 +1,4 @@
+import { v7 as uuidv7 } from 'uuid';
 import { Store } from '@tauri-apps/plugin-store';
 
 import { AppError } from '@/types/app-error';
@@ -23,10 +24,7 @@ type TRawSnapshot = unknown;
 // ---------------------------------------------------------------------------
 
 const createTraceId = (): string => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `session-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return uuidv7();
 };
 
 /**

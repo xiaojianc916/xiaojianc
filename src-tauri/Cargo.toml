@@ -18,11 +18,11 @@ desktop = [
   "dep:blake3",
   "dep:camino",
   "dep:cap-std",
-  "dep:chrono",
+
   "dep:diffy-imara",
   "dep:encoding_rs",
   "dep:fjall",
-  "dep:git2",
+  "dep:gix",
   "dep:globset",
   "dep:grep-matcher",
   "dep:grep-regex",
@@ -56,10 +56,9 @@ async-openai = { version = "0.38.2", default-features = false, features = ["chat
 base64 = "0.22.1"
 ast-grep-core = { version = "0.42.2", default-features = false, features = ["tree-sitter"], optional = true }
 ast-grep-language = { version = "0.42.2", default-features = false, features = ["tree-sitter-bash"], optional = true }
-chrono = { version = "0.4.44", features = ["serde"], optional = true }
 diffy-imara = { version = "0.3.2", optional = true }
 encoding_rs = { version = "0.8.35", optional = true }
-git2 = { version = "0.20.2", features = ["vendored-libgit2", "vendored-openssl"], optional = true }
+gix = { version = "0.83", default-features = false, features = ["max-performance-safe", "sha1", "revision", "index", "status", "blob-diff"], optional = true }
 globset = { version = "0.4.18", optional = true }
 grep-matcher = { version = "0.1.8", optional = true }
 grep-regex = { version = "0.1.14", optional = true }
@@ -89,7 +88,8 @@ tree-sitter = { version = "0.26.8", optional = true }
 tree-sitter-bash = { version = "0.25.1", optional = true }
 snow = "0.10.0"
 getrandom = "0.3.4"
-ssh2 = "0.9.5"
+russh = "0.61.1"
+russh-sftp = "2.3.0"
 tokenizers = { version = "0.23.1", default-features = false, features = ["onig"], optional = true }
 blake3 = { version = "1.8.5", optional = true }
 fjall = { version = "3.1.4", optional = true }
@@ -100,11 +100,17 @@ normpath = { version = "1.5.1", optional = true }
 specta = "=2.0.0-rc.25"
 specta-typescript = "0.0.12"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["typescript"] }
-vt100 = "0.16.2"
 log = "0.4.30"
+jiff = "0.2.25"
+backon = "1.6.0"
+vte = "0.15.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Networking_WinSock", "Win32_System_Hypervisor"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 tokio-vsock = { version = "0.7.2", features = ["tonic014"] }
+
+[patch.crates-io]
+wry = { git = "https://github.com/<your-fork>/wry", branch = "visual-hosting" }
+tauri-runtime = { git = "https://github.com/<your-fork>/tauri", branch = "visual-hosting" }

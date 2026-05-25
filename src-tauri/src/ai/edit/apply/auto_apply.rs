@@ -1,3 +1,4 @@
+use jiff::Timestamp;
 use crate::ai::edit as ai_edit;
 use crate::ai::edit::apply::diff_render;
 use crate::ai::edit::history::snapshot::{self, SnapshotSourceFile};
@@ -9,7 +10,7 @@ use crate::ai::errors;
 use crate::commands::contracts::{
     AiApplyPatchMetadataRequest, AiEditOperationPayload, AiEditTimelineEntryPayload,
 };
-use chrono::Utc;
+
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -333,7 +334,7 @@ fn build_operation_payload(
     metadata: Option<&AiApplyPatchMetadataRequest>,
     summary: &str,
 ) -> AiEditOperationPayload {
-    let timestamp = Utc::now();
+    let timestamp = Timestamp::now();
     let task_id = resolve_task_id(metadata);
     let turn_id = resolve_turn_id(metadata).unwrap_or_else(|| task_id.clone());
     let reason = resolve_reason(metadata, summary);
@@ -352,7 +353,7 @@ fn build_operation_payload(
     let diff_text = build_operation_diff_text(plan);
 
     AiEditOperationPayload {
-        id: format!("ai-edit-op-{}-{index}", timestamp.timestamp_millis()),
+        id: format!("ai-edit-op-{}-{index}", timestamp.as_millisecond()),
         task_id,
         turn_id,
         kind: "modify".to_string(),
@@ -363,7 +364,7 @@ fn build_operation_payload(
         after_hash: updated_hash,
         bytes_before: original_bytes,
         bytes_after: updated_bytes,
-        applied_at: timestamp.to_rfc3339(),
+        applied_at: timestamp.to_string(),
         reason,
         tool_call_id: metadata.and_then(|value| value.tool_call_id.clone()),
         diff_text,

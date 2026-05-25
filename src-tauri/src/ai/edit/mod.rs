@@ -1,4 +1,4 @@
-pub mod apply;
+﻿pub mod apply;
 pub mod errors;
 pub mod history;
 pub mod io;
@@ -20,7 +20,7 @@ use crate::commands::contracts::{
     AiEditSetPinPayload, AiEditSetPinRequest, AiEditTimelineEntryPayload,
     AiEditUndoOperationPayload, AiEditUndoOperationRequest, AiSnapshotPayload,
 };
-use chrono::Utc;
+use jiff::Timestamp;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -66,7 +66,7 @@ impl Default for AiEditAuthState {
         Self {
             level: AiEditAuthLevel::Manual,
             task_id: None,
-            updated_at: Utc::now().to_rfc3339(),
+            updated_at: jiff::Timestamp::now().to_string(),
         }
     }
 }
@@ -114,7 +114,7 @@ pub fn set_auth_level(
         AiEditAuthLevel::PerTask => payload.task_id.and_then(normalize_optional_string),
         AiEditAuthLevel::Manual | AiEditAuthLevel::Session => None,
     };
-    guard.updated_at = Utc::now().to_rfc3339();
+    guard.updated_at = Timestamp::now().to_string();
 
     let current = build_auth_payload(&guard);
     tracing::info!(
@@ -277,7 +277,7 @@ fn apply_retention_policy_with_policy(
     let stored_operations = edit_journal::list_operations(storage_root)?;
     let pin_records = pins::list_pin_records(storage_root)?;
     let pin_index = pins::build_pin_index(&pin_records);
-    let metadata_cutoff = snapshot_policy.now - chrono::Duration::days(OPERATION_METADATA_TTL_DAYS);
+    let metadata_cutoff = snapshot_policy.now - jiff::SignedDuration::from_secs((OPERATION_METADATA_TTL_DAYS as i64) * 86400);
     let retained_operations = stored_operations
         .iter()
         .filter(|operation| {
@@ -577,10 +577,8 @@ fn refresh_timeline_pin_state(state: &AiEditState, storage_root: &Path) -> Resul
     Ok(())
 }
 
-fn parse_rfc3339_utc(value: &str) -> Option<chrono::DateTime<Utc>> {
-    chrono::DateTime::parse_from_rfc3339(value)
-        .map(|value| value.with_timezone(&Utc))
-        .ok()
+fn parse_rfc3339_utc(value: &str) -> Option<Timestamp> {
+    value.parse::<Timestamp>().ok()
 }
 
 #[cfg(test)]
@@ -665,7 +663,7 @@ mod tests {
             &state,
             &storage_root,
             snapshot::SnapshotRetentionPolicy {
-                now: chrono::Utc::now() + chrono::Duration::days(31),
+                now: jiff::Timestamp::now() + jiff::SignedDuration::from_secs(31 * 86400),
                 total_blob_quota_bytes: 0,
                 ..snapshot::SnapshotRetentionPolicy::default()
             },
