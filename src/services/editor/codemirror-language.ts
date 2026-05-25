@@ -1,28 +1,30 @@
+import { cpp } from '@codemirror/lang-cpp';
 import { css } from '@codemirror/lang-css';
+import { go } from '@codemirror/lang-go';
 import { html } from '@codemirror/lang-html';
+import { java } from '@codemirror/lang-java';
 import { javascript } from '@codemirror/lang-javascript';
 import { json } from '@codemirror/lang-json';
 import { markdown } from '@codemirror/lang-markdown';
+import { python } from '@codemirror/lang-python';
+import { rust } from '@codemirror/lang-rust';
+import { sql } from '@codemirror/lang-sql';
 import { vue } from '@codemirror/lang-vue';
+import { xml } from '@codemirror/lang-xml';
 import { LanguageDescription, LanguageSupport, StreamLanguage } from '@codemirror/language';
-import { c, cpp, csharp, dart, java, kotlin, scala } from '@codemirror/legacy-modes/mode/clike';
+import { c, csharp, dart, kotlin, scala } from '@codemirror/legacy-modes/mode/clike';
 import { diff } from '@codemirror/legacy-modes/mode/diff';
 import { dockerFile } from '@codemirror/legacy-modes/mode/dockerfile';
-import { go } from '@codemirror/legacy-modes/mode/go';
 import { lua } from '@codemirror/legacy-modes/mode/lua';
 import { powerShell } from '@codemirror/legacy-modes/mode/powershell';
 import { properties } from '@codemirror/legacy-modes/mode/properties';
 import { protobuf } from '@codemirror/legacy-modes/mode/protobuf';
-import { python } from '@codemirror/legacy-modes/mode/python';
 import { r } from '@codemirror/legacy-modes/mode/r';
 import { ruby } from '@codemirror/legacy-modes/mode/ruby';
-import { rust } from '@codemirror/legacy-modes/mode/rust';
 import { shell } from '@codemirror/legacy-modes/mode/shell';
-import { sql } from '@codemirror/legacy-modes/mode/sql';
 import { stex } from '@codemirror/legacy-modes/mode/stex';
 import { swift } from '@codemirror/legacy-modes/mode/swift';
 import { toml } from '@codemirror/legacy-modes/mode/toml';
-import { xml } from '@codemirror/legacy-modes/mode/xml';
 import { yaml } from '@codemirror/legacy-modes/mode/yaml';
 import type { Extension } from '@codemirror/state';
 
@@ -103,7 +105,7 @@ const languageDescriptions: readonly LanguageDescription[] = [
     name: 'C++',
     alias: ['cpp'],
     extensions: ['cpp', 'cc', 'cxx', 'hpp'],
-    support: streamLanguage(cpp),
+    support: cpp(),
   }),
   LanguageDescription.of({
     name: 'C#',
@@ -119,12 +121,12 @@ const languageDescriptions: readonly LanguageDescription[] = [
   LanguageDescription.of({
     name: 'Go',
     extensions: ['go'],
-    support: streamLanguage(go),
+    support: go(),
   }),
   LanguageDescription.of({
     name: 'Java',
     extensions: ['java'],
-    support: streamLanguage(java),
+    support: java(),
   }),
   LanguageDescription.of({
     name: 'Kotlin',
@@ -153,7 +155,7 @@ const languageDescriptions: readonly LanguageDescription[] = [
     name: 'Python',
     alias: ['py'],
     extensions: ['py'],
-    support: streamLanguage(python),
+    support: python(),
   }),
   LanguageDescription.of({
     name: 'R',
@@ -170,7 +172,7 @@ const languageDescriptions: readonly LanguageDescription[] = [
     name: 'Rust',
     alias: ['rs'],
     extensions: ['rs'],
-    support: streamLanguage(rust),
+    support: rust(),
   }),
   LanguageDescription.of({
     name: 'Scala',
@@ -180,7 +182,7 @@ const languageDescriptions: readonly LanguageDescription[] = [
   LanguageDescription.of({
     name: 'SQL',
     extensions: ['sql'],
-    support: streamLanguage(sql({})),
+    support: sql({}),
   }),
   LanguageDescription.of({
     name: 'LaTeX',
@@ -208,7 +210,7 @@ const languageDescriptions: readonly LanguageDescription[] = [
     name: 'XML',
     alias: ['svg'],
     extensions: ['xml', 'svg'],
-    support: streamLanguage(xml),
+    support: xml(),
   }),
   LanguageDescription.of({
     name: 'YAML',

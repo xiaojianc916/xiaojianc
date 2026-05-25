@@ -8,24 +8,7 @@ import type { TAgentRuntimeEventDraft } from './stream-types.js';
 // 与 stream-adapter.ts 应保持一致 —— TODO: 抽到 stream-event-helpers.ts。
 // -----------------------------------------------------------------------
 
-const MASTRA_EVENT = {
-  beforeInvocation: 'beforeInvocationEvent',
-  beforeModelCall: 'beforeModelCallEvent',
-  afterModelCall: 'afterModelCallEvent',
-  modelStreamUpdate: 'modelStreamUpdateEvent',
-  modelContentBlockDelta: 'modelContentBlockDeltaEvent',
-  beforeToolCall: 'beforeToolCallEvent',
-  toolStreamUpdate: 'toolStreamUpdateEvent',
-  afterToolCall: 'afterToolCallEvent',
-  messageAdded: 'messageAddedEvent',
-  agentResult: 'agentResultEvent',
-} as const;
-
-const MASTRA_DELTA_TYPE = {
-  textDelta: 'textDelta',
-  reasoningContentDelta: 'reasoningContentDelta',
-  reasoningText: 'reasoningText',
-} as const;
+import { MASTRA_EVENT, MASTRA_DELTA_TYPE } from './stream-helpers.js';
 
 const TOOL_OK_STATUSES: ReadonlySet<string> = new Set(['success', 'ok', 'completed']);
 const UNKNOWN_TOOL_NAME = 'unknown_tool';

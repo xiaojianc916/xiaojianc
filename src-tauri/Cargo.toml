@@ -101,6 +101,7 @@ specta = "=2.0.0-rc.25"
 specta-typescript = "0.0.12"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["typescript"] }
 vt100 = "0.16.2"
+log = "0.4.30"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Networking_WinSock", "Win32_System_Hypervisor"] }

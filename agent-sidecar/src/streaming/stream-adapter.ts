@@ -2,6 +2,7 @@ import type { TAgentRuntimeOutputEvent } from '../engines/contracts/runtime-cont
 import type { TJsonValue } from '../schemas/events.js';
 import type { AgentStreamEventBus } from './stream-event-bus.js';
 import { extractRuntimeModelTextDelta, normalizeAgentRuntimeStreamEvent } from './stream-normalizer.js';
+import { toRecord } from '../engines/utils.js';
 import type { TAgentRuntimeEvent } from './stream-types.js';
 
 // -----------------------------------------------------------------------
@@ -82,10 +83,6 @@ export interface IAgentStreamAdapter {
 // 底层 unknown 解析助手
 // -----------------------------------------------------------------------
 
-const toRecord = (value: unknown): Record<string, unknown> | null =>
-    value && typeof value === 'object' && !Array.isArray(value)
-        ? value as Record<string, unknown>
-        : null;
 
 const getStringValue = (
     value: unknown,

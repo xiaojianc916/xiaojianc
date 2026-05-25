@@ -30,6 +30,7 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { toNonEmptyString, toRecord } from '../../engines/utils.js';
 import { createParser, type EventSourceMessage, type EventSourceParser } from 'eventsource-parser';
 
 // -----------------------------------------------------------------------------
@@ -89,10 +90,9 @@ const REASONING_DEBUG_ENABLED =
 
 // -----------------------------------------------------------------------------
 // Generic helpers
-// -----------------------------------------------------------------------------
 
 const isRecord = (value: unknown): value is TJsonRecord =>
-  value !== null && typeof value === 'object' && !Array.isArray(value);
+  toRecord(value) !== null;
 
 const countTextChars = (value: string): number => Array.from(value).length;
 
@@ -127,11 +127,6 @@ const estimateInputTokensByChars = (value: string): number => {
   }
   return Math.max(tokens, 1);
 };
-
-const toNonEmptyString = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
 };
 
 const logReasoningDebug = (

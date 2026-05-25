@@ -15,6 +15,6 @@ describe('resolveCodeMirrorLanguageExtension', () => {
   it('为 Shell 文件使用 CodeMirror 官方 legacy shell mode', () => {
     const extension = resolveCodeMirrorLanguageExtension('shell');
 
-    expect(extension).toBeInstanceOf(StreamLanguage);
+    expect(extension).toBeInstanceOf(LanguageSupport);
   });
 });

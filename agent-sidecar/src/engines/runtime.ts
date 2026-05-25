@@ -1,4 +1,4 @@
-import { MastraRuntime } from './mastra-runtime.js';
+import { MastraRuntime } from './rollback.js';
 import type {
     IAgentRuntimeResponse,
     IAgentRuntimeRunOptions,
