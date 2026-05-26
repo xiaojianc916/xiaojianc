@@ -25,6 +25,59 @@ import type { Extension, Text } from '@codemirror/state';
 import { EditorView, hoverTooltip, type Tooltip, type ViewUpdate } from '@codemirror/view';
 import type { UnlistenFn } from '@tauri-apps/api/event';
 
+// ============================================================================
+// 补全 / 悬停全局样式（!important 暴力覆盖 CM6 暗色主题）
+// ============================================================================
+(function injectCm6Styles() {
+  if (typeof document === 'undefined') return;
+  const id = 'cm6-lsp-style';
+  if (document.getElementById(id)) return;
+  const s = document.createElement('style');
+  s.id = id;
+  s.textContent = `.cm-tooltip-autocomplete{background:#fff!important;border:1px solid rgba(0,0,0,.08)!important;border-radius:10px!important;box-shadow:0 8px 24px rgba(0,0,0,.08)!important;max-width:none!important}.cm-tooltip.cm-tooltip-hover{max-width:none!important}.cm-tooltip-autocomplete .cm-completionInfo{max-width:none!important;background:#fff!important;border-left:1px solid rgba(0,0,0,.06)!important}.cm-completionOption{display:flex!important;flex-direction:row!important;align-items:center!important;gap:8px!important;padding:4px 10px!important}.cm-completionIcon{display:flex!important;flex-shrink:0!important;width:22px!important;height:22px!important;align-items:center!important;justify-content:center!important;border-radius:5px!important;opacity:1!important}.cm-completionIcon svg{width:14px!important;height:14px!important;color:#fff!important}.cm-completionLabel{flex:1!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-family:var(--font-mono)!important;font-size:12.5px!important;color:#111317!important}.cm-completionDetail{flex-shrink:0!important;font-size:11px!important;color:#8a8f98!important}.cm-completionMatchedText{color:#3872e0!important;font-weight:600!important}.cm-completionOption[aria-selected]{background:rgba(56,114,224,.06)!important}.cm-completionList::-webkit-scrollbar{width:6px!important}.cm-completionList::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12)!important;border-radius:8px!important}.cm-lsp-doc{max-width:520px!important;max-height:320px!important;overflow:auto!important;padding:10px 14px!important;font-size:12px!important;line-height:1.55!important;color:#5b6068!important;word-break:break-word!important}.cm-lsp-doc .cm-lsp-code-block{max-width:100%!important;overflow:auto!important}.cm-lsp-doc .cm-lsp-code-block pre{white-space:pre-wrap!important;word-break:break-all!important}`;
+  document.head.appendChild(s);
+})();
+
+export const lspCompletionTheme = EditorView.theme({}, {});
+
+// ============================================================================
+// Lucide SVG 图标（补全种类图标）
+// ============================================================================
+const LUCIDE_PATHS: Record<string, string> = {
+  function: 'M17.5 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11ZM9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3M9 11h5.7',
+  method: 'M17.5 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11ZM9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3M9 11h5.7',
+  keyword: 'm15 15-6 6v-4H4v-4h2v-2a6 6 0 0 1 6-6h3v4h-3a2 2 0 0 0-2 2v2h5Z',
+  variable: 'M8 21s-4-3-4-9 4-9 4-9m8 0s4 3 4 9-4 9-4 9M5 12h14',
+  text: 'M4 7V4h16v3M9 21h6M12 4v17',
+  snippet: 'M8 3H6a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4c0 1.1.9 2 2 2h2M16 21h2a2 2 0 0 0 2-2v-4c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-2',
+};
+
+function cm6TypeToLucide(type: string): string {
+  return LUCIDE_PATHS[type] ?? LUCIDE_PATHS.text;
+}
+
+export function createLucideCompletionIcon(type: string): HTMLElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('width', '14');
+  svg.setAttribute('height', '14');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', cm6TypeToLucide(type));
+  svg.appendChild(path);
+  const wrapper = document.createElement('span');
+  wrapper.className = 'cm-lsp-icon';
+  wrapper.setAttribute('data-type', type);
+  wrapper.appendChild(svg);
+  return wrapper;
+}
+
 // 懒加载 Shiki（避免阻塞编辑器初始化）
 type ShikiMod = typeof import('@/services/editor/shiki');
 let shikiModPromise: Promise<ShikiMod> | null = null;
@@ -554,72 +607,6 @@ async function renderCodeBlock(lang: string, code: string): Promise<string> {
 }
 
 // ============================================================================
-// 补全详情面板构建
-// ============================================================================
-
-function lspKindLabel(kind: number | null): string {
-  switch (kind) {
-    case 1: return '文本';
-    case 2: return '方法';
-    case 3: return '函数';
-    case 6: return '变量';
-    case 9: return '模块';
-    case 14: return '关键字';
-    case 15: return '代码片段';
-    default: return kind ? `kind ${kind}` : '';
-  }
-}
-
-function highlightSnippetPlaceholders(snippet: string): string {
-  return snippet.replace(
-    /\$\{(\d+):([^}]+)\}/g,
-    '<span class="cm-lsp-ph">$2</span>',
-  ).replace(
-    /\$(\d+)/g,
-    '<span class="cm-lsp-ph">$$1</span>',
-  );
-}
-
-function buildCompletionInfoPanel(item: LspItem): HTMLElement {
-  const dom = document.createElement('div');
-  dom.className = 'cm-lsp-info';
-
-  const kindLabel = lspKindLabel(item.kind);
-  const snippetHtml = item.insertText
-    ? highlightSnippetPlaceholders(escapeHtml(item.insertText))
-    : '';
-
-  dom.innerHTML = `
-    <div class="cm-lsp-info-head">
-      <span class="cm-lsp-info-title">${escapeHtml(item.label)}</span>
-      ${kindLabel ? `<span class="cm-lsp-info-tag">${kindLabel}</span>` : ''}
-      <span class="cm-lsp-info-tag">bash-language-server</span>
-    </div>
-    ${item.detail ? `<p class="cm-lsp-info-detail">${escapeHtml(item.detail)}</p>` : ''}
-    ${item.documentation ? `<div class="cm-lsp-info-doc"></div>` : ''}
-    ${snippetHtml ? `<pre class="cm-lsp-info-snippet"><code>${snippetHtml}</code></pre>` : ''}
-    <div class="cm-lsp-info-foot">
-      <span>${snippetHtml ? 'Tab 切换占位 · ' : ''}Enter 插入</span>
-    </div>`;
-
-  // 异步渲染 markdown 文档
-  if (item.documentation) {
-    const docEl = dom.querySelector('.cm-lsp-info-doc')!;
-    renderLspDoc(item.documentation).then((html) => {
-      docEl.innerHTML = html;
-    }).catch(() => {});
-  }
-
-  // CM6 补全信息面板有内置 max-width，去掉
-  requestAnimationFrame(() => {
-    const info = dom.closest('.cm-completionInfo') as HTMLElement | null;
-    if (info) info.style.maxWidth = 'none';
-  });
-
-  return dom;
-}
-
-// ============================================================================
 // CM6 Extension 工厂
 // ============================================================================
 export interface LspExtensionOptions {
@@ -752,7 +739,15 @@ export function createLspExtension(opts: LspExtensionOptions): LspExtensionHandl
           (item): Completion => ({
             label: item.label,
             detail: item.detail ?? undefined,
-            info: () => buildCompletionInfoPanel(item),
+            info: item.documentation
+              ? () => {
+                  const dom = document.createElement('div');
+                  dom.className = 'cm-lsp-doc';
+                  dom.textContent = item.documentation!;
+                  renderLspDoc(item.documentation!).then((h) => { dom.innerHTML = h; }).catch(() => {});
+                  return dom;
+                }
+              : undefined,
             type: lspKindToType(item.kind),
             apply: item.insertText ?? item.label,
           }),

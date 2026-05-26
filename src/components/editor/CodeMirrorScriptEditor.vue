@@ -83,7 +83,7 @@ import type { IEditorContextMenuItem } from '@/components/editor/editor-context-
 import { buildCodeMirrorSettingsExtensions } from '@/services/editor/codemirror-config';
 import { createCodeMirrorInlineCompletionController } from '@/services/editor/codemirror-inline-completion';
 import { resolveCodeMirrorLanguageExtension } from '@/services/editor/codemirror-language';
-import { createLspExtension, lspStopBridge } from '@/services/editor/lsp-bridge';
+import { createLspExtension, createLucideCompletionIcon, lspCompletionTheme, lspStopBridge } from '@/services/editor/lsp-bridge';
 import { aiService } from '@/services/ipc/ai.service';
 import { useEditorStore } from '@/store/editor';
 import type { IAiCodeActionRequest, IAiCodeActionResult } from '@/types/ai';
@@ -215,6 +215,13 @@ const buildCompletionExtension = (
     ? autocompletion({
         activateOnTyping: true,
         activateOnTypingDelay: editorSettings.suggestionDelay,
+        icons: (completion) => {
+          try {
+            return createLucideCompletionIcon(completion.type ?? 'text');
+          } catch {
+            return null;
+          }
+        },
         override:
           language === 'shell'
             ? [
@@ -769,6 +776,7 @@ const buildLspExtension = (): Extension => {
   return currentLsp.extensions;
 };
 const createBaseExtensions = (language: string): Extension[] => [
+  lspCompletionTheme,
   highlightSpecialChars(),
   githubLight,
   history(),
