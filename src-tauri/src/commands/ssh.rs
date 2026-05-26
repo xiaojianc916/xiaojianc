@@ -8,8 +8,9 @@ use super::{
     SshPathDeleteRequest, SshPathRenamePayload, SshPathRenameRequest,
 };
 use russh::{
-    client::{connect, Handle},
-    keys::{load_secret_key, PrivateKeyWithHashAlg},
+    cipher, client::{connect, Handle}, compression, kex, keys::{
+        load_secret_key, Algorithm, EcdsaCurve, HashAlg, PrivateKeyWithHashAlg,
+    }, mac, Preferred,
 };
 use russh_sftp::{client::SftpSession, protocol::OpenFlags};
 use std::{
@@ -36,6 +37,61 @@ const SSH_KEYRING_SERVICE: &str = "calamex.ssh";
 const SSH_CONFIG_IMPORTED_LABEL: &str = "SSH config";
 const SFTP_PARTIAL_SUFFIX: &str = ".aster.partial";
 const SFTP_TRANSFER_CHUNK_BYTES: usize = 256 * 1024;
+const SFTP_PIPELINE_DEPTH: usize = 32;
+
+// ---- optimized SSH algorithm preferences ----
+/// Prioritises fast, modern algorithms for minimal handshake latency and high throughput.
+///
+/// * KEX: Curve25519 first (fastest ECDH), ML-KEM hybrid second, ECDH NISTP as fallback.
+///   Slow fixed DH groups (group14/16/18) are excluded to avoid
+///   modular-exponentiation penalty during key exchange.
+/// * Host key: Ed25519 > Ecdsa NistP256 > RSA-SHA2-256.  The deprecated `ssh-rsa`
+///   (RSA with SHA-1) is omitted.
+/// * Cipher: AEAD-only (AES-GCM / ChaCha20-Poly1305).  CBC variants are excluded
+///   because they are non-AEAD, use MAC-then-encrypt, and have serial dependency.
+/// * MAC: Encrypt-then-MAC variants first (used only when falling back to CTR ciphers).
+/// * Compression: disabled – zlib compression is a CPU bottleneck with negligible
+///   benefit on modern encrypted channels.
+pub(crate) const OPTIMIZED_SSH_PREFERRED: Preferred = Preferred {
+    kex: std::borrow::Cow::Borrowed(&[
+        kex::CURVE25519,
+        kex::MLKEM768X25519_SHA256,
+        kex::ECDH_SHA2_NISTP256,
+        kex::ECDH_SHA2_NISTP384,
+        kex::DH_GEX_SHA256,
+        kex::EXTENSION_SUPPORT_AS_CLIENT,
+        kex::EXTENSION_SUPPORT_AS_SERVER,
+        kex::EXTENSION_OPENSSH_STRICT_KEX_AS_CLIENT,
+        kex::EXTENSION_OPENSSH_STRICT_KEX_AS_SERVER,
+    ]),
+    key: std::borrow::Cow::Borrowed(&[
+        Algorithm::Ed25519,
+        Algorithm::Ecdsa { curve: EcdsaCurve::NistP256 },
+        Algorithm::Rsa { hash: Some(HashAlg::Sha256) },
+        Algorithm::Ecdsa { curve: EcdsaCurve::NistP384 },
+        Algorithm::Rsa { hash: Some(HashAlg::Sha512) },
+        Algorithm::Ecdsa { curve: EcdsaCurve::NistP521 },
+    ]),
+    cipher: std::borrow::Cow::Borrowed(&[
+        cipher::AES_256_GCM,
+        cipher::AES_128_GCM,
+        cipher::CHACHA20_POLY1305,
+        cipher::AES_256_CTR,
+        cipher::AES_128_CTR,
+    ]),
+    mac: std::borrow::Cow::Borrowed(&[
+        mac::HMAC_SHA256_ETM,
+        mac::HMAC_SHA512_ETM,
+        mac::HMAC_SHA256,
+        mac::HMAC_SHA512,
+    ]),
+    compression: std::borrow::Cow::Borrowed(&[compression::NONE]),
+};
+
+// ---- optimised SSH window / buffer parameters ----
+pub(crate) const OPTIMIZED_WINDOW_SIZE: u32 = 16 * 1024 * 1024;       // 16 MiB  (default 2 MiB)
+pub(crate) const OPTIMIZED_MAX_PACKET_SIZE: u32 = 256 * 1024;         // 256 KiB (default 32 KiB)
+pub(crate) const OPTIMIZED_CHANNEL_BUFFER: usize = 256;                // default 100
 
 // POSIX mode bits used for permission rendering.
 const S_IFMT:  u32 = 0o170000;
@@ -49,13 +105,13 @@ const S_IFIFO: u32 = 0o010000;
 
 // ---- connection parameters ----
 #[derive(Debug, Clone)]
-struct SshConnectionParams {
-    host: String,
-    port: u16,
-    username: String,
-    auth_mode: String,
-    identity_path: Option<String>,
-    password: Option<String>,
+pub(crate) struct SshConnectionParams {
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) username: String,
+    pub(crate) auth_mode: String,
+    pub(crate) identity_path: Option<String>,
+    pub(crate) password: Option<String>,
 }
 
 impl Drop for SshConnectionParams {
@@ -106,7 +162,7 @@ impl_ssh_connection_params_from_request! {
 }
 
 // ---- russh client handler ----
-struct SshClientHandler;
+pub(crate) struct SshClientHandler;
 
 impl russh::client::Handler for SshClientHandler {
     type Error = russh::Error;
@@ -122,7 +178,7 @@ impl russh::client::Handler for SshClientHandler {
 
 // ---- SFTP connection wrapper ----
 struct SftpConnection {
-    _handle: Handle<SshClientHandler>,
+    _handle: Arc<Handle<SshClientHandler>>,
     sftp: SftpSession,
 }
 
@@ -135,11 +191,20 @@ impl SftpConnection {
     }
 }
 
-// ---- core: connect + auth + open SFTP ----
-async fn open_authenticated_sftp(params: &SshConnectionParams) -> Result<SftpConnection, String> {
+// ---- core: connect + auth (shared with connection pool) ----
+pub(crate) async fn connect_and_auth(
+    params: &SshConnectionParams,
+) -> Result<Handle<SshClientHandler>, String> {
     let addr = resolve_ssh_addr(&params.host, params.port)?;
     let config = Arc::new(russh::client::Config {
         inactivity_timeout: Some(Duration::from_secs(SSH_CONNECT_TIMEOUT_SECONDS)),
+        keepalive_interval: Some(Duration::from_secs(30)),
+        keepalive_max: 3,
+        preferred: OPTIMIZED_SSH_PREFERRED,
+        window_size: OPTIMIZED_WINDOW_SIZE,
+        maximum_packet_size: OPTIMIZED_MAX_PACKET_SIZE,
+        channel_buffer_size: OPTIMIZED_CHANNEL_BUFFER,
+        nodelay: true,
         ..Default::default()
     });
 
@@ -182,6 +247,31 @@ async fn open_authenticated_sftp(params: &SshConnectionParams) -> Result<SftpCon
         _ => return Err("不支持的 SSH 认证方式。".into()),
     }
 
+    Ok(handle)
+}
+
+// ---- core: connect + auth + open SFTP (uses connection pool) ----
+///
+/// Transparently retries once on connection-level failures: if the pooled
+/// handle is a zombie (server-side RST during idle), we evict it and
+/// establish a fresh connection without the caller seeing an error.
+async fn open_authenticated_sftp(params: &SshConnectionParams) -> Result<SftpConnection, String> {
+    match open_sftp_once(params).await {
+        Ok(conn) => Ok(conn),
+        Err(e) if is_connection_error(&e) => {
+            // The pooled connection is dead.  Evict and retry once.
+            super::ssh_pool::POOL.evict(params).await;
+            open_sftp_once(params).await
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Single-shot SFTP open (no retry).  Used by both the first attempt and
+/// the automatic retry in `open_authenticated_sftp`.
+async fn open_sftp_once(params: &SshConnectionParams) -> Result<SftpConnection, String> {
+    let handle = super::ssh_pool::POOL.acquire(params).await?;
+
     let channel = handle
         .channel_open_session()
         .await
@@ -199,6 +289,25 @@ async fn open_authenticated_sftp(params: &SshConnectionParams) -> Result<SftpCon
         _handle: handle,
         sftp,
     })
+}
+
+/// Heuristic: does this error message indicate a dead / disconnected
+/// transport rather than a credential or application-level failure?
+fn is_connection_error(err: &str) -> bool {
+    let lower = err.to_lowercase();
+    // Match transport-level errors only.
+    (lower.contains("io error")
+        || lower.contains("disconnect")
+        || lower.contains("eof")
+        || lower.contains("reset")
+        || lower.contains("broken pipe")
+        || lower.contains("connection")
+        || lower.contains("timeout"))
+        // Exclude auth / permission failures – those are permanent
+        // credential errors, not transient transport issues.
+        && !lower.contains("auth")
+        && !lower.contains("permission")
+        && !lower.contains("denied")
 }
 
 // ---- helper: resolve SSH address ----
@@ -416,27 +525,47 @@ async fn download_file_inner(
         .open(remote_path)
         .await
         .map_err(|e| format!("无法打开远程文件 {remote_path}：{e}"))?;
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<Vec<u8>, String>>(SFTP_PIPELINE_DEPTH);
+
+    // Spawn a reader task that pipelines SFTP reads while the main task
+    // writes to disk, overlapping network I/O with local disk I/O.
+    let read_handle = tokio::spawn(async move {
+        let mut buf = vec![0u8; SFTP_TRANSFER_CHUNK_BYTES];
+        loop {
+            let n = file
+                .read(&mut buf)
+                .await
+                .map_err(|e| format!("读取远程文件失败：{e}"))?;
+            if n == 0 {
+                break;
+            }
+            if tx.send(Ok(buf[..n].to_vec())).await.is_err() {
+                // Writer dropped → stop reading.
+                break;
+            }
+        }
+        Ok::<_, String>(())
+    });
+
     let mut local = std_fs::File::create(&partial)
         .map_err(|e| format!("无法创建本地文件 {partial:?}：{e}"))?;
-
-    let mut buf = vec![0u8; SFTP_TRANSFER_CHUNK_BYTES];
     let mut total: u64 = 0;
-    loop {
-        // NOTE: must use `read` (not `read_buf`), because `read_buf` writes to
-        // the Vec's spare capacity, which is zero when len == capacity.
-        let n = file
-            .read(&mut buf[..])
-            .await
-            .map_err(|e| format!("读取远程文件失败：{e}"))?;
-        if n == 0 {
-            break;
-        }
+
+    while let Some(chunk) = rx.recv().await {
+        let data = chunk?;
         local
-            .write_all(&buf[..n])
+            .write_all(&data)
             .map_err(|e| format!("写入本地文件失败：{e}"))?;
-        total += n as u64;
+        total += data.len() as u64;
     }
-    // Ensure on-disk bytes are flushed before atomic rename.
+
+    // Propagate reader errors.
+    read_handle
+        .await
+        .map_err(|e| format!("读取任务异常终止：{e}"))?
+        .map_err(|e| format!("{e}"))?;
+
     local
         .sync_all()
         .map_err(|e| format!("刷新本地文件失败：{e}"))?;
@@ -487,8 +616,6 @@ async fn upload_file_inner(
     local_path: &Path,
     file_size: u64,
 ) -> Result<(), String> {
-    let mut local = std_fs::File::open(local_path)
-        .map_err(|e| format!("无法打开本地文件 {local_path:?}：{e}"))?;
     let remote_partial = remote_partial_path(remote_path);
 
     let mut file = sftp
@@ -499,20 +626,43 @@ async fn upload_file_inner(
         .await
         .map_err(|e| format!("无法创建远程文件 {remote_partial}：{e}"))?;
 
-    let mut buf = vec![0u8; SFTP_TRANSFER_CHUNK_BYTES];
-    let mut written: u64 = 0;
-    loop {
-        let n = local
-            .read(&mut buf)
-            .map_err(|e| format!("读取本地文件失败：{e}"))?;
-        if n == 0 {
-            break;
+    // Pipeline: spawn a local reader task so disk reads and SFTP writes overlap.
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<Vec<u8>, String>>(SFTP_PIPELINE_DEPTH);
+    let local_path_clone = local_path.to_path_buf();
+
+    let read_handle = tokio::task::spawn_blocking(move || {
+        let mut local = std_fs::File::open(&local_path_clone)
+            .map_err(|e| format!("无法打开本地文件 {local_path_clone:?}：{e}"))?;
+        let mut buf = vec![0u8; SFTP_TRANSFER_CHUNK_BYTES];
+        loop {
+            let n = local
+                .read(&mut buf)
+                .map_err(|e| format!("读取本地文件失败：{e}"))?;
+            if n == 0 {
+                break;
+            }
+            if tx.blocking_send(Ok(buf[..n].to_vec())).is_err() {
+                break;
+            }
         }
-        file.write_all(&buf[..n])
+        Ok::<_, String>(())
+    });
+
+    let mut written: u64 = 0;
+    while let Some(chunk) = rx.recv().await {
+        let data = chunk?;
+        file.write_all(&data)
             .await
             .map_err(|e| format!("写入远程文件失败：{e}"))?;
-        written += n as u64;
+        written += data.len() as u64;
     }
+
+    // Propagate reader errors.
+    read_handle
+        .await
+        .map_err(|e| format!("读取任务异常终止：{e}"))?
+        .map_err(|e| format!("{e}"))?;
+
     file.shutdown()
         .await
         .map_err(|e| format!("关闭远程文件写入失败：{e}"))?;

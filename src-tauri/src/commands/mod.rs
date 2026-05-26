@@ -6,6 +6,7 @@ pub(crate) mod script_run;
 pub(crate) mod search;
 pub(crate) mod shell_tools;
 mod ssh;
+pub(crate) mod ssh_pool;
 mod terminal;
 pub(crate) mod window;
 pub(crate) mod window_stage;
