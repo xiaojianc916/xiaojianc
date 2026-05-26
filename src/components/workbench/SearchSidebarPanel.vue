@@ -218,6 +218,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed, onScopeDispose, ref, watch } from 'vue';
 import InlineError from '@/components/common/InlineError.vue';
 import { Input } from '@/components/ui/input';
 import ExplorerEntryIcon from '@/components/workbench/ExplorerEntryIcon.vue';
@@ -235,7 +236,6 @@ import type {
   TWorkspaceSearchScope,
 } from '@/types/search';
 import { toErrorMessage } from '@/utils/error';
-import { computed, onScopeDispose, ref, watch } from 'vue';
 import Braces from '~icons/lucide/braces';
 import CaseSensitive from '~icons/lucide/case-sensitive';
 import Check from '~icons/lucide/check';
@@ -524,8 +524,9 @@ const buildCompactHighlightedSegments = (
     .slice(previewStart, safeStart)
     .join('')}`;
   const matchText = characters.slice(safeStart, safeEnd).join('');
-  const suffixText = `${characters.slice(safeEnd, previewEnd).join('')}${previewEnd < characters.length ? COMPACT_PREVIEW_ELLIPSIS : ''
-    }`;
+  const suffixText = `${characters.slice(safeEnd, previewEnd).join('')}${
+    previewEnd < characters.length ? COMPACT_PREVIEW_ELLIPSIS : ''
+  }`;
   const segments: IHighlightedSegment[] = [];
 
   if (prefixText) {
@@ -716,7 +717,7 @@ const buildReplacementLineSegments = (
     suffixLength < beforeCharacters.length - prefixLength &&
     suffixLength < afterCharacters.length - prefixLength &&
     beforeCharacters[beforeCharacters.length - 1 - suffixLength] ===
-    afterCharacters[afterCharacters.length - 1 - suffixLength]
+      afterCharacters[afterCharacters.length - 1 - suffixLength]
   ) {
     suffixLength += 1;
   }
@@ -784,7 +785,10 @@ const visibleReplacementFiles = computed<IReplacementFileView[]>(() => {
     .filter((file): file is IReplacementFileView => Boolean(file));
 });
 
-const toggleReadonlySetValue = (values: ReadonlySet<string>, value: string): ReadonlySet<string> => {
+const toggleReadonlySetValue = (
+  values: ReadonlySet<string>,
+  value: string,
+): ReadonlySet<string> => {
   const nextValues = new Set(values);
   if (nextValues.has(value)) {
     nextValues.delete(value);
@@ -905,20 +909,23 @@ const runSearch = async (): Promise<void> => {
   searchError.value = '';
 
   try {
-    const payload = await tauriService.searchWorkspace({
-      workspaceRootPath: props.workspaceRootPath,
-      query: searchQuery.value.trim(),
-      scope: 'all',
-      matchCase: matchCase.value,
-      wholeWord: wholeWord.value,
-      useRegex: useRegex.value,
-      useStructural: useStructural.value,
-      includePatterns: showPathFilters.value && !useStructural.value ? includePatterns.value : [],
-      excludePatterns: showPathFilters.value && !useStructural.value ? excludePatterns.value : [],
-      limit: SEARCH_RESULT_LIMIT,
-    }, {
-      signal: abortController.signal,
-    });
+    const payload = await tauriService.searchWorkspace(
+      {
+        workspaceRootPath: props.workspaceRootPath,
+        query: searchQuery.value.trim(),
+        scope: 'all',
+        matchCase: matchCase.value,
+        wholeWord: wholeWord.value,
+        useRegex: useRegex.value,
+        useStructural: useStructural.value,
+        includePatterns: showPathFilters.value && !useStructural.value ? includePatterns.value : [],
+        excludePatterns: showPathFilters.value && !useStructural.value ? excludePatterns.value : [],
+        limit: SEARCH_RESULT_LIMIT,
+      },
+      {
+        signal: abortController.signal,
+      },
+    );
 
     if (requestId !== searchRequestId) {
       return;
@@ -1313,16 +1320,13 @@ watch(
   },
 );
 
-watch(
-  activeResults,
-  (results) => {
-    const availableKeys = new Set(results.map((result) => result.resultKey));
+watch(activeResults, (results) => {
+  const availableKeys = new Set(results.map((result) => result.resultKey));
 
-    if (selectedResultKey.value && !availableKeys.has(selectedResultKey.value)) {
-      selectedResultKey.value = null;
-    }
-  },
-);
+  if (selectedResultKey.value && !availableKeys.has(selectedResultKey.value)) {
+    selectedResultKey.value = null;
+  }
+});
 
 onScopeDispose(cancelPendingSearch);
 </script>

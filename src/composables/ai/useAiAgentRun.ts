@@ -1,9 +1,5 @@
 import { v7 as uuidv7 } from 'uuid';
 import { unref } from 'vue';
-
-import { useSidecarChangedDocumentRefresh } from '@/composables/useSidecarChangedDocumentRefresh';
-import { aiService } from '@/services/ipc/ai.service';
-import { type TAiAgentPanelMode, useAiAgentStore } from '@/store/aiAgent';
 import {
   mapSidecarEventsToToolCalls,
   mapSidecarToolNameToAiToolName,
@@ -13,9 +9,9 @@ import {
   projectSidecarPlanValidationResponse,
   resolveSidecarOfficialUsage,
 } from '@/composables/ai/sidecar-events';
-import { toErrorMessage } from '@/utils/error';
-
-import type { IAgentSidecarMessage, TAgentUiEvent } from '@/types/ai/sidecar';
+import { useSidecarChangedDocumentRefresh } from '@/composables/useSidecarChangedDocumentRefresh';
+import { aiService } from '@/services/ipc/ai.service';
+import { type TAiAgentPanelMode, useAiAgentStore } from '@/store/aiAgent';
 import type {
   IAiAgentRun,
   IAiAgentStepFinalAnswer,
@@ -25,6 +21,9 @@ import type {
   IAiToolCall,
   TAiToolConfirmationDecision,
 } from '@/types/ai';
+
+import type { IAgentSidecarMessage, TAgentUiEvent } from '@/types/ai/sidecar';
+import { toErrorMessage } from '@/utils/error';
 
 const mapToolConfirmationDecisionToSidecarDecision = (
   decision: TAiToolConfirmationDecision,
@@ -113,8 +112,7 @@ const buildStepSidecarMessages = (
 const createSidecarStepConfirmationId = (
   session: ISidecarStepLoopSession,
   requestId: string,
-): string =>
-  `${SIDECAR_STEP_CONFIRMATION_PREFIX}${session.runId}:${session.stepId}:${requestId}`;
+): string => `${SIDECAR_STEP_CONFIRMATION_PREFIX}${session.runId}:${session.stepId}:${requestId}`;
 
 const mapToolCallStatusToActivityState = (
   status: IAiToolCall['status'],
@@ -172,9 +170,7 @@ const isTerminalRunStatus = (status: IAiAgentRun['status']): boolean =>
   TERMINAL_RUN_STATUSES.has(status);
 
 const isAutoExecutionBoundaryStatus = (status: IAiAgentRun['status']): boolean =>
-  isTerminalRunStatus(status) ||
-  status === 'paused' ||
-  status === 'waiting-for-tool-confirmation';
+  isTerminalRunStatus(status) || status === 'paused' || status === 'waiting-for-tool-confirmation';
 
 const clearStepActivityFlags = (steps: IAiTaskPlanStep[]): IAiTaskPlanStep[] =>
   steps.map((step) => ({
@@ -227,10 +223,8 @@ export const useAiAgentRun = () => {
     return run;
   };
 
-  const updateRun = (
-    runId: string,
-    updater: (run: IAiAgentRun) => IAiAgentRun,
-  ): IAiAgentRun => applyRunPayload(updater(getRunOrThrow(runId)));
+  const updateRun = (runId: string, updater: (run: IAiAgentRun) => IAiAgentRun): IAiAgentRun =>
+    applyRunPayload(updater(getRunOrThrow(runId)));
 
   const clearRunSessions = (runId: string): void => {
     for (const [confirmationId, session] of sidecarStepLoopSessions.entries()) {
@@ -356,11 +350,14 @@ export const useAiAgentRun = () => {
     } catch (error) {
       const message = toErrorMessage(error, '验证 Agent 计划执行结果失败。');
       setErrorMessage(message);
-      await finishSidecarPlanIfTerminal({
-        ...run,
-        status: 'failed',
-        errorMessage: message,
-      }, message);
+      await finishSidecarPlanIfTerminal(
+        {
+          ...run,
+          status: 'failed',
+          errorMessage: message,
+        },
+        message,
+      );
     }
   };
 
@@ -369,11 +366,7 @@ export const useAiAgentRun = () => {
     stepId: string,
     toolCalls: readonly IAiToolCall[],
   ): void => {
-    store.appendStepToolResults(
-      runId,
-      stepId,
-      toStepToolResultSummaries(runId, stepId, toolCalls),
-    );
+    store.appendStepToolResults(runId, stepId, toStepToolResultSummaries(runId, stepId, toolCalls));
 
     for (const toolCall of toolCalls) {
       store.appendToolActivity(runId, {
@@ -417,12 +410,16 @@ export const useAiAgentRun = () => {
     });
 
     if (refreshResult.skippedDirtyNames.length > 0) {
-      setErrorMessage(`Agent 已修改文件，但 ${refreshResult.skippedDirtyNames.join('、')} 有未保存改动，已跳过自动刷新。`);
+      setErrorMessage(
+        `Agent 已修改文件，但 ${refreshResult.skippedDirtyNames.join('、')} 有未保存改动，已跳过自动刷新。`,
+      );
       return;
     }
 
     if (refreshResult.failedNames.length > 0) {
-      setErrorMessage(`Agent 已修改文件，但刷新 ${refreshResult.failedNames.join('、')} 失败，请手动重新打开。`);
+      setErrorMessage(
+        `Agent 已修改文件，但刷新 ${refreshResult.failedNames.join('、')} 失败，请手动重新打开。`,
+      );
     }
   };
 
@@ -461,9 +458,7 @@ export const useAiAgentRun = () => {
       return run.steps.find((step) => step.id === stepId) ?? null;
     }
 
-    return findRunningStep(run)
-      ?? run.steps.find((step) => step.status === 'pending')
-      ?? null;
+    return findRunningStep(run) ?? run.steps.find((step) => step.status === 'pending') ?? null;
   };
 
   const markStepRunning = (runId: string, stepId?: string): IAiAgentRun =>
@@ -498,17 +493,16 @@ export const useAiAgentRun = () => {
   ): IAiAgentRun =>
     updateRun(runId, (run) => {
       const now = new Date().toISOString();
-      const nextSteps = clearStepActivityFlags(run.steps).map((step) => (
+      const nextSteps = clearStepActivityFlags(run.steps).map((step) =>
         step.id === stepId
           ? {
-            ...step,
-            status: stepStatus,
-          }
-          : step
-      ));
+              ...step,
+              status: stepStatus,
+            }
+          : step,
+      );
       const hasRemainingPendingSteps = nextSteps.some((step) => step.status === 'pending');
-      const nextRunStatus = runStatus
-        ?? (!hasRemainingPendingSteps ? 'completed' : 'running-plan');
+      const nextRunStatus = runStatus ?? (!hasRemainingPendingSteps ? 'completed' : 'running-plan');
 
       return {
         ...run,
@@ -529,10 +523,9 @@ export const useAiAgentRun = () => {
       errorMessage: null,
     }));
 
-  const executeSidecarStepLoop = async (
-    session: ISidecarStepLoopSession,
-  ): Promise<IAiAgentRun> => {
-    const sidecarSessionId = session.sessionId ?? createSidecarStepSessionId(session.runId, session.stepId);
+  const executeSidecarStepLoop = async (session: ISidecarStepLoopSession): Promise<IAiAgentRun> => {
+    const sidecarSessionId =
+      session.sessionId ?? createSidecarStepSessionId(session.runId, session.stepId);
     const liveEvents: TAgentUiEvent[] = [];
     const unlistenSidecarStream = await aiService.onSidecarStream((payload) => {
       if (payload.sessionId !== sidecarSessionId) {
@@ -623,10 +616,7 @@ export const useAiAgentRun = () => {
     return nextRun;
   };
 
-  const runStep = async (
-    runId: string,
-    stepId?: string,
-  ): Promise<IAiAgentRun> => {
+  const runStep = async (runId: string, stepId?: string): Promise<IAiAgentRun> => {
     try {
       return markStepRunning(runId, stepId);
     } catch (error) {
@@ -723,7 +713,8 @@ export const useAiAgentRun = () => {
     sidecarStepLoopSessions.delete(confirmationId);
     store.clearPendingToolConfirmation(confirmationId);
 
-    const sidecarSessionId = session.sessionId ?? createSidecarStepSessionId(session.runId, session.stepId);
+    const sidecarSessionId =
+      session.sessionId ?? createSidecarStepSessionId(session.runId, session.stepId);
     const liveEvents: TAgentUiEvent[] = [];
     const unlistenSidecarStream = await aiService.onSidecarStream((payload) => {
       if (payload.sessionId !== sidecarSessionId) {
@@ -870,14 +861,15 @@ export const useAiAgentRun = () => {
       store.clearPendingToolConfirmation();
       const cancelledRun = updateRun(runId, (run) => {
         const now = new Date().toISOString();
-        const nextSteps: IAiTaskPlanStep[] = clearStepActivityFlags(run.steps).map((step): IAiTaskPlanStep => (
-          step.id === run.currentStepId && step.status !== 'done'
-            ? {
-              ...step,
-              status: 'cancelled',
-            }
-            : step
-        ));
+        const nextSteps: IAiTaskPlanStep[] = clearStepActivityFlags(run.steps).map(
+          (step): IAiTaskPlanStep =>
+            step.id === run.currentStepId && step.status !== 'done'
+              ? {
+                  ...step,
+                  status: 'cancelled',
+                }
+              : step,
+        );
 
         return {
           ...run,

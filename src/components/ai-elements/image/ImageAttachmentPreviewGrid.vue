@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { TAttachmentData, TAttachmentVariant } from '@/components/ai-elements/attachments'
+import PhotoSwipeLightbox from 'photoswipe/lightbox';
+import type { TAttachmentData, TAttachmentVariant } from '@/components/ai-elements/attachments';
 import {
   Attachment,
   AttachmentHoverCard,
@@ -11,92 +12,89 @@ import {
   Attachments,
   getAttachmentLabel,
   getMediaCategory,
-} from '@/components/ai-elements/attachments'
-import type { IAiImageAttachmentPreview } from '@/types/ai'
-import PhotoSwipeLightbox from 'photoswipe/lightbox'
-import 'photoswipe/style.css'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+} from '@/components/ai-elements/attachments';
+import type { IAiImageAttachmentPreview } from '@/types/ai';
+import 'photoswipe/style.css';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-type TAiImageAttachmentPreviewVariant = 'composer' | 'message'
+type TAiImageAttachmentPreviewVariant = 'composer' | 'message';
 
 interface IAiAttachmentPreviewItem {
-  id: string
-  name: string
-  preview?: IAiImageAttachmentPreview
-  mediaType?: string
-  detailLabel?: string
+  id: string;
+  name: string;
+  preview?: IAiImageAttachmentPreview;
+  mediaType?: string;
+  detailLabel?: string;
 }
 
 interface IOpenableAttachmentPreviewItem extends IAiAttachmentPreviewItem {
   preview: IAiImageAttachmentPreview & {
-    src: string
-    width: number
-    height: number
-  }
+    src: string;
+    width: number;
+    height: number;
+  };
 }
 
 interface IInternalAttachmentItem {
-  item: IAiAttachmentPreviewItem
-  data: TAttachmentData
-  index: number
-  openable: boolean
+  item: IAiAttachmentPreviewItem;
+  data: TAttachmentData;
+  index: number;
+  openable: boolean;
 }
 
 interface IPhotoSwipeZoomLevelView {
-  fit: number
-  elementSize: { x: number; y: number } | null
+  fit: number;
+  elementSize: { x: number; y: number } | null;
 }
 
 interface IPhotoSwipeDataSourceItem {
-  src: string
-  width: number
-  height: number
-  alt: string
+  src: string;
+  width: number;
+  height: number;
+  alt: string;
 }
 
-const LIGHTBOX_INITIAL_MAX_WIDTH = 960
-const LIGHTBOX_INITIAL_MAX_HEIGHT = 640
-const LIGHTBOX_VERTICAL_PADDING = 72
-const LIGHTBOX_COMPACT_HORIZONTAL_PADDING = 24
-const LIGHTBOX_DESKTOP_HORIZONTAL_PADDING = 160
-const LIGHTBOX_DESKTOP_MIN_WIDTH = 960
-const LIGHTBOX_SHOW_ANIMATION_DURATION = 0
-const LIGHTBOX_HIDE_ANIMATION_DURATION = 120
-const LIGHTBOX_ZOOM_ANIMATION_DURATION = 160
-const PRELOAD_LIMIT = 4
+const LIGHTBOX_INITIAL_MAX_WIDTH = 960;
+const LIGHTBOX_INITIAL_MAX_HEIGHT = 640;
+const LIGHTBOX_VERTICAL_PADDING = 72;
+const LIGHTBOX_COMPACT_HORIZONTAL_PADDING = 24;
+const LIGHTBOX_DESKTOP_HORIZONTAL_PADDING = 160;
+const LIGHTBOX_DESKTOP_MIN_WIDTH = 960;
+const LIGHTBOX_SHOW_ANIMATION_DURATION = 0;
+const LIGHTBOX_HIDE_ANIMATION_DURATION = 120;
+const LIGHTBOX_ZOOM_ANIMATION_DURATION = 160;
+const PRELOAD_LIMIT = 4;
 
 const props = withDefaults(
   defineProps<{
-    items: readonly IAiAttachmentPreviewItem[]
-    ariaLabel?: string
-    removable?: boolean
-    variant?: TAiImageAttachmentPreviewVariant
+    items: readonly IAiAttachmentPreviewItem[];
+    ariaLabel?: string;
+    removable?: boolean;
+    variant?: TAiImageAttachmentPreviewVariant;
   }>(),
   {
     ariaLabel: '附件预览',
     removable: false,
     variant: 'composer',
   },
-)
+);
 
 const emit = defineEmits<{
-  remove: [id: string]
-}>()
+  remove: [id: string];
+}>();
 
-const galleryRef = ref<HTMLElement | null>(null)
-let lightbox: PhotoSwipeLightbox | null = null
-let prefersReducedMotion = false
-const imagePreloadHandles = new Map<string, HTMLImageElement>()
-const preloadedImageSources = new Set<string>()
+const galleryRef = ref<HTMLElement | null>(null);
+let lightbox: PhotoSwipeLightbox | null = null;
+let prefersReducedMotion = false;
+const imagePreloadHandles = new Map<string, HTMLImageElement>();
+const preloadedImageSources = new Set<string>();
 
-const canOpenItem = (
-  item: IAiAttachmentPreviewItem,
-): item is IOpenableAttachmentPreviewItem =>
-  Boolean(item.preview?.src)
-  && typeof item.preview?.width === 'number'
-  && item.preview.width > 0
-  && typeof item.preview?.height === 'number'
-  && item.preview.height > 0
+const canOpenItem = (item: IAiAttachmentPreviewItem): item is IOpenableAttachmentPreviewItem =>
+  Boolean(item.preview?.src) &&
+  typeof item.preview?.width === 'number' &&
+  item.preview.width > 0 &&
+  typeof item.preview?.height === 'number' &&
+  item.preview.height > 0;
 
 const toAttachmentData = (item: IAiAttachmentPreviewItem): TAttachmentData => ({
   id: item.id,
@@ -104,11 +102,11 @@ const toAttachmentData = (item: IAiAttachmentPreviewItem): TAttachmentData => ({
   url: item.preview?.src ?? '',
   mediaType: item.preview?.mimeType ?? item.mediaType ?? 'application/octet-stream',
   filename: item.name,
-})
+});
 
 const attachmentVariant = computed<TAttachmentVariant>(() =>
   props.variant === 'composer' ? 'inline' : 'grid',
-)
+);
 
 const attachmentItems = computed<IInternalAttachmentItem[]>(() =>
   props.items.map((item, index) => ({
@@ -117,18 +115,18 @@ const attachmentItems = computed<IInternalAttachmentItem[]>(() =>
     index,
     openable: canOpenItem(item),
   })),
-)
+);
 
 const openableItems = computed<IOpenableAttachmentPreviewItem[]>(() =>
   props.items.filter(canOpenItem),
-)
+);
 
 const openableIndexes = computed<number[]>(() =>
   attachmentItems.value.reduce<number[]>((indexes, entry) => {
-    if (entry.openable) indexes.push(entry.index)
-    return indexes
+    if (entry.openable) indexes.push(entry.index);
+    return indexes;
   }, []),
-)
+);
 
 const lightboxDataSource = computed<IPhotoSwipeDataSourceItem[]>(() =>
   openableItems.value.map((item) => ({
@@ -137,83 +135,86 @@ const lightboxDataSource = computed<IPhotoSwipeDataSourceItem[]>(() =>
     height: item.preview.height,
     alt: item.name,
   })),
-)
+);
 
 const lightboxSignature = computed<string>(() =>
-  lightboxDataSource.value
-    .map((d) => `${d.src}|${d.width}x${d.height}`)
-    .join('||'),
-)
+  lightboxDataSource.value.map((d) => `${d.src}|${d.width}x${d.height}`).join('||'),
+);
 
 const resolveSecondaryMetaLabel = (entry: IInternalAttachmentItem): string => {
-  if (entry.item.detailLabel) return entry.item.detailLabel
+  if (entry.item.detailLabel) return entry.item.detailLabel;
   if (entry.openable && entry.item.preview) {
-    return `${entry.item.preview.width} × ${entry.item.preview.height}`
+    return `${entry.item.preview.width} × ${entry.item.preview.height}`;
   }
-  return ''
-}
+  return '';
+};
 
 const destroyLightbox = (): void => {
-  lightbox?.destroy()
-  lightbox = null
-}
+  lightbox?.destroy();
+  lightbox = null;
+};
 
 const releasePreloadHandle = (src: string, image: HTMLImageElement): void => {
-  if (imagePreloadHandles.get(src) !== image) return
-  image.onload = null
-  image.onerror = null
-  imagePreloadHandles.delete(src)
-}
+  if (imagePreloadHandles.get(src) !== image) return;
+  image.onload = null;
+  image.onerror = null;
+  imagePreloadHandles.delete(src);
+};
 
 const completeImagePreload = (src: string, image: HTMLImageElement): void => {
-  preloadedImageSources.add(src)
-  releasePreloadHandle(src, image)
-}
+  preloadedImageSources.add(src);
+  releasePreloadHandle(src, image);
+};
 
 const preloadImagePreview = (src: string): void => {
-  if (preloadedImageSources.has(src) || imagePreloadHandles.has(src)) return
+  if (preloadedImageSources.has(src) || imagePreloadHandles.has(src)) return;
 
-  const image = new Image()
-  image.decoding = 'async'
-  image.onload = () => completeImagePreload(src, image)
-  image.onerror = () => releasePreloadHandle(src, image)
-  imagePreloadHandles.set(src, image)
-  image.src = src
+  const image = new Image();
+  image.decoding = 'async';
+  image.onload = () => completeImagePreload(src, image);
+  image.onerror = () => releasePreloadHandle(src, image);
+  imagePreloadHandles.set(src, image);
+  image.src = src;
 
   if (typeof image.decode === 'function') {
-    void image.decode()
+    void image
+      .decode()
       .then(() => completeImagePreload(src, image))
-      .catch(() => { /* decode reject 不视为加载失败 */ })
+      .catch(() => {
+        /* decode reject 不视为加载失败 */
+      });
   }
-}
+};
 
 const clearImagePreloads = (): void => {
   imagePreloadHandles.forEach((image, src) => {
-    releasePreloadHandle(src, image)
-  })
-  preloadedImageSources.clear()
-}
+    releasePreloadHandle(src, image);
+  });
+  preloadedImageSources.clear();
+};
 
 const resolveLightboxHorizontalPadding = (viewportWidth: number): number => {
-  const vw = viewportWidth || (typeof window !== 'undefined' ? window.innerWidth : LIGHTBOX_DESKTOP_MIN_WIDTH)
-  if (vw < LIGHTBOX_DESKTOP_MIN_WIDTH) return LIGHTBOX_COMPACT_HORIZONTAL_PADDING
-  return LIGHTBOX_DESKTOP_HORIZONTAL_PADDING
-}
+  const vw =
+    viewportWidth ||
+    (typeof window !== 'undefined' ? window.innerWidth : LIGHTBOX_DESKTOP_MIN_WIDTH);
+  if (vw < LIGHTBOX_DESKTOP_MIN_WIDTH) return LIGHTBOX_COMPACT_HORIZONTAL_PADDING;
+  return LIGHTBOX_DESKTOP_HORIZONTAL_PADDING;
+};
 
 const resolveInitialLightboxZoom = (zoomLevel: IPhotoSwipeZoomLevelView): number => {
-  if (!zoomLevel.elementSize) return zoomLevel.fit
-  const widthZoom = LIGHTBOX_INITIAL_MAX_WIDTH / zoomLevel.elementSize.x
-  const heightZoom = LIGHTBOX_INITIAL_MAX_HEIGHT / zoomLevel.elementSize.y
-  return Math.min(zoomLevel.fit, widthZoom, heightZoom)
-}
+  if (!zoomLevel.elementSize) return zoomLevel.fit;
+  const widthZoom = LIGHTBOX_INITIAL_MAX_WIDTH / zoomLevel.elementSize.x;
+  const heightZoom = LIGHTBOX_INITIAL_MAX_HEIGHT / zoomLevel.elementSize.y;
+  return Math.min(zoomLevel.fit, widthZoom, heightZoom);
+};
 
 const initLightbox = (): void => {
-  if (lightbox || !galleryRef.value) return
-  if (lightboxDataSource.value.length === 0) return
+  if (lightbox || !galleryRef.value) return;
+  if (lightboxDataSource.value.length === 0) return;
 
-  const showDuration = prefersReducedMotion ? 0 : LIGHTBOX_SHOW_ANIMATION_DURATION
-  const hideDuration = prefersReducedMotion ? 0 : LIGHTBOX_HIDE_ANIMATION_DURATION
-  const zoomDuration = prefersReducedMotion ? 0 : LIGHTBOX_ZOOM_ANIMATION_DURATION
+  const showDuration = prefersReducedMotion ? 0 : LIGHTBOX_SHOW_ANIMATION_DURATION;
+  const hideDuration = prefersReducedMotion ? 0 : LIGHTBOX_HIDE_ANIMATION_DURATION;
+  const zoomDuration = prefersReducedMotion ? 0 : LIGHTBOX_ZOOM_ANIMATION_DURATION;
 
   lightbox = new PhotoSwipeLightbox({
     gallery: galleryRef.value,
@@ -224,63 +225,63 @@ const initLightbox = (): void => {
     hideAnimationDuration: hideDuration,
     zoomAnimationDuration: zoomDuration,
     paddingFn: (viewportSize) => {
-      const horizontalPadding = resolveLightboxHorizontalPadding(viewportSize.x)
+      const horizontalPadding = resolveLightboxHorizontalPadding(viewportSize.x);
       return {
         top: LIGHTBOX_VERTICAL_PADDING,
         right: horizontalPadding,
         bottom: LIGHTBOX_VERTICAL_PADDING,
         left: horizontalPadding,
-      }
+      };
     },
     initialZoomLevel: resolveInitialLightboxZoom,
     secondaryZoomLevel: (zoomLevel) => Math.min(zoomLevel.fit, 1),
     maxZoomLevel: (zoomLevel) => Math.max(1, zoomLevel.fit),
     bgOpacity: 0.78,
     mainClass: 'pswp--ai-attachment-preview',
-  })
-  lightbox.init()
-}
+  });
+  lightbox.init();
+};
 
 const openImagePreview = (item: IAiAttachmentPreviewItem, index: number): void => {
-  if (!canOpenItem(item) || !lightbox) return
-  const openableIndex = openableIndexes.value.indexOf(index)
-  if (openableIndex < 0) return
-  lightbox.loadAndOpen(openableIndex, lightboxDataSource.value)
-}
+  if (!canOpenItem(item) || !lightbox) return;
+  const openableIndex = openableIndexes.value.indexOf(index);
+  if (openableIndex < 0) return;
+  lightbox.loadAndOpen(openableIndex, lightboxDataSource.value);
+};
 
 const handleRemove = (id: string): void => {
-  emit('remove', id)
-}
+  emit('remove', id);
+};
 
 onMounted(() => {
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-    prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
-})
+});
 
 watch(
   lightboxSignature,
   async (signature) => {
-    destroyLightbox()
-    if (!signature) return
-    await nextTick()
-    initLightbox()
+    destroyLightbox();
+    if (!signature) return;
+    await nextTick();
+    initLightbox();
   },
   { immediate: true },
-)
+);
 
 watch(
   () => lightboxDataSource.value.slice(0, PRELOAD_LIMIT).map((d) => d.src),
   (sources) => {
-    sources.forEach(preloadImagePreview)
+    sources.forEach(preloadImagePreview);
   },
   { immediate: true },
-)
+);
 
 onBeforeUnmount(() => {
-  destroyLightbox()
-  clearImagePreloads()
-})
+  destroyLightbox();
+  clearImagePreloads();
+});
 </script>
 
 <template>

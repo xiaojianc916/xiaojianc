@@ -1,4 +1,4 @@
-import { computed, inject, type InjectionKey, type Ref } from 'vue';
+import { computed, type InjectionKey, inject, type Ref } from 'vue';
 import type { TAttachmentData, TAttachmentMediaCategory, TAttachmentVariant } from './types';
 
 export interface IAttachmentsContextValue {

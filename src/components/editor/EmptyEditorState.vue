@@ -65,39 +65,39 @@ v-if="showOpenFolderAction" variant="ghost" size="sm" class="empty-editor-state_
 </template>
 
 <script setup lang="ts">
-import { Button } from '@/components/ui/button';
 import { computed } from 'vue';
+import { Button } from '@/components/ui/button';
 
 const props = defineProps<{
-    hasWorkspace: boolean;
-    isDesktopRuntime: boolean;
+  hasWorkspace: boolean;
+  isDesktopRuntime: boolean;
 }>();
 
 const emit = defineEmits<{
-    create: [];
-    open: [];
-    'open-folder': [];
+  create: [];
+  open: [];
+  'open-folder': [];
 }>();
 
 const previewLineNumbers = ['1', '2', '3', '4', '5'] as const;
 
 const previewRows = [
-    { widthClass: 'w-[40%]', indentClass: '', toneClass: 'is-accent' },
-    { widthClass: 'w-[64%]', indentClass: '', toneClass: 'is-secondary' },
-    { widthClass: 'w-[48%]', indentClass: 'ml-2', toneClass: 'is-soft' },
-    { widthClass: 'w-[54%]', indentClass: 'ml-4', toneClass: 'is-muted' },
+  { widthClass: 'w-[40%]', indentClass: '', toneClass: 'is-accent' },
+  { widthClass: 'w-[64%]', indentClass: '', toneClass: 'is-secondary' },
+  { widthClass: 'w-[48%]', indentClass: 'ml-2', toneClass: 'is-soft' },
+  { widthClass: 'w-[54%]', indentClass: 'ml-4', toneClass: 'is-muted' },
 ] as const;
 
 const description = computed(() => {
-    if (props.hasWorkspace) {
-        return '从左侧资源管理器选择文件，或新建一份空白文档。';
-    }
+  if (props.hasWorkspace) {
+    return '从左侧资源管理器选择文件，或新建一份空白文档。';
+  }
 
-    if (props.isDesktopRuntime) {
-        return '打开文件或文件夹，或新建一份空白文档。';
-    }
+  if (props.isDesktopRuntime) {
+    return '打开文件或文件夹，或新建一份空白文档。';
+  }
 
-    return '打开一份本地文件，或新建一份空白文档。';
+  return '打开一份本地文件，或新建一份空白文档。';
 });
 
 const showOpenFolderAction = computed(() => props.isDesktopRuntime && !props.hasWorkspace);

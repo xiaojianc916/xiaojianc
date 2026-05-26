@@ -5,10 +5,8 @@ export interface IAiAedDiffRefTarget {
   path: string;
 }
 
-
 export const buildAiAedDiffRef = (target: IAiAedDiffRefTarget): string =>
   `${AED_DIFF_REF_PREFIX}${encodeURIComponent(target.taskId)}:${encodeURIComponent(target.path)}`;
-
 
 export const parseAiAedDiffRef = (diffRef: string): IAiAedDiffRefTarget | null => {
   if (!diffRef.startsWith(AED_DIFF_REF_PREFIX)) {
@@ -31,6 +29,4 @@ export const parseAiAedDiffRef = (diffRef: string): IAiAedDiffRefTarget | null =
   }
 };
 
-
-export const isAiAedDiffRef = (value: string): boolean =>
-  value.startsWith(AED_DIFF_REF_PREFIX);
+export const isAiAedDiffRef = (value: string): boolean => value.startsWith(AED_DIFF_REF_PREFIX);

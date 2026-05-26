@@ -20,8 +20,8 @@ const hostname = computed(() => {
   }
 });
 
-const canFetch = computed(() =>
-  props.source.status === 'search-result' || props.source.status === 'failed',
+const canFetch = computed(
+  () => props.source.status === 'search-result' || props.source.status === 'failed',
 );
 
 const fetchLabel = computed(() => {
@@ -37,8 +37,8 @@ const fetchLabel = computed(() => {
   }
 });
 
-const excerpt = computed(() =>
-  props.source.fetchedSource?.excerpt.trim() || props.source.result.snippet.trim(),
+const excerpt = computed(
+  () => props.source.fetchedSource?.excerpt.trim() || props.source.result.snippet.trim(),
 );
 
 const stepLabel = computed(() => props.source.stepTitle ?? props.source.stepId ?? '');

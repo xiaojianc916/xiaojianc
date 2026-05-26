@@ -1,3 +1,4 @@
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useShellWorkbenchAiBridge } from '@/composables/useShellWorkbenchAiBridge';
 import { useShellWorkbenchViewportState } from '@/composables/useShellWorkbenchViewportState';
 import { useWorkbench } from '@/composables/useWorkbench';
@@ -11,15 +12,14 @@ import type {
 } from '@/types/editor';
 import type { ITerminalRunCompletedPayload } from '@/types/terminal';
 import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
-import { createStartupShellState } from '@/utils/startup-shell';
 import { markStartup } from '@/utils/startup-profiler';
+import { createStartupShellState } from '@/utils/startup-shell';
 import { consumeProgrammaticWindowCloseAllowance } from '@/utils/window-close';
 import {
   SHELL_WINDOW_RESIZE_END_EVENT,
   SHELL_WINDOW_RESIZE_SETTLED_EVENT,
   SHELL_WINDOW_RESIZE_START_EVENT,
 } from '@/utils/window-resize-events';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 export type TEditorExpose = {
   focusEditor: () => void;
@@ -117,21 +117,18 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     createStartupShellState(workbench.editorStore.sessionSnapshot),
   );
   const isStartupShellVisible = computed(
-    () =>
-      isStartupShellPrimed.value &&
-      !workbench.editorStore.hasActiveDocument,
+    () => isStartupShellPrimed.value && !workbench.editorStore.hasActiveDocument,
   );
   const visibleWorkspaceRootPath = computed(() =>
     isStartupShellVisible.value
-      ? startupShellState.value?.workspaceRoot ?? workbench.editorStore.workspaceRootPath
+      ? (startupShellState.value?.workspaceRoot ?? workbench.editorStore.workspaceRootPath)
       : workbench.editorStore.workspaceRootPath,
   );
 
   const clampAiPanelWidth = (value: number): number =>
     Math.min(AI_PANEL_MAX_WIDTH, Math.max(AI_PANEL_MIN_WIDTH, Math.round(value)));
 
-  const clampTerminalPanelHeight = (value: number): number =>
-    Math.max(140, Math.round(value));
+  const clampTerminalPanelHeight = (value: number): number => Math.max(140, Math.round(value));
 
   watch(
     () => workbench.appStore.aiPanelWidth,
@@ -237,13 +234,16 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     }
 
     const targetDocumentId =
-      pickNextNavigableDocumentId(documentBackStack, currentDocumentId)
-      ?? resolveAdjacentDocumentId(currentDocumentId, 'back');
+      pickNextNavigableDocumentId(documentBackStack, currentDocumentId) ??
+      resolveAdjacentDocumentId(currentDocumentId, 'back');
     if (!targetDocumentId) {
       return;
     }
 
-    documentForwardStack.value = trimDocumentNavHistory([...documentForwardStack.value, currentDocumentId]);
+    documentForwardStack.value = trimDocumentNavHistory([
+      ...documentForwardStack.value,
+      currentDocumentId,
+    ]);
     isApplyingDocumentNavigation = true;
     workbench.activateDocument(targetDocumentId);
   };
@@ -255,13 +255,16 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     }
 
     const targetDocumentId =
-      pickNextNavigableDocumentId(documentForwardStack, currentDocumentId)
-      ?? resolveAdjacentDocumentId(currentDocumentId, 'forward');
+      pickNextNavigableDocumentId(documentForwardStack, currentDocumentId) ??
+      resolveAdjacentDocumentId(currentDocumentId, 'forward');
     if (!targetDocumentId) {
       return;
     }
 
-    documentBackStack.value = trimDocumentNavHistory([...documentBackStack.value, currentDocumentId]);
+    documentBackStack.value = trimDocumentNavHistory([
+      ...documentBackStack.value,
+      currentDocumentId,
+    ]);
     isApplyingDocumentNavigation = true;
     workbench.activateDocument(targetDocumentId);
   };
@@ -442,7 +445,11 @@ export const useShellWorkbenchView = (onReady: () => void) => {
   };
 
   const saveActiveDocumentFromShortcut = async (): Promise<void> => {
-    if (activePrimaryMode.value !== 'editor' || !workbench.isDesktopRuntime.value || !workbench.canSave.value) {
+    if (
+      activePrimaryMode.value !== 'editor' ||
+      !workbench.isDesktopRuntime.value ||
+      !workbench.canSave.value
+    ) {
       return;
     }
 
@@ -681,8 +688,12 @@ export const useShellWorkbenchView = (onReady: () => void) => {
     () => (workbench.editorStore.documents ?? []).map((item) => item.id),
     (documentIds) => {
       const documentIdSet = new Set(documentIds);
-      documentBackStack.value = documentBackStack.value.filter((documentId) => documentIdSet.has(documentId));
-      documentForwardStack.value = documentForwardStack.value.filter((documentId) => documentIdSet.has(documentId));
+      documentBackStack.value = documentBackStack.value.filter((documentId) =>
+        documentIdSet.has(documentId),
+      );
+      documentForwardStack.value = documentForwardStack.value.filter((documentId) =>
+        documentIdSet.has(documentId),
+      );
     },
     { immediate: true },
   );
@@ -716,7 +727,6 @@ export const useShellWorkbenchView = (onReady: () => void) => {
       window.cancelAnimationFrame(editorLayoutAfterSidebarFrameId);
       editorLayoutAfterSidebarFrameId = null;
     }
-
   });
 
   return {

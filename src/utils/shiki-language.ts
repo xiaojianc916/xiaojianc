@@ -7,8 +7,8 @@
  * - SHIKI_LANGUAGE_LABELS 为常用语言提供中文/可读标签，找不到时回退到语言 ID。
  */
 
-import { bundledLanguagesInfo } from 'shiki';
 import type { BundledLanguage } from 'shiki';
+import { bundledLanguagesInfo } from 'shiki';
 
 /** shiki 支持的语言 ID → 别名 的快速查找表 */
 const SHIKI_ALIAS_MAP: ReadonlyMap<string, BundledLanguage> = (() => {

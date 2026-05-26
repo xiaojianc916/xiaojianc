@@ -1,12 +1,12 @@
+import { describe, expect, it } from 'vitest';
 import {
+  aiAgentPermissionStateSchema,
+  aiAgentRunPayloadSchema,
+  aiAgentRunPlanRequestSchema,
   aiAgentSetNetworkPermissionRequestSchema,
   aiAgentStepDetailSchema,
   aiAgentTimelineItemSchema,
-  aiAgentRunPayloadSchema,
-  aiAgentRunPlanRequestSchema,
-  aiAgentPermissionStateSchema,
 } from '@/types/ai/agent.schema';
-import { describe, expect, it } from 'vitest';
 
 const createStep = (index: number) => ({
   id: `step-${index}`,
@@ -78,28 +78,32 @@ describe('AI agent schema', () => {
       runId: 'run-1',
       stepId: 'step-1',
       updatedAt: '2026-04-29T10:00:00.000Z',
-      webSources: [{
-        id: 'web-source-1',
-        title: 'Tauri Docs',
-        url: 'https://tauri.app/start/',
-        sourceType: 'docs',
-        status: 'fetched',
-        queryPreview: 'Tauri docs',
-        fetchedAt: '2026-04-29T10:00:00.000Z',
-        textRef: 'web-text:abc',
-        excerpt: '短摘要',
-      }],
-      toolResults: [{
-        id: 'tool-result-1',
-        runId: 'run-1',
-        stepId: 'step-1',
-        toolName: 'web_fetch',
-        status: 'succeeded',
-        summary: '读取 1 个网页正文引用',
-        startedAt: '2026-04-29T10:00:00.000Z',
-        endedAt: '2026-04-29T10:00:01.000Z',
-        outputRef: 'web-text:abc',
-      }],
+      webSources: [
+        {
+          id: 'web-source-1',
+          title: 'Tauri Docs',
+          url: 'https://tauri.app/start/',
+          sourceType: 'docs',
+          status: 'fetched',
+          queryPreview: 'Tauri docs',
+          fetchedAt: '2026-04-29T10:00:00.000Z',
+          textRef: 'web-text:abc',
+          excerpt: '短摘要',
+        },
+      ],
+      toolResults: [
+        {
+          id: 'tool-result-1',
+          runId: 'run-1',
+          stepId: 'step-1',
+          toolName: 'web_fetch',
+          status: 'succeeded',
+          summary: '读取 1 个网页正文引用',
+          startedAt: '2026-04-29T10:00:00.000Z',
+          endedAt: '2026-04-29T10:00:01.000Z',
+          outputRef: 'web-text:abc',
+        },
+      ],
     });
 
     expect(parsed.webSources[0]?.textRef).toBe('web-text:abc');
@@ -126,5 +130,4 @@ describe('AI agent schema', () => {
       }),
     ).toThrow();
   });
-
 });

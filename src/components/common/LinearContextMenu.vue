@@ -63,11 +63,12 @@ v-else :disabled="item.disabled" :inset="resolveItemInset(item)"
 </template>
 
 <script setup lang="ts">
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import LinearContextMenuIcon from '@/components/common/LinearContextMenuIcon.vue';
 import type {
   ILinearContextMenuGroup,
   ILinearContextMenuItem,
 } from '@/components/common/linear-context-menu.types';
-import LinearContextMenuIcon from '@/components/common/LinearContextMenuIcon.vue';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -81,7 +82,6 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import type { TThemeMode } from '@/types/app';
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
 
 const props = defineProps<{
   open: boolean;
@@ -104,13 +104,10 @@ const anchorStyle = computed(() => ({
   top: `${props.y}px`,
 }));
 
-const submenuSide = computed(() =>
-  props.submenuDirection === 'left' ? 'left' : 'right',
-);
+const submenuSide = computed(() => (props.submenuDirection === 'left' ? 'left' : 'right'));
 
 const createOpenEvent = (): MouseEvent | PointerEvent => {
-  const ContextMenuEvent =
-    typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+  const ContextMenuEvent = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
 
   return new ContextMenuEvent('contextmenu', {
     bubbles: false,

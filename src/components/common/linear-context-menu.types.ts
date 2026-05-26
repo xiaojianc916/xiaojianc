@@ -39,7 +39,9 @@ export interface ILinearContextMenuItem {
   children?: ILinearContextMenuItem[];
 }
 
-export interface ILinearContextMenuGroup<TItem extends ILinearContextMenuItem = ILinearContextMenuItem> {
+export interface ILinearContextMenuGroup<
+  TItem extends ILinearContextMenuItem = ILinearContextMenuItem,
+> {
   key: string;
   title?: string;
   items: TItem[];

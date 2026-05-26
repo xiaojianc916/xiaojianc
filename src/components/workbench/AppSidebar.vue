@@ -138,6 +138,17 @@
 </template>
 
 <script setup lang="ts">
+import {
+  computed,
+  defineAsyncComponent,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from 'vue';
+import { events } from '@/bindings/tauri';
 import { FileTree } from '@/components/ai-elements/file-tree';
 import InlineError from '@/components/common/InlineError.vue';
 import type {
@@ -178,15 +189,6 @@ import {
   resolveWorkspaceRootPayload,
 } from '@/utils/workspace';
 import FolderOpen from '~icons/lucide/folder-open';
-import {
-  computed,
-  defineAsyncComponent,
-  nextTick,
-  onBeforeUnmount,
-  reactive,
-  ref,
-  watch,
-} from 'vue';
 
 const DeferredLinearContextMenu = defineAsyncComponent({
   loader: () => import('@/components/common/LinearContextMenu.vue'),
@@ -345,7 +347,7 @@ const explorerContextMenuGroups = computed<ILinearContextMenuGroup<IExplorerCont
         items: [
           {
             key: 'delete',
-            label: '删除',
+            label: '移动到回收站',
             icon: 'trash',
             shortcut: ['Del'],
             action: 'delete',
@@ -457,7 +459,7 @@ const isSearchView = computed(() => props.view === 'search');
 const isSourceControlView = computed(() => props.view === 'source-control');
 const isRunView = computed(() => props.view === 'run');
 const isSshView = computed(() => props.view === 'extensions');
-const panelMeta = computed(() => SIDEBAR_META[props.view]);
+const panelMeta = computed(() => SIDEBAR_META[props.view] ?? SIDEBAR_META.ai);
 const normalizedExplorerSearchQuery = computed(() =>
   explorerSearchQuery.value.trim().toLowerCase(),
 );
@@ -493,8 +495,8 @@ const rootEntry = computed<IWorkspaceEntry | null>(() => {
 const selectedExplorerPath = computed(
   () => props.document.path ?? props.startupExplorerSelectedPath ?? undefined,
 );
-const explorerContextMenuHighlightPath = computed(
-  () => (explorerContextMenu.open ? explorerContextTarget.value?.path ?? null : null),
+const explorerContextMenuHighlightPath = computed(() =>
+  explorerContextMenu.open ? (explorerContextTarget.value?.path ?? null) : null,
 );
 
 const searchExpandedPaths = computed(() => {
@@ -596,6 +598,7 @@ const loadWorkspaceRoot = async (workspaceKey: string): Promise<void> => {
 
     applyWorkspaceRootPayload(payload, workspaceKey);
     void loadStartupExpandedDirectories();
+    void startWorkspaceFileWatcher();
   } catch (error) {
     if (requestId !== rootRequestId) {
       return;
@@ -1011,8 +1014,7 @@ const handleDeleteWorkspaceEntry = async (target: IExplorerContextTarget): Promi
       path: target.path,
       rootPath: root.value.rootPath,
     });
-    await refreshDirectoryAfterMutation(resolveParentPathForMutation(target.path));
-    message.success('已删除');
+    message.success('已移动到回收站');
   } catch (error) {
     message.error(toErrorMessage(error, '删除失败'));
   }
@@ -1130,6 +1132,57 @@ watch(
     closeInlineCreateDraft();
   },
 );
+
+// 工作区文件系统事件类型（对应 Rust WorkspaceFsEvent / FsChange）
+interface FsChange {
+  path: string;
+  kind: 'created' | 'modified' | 'removed' | 'renamed';
+}
+
+interface WorkspaceFsEvent {
+  changes: FsChange[];
+  rootPath: string;
+}
+
+// === 文件监听 ===
+let fsEventUnlisten: (() => void) | null = null;
+
+async function startWorkspaceFileWatcher(): Promise<void> {
+  if (!root.value?.rootPath) return;
+  try {
+    await tauriService.startWorkspaceWatching(root.value.rootPath);
+  } catch {
+    // 监听启动失败不阻塞
+  }
+  if (fsEventUnlisten) return;
+  fsEventUnlisten = await events.workspaceFsEvent.listen((e) => {
+    void handleFileSystemEvent(e.payload);
+  });
+}
+
+async function handleFileSystemEvent(payload: WorkspaceFsEvent): Promise<void> {
+  if (!root.value || payload.rootPath !== root.value.rootPath) return;
+  const affectedDirs = new Set<string>();
+  for (const change of payload.changes) {
+    const parent = resolveParentPathForMutation(change.path);
+    if (parent) affectedDirs.add(parent);
+  }
+  for (const dir of affectedDirs) {
+    await loadDirectoryEntries(dir);
+  }
+}
+
+onMounted(() => {
+  if (root.value?.rootPath) {
+    void startWorkspaceFileWatcher();
+  }
+});
+
+onBeforeUnmount(() => {
+  fsEventUnlisten?.();
+  fsEventUnlisten = null;
+  void tauriService.stopWorkspaceWatching();
+});
 </script>
 
 <style scoped>

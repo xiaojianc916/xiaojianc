@@ -1,6 +1,6 @@
-import type { AttachmentFile, PromptInputContext, PromptInputMessage } from './types';
 import { v7 as uuidv7 } from 'uuid';
 import { inject, onBeforeUnmount, provide, ref } from 'vue';
+import type { AttachmentFile, PromptInputContext, PromptInputMessage } from './types';
 import { PROMPT_INPUT_KEY } from './types';
 
 export function usePromptInputProvider(props: {

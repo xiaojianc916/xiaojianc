@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import type { HTMLAttributes } from 'vue';
 import { CollapsibleContent } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import type { HTMLAttributes } from 'vue';
 
-const props = defineProps<{ class?: HTMLAttributes['class'] }>()
+const props = defineProps<{ class?: HTMLAttributes['class'] }>();
 </script>
 
 <template>

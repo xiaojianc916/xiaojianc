@@ -24,11 +24,13 @@ import { beforeEach, vi } from 'vitest';
 // ── @tauri-apps/api/core ────────────────────────────────────────────────────
 
 vi.mock('@tauri-apps/api/core', () => ({
-    invoke: vi.fn().mockRejectedValue(
-        new Error(
-            '[test-setup] Tauri invoke() was called without an explicit mock. ' +
-            'Use vi.mocked(invoke).mockResolvedValueOnce(...) in the test.',
-        ),
+  invoke: vi
+    .fn()
+    .mockRejectedValue(
+      new Error(
+        '[test-setup] Tauri invoke() was called without an explicit mock. ' +
+          'Use vi.mocked(invoke).mockResolvedValueOnce(...) in the test.',
+      ),
     ),
 }));
 
@@ -38,16 +40,16 @@ vi.mock('@tauri-apps/api/core', () => ({
 // 作为 unlisten,而不是共享单一实例。这让 "expect(unlisten).toHaveBeenCalled()"
 // 对每个具体的 listen() 调用都成立。
 vi.mock('@tauri-apps/api/event', () => ({
-    listen: vi.fn().mockImplementation(async () => vi.fn()),
-    once: vi.fn().mockImplementation(async () => vi.fn()),
-    emit: vi.fn().mockResolvedValue(undefined),
+  listen: vi.fn().mockImplementation(async () => vi.fn()),
+  once: vi.fn().mockImplementation(async () => vi.fn()),
+  emit: vi.fn().mockResolvedValue(undefined),
 }));
 
 // ── @tauri-apps/plugin-dialog ───────────────────────────────────────────────
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
-    open: vi.fn().mockResolvedValue(null),
-    save: vi.fn().mockResolvedValue(null),
+  open: vi.fn().mockResolvedValue(null),
+  save: vi.fn().mockResolvedValue(null),
 }));
 
 // ── 测试间隔离 ────────────────────────────────────────────────────────────
@@ -58,8 +60,5 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
 // 如果你想连默认实现也每个测试重置,改用 vi.resetAllMocks();
 // 但那样 invoke 就会变成默认 resolve(undefined),失去 R1 的保护。
 beforeEach(() => {
-    vi.clearAllMocks();
+  vi.clearAllMocks();
 });
-
-// 确保本文件被视为 module(防 isolatedModules 警告)。
-export { };

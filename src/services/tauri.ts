@@ -1,13 +1,13 @@
 import { v7 as uuidv7 } from 'uuid';
+import { z } from 'zod';
 import { commands } from '@/bindings/tauri';
-import { agentSidecarStreamEventPayloadSchema } from '@/types/ai/sidecar.schema';
 import { aiChatStreamEventPayloadSchema } from '@/types/ai/schema';
+import { agentSidecarStreamEventPayloadSchema } from '@/types/ai/sidecar.schema';
 import { AppError, isAppError } from '@/types/app-error';
 import type { ITauriService } from '@/types/tauri';
 import { wslLinkStatusPayloadSchema } from '@/types/wsl-link/schema';
 import { assertDesktopRuntime } from '@/utils/desktop-runtime';
 import { toErrorMessage } from '@/utils/error';
-import { z } from 'zod';
 import { tauriContracts } from './tauri.contracts';
 
 type TauriCoreModule = typeof import('@tauri-apps/api/core');
@@ -186,10 +186,7 @@ const buildPayloadMetricsOmittingTextFields = <T extends Record<string, unknown>
 };
 
 const measureScriptContentInput = <T extends { content: string }>(value: T): IPayloadMetrics =>
-  buildPayloadMetricsOmittingTextFields(
-    value as unknown as Record<string, unknown>,
-    ['content'],
-  );
+  buildPayloadMetricsOmittingTextFields(value as unknown as Record<string, unknown>, ['content']);
 
 const measureAiChatInput = <T extends Record<string, unknown>>(value: T): IPayloadMetrics =>
   buildPayloadMetricsOmittingTextFields(value, ['messages', 'references']);
@@ -563,14 +560,14 @@ export const defineIpc = <TInSchema extends z.ZodTypeAny, TOutSchema extends z.Z
       const normalizedError =
         error instanceof z.ZodError
           ? new AppError({
-            code: 'ipc.input-validation',
-            message: `IPC 请求参数无效，已记录 traceId=${traceId}。`,
-            scope: 'validation',
-            traceId,
-            cause: {
-              issues: error.issues,
-            },
-          })
+              code: 'ipc.input-validation',
+              message: `IPC 请求参数无效，已记录 traceId=${traceId}。`,
+              scope: 'validation',
+              traceId,
+              cause: {
+                issues: error.issues,
+              },
+            })
           : normalizeIpcError(error, { traceId, errorMap });
 
       if (shouldAudit) {
@@ -621,7 +618,6 @@ const definePayloadIpc = <TInSchema extends z.ZodTypeAny, TOutSchema extends z.Z
     ...options,
     mapArgs: (payload) => ({ payload }),
   });
-
 
 const agentSidecarHealthIpc = defineContractIpc(
   'agent_sidecar_health',
@@ -1088,12 +1084,11 @@ const aiChatStreamIpc = definePayloadIpc(
   { audit: 'sensitive', timeoutMs: 60_000, measureInput: measureAiChatInput },
 );
 
-const aiCancelIpc = definePayloadIpc(
-  'ai_cancel',
-  '取消 AI 流式请求',
-  tauriContracts.aiCancel,
-  { audit: 'sensitive', timeoutMs: 15_000, measureInput: buildPayloadMetrics },
-);
+const aiCancelIpc = definePayloadIpc('ai_cancel', '取消 AI 流式请求', tauriContracts.aiCancel, {
+  audit: 'sensitive',
+  timeoutMs: 15_000,
+  measureInput: buildPayloadMetrics,
+});
 
 const aiInlineCompleteIpc = definePayloadIpc(
   'ai_inline_complete',
@@ -1485,6 +1480,29 @@ export const tauriService: ITauriService & {
     );
   },
 
+  startWorkspaceWatching(rootPath: string) {
+    return callSpectaCommand(
+      {
+        command: 'start_workspace_watching',
+        guardHint: '启动文件监听',
+        audit: 'read',
+        input: rootPath,
+      },
+      () => commands.startWorkspaceWatching(rootPath),
+    );
+  },
+
+  stopWorkspaceWatching() {
+    return callSpectaCommand(
+      {
+        command: 'stop_workspace_watching',
+        guardHint: '停止文件监听',
+        audit: 'read',
+        input: undefined,
+      },
+      () => commands.stopWorkspaceWatching(),
+    );
+  },
   searchWorkspace(payload, options) {
     const commandPayload = {
       ...payload,
@@ -1720,5 +1738,4 @@ export const tauriService: ITauriService & {
   aiEditRevertHunk: aiEditRevertHunkIpc,
 
   aiEditRevertTask: aiEditRevertTaskIpc,
-
 };

@@ -19,17 +19,19 @@ export const EditorViewStateEntrySchema = z.object({
   updatedAt: z.string().datetime(),
 });
 
-export const SessionWorkbenchStateSchema = z.object({
-  activeSidebarView: SessionWorkbenchSidebarViewSchema.default('explorer'),
-  explorerExpandedPaths: z.array(z.string().min(1)).max(120).default([]),
-  explorerSelectedPath: z.string().nullable().default(null),
-  isTerminalVisible: z.boolean().default(true),
-}).default({
-  activeSidebarView: 'explorer',
-  explorerExpandedPaths: [],
-  explorerSelectedPath: null,
-  isTerminalVisible: true,
-});
+export const SessionWorkbenchStateSchema = z
+  .object({
+    activeSidebarView: SessionWorkbenchSidebarViewSchema.default('explorer'),
+    explorerExpandedPaths: z.array(z.string().min(1)).max(120).default([]),
+    explorerSelectedPath: z.string().nullable().default(null),
+    isTerminalVisible: z.boolean().default(true),
+  })
+  .default({
+    activeSidebarView: 'explorer',
+    explorerExpandedPaths: [],
+    explorerSelectedPath: null,
+    isTerminalVisible: true,
+  });
 
 export const SessionSnapshotSchema = z.object({
   schemaVersion: z.literal(1),

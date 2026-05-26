@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue';
+import { Comment, computed, Text, toRef, useSlots } from 'vue';
 import type { InputGroupButtonVariants } from '@/components/ui/input-group';
 import { InputGroupButton } from '@/components/ui/input-group';
 import { cn } from '@/lib/utils';
-import { Comment, computed, Text, toRef, useSlots } from 'vue';
 
 type TPromptInputButtonVariant = 'default' | 'outline' | 'ghost';
 

@@ -27,26 +27,17 @@
 </template>
 
 <script setup lang="ts">
-import type { IEditorContextMenuItem } from '@/components/editor/editor-context-menu.types';
-import EditorContextMenu from '@/components/editor/EditorContextMenu.vue';
-import { buildCodeMirrorSettingsExtensions } from '@/services/editor/codemirror-config';
-import { createCodeMirrorInlineCompletionController } from '@/services/editor/codemirror-inline-completion';
-import { resolveCodeMirrorLanguageExtension } from '@/services/editor/codemirror-language';
-import { aiService } from '@/services/ipc/ai.service';
-import { useEditorStore } from '@/store/editor';
-import type { IAiCodeActionRequest, IAiCodeActionResult } from '@/types/ai';
-import type { TThemeMode } from '@/types/app';
-import type { IAnalyzeScriptPayload, IEditorSelectionSummary, TScriptDiagnosticSeverity } from '@/types/editor';
-import type { IEditorSettings } from '@/types/settings';
-import { tryReadClipboardText, writeClipboardText } from '@/utils/clipboard';
-import { resolveLanguageForPath } from '@/utils/editor-language';
+import type {
+  CompletionContext,
+  CompletionResult,
+  CompletionSource,
+} from '@codemirror/autocomplete';
 import {
-  SHELL_WINDOW_RESIZE_END_EVENT,
-  SHELL_WINDOW_RESIZE_SETTLED_EVENT,
-  SHELL_WINDOW_RESIZE_START_EVENT,
-} from '@/utils/window-resize-events';
-import type { CompletionContext, CompletionResult, CompletionSource } from '@codemirror/autocomplete';
-import { acceptCompletion, autocompletion, completeAnyWord, snippet } from '@codemirror/autocomplete';
+  acceptCompletion,
+  autocompletion,
+  completeAnyWord,
+  snippet,
+} from '@codemirror/autocomplete';
 import {
   defaultKeymap,
   history,
@@ -57,13 +48,22 @@ import {
   toggleLineComment,
   undo,
 } from '@codemirror/commands';
+import { bracketMatching, indentOnInput } from '@codemirror/language';
+import { type Diagnostic, lintGutter, setDiagnostics } from '@codemirror/lint';
 import {
-  bracketMatching,
-  indentOnInput,
-} from '@codemirror/language';
-import { lintGutter, setDiagnostics, type Diagnostic } from '@codemirror/lint';
-import { gotoLine, highlightSelectionMatches, openSearchPanel, search, searchKeymap } from '@codemirror/search';
-import { Compartment, EditorSelection, EditorState, type Extension, type SelectionRange } from '@codemirror/state';
+  gotoLine,
+  highlightSelectionMatches,
+  openSearchPanel,
+  search,
+  searchKeymap,
+} from '@codemirror/search';
+import {
+  Compartment,
+  EditorSelection,
+  EditorState,
+  type Extension,
+  type SelectionRange,
+} from '@codemirror/state';
 import {
   crosshairCursor,
   drawSelection,
@@ -78,6 +78,29 @@ import {
 import { githubLight } from '@fsegurai/codemirror-theme-github-light';
 import { useResizeObserver } from '@vueuse/core';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import EditorContextMenu from '@/components/editor/EditorContextMenu.vue';
+import type { IEditorContextMenuItem } from '@/components/editor/editor-context-menu.types';
+import { buildCodeMirrorSettingsExtensions } from '@/services/editor/codemirror-config';
+import { createCodeMirrorInlineCompletionController } from '@/services/editor/codemirror-inline-completion';
+import { resolveCodeMirrorLanguageExtension } from '@/services/editor/codemirror-language';
+import { createLspExtension, lspStopBridge } from '@/services/editor/lsp-bridge';
+import { aiService } from '@/services/ipc/ai.service';
+import { useEditorStore } from '@/store/editor';
+import type { IAiCodeActionRequest, IAiCodeActionResult } from '@/types/ai';
+import type { TThemeMode } from '@/types/app';
+import type {
+  IAnalyzeScriptPayload,
+  IEditorSelectionSummary,
+  TScriptDiagnosticSeverity,
+} from '@/types/editor';
+import type { IEditorSettings } from '@/types/settings';
+import { tryReadClipboardText, writeClipboardText } from '@/utils/clipboard';
+import { resolveLanguageForPath } from '@/utils/editor-language';
+import {
+  SHELL_WINDOW_RESIZE_END_EVENT,
+  SHELL_WINDOW_RESIZE_SETTLED_EVENT,
+  SHELL_WINDOW_RESIZE_START_EVENT,
+} from '@/utils/window-resize-events';
 
 interface IEditorExpose {
   focusEditor: () => void;
@@ -114,8 +137,8 @@ const createEmptyAnalysis = (): IAnalyzeScriptPayload => ({
 let cachedShellCompletionSourcePromise: Promise<CompletionSource> | null = null;
 const getShellCompletionSource = (): Promise<CompletionSource> => {
   if (!cachedShellCompletionSourcePromise) {
-    cachedShellCompletionSourcePromise = import('@/utils/shell-completion').then(
-      (mod) => mod.createShellCodeMirrorCompletionSource(),
+    cachedShellCompletionSourcePromise = import('@/utils/shell-completion').then((mod) =>
+      mod.createShellCodeMirrorCompletionSource(),
     );
   }
   return cachedShellCompletionSourcePromise;
@@ -173,6 +196,7 @@ let pendingEditorLayoutAfterWindowResize = false;
 const languageCompartment = new Compartment();
 const settingsCompartment = new Compartment();
 const completionCompartment = new Compartment();
+const lspCompartment = new Compartment();
 
 const inlineCompletionController = createCodeMirrorInlineCompletionController({
   getFilePath: () => props.documentPath,
@@ -185,16 +209,19 @@ const inlineCompletionController = createCodeMirrorInlineCompletionController({
 const buildCompletionExtension = (editorSettings: IEditorSettings, language: string): Extension =>
   editorSettings.commandCompletion
     ? autocompletion({
-      activateOnTyping: true,
-      activateOnTypingDelay: editorSettings.suggestionDelay,
-      override: language === 'shell'
-        ? [async (completionContext: CompletionContext): Promise<CompletionResult | null> => {
-          const source = await getShellCompletionSource();
-          return source(completionContext);
-        }]
-        : [completeAnyWord],
-      maxRenderedOptions: 80,
-    })
+        activateOnTyping: true,
+        activateOnTypingDelay: editorSettings.suggestionDelay,
+        override:
+          language === 'shell'
+            ? [
+                async (completionContext: CompletionContext): Promise<CompletionResult | null> => {
+                  const source = await getShellCompletionSource();
+                  return source(completionContext);
+                },
+              ]
+            : [completeAnyWord],
+        maxRenderedOptions: 80,
+      })
     : [];
 
 const getCurrentLanguage = (): string =>
@@ -279,9 +306,7 @@ const runAiCodeAction = async (
   }
 };
 
-const runAiCodeActionFromEditor = async (
-  kind: IAiCodeActionRequest['kind'],
-): Promise<void> => {
+const runAiCodeActionFromEditor = async (kind: IAiCodeActionRequest['kind']): Promise<void> => {
   await runAiCodeAction(kind, resolveSelectedText());
 };
 
@@ -358,10 +383,14 @@ const restoreViewStateForPath = (path: string | null | undefined): void => {
 // ──────────────────────────────────────────────────────────────────────
 const toDiagnosticSeverity = (level: TScriptDiagnosticSeverity): Diagnostic['severity'] => {
   switch (level) {
-    case 'error': return 'error';
-    case 'warning': return 'warning';
-    case 'style': return 'hint';
-    default: return 'info';
+    case 'error':
+      return 'error';
+    case 'warning':
+      return 'warning';
+    case 'style':
+      return 'hint';
+    default:
+      return 'info';
   }
 };
 
@@ -370,16 +399,16 @@ const syncDiagnostics = (): void => {
   if (!view) return;
   const diagnostics = analysisState.value.available
     ? analysisState.value.diagnostics.map((item): Diagnostic => {
-      const from = lineColumnToOffset(view, item.line, item.column);
-      const to = Math.max(from + 1, lineColumnToOffset(view, item.endLine, item.endColumn));
-      return {
-        from,
-        to: Math.min(to, view.state.doc.length),
-        severity: toDiagnosticSeverity(item.level),
-        source: item.code,
-        message: `${item.code} · ${item.message}`,
-      };
-    })
+        const from = lineColumnToOffset(view, item.line, item.column);
+        const to = Math.max(from + 1, lineColumnToOffset(view, item.endLine, item.endColumn));
+        return {
+          from,
+          to: Math.min(to, view.state.doc.length),
+          severity: toDiagnosticSeverity(item.level),
+          source: item.code,
+          message: `${item.code} · ${item.message}`,
+        };
+      })
     : [];
   view.dispatch(setDiagnostics(view.state, diagnostics));
 };
@@ -459,8 +488,20 @@ const buildMenuGroups = (): Array<{ key: string; items: IEditorContextMenuItem[]
     {
       key: 'run-actions',
       items: [
-        { key: 'open-terminal', label: '打开终端', icon: 'terminal', action: 'open-terminal', disabled: false },
-        { key: 'run-current-script', label: '运行当前脚本', icon: 'play', action: 'run-current-script', disabled: !props.canRun },
+        {
+          key: 'open-terminal',
+          label: '打开终端',
+          icon: 'terminal',
+          action: 'open-terminal',
+          disabled: false,
+        },
+        {
+          key: 'run-current-script',
+          label: '运行当前脚本',
+          icon: 'play',
+          action: 'run-current-script',
+          disabled: !props.canRun,
+        },
       ],
     },
     {
@@ -474,17 +515,41 @@ const buildMenuGroups = (): Array<{ key: string; items: IEditorContextMenuItem[]
       key: 'code-actions',
       items: [
         {
-          key: 'format-tools', label: '格式与注释', icon: 'format', disabled: !hasDocument,
+          key: 'format-tools',
+          label: '格式与注释',
+          icon: 'format',
+          disabled: !hasDocument,
           children: [
-            { key: 'format-with-shfmt', label: '使用 shfmt 格式化', icon: 'format', action: 'format-with-shfmt', disabled: !hasDocument },
-            { key: 'toggle-comment-line', label: '切换行注释', icon: 'comment', action: 'toggle-comment-line', disabled: !hasDocument },
+            {
+              key: 'format-with-shfmt',
+              label: '使用 shfmt 格式化',
+              icon: 'format',
+              action: 'format-with-shfmt',
+              disabled: !hasDocument,
+            },
+            {
+              key: 'toggle-comment-line',
+              label: '切换行注释',
+              icon: 'comment',
+              action: 'toggle-comment-line',
+              disabled: !hasDocument,
+            },
           ],
         },
         {
-          key: 'find-tools', label: '查找与跳转', icon: 'search', disabled: !hasDocument,
+          key: 'find-tools',
+          label: '查找与跳转',
+          icon: 'search',
+          disabled: !hasDocument,
           children: [
             { key: 'find', label: '查找', icon: 'search', action: 'find', disabled: !hasDocument },
-            { key: 'goto-line', label: '转到行 / 列', icon: 'goto', action: 'goto-line', disabled: !hasDocument },
+            {
+              key: 'goto-line',
+              label: '转到行 / 列',
+              icon: 'goto',
+              action: 'goto-line',
+              disabled: !hasDocument,
+            },
           ],
         },
       ],
@@ -495,15 +560,39 @@ const buildMenuGroups = (): Array<{ key: string; items: IEditorContextMenuItem[]
         { key: 'cut', label: '剪切', icon: 'cut', action: 'cut', disabled: !hasDocument },
         { key: 'copy', label: '复制', icon: 'copy', action: 'copy', disabled: !hasDocument },
         { key: 'paste', label: '粘贴', icon: 'paste', action: 'paste', disabled: !hasDocument },
-        { key: 'select-all', label: '全选', icon: 'select-all', action: 'select-all', disabled: !hasDocument },
+        {
+          key: 'select-all',
+          label: '全选',
+          icon: 'select-all',
+          action: 'select-all',
+          disabled: !hasDocument,
+        },
       ],
     },
     {
       key: 'ai-actions',
       items: [
-        { key: 'ai-explain-selection', label: 'AI 解释选区', icon: 'search', action: 'ai-explain-selection', disabled: !canRunAiAction },
-        { key: 'ai-fix-diagnostic', label: 'AI 修复诊断', icon: 'wrench', action: 'ai-fix-diagnostic', disabled: !canRunAiAction },
-        { key: 'ai-generate-tests', label: 'AI 生成测试', icon: 'flask', action: 'ai-generate-tests', disabled: !canRunAiAction },
+        {
+          key: 'ai-explain-selection',
+          label: 'AI 解释选区',
+          icon: 'search',
+          action: 'ai-explain-selection',
+          disabled: !canRunAiAction,
+        },
+        {
+          key: 'ai-fix-diagnostic',
+          label: 'AI 修复诊断',
+          icon: 'wrench',
+          action: 'ai-fix-diagnostic',
+          disabled: !canRunAiAction,
+        },
+        {
+          key: 'ai-generate-tests',
+          label: 'AI 生成测试',
+          icon: 'flask',
+          action: 'ai-generate-tests',
+          disabled: !canRunAiAction,
+        },
       ],
     },
   ];
@@ -554,7 +643,8 @@ const cutEditorSelection = async (): Promise<void> => {
   const view = editorView;
   if (!view) return;
   const ranges = view.state.selection.ranges;
-  const selectedText = ranges.filter((range) => !range.empty)
+  const selectedText = ranges
+    .filter((range) => !range.empty)
     .map((range) => selectionRangeToText(view, range))
     .join('\n');
   if (!selectedText) return;
@@ -582,23 +672,56 @@ const handleContextMenuItemSelect = async (item: IEditorContextMenuItem): Promis
   if (!view || !item.action) return;
   view.focus();
   switch (item.action) {
-    case 'ai-explain-selection': await runAiCodeAction('explain_selection', resolveSelectedText()); return;
-    case 'ai-fix-diagnostic': await runAiCodeAction('fix_diagnostic', resolveSelectedText()); return;
-    case 'ai-generate-tests': await runAiCodeAction('generate_tests', resolveSelectedText()); return;
-    case 'undo': undo(view); return;
-    case 'redo': redo(view); return;
-    case 'format-with-shfmt': emit('format-request'); return;
-    case 'toggle-comment-line': toggleLineComment(view); return;
-    case 'find': openSearchPanel(view); return;
-    case 'goto-line': gotoLine(view); return;
-    case 'quick-command': emit('command-palette-request'); return;
-    case 'run-current-script': emit('run-request'); return;
-    case 'open-terminal': emit('open-terminal-request'); return;
-    case 'cut': await cutEditorSelection(); return;
-    case 'copy': await copyEditorSelection(); return;
-    case 'paste': await pasteIntoEditor(); return;
-    case 'select-all': selectAll(view); return;
-    default: return;
+    case 'ai-explain-selection':
+      await runAiCodeAction('explain_selection', resolveSelectedText());
+      return;
+    case 'ai-fix-diagnostic':
+      await runAiCodeAction('fix_diagnostic', resolveSelectedText());
+      return;
+    case 'ai-generate-tests':
+      await runAiCodeAction('generate_tests', resolveSelectedText());
+      return;
+    case 'undo':
+      undo(view);
+      return;
+    case 'redo':
+      redo(view);
+      return;
+    case 'format-with-shfmt':
+      emit('format-request');
+      return;
+    case 'toggle-comment-line':
+      toggleLineComment(view);
+      return;
+    case 'find':
+      openSearchPanel(view);
+      return;
+    case 'goto-line':
+      gotoLine(view);
+      return;
+    case 'quick-command':
+      emit('command-palette-request');
+      return;
+    case 'run-current-script':
+      emit('run-request');
+      return;
+    case 'open-terminal':
+      emit('open-terminal-request');
+      return;
+    case 'cut':
+      await cutEditorSelection();
+      return;
+    case 'copy':
+      await copyEditorSelection();
+      return;
+    case 'paste':
+      await pasteIntoEditor();
+      return;
+    case 'select-all':
+      selectAll(view);
+      return;
+    default:
+      return;
   }
 };
 
@@ -622,6 +745,17 @@ const handleEditorUpdate = (update: ViewUpdate): void => {
   }
 };
 
+/** 构建 LSP extension（仅对 shell 文件启用） */
+const buildLspExtension = (): Extension => {
+  const lang = getCurrentLanguage();
+  if (lang !== 'Shell' || !props.documentPath) return [];
+  const lsp = createLspExtension({
+    filePath: props.documentPath,
+    languageId: 'shellscript',
+    getContent: () => props.modelValue,
+  });
+  return lsp.extensions;
+};
 const createBaseExtensions = (language: string): Extension[] => [
   highlightSpecialChars(),
   githubLight,
@@ -639,13 +773,26 @@ const createBaseExtensions = (language: string): Extension[] => [
   ...inlineCompletionController.extensions,
   keymap.of([
     indentWithTab,
-    { key: 'Alt-Shift-f', run: () => { emit('format-request'); return true; } },
-    { key: 'Mod-Enter', run: () => { emit('run-request'); return true; } },
+    {
+      key: 'Alt-Shift-f',
+      run: () => {
+        emit('format-request');
+        return true;
+      },
+    },
+    {
+      key: 'Mod-Enter',
+      run: () => {
+        emit('run-request');
+        return true;
+      },
+    },
     { key: 'Ctrl-Space', run: acceptCompletion },
     ...defaultKeymap,
     ...historyKeymap,
     ...searchKeymap,
   ]),
+  lspCompartment.of(buildLspExtension()),
   languageCompartment.of(resolveCodeMirrorLanguageExtension(language)),
   settingsCompartment.of(buildCodeMirrorSettingsExtensions(props.editorSettings)),
   completionCompartment.of(buildCompletionExtension(props.editorSettings, language)),
@@ -668,6 +815,13 @@ const createEditor = (): void => {
   requestAnimationFrame(() => scheduleEditorLayout());
 };
 
+const reconfigureLsp = (): void => {
+  const view = editorView;
+  if (!view) return;
+  view.dispatch({
+    effects: [lspCompartment.reconfigure(buildLspExtension())],
+  });
+};
 const reconfigureLanguage = (): void => {
   const view = editorView;
   if (!view) return;
@@ -687,7 +841,9 @@ const reconfigureSettings = (): void => {
   view.dispatch({
     effects: [
       settingsCompartment.reconfigure(buildCodeMirrorSettingsExtensions(props.editorSettings)),
-      completionCompartment.reconfigure(buildCompletionExtension(props.editorSettings, getCurrentLanguage())),
+      completionCompartment.reconfigure(
+        buildCompletionExtension(props.editorSettings, getCurrentLanguage()),
+      ),
     ],
   });
   scheduleEditorLayout();
@@ -701,6 +857,7 @@ watch(
   ([nextPath], [previousPath]) => {
     if (previousPath) persistViewState(previousPath);
     reconfigureLanguage();
+    reconfigureLsp();
     restoreViewStateForPath(nextPath);
   },
   { flush: 'sync' },
@@ -751,7 +908,8 @@ onMounted(() => {
     if (!containerRef.value) return;
     const nextWidth = Math.round(containerRef.value.clientWidth);
     const nextHeight = Math.round(containerRef.value.clientHeight);
-    if (previousContainerSize.width === nextWidth && previousContainerSize.height === nextHeight) return;
+    if (previousContainerSize.width === nextWidth && previousContainerSize.height === nextHeight)
+      return;
     previousContainerSize = { width: nextWidth, height: nextHeight };
     scheduleEditorLayout();
   });
@@ -768,6 +926,7 @@ onBeforeUnmount(() => {
   persistViewState(props.documentPath);
   clearViewStateSaveTimer();
   inlineCompletionController.destroy();
+  void lspStopBridge();
   if (editorLayoutFrameId !== null) {
     window.cancelAnimationFrame(editorLayoutFrameId);
     editorLayoutFrameId = null;

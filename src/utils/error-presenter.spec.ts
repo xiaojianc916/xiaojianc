@@ -1,6 +1,6 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppError } from '@/types/app-error';
 import { presentAppError } from '@/utils/error-presenter';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const presenterMocks = vi.hoisted(() => ({
   dialog: vi.fn(),

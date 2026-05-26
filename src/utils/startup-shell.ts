@@ -21,9 +21,7 @@ const resolveActiveTabPath = (snapshot: TSessionSnapshot): string | null => {
   return orderedTabs[0]?.path ?? null;
 };
 
-export const createStartupShellState = (
-  snapshot: TSessionSnapshot,
-): TStartupShellState => {
+export const createStartupShellState = (snapshot: TSessionSnapshot): TStartupShellState => {
   const activeTabPath = resolveActiveTabPath(snapshot);
   const normalizedActivePath = activeTabPath ? normalizeFileSystemPath(activeTabPath) : null;
   const workspaceName = snapshot.workspaceRoot ? getPathBaseName(snapshot.workspaceRoot) : null;

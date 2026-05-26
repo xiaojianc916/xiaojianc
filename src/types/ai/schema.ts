@@ -1,6 +1,4 @@
 import { z } from 'zod';
-
-import { agentRuntimeEventSchema } from '@/types/ai/sidecar.schema';
 import {
   aiAgentClassifyTaskPayloadSchema,
   aiAgentClassifyTaskRequestSchema,
@@ -47,6 +45,7 @@ import {
   aiDiffPreviewLineKindSchema,
   aiDiffPreviewLineSchema,
 } from '@/types/ai/patch.schema';
+import { agentRuntimeEventSchema } from '@/types/ai/sidecar.schema';
 import {
   aiWebActivityStateSchema,
   aiWebFetchInputSchema,
@@ -60,8 +59,6 @@ import {
   aiWebSourceEntryStatusSchema,
   aiWebSourceTypeSchema,
 } from '@/types/ai/web.schema';
-
-
 
 /* ============================================================================
  * Constants
@@ -478,5 +475,5 @@ export {
   aiWebSearchRecencySchema,
   aiWebSearchResultSchema,
   aiWebSourceEntryStatusSchema,
-  aiWebSourceTypeSchema
+  aiWebSourceTypeSchema,
 };

@@ -9,6 +9,7 @@ ref="innerEditorRef" :document-path="documentPath" :document-name="documentName"
 </template>
 
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import CodeMirrorScriptEditor from '@/components/editor/CodeMirrorScriptEditor.vue';
 import { tauriService } from '@/services/tauri';
 import type { IAiCodeActionRequest } from '@/types/ai';
@@ -17,7 +18,6 @@ import type { IAnalyzeScriptPayload, IEditorSelectionSummary } from '@/types/edi
 import type { IEditorSettings } from '@/types/settings';
 import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import { toErrorMessage } from '@/utils/error';
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const ANALYSIS_INITIAL_DELAY_MS = 90;
 const ANALYSIS_TYPING_DELAY_MS = 420;

@@ -10,6 +10,8 @@ mod terminal;
 pub(crate) mod window;
 pub(crate) mod window_stage;
 pub(crate) mod workspace_fs;
+pub(crate) mod workspace_watcher;
+mod lsp;
 mod wsl_link;
 
 #[cfg(windows)]
@@ -76,6 +78,13 @@ pub use workspace_fs::{
 };
 pub(crate) use workspace_fs::{
     decode_script_bytes, encode_script_content, resolve_workspace_root,
+};
+pub use workspace_watcher::{
+    start_workspace_watching, stop_workspace_watching, WorkspaceWatcher,
+};
+pub use lsp::{
+    lsp_start, lsp_stop, lsp_did_open, lsp_did_change, lsp_did_close,
+    lsp_completion, lsp_hover, LspManager, LspDiagnostic, LspCompletionItem, LspHoverResult,
 };
 pub use wsl_link::{
     check_wsl_link_environment, get_wsl_link_agent_artifact_status, get_wsl_link_status,

@@ -1,31 +1,31 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import AiAssistantPanel from '@/components/business/ai/shell/AiAssistantPanel.vue';
 import { Card, CardContent } from '@/components/ui/card';
 import { useMessage } from '@/composables/useMessage';
 import { aiService } from '@/services/ipc/ai.service';
 import type {
-    IActiveRunSummary,
-    IAnalyzeScriptPayload,
-    IEditorDocument,
-    IEditorSelectionSummary,
+  IActiveRunSummary,
+  IAnalyzeScriptPayload,
+  IEditorDocument,
+  IEditorSelectionSummary,
 } from '@/types/editor';
 import type { IGitDiffPreviewPayload, IGitRepositoryStatusPayload } from '@/types/git';
 import { toErrorMessage } from '@/utils/error';
 import PanelRight from '~icons/lucide/panel-right';
 import RotateCw from '~icons/lucide/rotate-cw';
-import { ref } from 'vue';
 
 defineProps<{
-    document: IEditorDocument;
-    activeRun: IActiveRunSummary | null;
-    analysis: IAnalyzeScriptPayload;
-    selection: IEditorSelectionSummary | null;
-    gitStatus: IGitRepositoryStatusPayload;
-    workspaceRootPath: string | null;
+  document: IEditorDocument;
+  activeRun: IActiveRunSummary | null;
+  analysis: IAnalyzeScriptPayload;
+  selection: IEditorSelectionSummary | null;
+  gitStatus: IGitRepositoryStatusPayload;
+  workspaceRootPath: string | null;
 }>();
 
 const emit = defineEmits<{
-    'open-patch-diff': [payload: IGitDiffPreviewPayload];
+  'open-patch-diff': [payload: IGitDiffPreviewPayload];
 }>();
 
 const isRightSidebarVisible = ref(false);
@@ -33,31 +33,31 @@ const isRestartingSidecar = ref(false);
 const message = useMessage();
 
 const toggleRightSidebar = (): void => {
-    isRightSidebarVisible.value = !isRightSidebarVisible.value;
+  isRightSidebarVisible.value = !isRightSidebarVisible.value;
 };
 
 const handleRestartSidecar = async (): Promise<void> => {
-    if (isRestartingSidecar.value) {
-        return;
-    }
+  if (isRestartingSidecar.value) {
+    return;
+  }
 
-    isRestartingSidecar.value = true;
+  isRestartingSidecar.value = true;
 
-    try {
-        const health = await aiService.sidecarRestart();
-        message.success('Agent sidecar 已重启', {
-            description: `当前状态：${health.status}`,
-        });
-    } catch (error) {
-        message.error(toErrorMessage(error, '重启 Agent sidecar 失败'));
-    } finally {
-        isRestartingSidecar.value = false;
-    }
+  try {
+    const health = await aiService.sidecarRestart();
+    message.success('Agent sidecar 已重启', {
+      description: `当前状态：${health.status}`,
+    });
+  } catch (error) {
+    message.error(toErrorMessage(error, '重启 Agent sidecar 失败'));
+  } finally {
+    isRestartingSidecar.value = false;
+  }
 };
 </script>
 
 <template>
-    <Card class="workbench-content-card ai-assistant-card flex h-full min-h-0 w-full flex-1 gap-0 py-0">
+    <Card class="ai-assistant-card flex h-full min-h-0 w-full flex-1 gap-0 rounded-none border-0 py-0 shadow-none bg-transparent">
         <CardContent class="ai-workspace-shell flex min-h-0 flex-1 px-0 pb-0 pt-0">
             <div class="ai-workspace-main flex min-h-0 flex-1">
                 <section class="ai-workspace-primary min-w-0 flex-1">

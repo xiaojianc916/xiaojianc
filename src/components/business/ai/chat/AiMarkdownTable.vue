@@ -1,70 +1,70 @@
 <script setup lang="ts">
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import MarkdownRender from 'markstream-vue';
 import { computed } from 'vue';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 interface ITableCellNode {
-    type: 'table_cell';
-    header: boolean;
-    children: Array<{
-        type: string;
-        raw: string;
-        [key: string]: unknown;
-    }>;
+  type: 'table_cell';
+  header: boolean;
+  children: Array<{
+    type: string;
     raw: string;
-    align?: 'left' | 'right' | 'center';
+    [key: string]: unknown;
+  }>;
+  raw: string;
+  align?: 'left' | 'right' | 'center';
 }
 
 interface ITableRowNode {
-    type: 'table_row';
-    cells: ITableCellNode[];
-    raw: string;
+  type: 'table_row';
+  cells: ITableCellNode[];
+  raw: string;
 }
 
 interface ITableNode {
-    type: 'table';
-    header: ITableRowNode;
-    rows: ITableRowNode[];
-    raw: string;
-    loading?: boolean;
+  type: 'table';
+  header: ITableRowNode;
+  rows: ITableRowNode[];
+  raw: string;
+  loading?: boolean;
 }
 
 const props = withDefaults(
-    defineProps<{
-        node: ITableNode;
-        indexKey: string | number;
-        customId?: string;
-        typewriter?: boolean;
-    }>(),
-    {
-        customId: undefined,
-        typewriter: false,
-    },
+  defineProps<{
+    node: ITableNode;
+    indexKey: string | number;
+    customId?: string;
+    typewriter?: boolean;
+  }>(),
+  {
+    customId: undefined,
+    typewriter: false,
+  },
 );
 
 const emit = defineEmits<{
-    copy: [payload: unknown];
+  copy: [payload: unknown];
 }>();
 
 const rowList = computed(() => props.node.rows ?? []);
 
 const resolveAlignClass = (align?: ITableCellNode['align']): string => {
-    if (align === 'right') {
-        return 'text-right';
-    }
+  if (align === 'right') {
+    return 'text-right';
+  }
 
-    if (align === 'center') {
-        return 'text-center';
-    }
+  if (align === 'center') {
+    return 'text-center';
+  }
 
-    return 'text-left';
+  return 'text-left';
 };
 </script>
 

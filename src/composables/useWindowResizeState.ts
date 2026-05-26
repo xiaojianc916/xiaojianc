@@ -1,11 +1,11 @@
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { onScopeDispose } from 'vue';
 import { logger } from '@/utils/logger';
 import {
   SHELL_WINDOW_RESIZE_END_EVENT,
-  SHELL_WINDOW_RESIZE_START_EVENT,
   SHELL_WINDOW_RESIZE_SETTLED_EVENT,
+  SHELL_WINDOW_RESIZE_START_EVENT,
 } from '@/utils/window-resize-events';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { onScopeDispose } from 'vue';
 
 const RESIZE_IDLE_RESET_DELAY_MS = 120;
 const INTERACTIVE_RESIZE_SETTLE_MS = 72;

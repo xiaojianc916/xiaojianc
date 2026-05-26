@@ -162,6 +162,7 @@ v-model="commandInput" class="terminal-log-command-input mono-text" type="text"
 </template>
 
 <script setup lang="ts">
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useMessage } from '@/composables/useMessage';
 import type { IRunLogEntry, IRunResult, TExecutorKind } from '@/types/editor';
 import { writeClipboardText } from '@/utils/clipboard';
@@ -180,12 +181,12 @@ import {
   isTerminalRunStartLog,
   resolveTerminalRunLogKind,
 } from '@/utils/terminal-run';
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
 const MAX_REPORT_CACHE_ENTRIES = 8;
 const REPORT_REBUILD_DELAY_MS = 240;
 const FALLBACK_BUILD_ERROR_REASON = '结构化日志构建失败，已切换到基础日志视图。';
-const FALLBACK_EMPTY_WITH_SIGNALS_REASON = '结构化日志未产出结果，但检测到了原始运行信号，已切换到基础日志视图。';
+const FALLBACK_EMPTY_WITH_SIGNALS_REASON =
+  '结构化日志未产出结果，但检测到了原始运行信号，已切换到基础日志视图。';
 
 const props = defineProps<{
   active: boolean;
@@ -247,12 +248,13 @@ const expandedItemIds = ref<Set<string>>(new Set());
 let reportBuildTimerId: number | null = null;
 let lastFallbackDiagnosticSignature: string | null = null;
 
-const hasRawRunSignals = computed(() => (
-  props.isRunning
-  || props.runLogs.length > 0
-  || props.lastRunResult !== null
-  || props.terminalOutputLength > 0
-));
+const hasRawRunSignals = computed(
+  () =>
+    props.isRunning ||
+    props.runLogs.length > 0 ||
+    props.lastRunResult !== null ||
+    props.terminalOutputLength > 0,
+);
 
 const ANSI_ESCAPE_PATTERN =
   // eslint-disable-next-line no-control-regex
@@ -263,44 +265,49 @@ const EMERGENCY_TEMP_SCRIPT_PATTERN = /\/tmp\/[\w.-]+\.tmp\.sh/i;
 const resolveLatestRunMarker = (runLogs: IRunLogEntry[]): IRunLogEntry | undefined =>
   [...runLogs]
     .reverse()
-    .find((item) => isTerminalRunFlowLog(item) && (isTerminalRunStartLog(item) || isTerminalRunDispatchedLog(item)));
+    .find(
+      (item) =>
+        isTerminalRunFlowLog(item) &&
+        (isTerminalRunStartLog(item) || isTerminalRunDispatchedLog(item)),
+    );
 
 const buildEmergencyDetailLines = (
   value: string,
   options?: {
     stripTerminalNoise?: boolean;
   },
-): IStructuredRunDetailLine[] => value
-  .replace(ANSI_ESCAPE_PATTERN, '')
-  .replace(/\r\n/g, '\n')
-  .replace(/\r/g, '\n')
-  .split('\n')
-  .map((line) => line.trim())
-  .filter(Boolean)
-  .filter((line) => {
-    if (!options?.stripTerminalNoise) {
+): IStructuredRunDetailLine[] =>
+  value
+    .replace(ANSI_ESCAPE_PATTERN, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => {
+      if (!options?.stripTerminalNoise) {
+        return true;
+      }
+
+      if (EMERGENCY_TEMP_SCRIPT_PATTERN.test(line)) {
+        return false;
+      }
+
+      if (EMERGENCY_PROMPT_ONLY_PATTERN.test(line)) {
+        return false;
+      }
+
       return true;
-    }
-
-    if (EMERGENCY_TEMP_SCRIPT_PATTERN.test(line)) {
-      return false;
-    }
-
-    if (EMERGENCY_PROMPT_ONLY_PATTERN.test(line)) {
-      return false;
-    }
-
-    return true;
-  })
-  .slice(-8)
-  .map((line) => ({
-    text: line,
-    tone: /error|failed|failure|exception|未找到|失败|错误|异常/i.test(line)
-      ? 'error'
-      : /warning|warn|deprecated|注意|提醒/i.test(line)
-        ? 'warning'
-        : 'default',
-  }));
+    })
+    .slice(-8)
+    .map((line) => ({
+      text: line,
+      tone: /error|failed|failure|exception|未找到|失败|错误|异常/i.test(line)
+        ? 'error'
+        : /warning|warn|deprecated|注意|提醒/i.test(line)
+          ? 'warning'
+          : 'default',
+    }));
 
 const buildEmergencyReport = (reason?: string): IStructuredRunReport => {
   const sortedRunLogs = [...props.runLogs].sort(
@@ -326,13 +333,14 @@ const buildEmergencyReport = (reason?: string): IStructuredRunReport => {
 
   for (const item of sortedRunLogs) {
     const runLogKind = resolveTerminalRunLogKind(item);
-    const status = item.level === 'error'
-      ? 'error'
-      : runLogKind === 'failed' || runLogKind === 'timeout'
+    const status =
+      item.level === 'error'
         ? 'error'
-        : props.isRunning && runLogKind === 'start'
-          ? 'running'
-          : 'done';
+        : runLogKind === 'failed' || runLogKind === 'timeout'
+          ? 'error'
+          : props.isRunning && runLogKind === 'start'
+            ? 'running'
+            : 'done';
     timeline.push({
       id: `fallback-log-${item.id}`,
       tag: status === 'error' ? 'error' : isTerminalRunDispatchedLog(item) ? 'exec' : 'info',
@@ -420,7 +428,9 @@ const buildEmergencyReport = (reason?: string): IStructuredRunReport => {
     source: 'fallback',
     fallbackReason: reason ?? FALLBACK_EMPTY_WITH_SIGNALS_REASON,
     session: {
-      pathPrefix: props.documentPath ? '' : formatFileSystemPathForDisplay(props.workspaceRootPath) || '??????',
+      pathPrefix: props.documentPath
+        ? ''
+        : formatFileSystemPathForDisplay(props.workspaceRootPath) || '??????',
       fileLabel: props.documentPath
         ? formatFileSystemPathForDisplay(props.documentPath)
         : props.documentName || '?????',
@@ -461,11 +471,11 @@ const buildReportDebugSample = (): Record<string, unknown> => {
     runLogTitles: props.runLogs.slice(-6).map((item) => item.title),
     lastRunResult: props.lastRunResult
       ? {
-        success: props.lastRunResult.success,
-        exitCode: props.lastRunResult.exitCode,
-        startedAt: props.lastRunResult.startedAt,
-        finishedAt: props.lastRunResult.finishedAt,
-      }
+          success: props.lastRunResult.success,
+          exitCode: props.lastRunResult.exitCode,
+          startedAt: props.lastRunResult.startedAt,
+          finishedAt: props.lastRunResult.finishedAt,
+        }
       : null,
     terminalOutputLength: terminalOutput.length,
     terminalOutputPreview: terminalOutput.slice(0, 240),
@@ -477,7 +487,10 @@ const resolveFallbackDiagnosticSignature = (reason: string): string => {
 
   return [
     currentReportKey.value,
-    latestRunMarker?.id ?? props.lastRunResult?.startedAt ?? props.lastRunResult?.finishedAt ?? 'idle',
+    latestRunMarker?.id ??
+      props.lastRunResult?.startedAt ??
+      props.lastRunResult?.finishedAt ??
+      'idle',
     reason,
   ].join('::');
 };
@@ -582,10 +595,13 @@ const updateLiveReport = (): void => {
 const scheduleLiveReportUpdate = (): void => {
   clearPendingReportBuild();
 
-  reportBuildTimerId = window.setTimeout(() => {
-    reportBuildTimerId = null;
-    updateLiveReport();
-  }, props.isRunning ? REPORT_REBUILD_DELAY_MS : 32);
+  reportBuildTimerId = window.setTimeout(
+    () => {
+      reportBuildTimerId = null;
+      updateLiveReport();
+    },
+    props.isRunning ? REPORT_REBUILD_DELAY_MS : 32,
+  );
 };
 
 watch(
@@ -647,10 +663,12 @@ const displayedReport = computed<IStructuredRunReport>(() => {
 });
 
 const summaryTone = computed(() => displayedReport.value.summary.tone);
-const isFallbackReportActive = computed(() => (
-  displayedReport.value.hasContent && displayedReport.value.source === 'fallback'
-));
-const fallbackBadgeTitle = computed(() => displayedReport.value.fallbackReason ?? '当前已切换到基础日志视图。');
+const isFallbackReportActive = computed(
+  () => displayedReport.value.hasContent && displayedReport.value.source === 'fallback',
+);
+const fallbackBadgeTitle = computed(
+  () => displayedReport.value.fallbackReason ?? '当前已切换到基础日志视图。',
+);
 
 const runIndicatorLabel = computed(() => {
   switch (summaryTone.value) {
@@ -758,9 +776,11 @@ const resolveItemTone = (item: IStructuredRunTimelineItem): TTerminalLogTone => 
   return 'info';
 };
 
-const resolveEventTone = (item: IStructuredRunTimelineItem): TTerminalLogTone => resolveItemTone(item);
+const resolveEventTone = (item: IStructuredRunTimelineItem): TTerminalLogTone =>
+  resolveItemTone(item);
 
-const resolveKindTone = (item: IStructuredRunTimelineItem): TTerminalLogTone => resolveItemTone(item);
+const resolveKindTone = (item: IStructuredRunTimelineItem): TTerminalLogTone =>
+  resolveItemTone(item);
 
 const resolveInlineCode = (item: IStructuredRunTimelineItem): string | null => {
   if (item.status !== 'error') {

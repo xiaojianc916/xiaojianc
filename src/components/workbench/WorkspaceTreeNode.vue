@@ -77,12 +77,12 @@
 </template>
 
 <script setup lang="ts">
+import type { CSSProperties } from 'vue';
+import { computed } from 'vue';
 import ExplorerEntryIcon from '@/components/workbench/ExplorerEntryIcon.vue';
 import type { IWorkspaceEntry } from '@/types/editor';
 import { areFileSystemPathsEqual } from '@/utils/path';
 import { filterWorkspaceEntriesByQuery } from '@/utils/workspace';
-import type { CSSProperties } from 'vue';
-import { computed } from 'vue';
 
 defineOptions({
   name: 'WorkspaceTreeNode',
@@ -129,13 +129,9 @@ const isDirectory = computed(() => props.entry.kind === 'directory');
 const isExpanded = computed(() => props.expandedPaths.has(props.entry.path));
 const isLoading = computed(() => Boolean(props.loadingPaths[props.entry.path]));
 const childEntries = computed(() => props.childrenMap[props.entry.path] ?? []);
-const isActive = computed(
-  () => areFileSystemPathsEqual(props.entry.path, props.activePath),
-);
+const isActive = computed(() => areFileSystemPathsEqual(props.entry.path, props.activePath));
 const isContextTarget = computed(
-  () =>
-    !isActive.value &&
-    areFileSystemPathsEqual(props.entry.path, props.contextMenuPath),
+  () => !isActive.value && areFileSystemPathsEqual(props.entry.path, props.contextMenuPath),
 );
 const normalizedSearchQuery = computed(() => (props.searchQuery ?? '').trim().toLowerCase());
 const hasActiveSearch = computed(() => normalizedSearchQuery.value.length > 0);

@@ -25,8 +25,11 @@ const visibleOptions = computed(() =>
 );
 
 const canToggleDetails = computed(() => Boolean(props.confirmation.impact?.trim()));
-const detailPreview = computed(() =>
-  props.confirmation.impact?.trim() || props.confirmation.summary.trim() || props.confirmation.toolName,
+const detailPreview = computed(
+  () =>
+    props.confirmation.impact?.trim() ||
+    props.confirmation.summary.trim() ||
+    props.confirmation.toolName,
 );
 const riskLabel = computed(() => {
   switch (props.confirmation.riskLevel) {
@@ -61,7 +64,9 @@ const getOptionVariant = (option: IAiToolConfirmationOption): 'default' | 'outli
 };
 
 const getOptionClass = (option: IAiToolConfirmationOption): string =>
-  option.tone === 'danger' ? 'ai-tool-confirmation-option is-danger' : 'ai-tool-confirmation-option';
+  option.tone === 'danger'
+    ? 'ai-tool-confirmation-option is-danger'
+    : 'ai-tool-confirmation-option';
 
 const toggleDetails = (): void => {
   isDetailExpanded.value = !isDetailExpanded.value;

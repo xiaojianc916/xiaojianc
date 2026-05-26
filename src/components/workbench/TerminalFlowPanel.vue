@@ -1,11 +1,11 @@
 <script setup lang="ts">
+import { storeToRefs } from 'pinia';
+import { computed } from 'vue';
 import { useMessage } from '@/composables/useMessage';
 import { useTerminalRuntimeStore } from '@/store/terminal';
 import type { ITerminalStatusChangePayload, TTerminalRuntimeState } from '@/types/terminal';
 import { writeClipboardText } from '@/utils/clipboard';
 import { toErrorMessage } from '@/utils/error';
-import { storeToRefs } from 'pinia';
-import { computed } from 'vue';
 
 const props = defineProps<{
   terminalStatus: ITerminalStatusChangePayload;
@@ -134,9 +134,7 @@ const eventRows = computed(() => [
 
 const lastEventLabel = computed(() => diagnostics.value.lastEventName ?? '暂无事件');
 const lastEventAtLabel = computed(() => diagnostics.value.lastEventAt ?? '—');
-const separatorToggleLabel = computed(() =>
-  showRunSeparator.value ? '隐藏分隔条' : '显示分隔条',
-);
+const separatorToggleLabel = computed(() => (showRunSeparator.value ? '隐藏分隔条' : '显示分隔条'));
 const diagnosticsToggleLabel = computed(() =>
   deepDiagnosticsEnabled.value ? '关闭深度诊断' : '开启深度诊断',
 );

@@ -6,7 +6,6 @@ import {
   getRelativeFileSystemPath,
 } from '@/utils/path';
 import {
-  TERMINAL_RUN_LOG_TITLES,
   isTerminalRunCompletedLog,
   isTerminalRunDispatchedLog,
   isTerminalRunFailedLog,
@@ -15,6 +14,7 @@ import {
   isTerminalRunStartLog,
   isTerminalRunTimeoutLog,
   resolveTerminalRunLogKind,
+  TERMINAL_RUN_LOG_TITLES,
 } from '@/utils/terminal-run';
 
 export type TInsightTone = 'neutral' | 'success' | 'warning' | 'error' | 'running';
@@ -204,7 +204,12 @@ const resolveShellName = (commandLine: string | null): string | null => {
     return null;
   }
 
-  return firstToken.split('/').pop()?.replace(/\.exe$/i, '') ?? null;
+  return (
+    firstToken
+      .split('/')
+      .pop()
+      ?.replace(/\.exe$/i, '') ?? null
+  );
 };
 
 const resolveCommandLine = (
@@ -235,9 +240,7 @@ const resolveSession = (
   const workspaceLabel = getPathLeaf(workspaceRootPath) || '未打开工作区';
   const fallbackFileLabel = documentName.trim() || getPathLeaf(documentPath) || '未选择文件';
   const relativePath = getRelativePath(documentPath, workspaceRootPath);
-  const relativeSegments = relativePath
-    ? relativePath.split('/').filter(Boolean)
-    : [];
+  const relativeSegments = relativePath ? relativePath.split('/').filter(Boolean) : [];
 
   if (relativeSegments.length === 0) {
     relativeSegments.push(fallbackFileLabel);
@@ -313,9 +316,7 @@ const resolveScopedRunLogs = (
     return runFlowLogs.slice(Math.max(0, runFlowLogs.length - 6));
   }
 
-  const scopedLogs = orderedLogs
-    .slice(startIndex)
-    .filter(isTerminalRunFlowLog);
+  const scopedLogs = orderedLogs.slice(startIndex).filter(isTerminalRunFlowLog);
 
   if (scopedLogs.length > 0) {
     return scopedLogs;
@@ -483,10 +484,7 @@ const resolveOutputTitle = (line: string): string => {
   return normalizedLine.length > 26 ? `${normalizedLine.slice(0, 26)}…` : normalizedLine;
 };
 
-const buildLogTimelineItem = (
-  item: IRunLogEntry,
-  outputLines: string[],
-): TInternalTimelineItem => {
+const buildLogTimelineItem = (item: IRunLogEntry, outputLines: string[]): TInternalTimelineItem => {
   let tag = 'trace';
   let accent: TInsightAccent = 'yellow';
   let status: TInsightStepStatus = 'done';
@@ -544,9 +542,12 @@ const buildLogTimelineItem = (
     description: item.detail,
     status,
     timestamp: formatTime(item.createdAt),
-    detailsLabel: detailLines.length > 0
-      ? (isTerminalRunDispatchedLog(item) ? '查看命令' : '查看输出')
-      : undefined,
+    detailsLabel:
+      detailLines.length > 0
+        ? isTerminalRunDispatchedLog(item)
+          ? '查看命令'
+          : '查看输出'
+        : undefined,
     details: detailLines.length > 0 ? detailLines : undefined,
     createdAtMs: parseTimestamp(item.createdAt),
   };
@@ -577,24 +578,27 @@ const buildSyntheticOutcomeItem = (
   outputLines: string[],
 ): TInternalTimelineItem | null => {
   if (lastRunResult) {
-    const exitCode = typeof lastRunResult.exitCode === 'number'
-      ? lastRunResult.exitCode
-      : exitCodeFromOutput;
-    const detailLines = outputLines.length > 0
-      ? buildDetailLines(outputLines)
-      : lastRunResult.commandLine
-        ? buildDetailLines([lastRunResult.commandLine])
-        : [];
+    const exitCode =
+      typeof lastRunResult.exitCode === 'number' ? lastRunResult.exitCode : exitCodeFromOutput;
+    const detailLines =
+      outputLines.length > 0
+        ? buildDetailLines(outputLines)
+        : lastRunResult.commandLine
+          ? buildDetailLines([lastRunResult.commandLine])
+          : [];
 
     return {
       id: `synthetic-outcome-${lastRunResult.finishedAt}`,
       tag: lastRunResult.success ? 'done' : 'error',
       accent: lastRunResult.success ? 'green' : 'red',
-      title: lastRunResult.success ? TERMINAL_RUN_LOG_TITLES.completed : TERMINAL_RUN_LOG_TITLES.failed,
+      title: lastRunResult.success
+        ? TERMINAL_RUN_LOG_TITLES.completed
+        : TERMINAL_RUN_LOG_TITLES.failed,
       description: `执行器：${lastRunResult.executorLabel}，退出码：${exitCode ?? '未知'}，耗时：${lastRunResult.durationMs}ms。`,
       status: lastRunResult.success ? 'done' : 'error',
       timestamp: formatTime(lastRunResult.finishedAt),
-      detailsLabel: detailLines.length > 0 ? (outputLines.length > 0 ? '查看输出' : '查看命令') : undefined,
+      detailsLabel:
+        detailLines.length > 0 ? (outputLines.length > 0 ? '查看输出' : '查看命令') : undefined,
       details: detailLines.length > 0 ? detailLines : undefined,
       createdAtMs: parseTimestamp(lastRunResult.finishedAt),
     };
@@ -647,16 +651,12 @@ const buildRunningTimelineItem = (outputLines: string[]): TInternalTimelineItem 
   };
 };
 
-const assignGapWeights = (
-  items: TInternalTimelineItem[],
-): IStructuredRunTimelineItem[] =>
+const assignGapWeights = (items: TInternalTimelineItem[]): IStructuredRunTimelineItem[] =>
   items.map((item, index) => {
     const nextItem = items[index + 1];
     let gapWeight = 1;
 
-    if (nextItem !== undefined &&
-      item.createdAtMs !== null &&
-      nextItem.createdAtMs !== null) {
+    if (nextItem !== undefined && item.createdAtMs !== null && nextItem.createdAtMs !== null) {
       const diffMs = Math.max(0, nextItem.createdAtMs - item.createdAtMs);
       gapWeight = diffMs >= 3000 ? 3 : diffMs >= 1200 ? 2 : 1;
     }
@@ -686,14 +686,14 @@ const buildTimeline = (
   const finalLogItems: TInternalTimelineItem[] = [];
   const scopedRunLogs = lastRunResult
     ? runLogs.filter((item) => {
-      if (!isTerminalRunFinalLog(item)) {
-        return true;
-      }
+        if (!isTerminalRunFinalLog(item)) {
+          return true;
+        }
 
-      return lastRunResult.success
-        ? isTerminalRunCompletedLog(item)
-        : isTerminalRunFailedLog(item) || isTerminalRunTimeoutLog(item);
-    })
+        return lastRunResult.success
+          ? isTerminalRunCompletedLog(item)
+          : isTerminalRunFailedLog(item) || isTerminalRunTimeoutLog(item);
+      })
     : runLogs;
 
   for (const item of scopedRunLogs) {
@@ -711,7 +711,11 @@ const buildTimeline = (
     ...finalLogItems,
   ];
 
-  const syntheticOutcomeItem = buildSyntheticOutcomeItem(lastRunResult, exitCodeFromOutput, outputLines);
+  const syntheticOutcomeItem = buildSyntheticOutcomeItem(
+    lastRunResult,
+    exitCodeFromOutput,
+    outputLines,
+  );
   if (syntheticOutcomeItem && finalLogItems.length === 0) {
     timelineItems.push(syntheticOutcomeItem);
   }
@@ -732,7 +736,8 @@ const resolveElapsedMs = (
     return lastRunResult.durationMs;
   }
 
-  const startedAtMs = parseTimestamp(lastRunResult?.startedAt) ?? parseTimestamp(scopedRunLogs[0]?.createdAt);
+  const startedAtMs =
+    parseTimestamp(lastRunResult?.startedAt) ?? parseTimestamp(scopedRunLogs[0]?.createdAt);
   if (startedAtMs === null) {
     return null;
   }
@@ -741,7 +746,9 @@ const resolveElapsedMs = (
     return Math.max(0, Date.now() - startedAtMs);
   }
 
-  const finishedAtMs = parseTimestamp(lastRunResult?.finishedAt) ?? parseTimestamp(scopedRunLogs[scopedRunLogs.length - 1]?.createdAt);
+  const finishedAtMs =
+    parseTimestamp(lastRunResult?.finishedAt) ??
+    parseTimestamp(scopedRunLogs[scopedRunLogs.length - 1]?.createdAt);
   if (finishedAtMs === null) {
     return null;
   }
@@ -813,12 +820,14 @@ const buildSummary = (
 
   const tone = resolveSummaryTone(isRunning, lastRunResult, exitCodeFromOutput, counts);
   const totalSteps = timeline.length;
-  const weightedCompletedSteps = counts.success + counts.warning + counts.error + (counts.running > 0 ? 0.35 : 0);
-  const progress = totalSteps === 0
-    ? 0
-    : tone === 'success' || tone === 'warning' || tone === 'error'
-      ? 100
-      : Math.max(12, Math.min(92, Math.round((weightedCompletedSteps / totalSteps) * 100)));
+  const weightedCompletedSteps =
+    counts.success + counts.warning + counts.error + (counts.running > 0 ? 0.35 : 0);
+  const progress =
+    totalSteps === 0
+      ? 0
+      : tone === 'success' || tone === 'warning' || tone === 'error'
+        ? 100
+        : Math.max(12, Math.min(92, Math.round((weightedCompletedSteps / totalSteps) * 100)));
 
   return {
     tone,
@@ -833,7 +842,11 @@ const buildSummary = (
               ? '已完成'
               : '待执行',
     phaseLabel:
-      totalSteps === 0 ? '等待运行' : isRunning ? `第 ${totalSteps} 步，共 ${totalSteps} 步` : `共 ${totalSteps} 步`,
+      totalSteps === 0
+        ? '等待运行'
+        : isRunning
+          ? `第 ${totalSteps} 步，共 ${totalSteps} 步`
+          : `共 ${totalSteps} 步`,
     elapsedLabel: formatElapsed(resolveElapsedMs(lastRunResult, scopedRunLogs, isRunning)),
     progress,
     counts,
@@ -857,7 +870,13 @@ export const buildStructuredRunReport = ({
   const safeOutput = typeof terminalOutput === 'string' ? terminalOutput : '';
   const outputLines = collectExecutionOutputLines(safeOutput);
   const exitCodeFromOutput = parseExitCodeFromOutput(outputLines.join('\n'));
-  const timeline = buildTimeline(safeRunLogs, outputLines, lastRunResult, exitCodeFromOutput, isRunning);
+  const timeline = buildTimeline(
+    safeRunLogs,
+    outputLines,
+    lastRunResult,
+    exitCodeFromOutput,
+    isRunning,
+  );
 
   return {
     hasContent:

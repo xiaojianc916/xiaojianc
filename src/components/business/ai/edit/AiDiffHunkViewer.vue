@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import CodeBlock from '@/components/ai-elements/code-block/CodeBlock.vue';
 import type { IAiDiffHunkPreview, TAiDiffPreviewLineKind } from '@/types/ai';
-import { computed } from 'vue';
 
 const props = defineProps<{
   hunk: IAiDiffHunkPreview;

@@ -1,14 +1,13 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue';
+import type { IAiTaskPlanStep } from '@/types/ai';
+import type { TAgentPlanStatus } from '@/types/ai/sidecar';
 import Check from '~icons/lucide/check';
 import ChevronUp from '~icons/lucide/chevron-up';
 import FileText from '~icons/lucide/file-text';
 import RotateCw from '~icons/lucide/rotate-cw';
 import Trash2 from '~icons/lucide/trash2';
 import X from '~icons/lucide/x';
-import { computed, ref } from 'vue';
-
-import type { TAgentPlanStatus } from '@/types/ai/sidecar';
-import type { IAiTaskPlanStep } from '@/types/ai';
 
 const props = defineProps<{
   goal: string;
@@ -33,8 +32,8 @@ const emit = defineEmits<{
 const MIN_STEP_COUNT = 2;
 const isCollapsed = ref(false);
 
-const overviewText = computed(() =>
-  props.summary?.trim() || props.goal.trim() || 'AI 已生成一份计划，请确认后开始执行。',
+const overviewText = computed(
+  () => props.summary?.trim() || props.goal.trim() || 'AI 已生成一份计划，请确认后开始执行。',
 );
 
 const approvalLabel = computed(() => {
@@ -57,13 +56,14 @@ const approvalLabel = computed(() => {
   return props.isApproving ? '批准中...' : '批准并启动';
 });
 
-const canReject = computed(() =>
-  !props.approvedAt &&
-  props.status !== 'approved' &&
-  props.status !== 'rejected' &&
-  props.status !== 'executing' &&
-  props.status !== 'completed' &&
-  props.status !== 'failed',
+const canReject = computed(
+  () =>
+    !props.approvedAt &&
+    props.status !== 'approved' &&
+    props.status !== 'rejected' &&
+    props.status !== 'executing' &&
+    props.status !== 'completed' &&
+    props.status !== 'failed',
 );
 
 const getInputValue = (event: Event): string =>

@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import type { TAiChatRole } from '@/types/ai';
 import type { HTMLAttributes } from 'vue';
 import { cn } from '@/lib/utils';
+import type { TAiChatRole } from '@/types/ai';
 
-const props = withDefaults(defineProps<{
-  from: TAiChatRole;
-  class?: HTMLAttributes['class'];
-}>(), {
-  class: undefined,
-});
+const props = withDefaults(
+  defineProps<{
+    from: TAiChatRole;
+    class?: HTMLAttributes['class'];
+  }>(),
+  {
+    class: undefined,
+  },
+);
 </script>
 
 <template>

@@ -338,10 +338,7 @@ export interface IAgentCheckpointEvent extends IAgentRuntimeEventBase {
 }
 
 export interface IAgentRollbackEvent extends IAgentRuntimeEventBase {
-  type:
-  | 'rollback.restore.started'
-  | 'rollback.restore.completed'
-  | 'rollback.restore.failed';
+  type: 'rollback.restore.started' | 'rollback.restore.completed' | 'rollback.restore.failed';
   snapshotId?: string;
   savedAsLatest?: boolean;
   message?: string;
@@ -538,8 +535,7 @@ export interface IAgentSidecarPlanFinishRequest extends IAgentSidecarPlanApprove
  *
  * 缺点:类型层失去对 `messages` 必填的保护。如有需要可以拆成两条 request 类型。
  */
-export interface IAgentSidecarApprovalResolveRequest
-  extends Partial<IAgentSidecarBaseRequest> {
+export interface IAgentSidecarApprovalResolveRequest extends Partial<IAgentSidecarBaseRequest> {
   sessionId?: string;
   requestId: string;
   decision: string;

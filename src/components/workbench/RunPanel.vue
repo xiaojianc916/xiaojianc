@@ -122,6 +122,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue';
 import DiagnosticsPanel from '@/components/workbench/DiagnosticsPanel.vue';
 import EmbeddedTerminal from '@/components/workbench/EmbeddedTerminal.vue';
 import StructuredRunInsights from '@/components/workbench/StructuredRunInsights.vue';
@@ -138,9 +139,9 @@ import type {
 } from '@/types/editor';
 import type { ITerminalSettings } from '@/types/settings';
 import type {
-    ITerminalRunCompletedPayload,
-    ITerminalRunChunkPayload,
-    ITerminalStatusChangePayload,
+  ITerminalRunChunkPayload,
+  ITerminalRunCompletedPayload,
+  ITerminalStatusChangePayload,
 } from '@/types/terminal';
 import { toErrorMessage } from '@/utils/error';
 import Eraser from '~icons/lucide/eraser';
@@ -148,7 +149,6 @@ import Maximize2 from '~icons/lucide/maximize2';
 import Minimize2 from '~icons/lucide/minimize2';
 import RefreshCcw from '~icons/lucide/refresh-ccw';
 import X from '~icons/lucide/x';
-import { computed, ref } from 'vue';
 
 const props = defineProps<{
   terminalOutputLength: number;

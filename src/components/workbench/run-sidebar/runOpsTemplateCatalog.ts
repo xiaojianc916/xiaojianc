@@ -104,7 +104,6 @@ export const RUN_OPS_TEMPLATE_CATEGORIES: readonly IRunOpsTemplateCategory[] = [
   },
 ] as const;
 
-
 const BASE_LAYERS: readonly IRunOpsTemplateLayer[] = [
   { id: 'L0', title: 'Meta / Safety', summary: '先收紧运行边界，失败必须可见。' },
   { id: 'L1', title: 'Bootstrap', summary: '解析路径、加载配置、建立默认值。' },
@@ -300,4 +299,3 @@ export const RUN_OPS_TEMPLATE_BLUEPRINTS: readonly IRunOpsTemplateBlueprint[] = 
     commentGuide: '注释批次、超时、失败继续或中止策略，避免误伤整组机器。',
   }),
 ] as const;
-

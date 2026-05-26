@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { cn } from "@/lib/utils";
-import type { HTMLAttributes } from "vue";
+import type { HTMLAttributes } from 'vue';
+import { cn } from '@/lib/utils';
 
 const props = withDefaults(
-    defineProps<{
-        class?: HTMLAttributes["class"]
-        orientation?: "vertical" | "horizontal"
-    }>(),
-    {
-        class: undefined,
-        orientation: "vertical",
-    },
-)
+  defineProps<{
+    class?: HTMLAttributes['class'];
+    orientation?: 'vertical' | 'horizontal';
+  }>(),
+  {
+    class: undefined,
+    orientation: 'vertical',
+  },
+);
 </script>
 
 <template>

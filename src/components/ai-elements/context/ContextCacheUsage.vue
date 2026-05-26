@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from 'vue';
-import { cn } from '@/lib/utils';
 import { getUsage } from 'tokenlens';
+import type { HTMLAttributes } from 'vue';
 import { computed } from 'vue';
+import { cn } from '@/lib/utils';
 import { useContextValue } from './context';
 import TokensWithCost from './TokensWithCost.vue';
 
@@ -12,8 +12,8 @@ const props = defineProps<{
 
 const { usage, modelId } = useContextValue();
 
-const cacheTokens = computed(() =>
-  usage.value?.inputTokenDetails.cacheReadTokens ?? usage.value?.cachedInputTokens ?? 0,
+const cacheTokens = computed(
+  () => usage.value?.inputTokenDetails.cacheReadTokens ?? usage.value?.cachedInputTokens ?? 0,
 );
 
 const cacheCostText = computed(() => {

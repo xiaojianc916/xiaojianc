@@ -1,3 +1,6 @@
+import type { Event, UnlistenFn } from '@tauri-apps/api/event';
+import { createPinia, setActivePinia } from 'pinia';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createTerminalEventBus,
   type ITerminalEventBus,
@@ -10,14 +13,11 @@ import type { ITauriService } from '@/types/tauri';
 import type {
   ITerminalDataEvent,
   ITerminalExitEvent,
-  ITerminalRunCompletedPayload,
   ITerminalRunChunkPayload,
+  ITerminalRunCompletedPayload,
   ITerminalRunStartedPayload,
   ITerminalStateChangedPayload,
 } from '@/types/terminal';
-import type { Event, UnlistenFn } from '@tauri-apps/api/event';
-import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 type TTerminalFacadeTauri = Pick<
   ITauriService,
@@ -35,10 +35,14 @@ class FakeTerminalEventBus implements ITerminalEventBus {
   private readonly dataHandlers = new Set<(payload: ITerminalDataEvent) => void>();
   private readonly runChunkHandlers = new Set<(payload: ITerminalRunChunkPayload) => void>();
   private readonly runStartedHandlers = new Set<(payload: ITerminalRunStartedPayload) => void>();
-  private readonly runCompletedHandlers = new Set<(payload: ITerminalRunCompletedPayload) => void>();
+  private readonly runCompletedHandlers = new Set<
+    (payload: ITerminalRunCompletedPayload) => void
+  >();
   private readonly interactiveReadyHandlers = new Set<() => void>();
   private readonly interactiveExitedHandlers = new Set<(payload: ITerminalExitEvent) => void>();
-  private readonly stateChangedHandlers = new Set<(payload: ITerminalStateChangedPayload) => void>();
+  private readonly stateChangedHandlers = new Set<
+    (payload: ITerminalStateChangedPayload) => void
+  >();
 
   onTerminalData(handler: (payload: ITerminalDataEvent) => void): UnlistenFn {
     this.dataHandlers.add(handler);
@@ -195,7 +199,10 @@ describe('terminal facade suite 1', () => {
   });
 
   it('terminal facade case 2', () => {
-    const facade = useTerminalFacade({ tauri: createTauriMock(), eventBus: new FakeTerminalEventBus() });
+    const facade = useTerminalFacade({
+      tauri: createTauriMock(),
+      eventBus: new FakeTerminalEventBus(),
+    });
 
     expect(facade.routeInput('idle_interactive', null)).toBe('main-terminal');
     expect(
@@ -270,12 +277,15 @@ describe('terminal facade suite 1', () => {
   it('terminal facade case 4', async () => {
     const eventBus = new FakeTerminalEventBus();
     const tauri = createTauriMock();
-    let resolveDispatch: ((value: Awaited<ReturnType<TTerminalFacadeTauri['dispatchScriptToTerminal']>>) => void) | null = null;
-    tauri.dispatchScriptToTerminal = vi.fn((payload) =>
-      new Promise((resolve) => {
-        resolveDispatch = resolve;
-        void payload;
-      }),
+    let resolveDispatch:
+      | ((value: Awaited<ReturnType<TTerminalFacadeTauri['dispatchScriptToTerminal']>>) => void)
+      | null = null;
+    tauri.dispatchScriptToTerminal = vi.fn(
+      (payload) =>
+        new Promise((resolve) => {
+          resolveDispatch = resolve;
+          void payload;
+        }),
     );
     const facade = useTerminalFacade({ tauri, eventBus });
 

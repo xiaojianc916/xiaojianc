@@ -1,6 +1,6 @@
+import { ref } from 'vue';
 import { isAppError } from '@/types/app-error';
 import { toErrorMessage } from '@/utils/error';
-import { ref } from 'vue';
 
 export interface IRuntimeErrorState {
   title: string;

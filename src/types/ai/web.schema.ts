@@ -77,7 +77,11 @@ export const aiWebFetchInputSchema = z.object({
     message: 'web_fetch 只允许访问公网 http/https URL。',
   }),
   reason: z.string().trim().min(1).max(240),
-  maxBytes: z.number().int().min(1).max(512 * 1024),
+  maxBytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(512 * 1024),
 });
 
 export const aiWebFetchResultSchema = z.object({

@@ -1,6 +1,6 @@
 <script setup lang="ts">
+import { computed, type HTMLAttributes, provide } from 'vue';
 import { cn } from '@/lib/utils';
-import { computed, provide, type HTMLAttributes } from 'vue';
 import { AttachmentsKey } from './context';
 import type { TAttachmentVariant } from './types';
 

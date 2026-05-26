@@ -1,5 +1,5 @@
 import { storeToRefs } from 'pinia';
-import { readonly, type DeepReadonly, type Ref } from 'vue';
+import { type DeepReadonly, type Ref, readonly } from 'vue';
 
 import { tauriService } from '@/services/tauri';
 import { getTerminalEventBus, type ITerminalEventBus } from '@/services/terminal/eventBus';
@@ -41,10 +41,7 @@ export interface ITerminalFacade {
   writeInput(sessionId: string, data: Uint8Array): Promise<void>;
   writeInputForCurrentState(data: Uint8Array): Promise<void>;
   resize(cols: number, rows: number): Promise<void>;
-  routeInput(
-    state: TTerminalRuntimeState,
-    activeRun: ITerminalRunHandle | null,
-  ): string | null;
+  routeInput(state: TTerminalRuntimeState, activeRun: ITerminalRunHandle | null): string | null;
   onTerminalData(handler: TTerminalDataHandler): TTerminalUnsubscribe;
   dispose(): void;
   readonly state: DeepReadonly<Ref<TTerminalRuntimeState>>;
@@ -241,7 +238,8 @@ export const useTerminalFacade = (options: ITerminalFacadeOptions = {}): ITermin
       });
     }
 
-    eventBridgePromise = eventBus.start()
+    eventBridgePromise = eventBus
+      .start()
       .then(() => {
         eventBridgeStarted = true;
       })
@@ -353,10 +351,7 @@ export const useTerminalFacade = (options: ITerminalFacadeOptions = {}): ITermin
   const writeInputForCurrentState = async (data: Uint8Array): Promise<void> => {
     const targetSessionId = routeInput(state.value, activeRun.value);
     if (targetSessionId) {
-      runtimeStore.recordInputRoute(
-        state.value === 'running' ? 'run' : 'interactive',
-        data,
-      );
+      runtimeStore.recordInputRoute(state.value === 'running' ? 'run' : 'interactive', data);
       await writeInput(targetSessionId, data);
       return;
     }

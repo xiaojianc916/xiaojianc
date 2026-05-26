@@ -6,16 +6,6 @@ import { useAiAssistant } from '@/composables/ai/useAiAssistant';
 import { useAiAgentStore } from '@/store/aiAgent';
 import { useAiConversationStore } from '@/store/aiConversation';
 import type {
-  IAgentSidecarCheckpointRestoreRequest,
-  IAgentSidecarExecuteRequest,
-  IAgentSidecarPlanQueryRequest,
-  IAgentSidecarPlanRequest,
-  IAgentSidecarResponsePayload,
-  IAgentSidecarStreamEventPayload,
-  TJsonValue,
-} from '@/types/ai/sidecar';
-import { agentSidecarPlanRequestSchema } from '@/types/ai/sidecar.schema';
-import type {
   IAiAgentRun,
   IAiApplyPatchPayload,
   IAiApplyPatchRequest,
@@ -35,6 +25,16 @@ import type {
   IAiEditUndoOperationRequest,
   IAiSnapshot,
 } from '@/types/ai/edit';
+import type {
+  IAgentSidecarCheckpointRestoreRequest,
+  IAgentSidecarExecuteRequest,
+  IAgentSidecarPlanQueryRequest,
+  IAgentSidecarPlanRequest,
+  IAgentSidecarResponsePayload,
+  IAgentSidecarStreamEventPayload,
+  TJsonValue,
+} from '@/types/ai/sidecar';
+import { agentSidecarPlanRequestSchema } from '@/types/ai/sidecar.schema';
 import type { IAnalyzeScriptPayload, IEditorDocument } from '@/types/editor';
 import type { IGitRepositoryStatusPayload } from '@/types/git';
 
@@ -759,10 +759,7 @@ const createAssistantHarness = (): ReturnType<typeof useAiAssistant> =>
   createAssistantHarnessContext().assistant;
 
 const createAssistantHarnessContext = (
-  overrides: {
-    analysis?: IAnalyzeScriptPayload;
-    narratorConfigured?: boolean;
-  } = {},
+  overrides: { analysis?: IAnalyzeScriptPayload; narratorConfigured?: boolean } = {},
 ) => {
   const document = ref(createDocument());
   const assistant = useAiAssistant({
@@ -1140,7 +1137,8 @@ describe('useAiAssistant streaming integration', () => {
   it('清空草稿并展示用户消息时，不再等待 @project 上下文查询', async () => {
     const { assistant } = createAssistantHarnessContext();
     const userQuestion = '@project 查一下发送流程';
-    const executeDeferred = createDeferred<Awaited<ReturnType<typeof aiServiceMock.sidecarExecute>>>();
+    const executeDeferred =
+      createDeferred<Awaited<ReturnType<typeof aiServiceMock.sidecarExecute>>>();
 
     aiServiceMock.sidecarExecute.mockReturnValueOnce(executeDeferred.promise);
 
@@ -3067,7 +3065,8 @@ describe('useAiAssistant streaming integration', () => {
 
   it('在 apply_file_edits 完成事件到达时立刻挂载折叠 diff，不等待整轮 Agent 结束', async () => {
     const { assistant, document } = createAssistantHarnessContext();
-    const executeDeferred = createDeferred<Awaited<ReturnType<typeof aiServiceMock.sidecarExecute>>>();
+    const executeDeferred =
+      createDeferred<Awaited<ReturnType<typeof aiServiceMock.sidecarExecute>>>();
     const patch: IAiPatchSet = {
       summary: '更新启动提示',
       files: [
@@ -3432,7 +3431,9 @@ describe('useAiAssistant streaming integration', () => {
       result: 'Agent 姝ｅ湪绛夊緟纭锛氬厑璁?Agent 鎵ц pnpm test 鍚楋紵',
     });
 
-    await assistant.attachFile(new File(['image-bytes'], 'confirm-image.png', { type: 'image/png' }));
+    await assistant.attachFile(
+      new File(['image-bytes'], 'confirm-image.png', { type: 'image/png' }),
+    );
     expect(assistant.attachedFiles.value).toHaveLength(1);
 
     assistant.activeMode.value = 'agent';
@@ -3458,13 +3459,15 @@ describe('useAiAssistant streaming integration', () => {
 
     await assistant.resolveSidecarToolConfirmation('allow-once');
 
-    expect(aiServiceMock.sidecarResolveApproval).toHaveBeenCalledWith(expect.objectContaining({
-      sessionId: 'sidecar-confirmation-session',
-      requestId: 'approval-run-command',
-      decision: 'approve',
-      goal: '运行一次最小验证',
-      threadId: expect.any(String),
-    }));
+    expect(aiServiceMock.sidecarResolveApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'sidecar-confirmation-session',
+        requestId: 'approval-run-command',
+        decision: 'approve',
+        goal: '运行一次最小验证',
+        threadId: expect.any(String),
+      }),
+    );
     expect(agentStore.pendingToolConfirmation).toBeNull();
     expect(agentStore.pendingSidecarAgentSession).toBeNull();
     expect(assistant.messages.value[1]?.content).toContain('审批结果已交给 sidecar');
@@ -3504,12 +3507,14 @@ describe('useAiAssistant streaming integration', () => {
 
     await assistant.resolveSidecarToolConfirmation('stop');
 
-    expect(aiServiceMock.sidecarResolveApproval).toHaveBeenCalledWith(expect.objectContaining({
-      sessionId: 'sidecar-persisted-session',
-      requestId: 'approval-persisted-command',
-      decision: 'cancel',
-      goal: '运行一次最小验证',
-    }));
+    expect(aiServiceMock.sidecarResolveApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'sidecar-persisted-session',
+        requestId: 'approval-persisted-command',
+        decision: 'cancel',
+        goal: '运行一次最小验证',
+      }),
+    );
     expect(agentStore.pendingToolConfirmation).toBeNull();
     expect(agentStore.pendingSidecarAgentSession).toBeNull();
   });
@@ -3756,11 +3761,11 @@ describe('useAiAssistant streaming integration', () => {
       taskId: 'thread-rollback',
     });
     expect(document.value.content).toBe('echo old');
-    expect(assistant.messages.value[0]?.changedFilesSummary?.revertedAt).toEqual(expect.any(String));
+    expect(assistant.messages.value[0]?.changedFilesSummary?.revertedAt).toEqual(
+      expect.any(String),
+    );
     expect(assistant.messages.value[0]?.stream?.runtimeEvents).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: 'rollback.restore.completed' }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ type: 'rollback.restore.completed' })]),
     );
     expect(assistant.revertingChangedFilesSummaryId.value).toBeNull();
   });

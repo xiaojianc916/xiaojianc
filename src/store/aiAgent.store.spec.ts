@@ -6,7 +6,10 @@ import { createApp, nextTick } from 'vue';
 import { useAiAgentStore } from '@/store/aiAgent';
 import type { IAiAgentRun, IAiTaskPlanStep } from '@/types/ai';
 
-const createStep = (index: number, status: IAiTaskPlanStep['status'] = 'pending'): IAiTaskPlanStep => ({
+const createStep = (
+  index: number,
+  status: IAiTaskPlanStep['status'] = 'pending',
+): IAiTaskPlanStep => ({
   id: `plan-step-${index + 1}`,
   index,
   title: index === 0 ? '收集上下文' : '执行修改',
@@ -64,28 +67,32 @@ describe('aiAgent store step details', () => {
   it('保存 step 的 Web Sources 摘要与工具结果，不保存网页全文', () => {
     const store = useAiAgentStore();
 
-    store.setStepWebSources('run-1', 'step-1', [{
-      id: 'web-source-1',
-      title: 'Tauri Docs',
-      url: 'https://tauri.app/start/',
-      sourceType: 'docs',
-      status: 'fetched',
-      queryPreview: 'Tauri docs',
-      fetchedAt: '2026-04-29T10:00:00.000Z',
-      textRef: 'web-text:abc',
-      excerpt: '短摘要',
-    }]);
-    store.appendStepToolResults('run-1', 'step-1', [{
-      id: 'tool-result-1',
-      runId: 'run-1',
-      stepId: 'step-1',
-      toolName: 'web_fetch',
-      status: 'succeeded',
-      summary: '读取 1 个网页正文引用',
-      startedAt: '2026-04-29T10:00:00.000Z',
-      endedAt: '2026-04-29T10:00:01.000Z',
-      outputRef: 'web-text:abc',
-    }]);
+    store.setStepWebSources('run-1', 'step-1', [
+      {
+        id: 'web-source-1',
+        title: 'Tauri Docs',
+        url: 'https://tauri.app/start/',
+        sourceType: 'docs',
+        status: 'fetched',
+        queryPreview: 'Tauri docs',
+        fetchedAt: '2026-04-29T10:00:00.000Z',
+        textRef: 'web-text:abc',
+        excerpt: '短摘要',
+      },
+    ]);
+    store.appendStepToolResults('run-1', 'step-1', [
+      {
+        id: 'tool-result-1',
+        runId: 'run-1',
+        stepId: 'step-1',
+        toolName: 'web_fetch',
+        status: 'succeeded',
+        summary: '读取 1 个网页正文引用',
+        startedAt: '2026-04-29T10:00:00.000Z',
+        endedAt: '2026-04-29T10:00:01.000Z',
+        outputRef: 'web-text:abc',
+      },
+    ]);
 
     const detail = store.getStepDetail('run-1', 'step-1');
 
@@ -106,14 +113,16 @@ describe('aiAgent store step details', () => {
       totalDeletions: 1,
       patchRef: 'patch:run-1:step-1',
       appliedAt: '2026-04-29T10:00:00.000Z',
-      files: [{
-        path: 'src/agent/runtime.ts',
-        status: 'modified',
-        additions: 3,
-        deletions: 1,
-        diffRef: 'diff:runtime',
-        rollbackRef: 'rollback:runtime',
-      }],
+      files: [
+        {
+          path: 'src/agent/runtime.ts',
+          status: 'modified',
+          additions: 3,
+          deletions: 1,
+          diffRef: 'diff:runtime',
+          rollbackRef: 'rollback:runtime',
+        },
+      ],
     });
 
     const summaries = store.getPatchSummaries('run-1');

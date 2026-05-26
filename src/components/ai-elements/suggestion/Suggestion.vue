@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
 import type { HTMLAttributes } from 'vue';
+import { cn } from '@/lib/utils';
 
 defineOptions({
   inheritAttrs: false,
 });
 
-const props = withDefaults(defineProps<{
-  suggestion: string;
-  class?: HTMLAttributes['class'];
-  disabled?: boolean;
-}>(), {
-  class: undefined,
-  disabled: false,
-});
+const props = withDefaults(
+  defineProps<{
+    suggestion: string;
+    class?: HTMLAttributes['class'];
+    disabled?: boolean;
+  }>(),
+  {
+    class: undefined,
+    disabled: false,
+  },
+);
 
 const emit = defineEmits<{
   click: [suggestion: string];

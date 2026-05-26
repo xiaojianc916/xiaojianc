@@ -4,15 +4,15 @@ import { computed, onScopeDispose, ref } from 'vue';
 import {
   ACCENT_COLORS,
   RADIUS_PRESETS,
-  THEME_PREFERENCES,
-  UI_DENSITIES,
-  WORKBENCH_PRIMARY_MODES,
   type TAccentColor,
+  THEME_PREFERENCES,
   type TRadiusPreset,
   type TThemeMode,
   type TThemePreference,
   type TUiDensity,
   type TWorkbenchPrimaryMode,
+  UI_DENSITIES,
+  WORKBENCH_PRIMARY_MODES,
 } from '@/types/app';
 import {
   createDefaultAppSettings,
@@ -69,14 +69,15 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 /** 由有限字符串元组生成 type guard,所有 isKnown* 共用。 */
 const createTupleGuard =
   <T extends string>(allowed: readonly T[]) =>
-    (value: unknown): value is T =>
-      typeof value === 'string' && (allowed as readonly string[]).includes(value);
+  (value: unknown): value is T =>
+    typeof value === 'string' && (allowed as readonly string[]).includes(value);
 
 const isKnownThemePreference = createTupleGuard<TThemePreference>(THEME_PREFERENCES);
 const isKnownAccentColor = createTupleGuard<TAccentColor>(ACCENT_COLORS);
 const isKnownUiDensity = createTupleGuard<TUiDensity>(UI_DENSITIES);
 const isKnownRadiusPreset = createTupleGuard<TRadiusPreset>(RADIUS_PRESETS);
-const isKnownWorkbenchPrimaryMode = createTupleGuard<TWorkbenchPrimaryMode>(WORKBENCH_PRIMARY_MODES);
+const isKnownWorkbenchPrimaryMode =
+  createTupleGuard<TWorkbenchPrimaryMode>(WORKBENCH_PRIMARY_MODES);
 
 /** value 通过 guard 时返回自身,否则回退 fallback。 */
 const coerceEnum = <T>(
@@ -89,11 +90,7 @@ const coerceEnum = <T>(
  * 把数字夹紧到 [min, max]。非有限数 (NaN / Infinity / 非 number) 走 fallback,
  * 没传 fallback 就回到 min。fallback 自身也会被 round + clamp,保证返回值始终合法。
  */
-const clampNumber = (
-  value: unknown,
-  [min, max]: TNumberRange,
-  fallback?: number,
-): number => {
+const clampNumber = (value: unknown, [min, max]: TNumberRange, fallback?: number): number => {
   const clamp = (n: number): number => Math.min(max, Math.max(min, Math.round(n)));
   if (typeof value === 'number' && Number.isFinite(value)) {
     return clamp(value);
@@ -135,10 +132,10 @@ interface IAppStorePersistShape {
 /** 用于 patchSettings: 任意深度的可选合并形状。 */
 type TDeepPartial<T> = {
   [K in keyof T]?: T[K] extends ReadonlyArray<unknown>
-  ? T[K]
-  : T[K] extends object
-  ? TDeepPartial<T[K]>
-  : T[K];
+    ? T[K]
+    : T[K] extends object
+      ? TDeepPartial<T[K]>
+      : T[K];
 };
 
 /** environmentVariables 元素的最小形状校验。 */
@@ -368,11 +365,7 @@ export const useAppStore = defineStore(
     };
 
     const setAiPanelWidth = (value: number): void => {
-      aiPanelWidth.value = clampNumber(
-        value,
-        RANGE_AI_PANEL_WIDTH,
-        DEFAULT_AI_PANEL_WIDTH,
-      );
+      aiPanelWidth.value = clampNumber(value, RANGE_AI_PANEL_WIDTH, DEFAULT_AI_PANEL_WIDTH);
     };
 
     const setTerminalPanelHeight = (value: number): void => {

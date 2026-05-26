@@ -15,7 +15,8 @@
     "pretauri:dev": "node ./scripts/check-dev-env.mjs",
     "build": "pnpm run generate:shell-catalog && vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext .ts,.vue",
+    "format": "biome check --write src/",
+    "lint": "biome check src/",
     "typecheck": "vue-tsc --noEmit",
     "size-limit": "pnpm run build && size-limit",
     "test": "vitest run",
@@ -94,9 +95,9 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
+    "@biomejs/biome": "^2.4.15",
     "@commitlint/cli": "^21.0.1",
     "@commitlint/config-conventional": "^21.0.1",
-    "@eslint/js": "^10.0.1",
     "@iconify-json/lucide": "^1.2.109",
     "@playwright/test": "^1.60.0",
     "@size-limit/file": "^12.1.0",
@@ -108,36 +109,23 @@
     "@vue/tsconfig": "^0.9.1",
     "dpdm": "^4.2.0",
     "esbuild": "^0.28.0",
-    "eslint": "^10.4.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-vue": "^10.9.1",
-    "globals": "^17.6.0",
     "happy-dom": "^20.9.0",
     "husky": "^9.1.7",
     "knip": "^6.14.2",
     "lint-staged": "^17.0.5",
-    "prettier": "^3.8.3",
     "shellcheck": "^4.1.0",
     "size-limit": "^12.1.0",
-    "stylelint": "^17.12.0",
-    "stylelint-config-tailwindcss": "^1.0.1",
     "tailwindcss": "^4.3.0",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.4",
     "unplugin-icons": "^23.0.1",
     "vite": "^8.0.14",
     "vitest": "^4.1.7",
-    "vue-eslint-parser": "^10.4.0",
     "vue-tsc": "^3.3.1"
   },
   "lint-staged": {
-    "*.{ts,vue}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{css,scss}": [
-      "prettier --write"
+    "*.{ts,vue,css,json}": [
+      "biome check --write --no-errors-on-unmatched"
     ]
   }
 }

@@ -1,10 +1,10 @@
-import { SHIKI_THEME } from '@/constants/editor/shiki';
 import {
+  type BundledLanguage,
   bundledLanguagesInfo,
   createHighlighter,
-  type BundledLanguage,
   type Highlighter,
 } from 'shiki';
+import { SHIKI_THEME } from '@/constants/editor/shiki';
 
 const SHIKI_LANGUAGE_LOOKUP: ReadonlyMap<string, BundledLanguage> = (() => {
   const map = new Map<string, BundledLanguage>();
@@ -20,7 +20,9 @@ const SHIKI_LANGUAGE_LOOKUP: ReadonlyMap<string, BundledLanguage> = (() => {
 
 const BOOTSTRAP_LANGUAGES: BundledLanguage[] = ['typescript'];
 
-const EMBEDDED_LANGUAGE_DEPENDENCIES: Readonly<Partial<Record<BundledLanguage, readonly BundledLanguage[]>>> = {
+const EMBEDDED_LANGUAGE_DEPENDENCIES: Readonly<
+  Partial<Record<BundledLanguage, readonly BundledLanguage[]>>
+> = {
   vue: ['typescript', 'javascript', 'html', 'css', 'scss', 'sass', 'less', 'stylus', 'json'],
 } as const;
 

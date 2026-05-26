@@ -11,12 +11,7 @@ export type TGitDiffMode = 'worktree' | 'staged';
 
 export type TGitBranchKind = 'local' | 'remote';
 
-export type TGitPullRequestProvider =
-  | 'github'
-  | 'gitlab'
-  | 'gitea'
-  | 'bitbucket'
-  | 'unknown';
+export type TGitPullRequestProvider = 'github' | 'gitlab' | 'gitea' | 'bitbucket' | 'unknown';
 
 export interface IGitCommitSummaryPayload {
   id: string;

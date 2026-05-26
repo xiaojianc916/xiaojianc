@@ -25,7 +25,9 @@ const normalizeContextPath = (path: string | null | undefined): string | null =>
   return path.trim() ? path : null;
 };
 
-export const buildCurrentFileReference = (document: IEditorDocument): IAiContextReference | null => {
+export const buildCurrentFileReference = (
+  document: IEditorDocument,
+): IAiContextReference | null => {
   if (!document.id || document.kind !== 'text') {
     return null;
   }
@@ -42,7 +44,3 @@ export const buildCurrentFileReference = (document: IEditorDocument): IAiContext
     redacted: false,
   };
 };
-
-
-
-

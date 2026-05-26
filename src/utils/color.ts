@@ -1,4 +1,4 @@
-import { parse, sRGB } from "@texel/color";
+import { parse, sRGB } from '@texel/color';
 
 export interface IRgbaColor {
   /** 红色通道，0-255 整数。 */
@@ -11,8 +11,7 @@ export interface IRgbaColor {
   a: number;
 }
 
-const clamp01 = (value: number): number =>
-  value < 0 ? 0 : value > 1 ? 1 : value;
+const clamp01 = (value: number): number => (value < 0 ? 0 : value > 1 ? 1 : value);
 
 const toByte = (value: number): number => Math.round(clamp01(value) * 255);
 
@@ -29,19 +28,14 @@ const toByte = (value: number): number => Math.round(clamp01(value) * 255);
 export const parseCssColorToRgba = (value: string): IRgbaColor => {
   const trimmed = value.trim();
   if (!trimmed) {
-    throw new Error(
-      `parseCssColorToRgba: 颜色值为空 (raw=${JSON.stringify(value)})`,
-    );
+    throw new Error(`parseCssColorToRgba: 颜色值为空 (raw=${JSON.stringify(value)})`);
   }
 
   let vec: ArrayLike<number>;
   try {
     vec = parse(trimmed, sRGB);
   } catch (cause) {
-    throw new Error(
-      `parseCssColorToRgba: 无法解析颜色 "${trimmed}"`,
-      { cause },
-    );
+    throw new Error(`parseCssColorToRgba: 无法解析颜色 "${trimmed}"`, { cause });
   }
 
   const [r, g, b, a = 1] = vec as [number, number, number, number?];
@@ -64,25 +58,16 @@ export const parseCssColorToRgba = (value: string): IRgbaColor => {
  *
  * @throws 当所处环境无 DOM、变量未定义或值为空时抛错。
  */
-export const readCssVarAsRgba = (
-  name: `--${string}`,
-  element?: Element,
-): IRgbaColor => {
-  const target =
-    element ??
-    (typeof document !== "undefined" ? document.documentElement : null);
+export const readCssVarAsRgba = (name: `--${string}`, element?: Element): IRgbaColor => {
+  const target = element ?? (typeof document !== 'undefined' ? document.documentElement : null);
 
   if (!target) {
-    throw new Error(
-      `readCssVarAsRgba: 当前环境无 DOM，必须显式传入 element (name=${name})`,
-    );
+    throw new Error(`readCssVarAsRgba: 当前环境无 DOM，必须显式传入 element (name=${name})`);
   }
 
   const raw = getComputedStyle(target).getPropertyValue(name);
   if (!raw.trim()) {
-    throw new Error(
-      `readCssVarAsRgba: CSS 变量 ${name} 未定义或值为空`,
-    );
+    throw new Error(`readCssVarAsRgba: CSS 变量 ${name} 未定义或值为空`);
   }
 
   return parseCssColorToRgba(raw);

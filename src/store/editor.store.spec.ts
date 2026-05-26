@@ -1,7 +1,7 @@
-import { useEditorStore } from '@/store/editor';
-import { TERMINAL_RUN_LOG_CODES, TERMINAL_RUN_LOG_TITLES } from '@/utils/terminal-run';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useEditorStore } from '@/store/editor';
+import { TERMINAL_RUN_LOG_CODES, TERMINAL_RUN_LOG_TITLES } from '@/utils/terminal-run';
 
 describe('editor store session state', () => {
   beforeEach(() => {

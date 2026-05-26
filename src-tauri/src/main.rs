@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![allow(rust_2024_compatibility)]
 
 mod agent_sidecar;
 mod ai;
@@ -10,6 +11,8 @@ mod terminal;
 mod wsl_link;
 
 use ai::edit::AiEditState;
+use commands::WorkspaceWatcher;
+use commands::LspManager;
 use commands::{
     agent_sidecar_chat, agent_sidecar_execute, agent_sidecar_health, agent_sidecar_plan,
     agent_sidecar_plan_approve, agent_sidecar_plan_finish, agent_sidecar_plan_query,
@@ -35,9 +38,11 @@ use commands::{
     list_workspace_entries, load_image_asset, load_script, preview_workspace_replacement,
     probe_wsl_link_primary, read_ssh_file, rename_ssh_path, rename_workspace_path,
     resize_terminal_session, save_git_stash, save_script, save_ssh_password, search_workspace,
-    set_window_background, shutdown_all_terminal_sessions, stage_git_paths, start_wsl_link_agent,
-    start_wsl_link_supervisor, stop_wsl_link_supervisor, test_ssh_connection, unstage_git_paths,
-    upload_ssh_file, write_ssh_file, write_terminal_input, TerminalSessionState,
+    set_window_background, shutdown_all_terminal_sessions, stage_git_paths, lsp_start, lsp_stop, lsp_did_open, lsp_did_change, lsp_did_close, lsp_completion, lsp_hover,
+            start_workspace_watching,
+    start_wsl_link_agent, start_wsl_link_supervisor, stop_workspace_watching,
+    stop_wsl_link_supervisor, test_ssh_connection, unstage_git_paths, upload_ssh_file,
+    write_ssh_file, write_terminal_input, TerminalSessionState,
 };
 use std::{
     sync::atomic::{AtomicBool, Ordering},
@@ -57,6 +62,7 @@ const TRAY_MENU_QUIT_ID: &str = "tray.quit-app";
 const TRAY_TOOLTIP: &str = "Calamex";
 
 // === 启动日志 ============================================================
+
 fn elapsed_ms(since: Instant) -> f64 {
     since.elapsed().as_secs_f64() * 1000.0
 }
@@ -96,6 +102,7 @@ macro_rules! timed_step {
 }
 
 // === 生命周期 ============================================================
+
 #[derive(Default)]
 struct AppLifecycleState {
     is_quitting: AtomicBool,
@@ -105,6 +112,7 @@ impl AppLifecycleState {
     fn mark_quitting(&self) {
         self.is_quitting.store(true, Ordering::SeqCst);
     }
+
     fn is_quitting(&self) -> bool {
         self.is_quitting.load(Ordering::SeqCst)
     }
@@ -121,7 +129,6 @@ fn reveal_main_window<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) {
 
 fn request_app_exit<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) {
     app_handle.state::<AppLifecycleState>().mark_quitting();
-
     let terminal_state = app_handle.state::<TerminalSessionState>();
     if let Err(error) = shutdown_all_terminal_sessions(terminal_state.inner()) {
         eprintln!("failed to shutdown terminal sessions: {error}");
@@ -130,9 +137,11 @@ fn request_app_exit<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) {
 }
 
 // === 系统托盘 ============================================================
+
 fn setup_system_tray<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
     let show_item = MenuItemBuilder::with_id(TRAY_MENU_SHOW_ID, "显示主窗口").build(app)?;
     let quit_item = MenuItemBuilder::with_id(TRAY_MENU_QUIT_ID, "退出").build(app)?;
+
     let menu = MenuBuilder::new(app)
         .item(&show_item)
         .separator()
@@ -150,7 +159,6 @@ fn setup_system_tray<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result<()
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app_handle, event| match event.id().as_ref() {
-            // 改动 3: 用 match 替代连续 if，新增菜单项时分支显式可见
             TRAY_MENU_SHOW_ID => reveal_main_window(app_handle),
             TRAY_MENU_QUIT_ID => request_app_exit(app_handle),
             _ => {}
@@ -166,11 +174,12 @@ fn setup_system_tray<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result<()
             }
         })
         .build(app)?;
+
     Ok(())
 }
 
 // === WebView 平台相关 ====================================================
-// 改动 4: 简化 label 二次 clone；用 Cow / 直接拥有 String 给闭包
+
 #[cfg(windows)]
 fn disable_webview_default_context_menu<R: tauri::Runtime>(
     webview_window: &tauri::WebviewWindow<R>,
@@ -201,16 +210,17 @@ fn disable_webview_default_context_menu<R: tauri::Runtime>(
 }
 
 // === main ================================================================
+
 fn main() {
     let app_started_at = Instant::now();
     emit_startup_event("tauri.main.start", app_started_at);
 
-    // 改动 5: tauri_bindings 仅在 debug 模式生成与导出，避免 release 下 unused 警告
+    // specta 绑定 builder 在 debug / release 都需要构造（用于 mount_events）；
+    // 仅在 debug 模式 export TS 文件
+    let specta_bindings = tauri_bindings::builder();
+
     #[cfg(debug_assertions)]
-    {
-        let bindings = tauri_bindings::builder();
-        tauri_bindings::export(&bindings);
-    }
+    tauri_bindings::export(&specta_bindings);
 
     let builder_started_at = Instant::now();
     let app = tauri::Builder::default()
@@ -227,8 +237,9 @@ fn main() {
         .manage(AppLifecycleState::default())
         .manage(TerminalSessionState::default())
         .manage(WslLinkRuntimeState::default())
+        .manage(WorkspaceWatcher::default())
+        .manage(LspManager::new())
         .on_window_event(|window, event| {
-            // 改动 6: 提前 return 减少嵌套；只对 main 窗口拦截关闭
             let WindowEvent::CloseRequested { api, .. } = event else {
                 return;
             };
@@ -248,13 +259,15 @@ fn main() {
             let setup_started_at = Instant::now();
             emit_startup_event("tauri.setup.start", app_started_at);
 
+            // 挂载 specta 强类型事件；让前端 events.workspaceFsEvent.listen(...) 拿到 typed payload
+            specta_bindings.mount_events(app);
+
             timed_step!("tauri.setup.terminal-events-attached", app_started_at, {
                 terminal::registry::registry()
                     .event_bus
                     .attach_app(app.handle().clone());
             });
 
-            // setup_system_tray 返回 Result，用 ? 跳出 setup
             let tray_started_at = Instant::now();
             setup_system_tray(app)?;
             emit_startup_step("tauri.setup.tray-ready", app_started_at, tray_started_at);
@@ -377,8 +390,12 @@ fn main() {
             ai_edit_revert_file,
             ai_edit_revert_hunk,
             ai_edit_revert_task,
-            ai_edit_set_pin
+            ai_edit_set_pin,
+            lsp_start, lsp_stop, lsp_did_open, lsp_did_change, lsp_did_close, lsp_completion, lsp_hover,
+            start_workspace_watching,
+            stop_workspace_watching
         ]);
+
     emit_startup_step("tauri.builder.ready", app_started_at, builder_started_at);
 
     emit_startup_event("tauri.run.start", app_started_at);

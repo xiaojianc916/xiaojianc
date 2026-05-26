@@ -1,5 +1,3 @@
-import type { IAiDiffEditorPreview } from '@/types/ai/patch';
-import type { IGitDiffPreviewPayload } from '@/types/git';
 import type {
   AnalyzeScriptPayload,
   AnalyzeScriptRequest,
@@ -23,6 +21,8 @@ import type {
   WorkspacePathRenamePayload,
   WorkspacePathRenameRequest,
 } from '@/bindings/tauri';
+import type { IAiDiffEditorPreview } from '@/types/ai/patch';
+import type { IGitDiffPreviewPayload } from '@/types/git';
 
 export type TDocumentEncoding = DocumentEncoding;
 

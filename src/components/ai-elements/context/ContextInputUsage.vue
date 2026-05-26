@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
 import type { HTMLAttributes } from 'vue';
 import { computed } from 'vue';
+import { cn } from '@/lib/utils';
 import { useContextValue } from './context';
 import TokensWithCost from './TokensWithCost.vue';
 
@@ -15,10 +15,11 @@ const inputTokens = computed(() => usage.value?.inputTokens ?? 0);
 const inputLabel = computed(() => (usageSource.value === 'official' ? '输入' : '估算输入'));
 const cacheHitInputTokens = computed(() => cost.value?.cacheHitInputTokens ?? 0);
 const cacheMissInputTokens = computed(() => cost.value?.cacheMissInputTokens ?? 0);
-const shouldSplitOfficialInput = computed(() =>
-  usageSource.value === 'official' &&
-  Boolean(cost.value) &&
-  (cacheHitInputTokens.value > 0 || cacheMissInputTokens.value > 0),
+const shouldSplitOfficialInput = computed(
+  () =>
+    usageSource.value === 'official' &&
+    Boolean(cost.value) &&
+    (cacheHitInputTokens.value > 0 || cacheMissInputTokens.value > 0),
 );
 
 const inputCostText = computed(() => cost.value?.inputCostText);

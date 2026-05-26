@@ -1,8 +1,8 @@
-import { useDialog, type DialogConfirmExtraOptions } from '@/composables/useDialog';
+import { type DialogConfirmExtraOptions, useDialog } from '@/composables/useDialog';
 import type { TAppDialogAction, TAppDialogVariant } from '@/types/dialog';
 import {
-  resolveErrorPresentation,
   type IResolveErrorPresentationOptions,
+  resolveErrorPresentation,
 } from '@/utils/error-presentation';
 
 export interface IPresentErrorDialogOptions
@@ -45,15 +45,8 @@ export const presentErrorDialog = async (
   error: unknown,
   options: IPresentErrorDialogOptions = {},
 ): Promise<TAppDialogAction> => {
-  const {
-    cancelText,
-    confirmText,
-    dismissText,
-    id,
-    signal,
-    variant,
-    ...presentationOptions
-  } = options;
+  const { cancelText, confirmText, dismissText, id, signal, variant, ...presentationOptions } =
+    options;
   const model = resolveErrorPresentation(error, {
     ...presentationOptions,
     presentation: 'dialog',

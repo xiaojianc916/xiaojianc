@@ -1,1 +1,1 @@
-export { default as AiFloatingSuggestions } from './AiFloatingSuggestions.vue'
+export { default as AiFloatingSuggestions } from './AiFloatingSuggestions.vue';

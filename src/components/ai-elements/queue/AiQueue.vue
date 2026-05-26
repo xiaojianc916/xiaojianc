@@ -5,7 +5,13 @@ import Circle from '~icons/lucide/circle';
 import LoaderCircle from '~icons/lucide/loader-circle';
 import Trash2 from '~icons/lucide/trash2';
 
-export type TAiQueueItemStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped' | 'cancelled';
+export type TAiQueueItemStatus =
+  | 'pending'
+  | 'running'
+  | 'done'
+  | 'failed'
+  | 'skipped'
+  | 'cancelled';
 
 export interface IAiQueueItem {
   id: string;

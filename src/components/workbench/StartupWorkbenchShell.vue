@@ -1,20 +1,23 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import FileEntryIcon from '@/components/common/FileEntryIcon.vue';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { TStartupShellState } from '@/types/startup-shell';
-import { computed } from 'vue';
 
-const props = withDefaults(defineProps<{
-  state: TStartupShellState;
-  showTerminal?: boolean;
-  terminalHeight?: number;
-}>(), {
-  showTerminal: false,
-  terminalHeight: 236,
-});
+const props = withDefaults(
+  defineProps<{
+    state: TStartupShellState;
+    showTerminal?: boolean;
+    terminalHeight?: number;
+  }>(),
+  {
+    showTerminal: false,
+    terminalHeight: 236,
+  },
+);
 
-const activeTab = computed(() =>
-  props.state.openTabs.find((item) => item.isActive) ?? props.state.openTabs[0] ?? null,
+const activeTab = computed(
+  () => props.state.openTabs.find((item) => item.isActive) ?? props.state.openTabs[0] ?? null,
 );
 
 const visibleTabs = computed(() => props.state.openTabs.slice(0, 8));
@@ -24,16 +27,7 @@ const terminalPanelStyle = computed(() => ({
   height: `${Math.max(140, Math.round(props.terminalHeight))}px`,
 }));
 
-const editorLineWidths = [
-  '62%',
-  '46%',
-  '72%',
-  '38%',
-  '66%',
-  '54%',
-  '78%',
-  '42%',
-] as const;
+const editorLineWidths = ['62%', '46%', '72%', '38%', '66%', '54%', '78%', '42%'] as const;
 </script>
 
 <template>

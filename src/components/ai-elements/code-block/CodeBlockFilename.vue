@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
 import type { HTMLAttributes } from 'vue';
+import { cn } from '@/lib/utils';
 
 interface IProps extends /* @vue-ignore */ HTMLAttributes {
   class?: HTMLAttributes['class'];

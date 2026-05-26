@@ -1,6 +1,3 @@
-import { fnv1a32 } from '@/utils/hash';
-import { areFileSystemPathsEqual, normalizeFileSystemPath } from '@/utils/path';
-
 import type {
   IAiDiffHunkPreview,
   IAiDiffPreviewLine,
@@ -9,6 +6,8 @@ import type {
   IAiPatchSet,
 } from '@/types/ai';
 import type { IGitDiffPreviewPayload } from '@/types/git';
+import { fnv1a32 } from '@/utils/hash';
+import { areFileSystemPathsEqual, normalizeFileSystemPath } from '@/utils/path';
 
 export interface IAiPatchPreviewFile {
   path: string;
@@ -187,10 +186,7 @@ const buildLinePreview = (
   return item;
 };
 
-const buildPatchPreviewHunks = (
-  file: IAiPatchFile,
-  displayPath: string,
-): IAiDiffHunkPreview[] => {
+const buildPatchPreviewHunks = (file: IAiPatchFile, displayPath: string): IAiDiffHunkPreview[] => {
   const diffRef = buildPatchDiffRef(displayPath);
   return file.hunks.map((hunk, hunkIndex) => {
     const cursor: ILineCursor = {
@@ -203,9 +199,7 @@ const buildPatchPreviewHunks = (
       diffRef,
       header: buildPatchHunkHeader(hunk),
       lines: hunk.lines
-        .map((line, lineIndex) =>
-          buildLinePreview(displayPath, hunkIndex, line, lineIndex, cursor),
-        )
+        .map((line, lineIndex) => buildLinePreview(displayPath, hunkIndex, line, lineIndex, cursor))
         .filter((line): line is IAiDiffPreviewLine => line !== null),
     };
   });
@@ -302,8 +296,7 @@ const buildGitDiffPreview = (
   workspaceRootPath: string | null | undefined,
 ): IGitDiffPreviewPayload => {
   const relativePath = getPatchRelativePath(file.path, workspaceRootPath);
-  const { originalContent, modifiedContent, hasMaterialChange } =
-    materializePatchContent(file);
+  const { originalContent, modifiedContent, hasMaterialChange } = materializePatchContent(file);
 
   return {
     id: buildPatchDiffPreviewId(file, displayPath),

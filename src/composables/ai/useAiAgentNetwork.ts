@@ -1,10 +1,4 @@
-import {
-  computed,
-  readonly,
-  ref,
-  type ComputedRef,
-  type Ref,
-} from 'vue';
+import { type ComputedRef, computed, type Ref, readonly, ref } from 'vue';
 
 import { aiService } from '@/services/ipc/ai.service';
 import { useAiAgentStore } from '@/store/aiAgent';

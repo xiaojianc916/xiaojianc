@@ -1,13 +1,9 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import AiProviderIcon from '@/components/business/ai/provider/AiProviderIcon.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   AI_SERVICE_PLATFORM_PRESETS,
   findAiServicePlatformByModel,
@@ -16,12 +12,7 @@ import {
   type TAiServicePlatformId,
 } from '@/constants/ai/providers';
 import { cloneAiConfigPayload } from '@/services/ipc/ai-config.service';
-import type {
-  IAiConfigPayload,
-  IAiProviderSettingsActionFeedback,
-  TAiModelRole,
-} from '@/types/ai';
-import AlertTriangle from '~icons/lucide/triangle-alert';
+import type { IAiConfigPayload, IAiProviderSettingsActionFeedback, TAiModelRole } from '@/types/ai';
 import ArrowLeft from '~icons/lucide/arrow-left';
 import Check from '~icons/lucide/check';
 import Crown from '~icons/lucide/crown';
@@ -31,9 +22,9 @@ import Gauge from '~icons/lucide/gauge';
 import Pencil from '~icons/lucide/pencil';
 import Plus from '~icons/lucide/plus';
 import Search from '~icons/lucide/search';
+import AlertTriangle from '~icons/lucide/triangle-alert';
 import X from '~icons/lucide/x';
 import Zap from '~icons/lucide/zap';
-import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{
   open: boolean;
@@ -104,8 +95,8 @@ const credentialsByProvider = computed(() => {
 });
 
 const mainProviderId = computed(() => findAiServicePlatformByModel(props.config.selectedModel).id);
-const narratorProviderId = computed(() =>
-  findAiServicePlatformByModel(props.config.narrator.selectedModel).id,
+const narratorProviderId = computed(
+  () => findAiServicePlatformByModel(props.config.narrator.selectedModel).id,
 );
 const selectedProvider = computed(() => findAiServicePlatformPreset(selectedProviderId.value));
 const selectedProviderHasCredentials = computed(
@@ -113,11 +104,16 @@ const selectedProviderHasCredentials = computed(
 );
 const selectedProviderModels = computed(() => selectedProvider.value.models);
 const selectedSmallModel = computed(() => {
-  const matched = selectedProviderModels.value.find((model) => model.id === selectedSmallModelId.value);
-  return matched ?? selectedProviderModels.value[0] ?? {
-    id: selectedProvider.value.defaultModel,
-    label: selectedProvider.value.defaultModel,
-  };
+  const matched = selectedProviderModels.value.find(
+    (model) => model.id === selectedSmallModelId.value,
+  );
+  return (
+    matched ??
+    selectedProviderModels.value[0] ?? {
+      id: selectedProvider.value.defaultModel,
+      label: selectedProvider.value.defaultModel,
+    }
+  );
 });
 
 const providerKey = computed({
@@ -137,8 +133,8 @@ const tavilyKey = computed({
 });
 
 const providerRows = computed<IProviderViewModel[]>(() =>
-  AI_SERVICE_PLATFORM_PRESETS.filter((preset) =>
-    credentialsByProvider.value.get(preset.id)?.hasCredentials === true,
+  AI_SERVICE_PLATFORM_PRESETS.filter(
+    (preset) => credentialsByProvider.value.get(preset.id)?.hasCredentials === true,
   ).map((preset) => {
     const credential = credentialsByProvider.value.get(preset.id);
     return {
@@ -161,7 +157,9 @@ const filteredProviderRows = computed(() => {
       row.preset.id,
       row.preset.label,
       ...row.preset.models.map((model) => model.label),
-    ].join(' ').toLocaleLowerCase();
+    ]
+      .join(' ')
+      .toLocaleLowerCase();
     return haystack.includes(keyword);
   });
 });
@@ -181,8 +179,8 @@ const resolveSmallModelForProvider = (providerId: TAiServicePlatformId): string 
   const provider = findAiServicePlatformPreset(providerId);
   const narratorModelId = props.config.narrator.selectedModel;
   if (
-    providerId === narratorProviderId.value
-    && provider.models.some((model) => model.id === narratorModelId)
+    providerId === narratorProviderId.value &&
+    provider.models.some((model) => model.id === narratorModelId)
   ) {
     return narratorModelId ?? provider.defaultModel;
   }
@@ -292,11 +290,7 @@ const saveProviderSettings = (): void => {
   }
   emit(
     'save',
-    createRoleConfig(
-      selectedProvider.value,
-      'narrator',
-      selectedSmallModel.value.id,
-    ),
+    createRoleConfig(selectedProvider.value, 'narrator', selectedSmallModel.value.id),
     normalizedApiKey,
     'narrator',
     createFeedback(() => {
@@ -313,10 +307,11 @@ const testSelectedProvider = (): void => {
 
   actionState.value = 'testing';
   const draft = cloneAiConfigPayload(props.draft);
-  const role: TAiModelRole = selectedProviderId.value === narratorProviderId.value
-    && selectedProviderId.value !== mainProviderId.value
-    ? 'narrator'
-    : 'main';
+  const role: TAiModelRole =
+    selectedProviderId.value === narratorProviderId.value &&
+    selectedProviderId.value !== mainProviderId.value
+      ? 'narrator'
+      : 'main';
   if (role === 'narrator') {
     draft.narrator.selectedModel = selectedSmallModel.value.id;
     draft.narrator.baseUrl = selectedProvider.value.baseUrl || null;
@@ -354,10 +349,7 @@ const createRoleConfig = (
   return draft;
 };
 
-const setProviderAsRoleDefault = (
-  provider: IAiServicePlatformPreset,
-  role: TAiModelRole,
-): void => {
+const setProviderAsRoleDefault = (provider: IAiServicePlatformPreset, role: TAiModelRole): void => {
   actionState.value = 'saving';
   const roleLabel = role === 'narrator' ? '小模型' : '主模型';
   showStatus(`正在设置 ${provider.label} 为${roleLabel}...`, 'info');

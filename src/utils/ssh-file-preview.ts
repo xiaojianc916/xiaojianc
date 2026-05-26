@@ -199,7 +199,11 @@ export const buildSshPreviewMatchRanges = (
   const normalizedQueryGraphemes = queryGraphemes.map(normalizeSearchGrapheme);
   const matches: ISshPreviewMatchRange[] = [];
 
-  for (let start = 0; start <= normalizedLineGraphemes.length - normalizedQueryGraphemes.length; start += 1) {
+  for (
+    let start = 0;
+    start <= normalizedLineGraphemes.length - normalizedQueryGraphemes.length;
+    start += 1
+  ) {
     let matched = true;
 
     for (let offset = 0; offset < normalizedQueryGraphemes.length; offset += 1) {
@@ -233,10 +237,7 @@ const buildGraphemeCodeUnitOffsets = (value: string): number[] => {
   return offsets;
 };
 
-export const buildSshPreviewMatchHits = (
-  content: string,
-  query: string,
-): ISshPreviewMatchHit[] => {
+export const buildSshPreviewMatchHits = (content: string, query: string): ISshPreviewMatchHit[] => {
   const normalizedContent = normalizeSshPreviewContent(content);
   const normalizedQuery = query.trim();
   if (!normalizedQuery) {

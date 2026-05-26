@@ -1,22 +1,5 @@
 import { tauriService } from '@/services/tauri';
 import type {
-  IAgentSidecarApprovalResolveRequest,
-  IAgentSidecarChatRequest,
-  IAgentSidecarCheckpointRestoreRequest,
-  IAgentSidecarExecuteRequest,
-  IAgentSidecarHealthPayload,
-  IAgentSidecarPlanApproveRequest,
-  IAgentSidecarPlanFinishRequest,
-  IAgentSidecarPlanQueryRequest,
-  IAgentSidecarPlanRejectRequest,
-  IAgentSidecarPlanReplanRequest,
-  IAgentSidecarPlanRequest,
-  IAgentSidecarPlanValidateRequest,
-  IAgentSidecarResponsePayload,
-  IAgentSidecarStreamEventPayload,
-  IAgentSidecarWarmupPayload,
-} from '@/types/ai/sidecar';
-import type {
   IAiAgentClassifyTaskPayload,
   IAiAgentClassifyTaskRequest,
   IAiAgentNetworkPermissionPayload,
@@ -47,10 +30,24 @@ import type {
   IAiWebSearchInput,
   IAiWebSearchPayload,
 } from '@/types/ai';
+import type { IAiEditGetDiffPayload, IAiEditGetDiffRequest } from '@/types/ai/edit';
 import type {
-  IAiEditGetDiffPayload,
-  IAiEditGetDiffRequest,
-} from '@/types/ai/edit';
+  IAgentSidecarApprovalResolveRequest,
+  IAgentSidecarChatRequest,
+  IAgentSidecarCheckpointRestoreRequest,
+  IAgentSidecarExecuteRequest,
+  IAgentSidecarHealthPayload,
+  IAgentSidecarPlanApproveRequest,
+  IAgentSidecarPlanFinishRequest,
+  IAgentSidecarPlanQueryRequest,
+  IAgentSidecarPlanRejectRequest,
+  IAgentSidecarPlanReplanRequest,
+  IAgentSidecarPlanRequest,
+  IAgentSidecarPlanValidateRequest,
+  IAgentSidecarResponsePayload,
+  IAgentSidecarStreamEventPayload,
+  IAgentSidecarWarmupPayload,
+} from '@/types/ai/sidecar';
 import { normalizeFileSystemPath } from '@/utils/path';
 
 const SIDECAR_DOTENV_RELATIVE_PATH = 'agent-sidecar/.env';
@@ -99,10 +96,7 @@ const parseDotenvValue = (rawValue: string): string => {
 };
 
 const readDotenvAssignment = (content: string, key: string): string => {
-  const linePattern = new RegExp(
-    `^\\s*(?:export\\s+)?${escapeRegExp(key)}\\s*=\\s*(.*)\\s*$`,
-    'u',
-  );
+  const linePattern = new RegExp(`^\\s*(?:export\\s+)?${escapeRegExp(key)}\\s*=\\s*(.*)\\s*$`, 'u');
 
   for (const line of content.split(/\r?\n/u)) {
     const trimmed = line.trim();
@@ -122,11 +116,7 @@ const readDotenvAssignment = (content: string, key: string): string => {
 const formatDotenvValue = (value: string): string =>
   /[\s#"']/u.test(value) ? JSON.stringify(value) : value;
 
-const updateDotenvAssignment = (
-  content: string,
-  key: string,
-  nextValue: string | null,
-): string => {
+const updateDotenvAssignment = (content: string, key: string, nextValue: string | null): string => {
   const lineBreak = content.includes('\r\n') ? '\r\n' : '\n';
   const hadTrailingNewline = content.endsWith('\n');
   const linePattern = buildDotenvLinePattern(key);
@@ -195,11 +185,7 @@ export const aiService = {
 
     await tauriService.saveScript({
       path: sidecarDotenvPath,
-      content: updateDotenvAssignment(
-        script?.content ?? '',
-        TAVILY_API_KEY_ENV,
-        nextValue || null,
-      ),
+      content: updateDotenvAssignment(script?.content ?? '', TAVILY_API_KEY_ENV, nextValue || null),
       encoding: script?.encoding ?? 'utf-8',
     });
   },
@@ -209,22 +195,32 @@ export const aiService = {
   sidecarPlan(payload: IAgentSidecarPlanRequest): Promise<IAgentSidecarResponsePayload> {
     return tauriService.agentSidecarPlan(payload);
   },
-  sidecarPlanApprove(payload: IAgentSidecarPlanApproveRequest): Promise<IAgentSidecarResponsePayload> {
+  sidecarPlanApprove(
+    payload: IAgentSidecarPlanApproveRequest,
+  ): Promise<IAgentSidecarResponsePayload> {
     return tauriService.agentSidecarPlanApprove(payload);
   },
   sidecarPlanQuery(payload: IAgentSidecarPlanQueryRequest): Promise<IAgentSidecarResponsePayload> {
     return tauriService.agentSidecarPlanQuery(payload);
   },
-  sidecarPlanReject(payload: IAgentSidecarPlanRejectRequest): Promise<IAgentSidecarResponsePayload> {
+  sidecarPlanReject(
+    payload: IAgentSidecarPlanRejectRequest,
+  ): Promise<IAgentSidecarResponsePayload> {
     return tauriService.agentSidecarPlanReject(payload);
   },
-  sidecarPlanFinish(payload: IAgentSidecarPlanFinishRequest): Promise<IAgentSidecarResponsePayload> {
+  sidecarPlanFinish(
+    payload: IAgentSidecarPlanFinishRequest,
+  ): Promise<IAgentSidecarResponsePayload> {
     return tauriService.agentSidecarPlanFinish(payload);
   },
-  sidecarPlanValidate(payload: IAgentSidecarPlanValidateRequest): Promise<IAgentSidecarResponsePayload> {
+  sidecarPlanValidate(
+    payload: IAgentSidecarPlanValidateRequest,
+  ): Promise<IAgentSidecarResponsePayload> {
     return tauriService.agentSidecarPlanValidate(payload);
   },
-  sidecarPlanReplan(payload: IAgentSidecarPlanReplanRequest): Promise<IAgentSidecarResponsePayload> {
+  sidecarPlanReplan(
+    payload: IAgentSidecarPlanReplanRequest,
+  ): Promise<IAgentSidecarResponsePayload> {
     return tauriService.agentSidecarPlanReplan(payload);
   },
   sidecarExecute(payload: IAgentSidecarExecuteRequest): Promise<IAgentSidecarResponsePayload> {

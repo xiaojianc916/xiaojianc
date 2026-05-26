@@ -1,3 +1,5 @@
+import type { UnlistenFn } from '@tauri-apps/api/event';
+import { type ComputedRef, onScopeDispose } from 'vue';
 import { useMessage } from '@/composables/useMessage';
 import { getTerminalEventBus } from '@/services/terminal/eventBus';
 import { useTerminalFacade } from '@/services/terminal/facade';
@@ -8,16 +10,14 @@ import {
   DEFAULT_TERMINAL_SESSION_ID,
   type IDispatchTerminalScriptRequest,
   type ITerminalExitEvent,
-  type ITerminalRunCompletedPayload,
   type ITerminalRunChunkPayload,
+  type ITerminalRunCompletedPayload,
 } from '@/types/terminal';
 import { waitForDesktopRuntime } from '@/utils/desktop-runtime';
 import { toErrorMessage } from '@/utils/error';
 import { isShellScriptPath } from '@/utils/file-assets';
 import { DEFAULT_EXECUTOR, getExecutorLabel } from '@/utils/templates';
 import {
-  TERMINAL_RUN_LOG_CODES,
-  TERMINAL_RUN_LOG_TITLES,
   buildDispatchedTerminalRunSummary,
   buildPendingTerminalRunSummary,
   buildTerminalRunCompletionDetail,
@@ -25,11 +25,11 @@ import {
   buildTerminalRunResult,
   createActiveTerminalRunMeta,
   createTerminalRunId,
-  isTerminalRunFinalLog,
   type IActiveTerminalRunMeta,
+  isTerminalRunFinalLog,
+  TERMINAL_RUN_LOG_CODES,
+  TERMINAL_RUN_LOG_TITLES,
 } from '@/utils/terminal-run';
-import type { UnlistenFn } from '@tauri-apps/api/event';
-import { onScopeDispose, type ComputedRef } from 'vue';
 
 const TERMINAL_OUTPUT_BATCH_INTERVAL_MS = 120;
 const TERMINAL_RUN_COMPLETION_TIMEOUT_MS = 30 * 60 * 1000;
@@ -150,10 +150,10 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
   };
 
   const getCurrentTerminalRunId = (): string | null =>
-    activeTerminalRunMeta?.runId
-    ?? editorStore.pendingTerminalRunId
-    ?? editorStore.activeRunSummary?.runId
-    ?? null;
+    activeTerminalRunMeta?.runId ??
+    editorStore.pendingTerminalRunId ??
+    editorStore.activeRunSummary?.runId ??
+    null;
 
   const isIntegratedTerminalSession = (sessionId: string): boolean =>
     sessionId === DEFAULT_TERMINAL_SESSION_ID;
@@ -161,12 +161,10 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
   const resolveTerminalRunId = (runId: string | null | undefined): string | null => {
     const normalizedRunId = typeof runId === 'string' ? runId.trim() : '';
     if (
-      normalizedRunId
-      && (
-        editorStore.pendingTerminalRunId === normalizedRunId
-        || activeTerminalRunMeta?.runId === normalizedRunId
-        || editorStore.activeRunSummary?.runId === normalizedRunId
-      )
+      normalizedRunId &&
+      (editorStore.pendingTerminalRunId === normalizedRunId ||
+        activeTerminalRunMeta?.runId === normalizedRunId ||
+        editorStore.activeRunSummary?.runId === normalizedRunId)
     ) {
       return normalizedRunId;
     }
@@ -190,9 +188,7 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
       return true;
     }
 
-    return editorStore.runLogs.some(
-      (item) => item.runId === runId && isTerminalRunFinalLog(item),
-    );
+    return editorStore.runLogs.some((item) => item.runId === runId && isTerminalRunFinalLog(item));
   };
 
   const failTerminalRun = (
@@ -365,15 +361,9 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
         return;
       }
 
-      failTerminalRun(
-        '脚本执行失败',
-        error,
-        '脚本执行失败',
-        TERMINAL_RUN_LOG_CODES.failed,
-        {
-          writeMessageToTerminalOutput: true,
-        },
-      );
+      failTerminalRun('脚本执行失败', error, '脚本执行失败', TERMINAL_RUN_LOG_CODES.failed, {
+        writeMessageToTerminalOutput: true,
+      });
     }
   };
 
@@ -398,11 +388,7 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
   };
 
   const ensureTerminalRunEventListeners = async (): Promise<void> => {
-    if (
-      terminalRunChunkUnlisten
-      && terminalRunCompletedUnlisten
-      && terminalExitUnlisten
-    ) {
+    if (terminalRunChunkUnlisten && terminalRunCompletedUnlisten && terminalExitUnlisten) {
       return;
     }
 
@@ -546,10 +532,10 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
 
   const appendTerminalOutput = (payload: ITerminalRunChunkPayload): void => {
     if (
-      isDisposed
-      || !isIntegratedTerminalSession(payload.sessionId)
-      || !payload.data
-      || !isCurrentTerminalRun(payload.runId)
+      isDisposed ||
+      !isIntegratedTerminalSession(payload.sessionId) ||
+      !payload.data ||
+      !isCurrentTerminalRun(payload.runId)
     ) {
       return;
     }
@@ -566,10 +552,10 @@ export const useTerminalRun = ({ canRun, editorStore }: TUseTerminalRunOptions) 
 
   const appendStructuredTerminalOutput = (payload: ITerminalRunChunkPayload): void => {
     if (
-      isDisposed
-      || !isIntegratedTerminalSession(payload.sessionId)
-      || !payload.data
-      || !isCurrentTerminalRun(payload.runId)
+      isDisposed ||
+      !isIntegratedTerminalSession(payload.sessionId) ||
+      !payload.data ||
+      !isCurrentTerminalRun(payload.runId)
     ) {
       return;
     }

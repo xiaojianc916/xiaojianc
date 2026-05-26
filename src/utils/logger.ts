@@ -1,4 +1,4 @@
-import { createConsola, type ConsolaInstance } from "consola/browser";
+import { type ConsolaInstance, createConsola } from 'consola/browser';
 
 export interface ILoggerPayload {
   event: string;
@@ -33,7 +33,7 @@ const consola: ConsolaInstance = createConsola({
 /** 非 Error 值规整为 Error，确保 stack/打印行为可预期。 */
 const normalizeErr = (err: unknown): Error => {
   if (err instanceof Error) return err;
-  if (typeof err === "string") return new Error(err);
+  if (typeof err === 'string') return new Error(err);
   try {
     return new Error(JSON.stringify(err));
   } catch {
@@ -44,7 +44,7 @@ const normalizeErr = (err: unknown): Error => {
 /** 把 err 作为独立参数传给 consola，让 stack/染色等内置行为生效。 */
 const emit = (
   instance: ConsolaInstance,
-  method: "warn" | "info" | "error" | "debug",
+  method: 'warn' | 'info' | 'error' | 'debug',
   payload: ILoggerPayload,
 ): void => {
   const { err, event, ...extra } = payload;
@@ -65,28 +65,28 @@ export interface ILogger {
    * 新增：派生一个带固定字段的子 logger（如 traceId / module），
    * 子 logger 的所有日志都会自动合并这些字段，调用方不必每次重复传。
    */
-  child(bindings: Omit<ILoggerPayload, "event">): ILogger;
+  child(bindings: Omit<ILoggerPayload, 'event'>): ILogger;
 }
 
 const createLogger = (
   instance: ConsolaInstance,
-  bindings: Omit<ILoggerPayload, "event"> = {},
+  bindings: Omit<ILoggerPayload, 'event'> = {},
 ): ILogger => {
   const merge = (payload: ILoggerPayload): ILoggerPayload =>
     Object.keys(bindings).length === 0 ? payload : { ...bindings, ...payload };
 
   return {
     warn(payload) {
-      emit(instance, "warn", merge(payload));
+      emit(instance, 'warn', merge(payload));
     },
     info(payload) {
-      emit(instance, "info", merge(payload));
+      emit(instance, 'info', merge(payload));
     },
     error(payload) {
-      emit(instance, "error", merge(payload));
+      emit(instance, 'error', merge(payload));
     },
     debug(payload) {
-      emit(instance, "debug", merge(payload));
+      emit(instance, 'debug', merge(payload));
     },
     child(extraBindings) {
       return createLogger(instance, { ...bindings, ...extraBindings });

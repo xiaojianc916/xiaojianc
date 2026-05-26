@@ -45,7 +45,8 @@ const hasWebSearchTool = (step: IAiTaskPlanStep): boolean => step.tools.includes
 
 const hasWebFetchTool = (step: IAiTaskPlanStep): boolean => step.tools.includes('web_fetch');
 
-const hasWebTools = (step: IAiTaskPlanStep): boolean => hasWebSearchTool(step) || hasWebFetchTool(step);
+const hasWebTools = (step: IAiTaskPlanStep): boolean =>
+  hasWebSearchTool(step) || hasWebFetchTool(step);
 
 const buildStepSearchQuery = (step: IAiTaskPlanStep): string => {
   const query = step.goal.trim() || step.title.trim() || step.expectedOutput.trim();
@@ -55,10 +56,12 @@ const buildStepSearchQuery = (step: IAiTaskPlanStep): string => {
 const pickFetchTarget = (sources: IAiWebSourceEntry[]): IAiWebSourceEntry | null => {
   const pendingSources = sources.filter((source) => source.status !== 'fetched');
 
-  return pendingSources.find((source) => source.result.sourceType === 'official')
-    ?? pendingSources.find((source) => source.result.sourceType === 'docs')
-    ?? pendingSources[0]
-    ?? null;
+  return (
+    pendingSources.find((source) => source.result.sourceType === 'official') ??
+    pendingSources.find((source) => source.result.sourceType === 'docs') ??
+    pendingSources[0] ??
+    null
+  );
 };
 
 export const useAiWebSources = () => {

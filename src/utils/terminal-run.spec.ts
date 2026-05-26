@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  TERMINAL_RUN_LOG_CODES,
-  TERMINAL_RUN_LOG_TITLES,
   buildDispatchedTerminalRunSummary,
   buildPendingTerminalRunSummary,
   buildTerminalRunCompletionDetail,
@@ -11,6 +9,8 @@ import {
   isTerminalRunFinalLog,
   isTerminalRunFlowLog,
   resolveRunHistoryStatus,
+  TERMINAL_RUN_LOG_CODES,
+  TERMINAL_RUN_LOG_TITLES,
 } from './terminal-run';
 
 describe('terminal-run helpers', () => {

@@ -1,18 +1,13 @@
 import { buildAiAedDiffRef } from '@/components/business/ai/edit/diff-ref';
-import { fnv1a32Base36 } from '@/utils/hash';
-import { areFileSystemPathsEqual, normalizeFileSystemPath } from '@/utils/path';
-
-import type {
-  IAiApplyPatchPayload,
-  IAiPatchFile,
-  IAiPatchSet,
-} from '@/types/ai';
+import type { IAiApplyPatchPayload, IAiPatchFile, IAiPatchSet } from '@/types/ai';
 import type { IAiEditGetDiffPayload, TAiEditOperationKind } from '@/types/ai/edit';
 import type {
   IAiAgentChangedFile,
   IAiAgentPatchSummary,
   TAiAgentChangedFileStatus,
 } from '@/types/ai/patch';
+import { fnv1a32Base36 } from '@/utils/hash';
+import { areFileSystemPathsEqual, normalizeFileSystemPath } from '@/utils/path';
 
 const AED_PATCH_REF_PREFIX = 'aed-patch:';
 const PATCH_SUMMARY_ID_PREFIX = 'patch-summary';
@@ -105,13 +100,7 @@ const buildSummaryIdPayload = (
     keys.taskId,
     keys.appliedAt,
     ...files.map((file) =>
-      [
-        file.path,
-        file.status,
-        file.additions,
-        file.deletions,
-        file.diffRef,
-      ].join('|'),
+      [file.path, file.status, file.additions, file.deletions, file.diffRef].join('|'),
     ),
   ].join('\n');
 
@@ -215,9 +204,7 @@ const isAppliedPatchFile = (
   appliedFiles.some((appliedFile) => areFileSystemPathsEqual(appliedFile.path, file.path));
 
 /** 单趟扫描同时算出 totalAdditions / totalDeletions。 */
-const computeChangedFileTotals = (
-  files: readonly IAiAgentChangedFile[],
-): IChangedFileTotals => {
+const computeChangedFileTotals = (files: readonly IAiAgentChangedFile[]): IChangedFileTotals => {
   let totalAdditions = 0;
   let totalDeletions = 0;
   for (const file of files) {
@@ -234,13 +221,7 @@ export const buildAiAgentPatchSummaryFromApplyResult = (
   const runId = input.runId.trim();
   const stepId = input.stepId.trim();
   const appliedAt = input.appliedAt.trim();
-  if (
-    !taskId ||
-    !runId ||
-    !stepId ||
-    !appliedAt ||
-    input.applyResult.appliedFiles.length === 0
-  ) {
+  if (!taskId || !runId || !stepId || !appliedAt || input.applyResult.appliedFiles.length === 0) {
     return null;
   }
 
@@ -279,9 +260,7 @@ export const buildAiAgentPatchSummaryFromApplyResult = (
  * 备注：`originalHash` 字段在这里塞的是来源标识 `aed:<operationId>`，
  * 不是原文件内容指纹。下游若用作内容寻址 / 乐观锁请勿直接信任。
  */
-export const buildAiPatchSetFromAedDiff = (
-  diff: IAiEditGetDiffPayload,
-): IAiPatchSet | null => {
+export const buildAiPatchSetFromAedDiff = (diff: IAiEditGetDiffPayload): IAiPatchSet | null => {
   if (diff.hunks.length === 0) return null;
   return {
     summary: `已修改 ${diff.path}`,
@@ -373,10 +352,9 @@ export const mergeAiAgentPatchSummaries = (
     if (patchRefs.size > 1) {
       // TODO: 接入 Aster 统一 logger (logger.warn) 替换 console.warn
       // eslint-disable-next-line no-console
-      console.warn(
-        '[mergeAiAgentPatchSummaries] 输入 summary 的 patchRef 不一致，仅会保留首条:',
-        [...patchRefs],
-      );
+      console.warn('[mergeAiAgentPatchSummaries] 输入 summary 的 patchRef 不一致，仅会保留首条:', [
+        ...patchRefs,
+      ]);
     }
   }
 

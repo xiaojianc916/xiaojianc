@@ -1,4 +1,7 @@
+import { defineStore } from 'pinia';
+import { computed, ref } from 'vue';
 import { aiService } from '@/services/ipc/ai.service';
+import { createDefaultAiConfigPayload } from '@/services/ipc/ai-config.service';
 import type {
   IAiConfigPayload,
   IAiProviderConnectionPayload,
@@ -9,9 +12,6 @@ import type {
   TAiProviderType,
   TAiStatus,
 } from '@/types/ai';
-import { createDefaultAiConfigPayload } from '@/services/ipc/ai-config.service';
-import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
 
 // ---------------------------------------------------------------------------
 // Store
@@ -79,36 +79,24 @@ export const useAiStore = defineStore('ai', () => {
   const loadConfig = (): Promise<IAiConfigPayload> =>
     withConfigUpdate(aiService.getConfig(), identityConfig);
 
-  const saveConfig = (
-    payload: IAiSaveConfigRequest,
-  ): Promise<IAiConfigPayload> =>
+  const saveConfig = (payload: IAiSaveConfigRequest): Promise<IAiConfigPayload> =>
     withConfigUpdate(aiService.saveConfig(payload), identityConfig);
 
-  const saveCredentials = (
-    payload: IAiSaveCredentialsRequest,
-  ): Promise<IAiConfigPayload> =>
+  const saveCredentials = (payload: IAiSaveCredentialsRequest): Promise<IAiConfigPayload> =>
     withConfigUpdate(aiService.saveCredentials(payload), identityConfig);
 
-  const testProvider = (): Promise<IAiProviderTestPayload> =>
-    aiService.testProvider();
+  const testProvider = (): Promise<IAiProviderTestPayload> => aiService.testProvider();
 
   const testProviderConfig = (
     payload: IAiProviderConnectionRequest,
-  ): Promise<IAiProviderTestPayload> =>
-    aiService.testProviderConfig(payload);
+  ): Promise<IAiProviderTestPayload> => aiService.testProviderConfig(payload);
 
   const connectProvider = (
     payload: IAiProviderConnectionRequest,
   ): Promise<IAiProviderConnectionPayload> =>
-    withConfigUpdate(
-      aiService.connectProvider(payload),
-      (result) => result.config,
-    );
+    withConfigUpdate(aiService.connectProvider(payload), (result) => result.config);
 
-  const setStatus = (
-    nextStatus: TAiStatus,
-    message: string | null = null,
-  ): void => {
+  const setStatus = (nextStatus: TAiStatus, message: string | null = null): void => {
     status.value = nextStatus;
     errorMessage.value = message;
   };

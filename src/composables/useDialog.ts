@@ -25,10 +25,7 @@ const canDispatchDialog = (): boolean =>
   typeof window !== 'undefined' && typeof window.dispatchEvent === 'function';
 
 /** 按 id 主动关闭对话框；不传 id 则关闭全部。action 默认为 'dismiss'。 */
-export function dismissDialog(
-  id?: string,
-  action: TAppDialogAction = 'dismiss',
-): void {
+export function dismissDialog(id?: string, action: TAppDialogAction = 'dismiss'): void {
   if (!canDispatchDialog()) return;
   const detail: IAppDialogDismissDetail = { id, action };
   window.dispatchEvent(
@@ -87,10 +84,7 @@ export function useDialog() {
       const cleanup = (): void => {
         signal?.removeEventListener('abort', handleAbort);
         if (canDispatchDialog()) {
-          window.removeEventListener(
-            APP_DIALOG_DISMISS_EVENT,
-            handleExternalDismiss,
-          );
+          window.removeEventListener(APP_DIALOG_DISMISS_EVENT, handleExternalDismiss);
         }
       };
 
@@ -107,10 +101,7 @@ export function useDialog() {
         return;
       }
 
-      window.addEventListener(
-        APP_DIALOG_DISMISS_EVENT,
-        handleExternalDismiss,
-      );
+      window.addEventListener(APP_DIALOG_DISMISS_EVENT, handleExternalDismiss);
 
       const detail: IAppDialogEventDetail = {
         dismissText: '取消',
@@ -122,9 +113,7 @@ export function useDialog() {
         onAction: (action) => settle(action),
       };
 
-      window.dispatchEvent(
-        new CustomEvent<IAppDialogEventDetail>(APP_DIALOG_EVENT, { detail }),
-      );
+      window.dispatchEvent(new CustomEvent<IAppDialogEventDetail>(APP_DIALOG_EVENT, { detail }));
     });
 
   return { confirm, dismiss: dismissDialog };

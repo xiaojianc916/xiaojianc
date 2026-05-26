@@ -16,6 +16,7 @@ import {
   AI_TOOL_CONFIRMATION_OPTION_TONES,
 } from '@/types/ai/agent';
 import { aiContextReferenceSchema } from '@/types/ai/context.schema';
+import { UNIFIED_DIFF_HUNK_LINE_PREFIXES, UNIFIED_DIFF_NO_NEWLINE_MARKER } from '@/types/ai/schema';
 import { AI_AGENT_PERMISSION_LEVELS, AI_AGENT_TOOL_NAMES } from '@/types/ai/tools';
 import {
   aiWebFetchInputSchema,
@@ -23,10 +24,6 @@ import {
   aiWebSourceEntryStatusSchema,
   aiWebSourceTypeSchema,
 } from '@/types/ai/web.schema';
-import {
-  UNIFIED_DIFF_HUNK_LINE_PREFIXES,
-  UNIFIED_DIFF_NO_NEWLINE_MARKER,
-} from '@/types/ai/schema';
 
 /* ============================================================================
  * Numeric constraints (business rules; named so they're greppable & adjustable
@@ -95,12 +92,14 @@ const nullableOptionalTextSchema = nullishOptional(z.string().trim().min(1));
  * 派生,保证 prefix 列表只在一处维护。
  * ========================================================================== */
 
-const unifiedDiffHunkLineSchema = z.string().refine(
-  (value) =>
-    value === UNIFIED_DIFF_NO_NEWLINE_MARKER ||
-    UNIFIED_DIFF_HUNK_LINE_PREFIXES.some((prefix) => value.startsWith(prefix)),
-  'Patch hunk line must be a unified diff line.',
-);
+const unifiedDiffHunkLineSchema = z
+  .string()
+  .refine(
+    (value) =>
+      value === UNIFIED_DIFF_NO_NEWLINE_MARKER ||
+      UNIFIED_DIFF_HUNK_LINE_PREFIXES.some((prefix) => value.startsWith(prefix)),
+    'Patch hunk line must be a unified diff line.',
+  );
 
 /* ============================================================================
  * Plan references
@@ -122,7 +121,8 @@ export const aiRunCommandToolInputSchema = z.object({
   reason: z.string().trim().min(1),
   cwdPolicy: z.literal('workspace-root'),
   timeoutMs: nullishOptional(
-    z.number()
+    z
+      .number()
       .int()
       .min(AI_AGENT_RUN_COMMAND_MIN_TIMEOUT_MS)
       .max(AI_AGENT_RUN_COMMAND_MAX_TIMEOUT_MS),
@@ -240,9 +240,7 @@ export const aiAgentRunSchema = z.object({
   id: z.string().trim().min(1),
   goal: z.string().trim().min(1),
   status: aiAgentRunStatusSchema,
-  steps: z.array(aiTaskPlanStepSchema)
-    .min(AI_AGENT_PLAN_MIN_STEPS)
-    .max(AI_AGENT_PLAN_MAX_STEPS),
+  steps: z.array(aiTaskPlanStepSchema).min(AI_AGENT_PLAN_MIN_STEPS).max(AI_AGENT_PLAN_MAX_STEPS),
   currentStepId: z.string().trim().min(1).nullable(),
   createdAt: z.string().trim().min(1),
   updatedAt: z.string().trim().min(1),
@@ -253,9 +251,7 @@ export const aiAgentRunSchema = z.object({
 
 export const aiAgentRunPlanRequestSchema = z.object({
   goal: z.string().trim().min(1),
-  steps: z.array(aiTaskPlanStepSchema)
-    .min(AI_AGENT_PLAN_MIN_STEPS)
-    .max(AI_AGENT_PLAN_MAX_STEPS),
+  steps: z.array(aiTaskPlanStepSchema).min(AI_AGENT_PLAN_MIN_STEPS).max(AI_AGENT_PLAN_MAX_STEPS),
   context: z.array(aiContextReferenceSchema).default([]),
 });
 

@@ -1,8 +1,8 @@
-import AiMessageItem from '@/components/business/ai/chat/AiMessageItem.vue';
-import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
-import type { IAiChatMessage } from '@/types/ai';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import AiMessageItem from '@/components/business/ai/chat/AiMessageItem.vue';
+import type { IAiChatMessage } from '@/types/ai';
+import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
 
 const { successMock, errorMock, warningMock, tryWriteClipboardTextMock } = vi.hoisted(() => ({
   successMock: vi.fn(),
@@ -353,7 +353,7 @@ describe('AiMessageItem', () => {
     expect(wrapper.find('.ai-tool-call-list').exists()).toBe(false);
     expect(
       runtimeTimeline.element.compareDocumentPosition(messageBubble.element) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 

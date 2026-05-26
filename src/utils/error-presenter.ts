@@ -1,15 +1,9 @@
-import type {
-  IResolvedErrorPresentation,
-  TErrorPresentation,
-} from '@/types/app-error';
+import type { IResolvedErrorPresentation, TErrorPresentation } from '@/types/app-error';
 import type { TAppDialogAction, TAppDialogVariant } from '@/types/dialog';
+import { type IPresentErrorDialogOptions, presentErrorDialog } from '@/utils/error-dialog';
 import {
-  presentErrorDialog,
-  type IPresentErrorDialogOptions,
-} from '@/utils/error-dialog';
-import {
-  resolveErrorPresentation,
   type IResolveErrorPresentationOptions,
+  resolveErrorPresentation,
 } from '@/utils/error-presentation';
 import { presentErrorToast } from '@/utils/error-toast';
 
@@ -27,9 +21,7 @@ export interface IPresentAppErrorResult {
   model: IResolvedErrorPresentation;
 }
 
-const toDialogOptions = (
-  options: IPresentAppErrorOptions,
-): IPresentErrorDialogOptions => {
+const toDialogOptions = (options: IPresentAppErrorOptions): IPresentErrorDialogOptions => {
   const { dialogId, ...dialogOptions } = options;
   return {
     ...dialogOptions,

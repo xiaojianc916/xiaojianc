@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from 'vue';
-import { cn } from '@/lib/utils';
 import { reactiveOmit } from '@vueuse/core';
+import type { HTMLAttributes } from 'vue';
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { StickToBottom } from 'vue-stick-to-bottom';
+import { cn } from '@/lib/utils';
 
 interface Props {
   ariaLabel?: string;
@@ -34,12 +34,14 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-  scrollStateChange: [state: {
-    scrollTop: number;
-    scrollHeight: number;
-    clientHeight: number;
-    distanceFromBottom: number;
-  }];
+  scrollStateChange: [
+    state: {
+      scrollTop: number;
+      scrollHeight: number;
+      clientHeight: number;
+      distanceFromBottom: number;
+    },
+  ];
 }>();
 
 const SCROLL_BOTTOM_RESTORE_THRESHOLD = 4;
@@ -63,8 +65,7 @@ const cancelRestoreFrame = (): void => {
   restoreFrame = null;
 };
 
-const getScrollElement = (): HTMLElement | null =>
-  stickToBottomRef.value?.scrollRef ?? null;
+const getScrollElement = (): HTMLElement | null => stickToBottomRef.value?.scrollRef ?? null;
 
 const emitScrollState = (scrollElement: HTMLElement): void => {
   const scrollTop = Math.max(0, Math.round(scrollElement.scrollTop));
@@ -99,9 +100,10 @@ const resolveRestoredScrollTop = (scrollElement: HTMLElement): number => {
 
   const restoredScrollTop = props.initialScrollTop ?? 0;
   const distanceFromBottom = props.initialDistanceFromBottom;
-  const target = distanceFromBottom !== null && distanceFromBottom <= SCROLL_BOTTOM_RESTORE_THRESHOLD
-    ? maxScrollTop
-    : restoredScrollTop;
+  const target =
+    distanceFromBottom !== null && distanceFromBottom <= SCROLL_BOTTOM_RESTORE_THRESHOLD
+      ? maxScrollTop
+      : restoredScrollTop;
 
   return Math.min(Math.max(0, target), maxScrollTop);
 };

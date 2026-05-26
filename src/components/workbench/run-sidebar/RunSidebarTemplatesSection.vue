@@ -1,116 +1,115 @@
 <script setup lang="ts">
+import type { FunctionalComponent, SVGAttributes } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import {
-  TEMPLATE_PHASES,
-  countSnippets,
   type IPhase,
   type ISnippetCategory,
   type ISnippetItem,
+  TEMPLATE_PHASES,
   type TPhaseId,
-} from "@/components/workbench/run-sidebar/templateCatalog";
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+} from '@/components/workbench/run-sidebar/templateCatalog';
+import AlertTriangle from '~icons/lucide/alert-triangle';
+import ArrowDownAZ from '~icons/lucide/arrow-down-a-z';
+import ArrowLeftRight from '~icons/lucide/arrow-left-right';
+import ArrowRight from '~icons/lucide/arrow-right';
+import ArrowUpAZ from '~icons/lucide/arrow-up-a-z';
+import ArrowUpDown from '~icons/lucide/arrow-up-down';
+import Asterisk from '~icons/lucide/asterisk';
+import AtSign from '~icons/lucide/at-sign';
+import Ban from '~icons/lucide/ban';
+import Bell from '~icons/lucide/bell';
+import BellRing from '~icons/lucide/bell-ring';
+import BookOpen from '~icons/lucide/book-open';
+import Braces from '~icons/lucide/braces';
+import Brackets from '~icons/lucide/brackets';
+import Brush from '~icons/lucide/brush';
+import Bug from '~icons/lucide/bug';
+import Calendar from '~icons/lucide/calendar';
+import CalendarClock from '~icons/lucide/calendar-clock';
+import CalendarMinus from '~icons/lucide/calendar-minus';
+import ChartBar from '~icons/lucide/chart-bar';
+import Check from '~icons/lucide/check';
+import ChevronRight from '~icons/lucide/chevron-right';
+import Clock from '~icons/lucide/clock';
+import CodeXml from '~icons/lucide/code-xml';
+import Combine from '~icons/lucide/combine';
+import Cone from '~icons/lucide/cone';
+import Copy from '~icons/lucide/copy';
+import Cpu from '~icons/lucide/cpu';
+import Database from '~icons/lucide/database';
+import Equal from '~icons/lucide/equal';
+import Eye from '~icons/lucide/eye';
+import EyeOff from '~icons/lucide/eye-off';
+import File from '~icons/lucide/file';
+import FileCheck from '~icons/lucide/file-check';
+import FileClock from '~icons/lucide/file-clock';
+import FileCode from '~icons/lucide/file-code';
+import FilePlus from '~icons/lucide/file-plus';
+import FileSearch from '~icons/lucide/file-search';
+import FileText from '~icons/lucide/file-text';
+import FileX from '~icons/lucide/file-x';
+import Filter from '~icons/lucide/filter';
+import Flag from '~icons/lucide/flag';
+import Folder from '~icons/lucide/folder';
+import FolderX from '~icons/lucide/folder-x';
+import GitBranch from '~icons/lucide/git-branch';
+import GitBranchPlus from '~icons/lucide/git-branch-plus';
+import GitFork from '~icons/lucide/git-fork';
+import Globe from '~icons/lucide/globe';
+import Grid3x3 from '~icons/lucide/grid-3x3';
+import HardDrive from '~icons/lucide/hard-drive';
+import Hash from '~icons/lucide/hash';
+import HelpCircle from '~icons/lucide/help-circle';
+import Info from '~icons/lucide/info';
+import Key from '~icons/lucide/key';
+import Layers from '~icons/lucide/layers';
+import List from '~icons/lucide/list';
+import ListOrdered from '~icons/lucide/list-ordered';
+import Loader from '~icons/lucide/loader';
+import Lock from '~icons/lucide/lock';
+import LogOut from '~icons/lucide/log-out';
+import Mail from '~icons/lucide/mail';
+import MessageCircle from '~icons/lucide/message-circle';
+import MessageSquare from '~icons/lucide/message-square';
+import Monitor from '~icons/lucide/monitor';
+import MoreHorizontal from '~icons/lucide/more-horizontal';
+import MousePointer from '~icons/lucide/mouse-pointer';
+import OctagonAlert from '~icons/lucide/octagon-alert';
+import Package from '~icons/lucide/package';
+import Pencil from '~icons/lucide/pencil';
+import Pin from '~icons/lucide/pin';
+import Plug from '~icons/lucide/plug';
+import Plus from '~icons/lucide/plus';
+import RefreshCw from '~icons/lucide/refresh-cw';
+import Repeat from '~icons/lucide/repeat';
+import Replace from '~icons/lucide/replace';
+import Rocket from '~icons/lucide/rocket';
+import RotateCw from '~icons/lucide/rotate-cw';
+import Ruler from '~icons/lucide/ruler';
+import Save from '~icons/lucide/save';
+import Scissors from '~icons/lucide/scissors';
 // ── UI Chrome 图标 ──
-import Search from "~icons/lucide/search";
-import ChevronRight from "~icons/lucide/chevron-right";
-import MoreHorizontal from "~icons/lucide/more-horizontal";
-import Plus from "~icons/lucide/plus";
-import Copy from "~icons/lucide/copy";
-import Pin from "~icons/lucide/pin";
-import Eye from "~icons/lucide/eye";
-import Pencil from "~icons/lucide/pencil";
-import Trash2 from "~icons/lucide/trash-2";
-import Check from "~icons/lucide/check";
+import Search from '~icons/lucide/search';
+import Send from '~icons/lucide/send';
+import Settings from '~icons/lucide/settings';
+import Shield from '~icons/lucide/shield';
+import ShieldCheck from '~icons/lucide/shield-check';
+import Skull from '~icons/lucide/skull';
+import SquareTerminal from '~icons/lucide/square-terminal';
 // ── 类别 / 片段图标（按需映射） ──
-import Star from "~icons/lucide/star";
-import Clock from "~icons/lucide/clock";
-import Rocket from "~icons/lucide/rocket";
-import BookOpen from "~icons/lucide/book-open";
-import Terminal from "~icons/lucide/terminal";
-import Settings from "~icons/lucide/settings";
-import ShieldCheck from "~icons/lucide/shield-check";
-import Lock from "~icons/lucide/lock";
-import Type from "~icons/lucide/type";
-import Braces from "~icons/lucide/braces";
-import Calendar from "~icons/lucide/calendar";
-import Database from "~icons/lucide/database";
-import MessageSquare from "~icons/lucide/message-square";
-import List from "~icons/lucide/list";
-import Loader from "~icons/lucide/loader";
-import FileText from "~icons/lucide/file-text";
-import GitBranch from "~icons/lucide/git-branch";
-import Folder from "~icons/lucide/folder";
-import FileSearch from "~icons/lucide/file-search";
-import Cpu from "~icons/lucide/cpu";
-import Globe from "~icons/lucide/globe";
-import ChartBar from "~icons/lucide/chart-bar";
-import Bell from "~icons/lucide/bell";
-import AlertTriangle from "~icons/lucide/alert-triangle";
-import LogOut from "~icons/lucide/log-out";
-import Bug from "~icons/lucide/bug";
-import Shield from "~icons/lucide/shield";
-import TestTube from "~icons/lucide/test-tube";
-import Info from "~icons/lucide/info";
-import RotateCw from "~icons/lucide/rotate-cw";
-import RefreshCw from "~icons/lucide/refresh-cw";
-import Hash from "~icons/lucide/hash";
-import Tag from "~icons/lucide/tag";
-import HelpCircle from "~icons/lucide/help-circle";
-import Flag from "~icons/lucide/flag";
-import ArrowRight from "~icons/lucide/arrow-right";
-import Key from "~icons/lucide/key";
-import Layers from "~icons/lucide/layers";
-import File from "~icons/lucide/file";
-import Package from "~icons/lucide/package";
-import Monitor from "~icons/lucide/monitor";
-import UserCheck from "~icons/lucide/user-check";
-import HardDrive from "~icons/lucide/hard-drive";
-import Scissors from "~icons/lucide/scissors";
-import ArrowDownAZ from "~icons/lucide/arrow-down-a-z";
-import ArrowUpAZ from "~icons/lucide/arrow-up-a-z";
-import Replace from "~icons/lucide/replace";
-import TextCursorInput from "~icons/lucide/text-cursor-input";
-import AtSign from "~icons/lucide/at-sign";
-import Brackets from "~icons/lucide/brackets";
-import Repeat from "~icons/lucide/repeat";
-import GitBranchPlus from "~icons/lucide/git-branch-plus";
-import Combine from "~icons/lucide/combine";
-import CalendarMinus from "~icons/lucide/calendar-minus";
-import CalendarClock from "~icons/lucide/calendar-clock";
-import Filter from "~icons/lucide/filter";
-import Wrench from "~icons/lucide/wrench";
-import ArrowLeftRight from "~icons/lucide/arrow-left-right";
-import MousePointer from "~icons/lucide/mouse-pointer";
-import ListOrdered from "~icons/lucide/list-ordered";
-import OctagonAlert from "~icons/lucide/octagon-alert";
-import Save from "~icons/lucide/save";
-import TimerOff from "~icons/lucide/timer-off";
-import GitFork from "~icons/lucide/git-fork";
-import FileCheck from "~icons/lucide/file-check";
-import FilePlus from "~icons/lucide/file-plus";
-import FileClock from "~icons/lucide/file-clock";
-import FileX from "~icons/lucide/file-x";
-import Ruler from "~icons/lucide/ruler";
-import Table2 from "~icons/lucide/table-2";
-import ArrowUpDown from "~icons/lucide/arrow-up-down";
-import Cone from "~icons/lucide/cone";
-import Ban from "~icons/lucide/ban";
-import Send from "~icons/lucide/send";
-import Plug from "~icons/lucide/plug";
-import Mail from "~icons/lucide/mail";
-import Webhook from "~icons/lucide/webhook";
-import MessageCircle from "~icons/lucide/message-circle";
-import BellRing from "~icons/lucide/bell-ring";
-import Skull from "~icons/lucide/skull";
-import Asterisk from "~icons/lucide/asterisk";
-import Brush from "~icons/lucide/brush";
-import FolderX from "~icons/lucide/folder-x";
-import Undo2 from "~icons/lucide/undo-2";
-import CodeXml from "~icons/lucide/code-xml";
-import SquareTerminal from "~icons/lucide/square-terminal";
-import EyeOff from "~icons/lucide/eye-off";
-import Equal from "~icons/lucide/equal";
-import Grid3x3 from "~icons/lucide/grid-3x3";
-import FileCode from "~icons/lucide/file-code";
-import type { FunctionalComponent, SVGAttributes } from "vue";
+import Star from '~icons/lucide/star';
+import Table2 from '~icons/lucide/table-2';
+import Tag from '~icons/lucide/tag';
+import Terminal from '~icons/lucide/terminal';
+import TestTube from '~icons/lucide/test-tube';
+import TextCursorInput from '~icons/lucide/text-cursor-input';
+import TimerOff from '~icons/lucide/timer-off';
+import Trash2 from '~icons/lucide/trash-2';
+import Type from '~icons/lucide/type';
+import Undo2 from '~icons/lucide/undo-2';
+import UserCheck from '~icons/lucide/user-check';
+import Webhook from '~icons/lucide/webhook';
+import Wrench from '~icons/lucide/wrench';
 
 // ═══════════════════════════════════════════════
 // 图标映射
@@ -122,104 +121,104 @@ const iconMap: Record<string, IconComponent> = {
   star: Star,
   clock: Clock,
   rocket: Rocket,
-  "book-open": BookOpen,
+  'book-open': BookOpen,
   terminal: Terminal,
   settings: Settings,
-  "shield-check": ShieldCheck,
+  'shield-check': ShieldCheck,
   lock: Lock,
   type: Type,
   braces: Braces,
   calendar: Calendar,
   database: Database,
-  "message-square": MessageSquare,
+  'message-square': MessageSquare,
   list: List,
   loader: Loader,
-  "file-text": FileText,
-  "git-branch": GitBranch,
+  'file-text': FileText,
+  'git-branch': GitBranch,
   folder: Folder,
-  "file-search": FileSearch,
+  'file-search': FileSearch,
   cpu: Cpu,
   globe: Globe,
-  "bar-chart-2": ChartBar,
+  'bar-chart-2': ChartBar,
   bell: Bell,
-  "alert-triangle": AlertTriangle,
-  "trash-2": Trash2,
-  "log-out": LogOut,
+  'alert-triangle': AlertTriangle,
+  'trash-2': Trash2,
+  'log-out': LogOut,
   bug: Bug,
   shield: Shield,
-  "test-tube": TestTube,
+  'test-tube': TestTube,
   // 片段图标
   info: Info,
-  "rotate-cw": RotateCw,
-  "refresh-cw": RefreshCw,
+  'rotate-cw': RotateCw,
+  'refresh-cw': RefreshCw,
   hash: Hash,
   tag: Tag,
-  "help-circle": HelpCircle,
+  'help-circle': HelpCircle,
   flag: Flag,
-  "arrow-right": ArrowRight,
+  'arrow-right': ArrowRight,
   key: Key,
   layers: Layers,
   file: File,
   search: Search,
   package: Package,
   monitor: Monitor,
-  "user-check": UserCheck,
-  "hard-drive": HardDrive,
+  'user-check': UserCheck,
+  'hard-drive': HardDrive,
   scissors: Scissors,
-  "arrow-down-az": ArrowDownAZ,
-  "arrow-up-az": ArrowUpAZ,
+  'arrow-down-az': ArrowDownAZ,
+  'arrow-up-az': ArrowUpAZ,
   replace: Replace,
-  "text-cursor-input": TextCursorInput,
-  "at-sign": AtSign,
+  'text-cursor-input': TextCursorInput,
+  'at-sign': AtSign,
   brackets: Brackets,
   repeat: Repeat,
-  "git-branch-plus": GitBranchPlus,
+  'git-branch-plus': GitBranchPlus,
   combine: Combine,
-  "calendar-minus": CalendarMinus,
-  "calendar-clock": CalendarClock,
+  'calendar-minus': CalendarMinus,
+  'calendar-clock': CalendarClock,
   filter: Filter,
   wrench: Wrench,
-  "arrow-left-right": ArrowLeftRight,
-  "mouse-pointer": MousePointer,
-  "chevron-right": ChevronRight,
-  "list-ordered": ListOrdered,
-  "octagon-alert": OctagonAlert,
+  'arrow-left-right': ArrowLeftRight,
+  'mouse-pointer': MousePointer,
+  'chevron-right': ChevronRight,
+  'list-ordered': ListOrdered,
+  'octagon-alert': OctagonAlert,
   save: Save,
-  "timer-off": TimerOff,
-  "git-fork": GitFork,
-  "file-check": FileCheck,
-  "file-plus": FilePlus,
-  "file-clock": FileClock,
-  "file-x": FileX,
+  'timer-off': TimerOff,
+  'git-fork': GitFork,
+  'file-check': FileCheck,
+  'file-plus': FilePlus,
+  'file-clock': FileClock,
+  'file-x': FileX,
   copy: Copy,
   ruler: Ruler,
   table: Table2,
-  "arrow-up-down": ArrowUpDown,
+  'arrow-up-down': ArrowUpDown,
   cone: Cone,
   ban: Ban,
   send: Send,
   plug: Plug,
   mail: Mail,
   webhook: Webhook,
-  "message-circle": MessageCircle,
-  "bell-ring": BellRing,
+  'message-circle': MessageCircle,
+  'bell-ring': BellRing,
   skull: Skull,
   asterisk: Asterisk,
   broom: Brush,
-  "folder-x": FolderX,
-  "undo-2": Undo2,
+  'folder-x': FolderX,
+  'undo-2': Undo2,
   code: CodeXml,
-  "terminal-square": SquareTerminal,
-  "eye-off": EyeOff,
+  'terminal-square': SquareTerminal,
+  'eye-off': EyeOff,
   equal: Equal,
-  "grid-3x3": Grid3x3,
-  "file-code": FileCode,
+  'grid-3x3': Grid3x3,
+  'file-code': FileCode,
   check: Check,
-  "shield-alert": AlertTriangle,
-  regex: Brackets,                // 用 Brackets 近似
-  "text-cursor": TextCursorInput,
-  "bar-chart": ChartBar,
-  pipeline: File,                  // 用 File 近似
+  'shield-alert': AlertTriangle,
+  regex: Brackets, // 用 Brackets 近似
+  'text-cursor': TextCursorInput,
+  'bar-chart': ChartBar,
+  pipeline: File, // 用 File 近似
 };
 
 function getIcon(name: string): IconComponent {
@@ -229,25 +228,29 @@ function getIcon(name: string): IconComponent {
 // ═══════════════════════════════════════════════
 // 状态
 // ═══════════════════════════════════════════════
-const searchQuery = ref("");
+const searchQuery = ref('');
 const expandedCategoryKeys = ref<Set<string>>(new Set());
 const contextMenuOpen = ref(false);
 const contextMenuPos = ref({ x: 0, y: 0 });
 const contextMenuTarget = ref<ISnippetItem | null>(null);
 const toastVisible = ref(false);
-const toastMessage = ref("");
+const toastMessage = ref('');
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
 // ── 搜索 ──
 const normalizeText = (value: string): string =>
-  value.normalize("NFKC").toLocaleLowerCase("zh-CN").trim();
+  value.normalize('NFKC').toLocaleLowerCase('zh-CN').trim();
 
 const normalizedQuery = computed(() => normalizeText(searchQuery.value));
 
-function snippetMatchesQuery(item: ISnippetItem, _category: ISnippetCategory, phase: IPhase): boolean {
+function snippetMatchesQuery(
+  item: ISnippetItem,
+  _category: ISnippetCategory,
+  phase: IPhase,
+): boolean {
   if (normalizedQuery.value.length === 0) return true;
   const searchText = normalizeText(
-    [item.trigger, item.description, phase.label, _category.name].join(" "),
+    [item.trigger, item.description, phase.label, _category.name].join(' '),
   );
   return searchText.includes(normalizedQuery.value);
 }
@@ -256,7 +259,7 @@ function snippetMatchesQuery(item: ISnippetItem, _category: ISnippetCategory, ph
 const visiblePhases = computed(() =>
   TEMPLATE_PHASES.map((phase) => {
     // "我的" 阶段不在搜索中过滤
-    if (phase.id === "mine") return phase;
+    if (phase.id === 'mine') return phase;
     const filteredCategories = phase.categories
       .map((cat) => ({
         ...cat,
@@ -265,7 +268,7 @@ const visiblePhases = computed(() =>
       .filter((cat) => normalizedQuery.value.length === 0 || cat.items.length > 0);
     return { ...phase, categories: filteredCategories };
   }).filter((phase) => {
-    if (phase.id === "mine") return true;
+    if (phase.id === 'mine') return true;
     return normalizedQuery.value.length === 0 || phase.categories.length > 0;
   }),
 );
@@ -317,14 +320,14 @@ function handleMenuAction(action: string): void {
   const trigger = contextMenuTarget.value.trigger;
   const messages: Record<string, string> = {
     insert: `已插入 ${trigger} → 光标`,
-    "copy-trigger": `已复制触发词 ${trigger}`,
-    "copy-code": `已复制 ${trigger} 完整代码`,
+    'copy-trigger': `已复制触发词 ${trigger}`,
+    'copy-code': `已复制 ${trigger} 完整代码`,
     pin: `${trigger} 已钉到收藏`,
     view: `打开 ${trigger} 详情`,
     edit: `编辑 ${trigger}`,
     delete: `已删除 ${trigger}`,
   };
-  showToast(messages[action] ?? "");
+  showToast(messages[action] ?? '');
   closeContextMenu();
 }
 
@@ -349,16 +352,16 @@ function handleSnippetClick(item: ISnippetItem): void {
 const searchInputRef = ref<HTMLInputElement | null>(null);
 
 function handleGlobalKeydown(event: KeyboardEvent): void {
-  if ((event.metaKey || event.ctrlKey) && event.key === "p") {
+  if ((event.metaKey || event.ctrlKey) && event.key === 'p') {
     event.preventDefault();
     searchInputRef.value?.focus();
     searchInputRef.value?.select();
     return;
   }
-  if (event.key === "Escape") {
+  if (event.key === 'Escape') {
     closeContextMenu();
     if (document.activeElement === searchInputRef.value) {
-      searchQuery.value = "";
+      searchQuery.value = '';
       searchInputRef.value?.blur();
     }
   }
@@ -366,21 +369,21 @@ function handleGlobalKeydown(event: KeyboardEvent): void {
 
 // ── 点击外部关闭菜单 ──
 function handleDocumentClick(event: MouseEvent): void {
-  const menuEl = document.getElementById("template-context-menu");
+  const menuEl = document.getElementById('template-context-menu');
   if (menuEl && !menuEl.contains(event.target as Node)) {
     closeContextMenu();
   }
 }
 
 onMounted(() => {
-  document.addEventListener("keydown", handleGlobalKeydown);
-  document.addEventListener("click", handleDocumentClick);
+  document.addEventListener('keydown', handleGlobalKeydown);
+  document.addEventListener('click', handleDocumentClick);
 });
 
 onBeforeUnmount(() => {
   if (toastTimer) clearTimeout(toastTimer);
-  document.removeEventListener("keydown", handleGlobalKeydown);
-  document.removeEventListener("click", handleDocumentClick);
+  document.removeEventListener('keydown', handleGlobalKeydown);
+  document.removeEventListener('click', handleDocumentClick);
 });
 </script>
 

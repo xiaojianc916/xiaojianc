@@ -1,11 +1,11 @@
 <script setup lang="ts">
+import { useEventListener } from '@vueuse/core';
 import type { HTMLAttributes } from 'vue';
-import type { PromptInputMessage } from './types';
+import { computed, getCurrentInstance, inject, ref } from 'vue';
 import { InputGroup } from '@/components/ui/input-group';
 import { cn } from '@/lib/utils';
-import { getCurrentInstance, inject, computed, ref } from 'vue';
-import { useEventListener } from '@vueuse/core';
 import { usePromptInputProvider } from './context';
+import type { PromptInputMessage } from './types';
 import { PROMPT_INPUT_KEY } from './types';
 
 const props = defineProps<{
@@ -91,11 +91,9 @@ function handleDrop(e: DragEvent) {
   }
 }
 
-const globalDropTarget = computed(() => props.globalDrop ? document : undefined);
+const globalDropTarget = computed(() => (props.globalDrop ? document : undefined));
 useEventListener(globalDropTarget, 'dragover', handleDragOver);
 useEventListener(globalDropTarget, 'drop', handleDrop);
-
-
 
 function onFileChange(e: Event) {
   const input = e.target as HTMLInputElement;

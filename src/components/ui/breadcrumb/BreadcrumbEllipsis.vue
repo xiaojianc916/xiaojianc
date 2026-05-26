@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils'
-import Ellipsis from '~icons/lucide/ellipsis';import type { HTMLAttributes } from 'vue'
+import type { HTMLAttributes } from 'vue';
+import { cn } from '@/lib/utils';
+import Ellipsis from '~icons/lucide/ellipsis';
 
 const props = defineProps<{
-  class?: HTMLAttributes['class']
-}>()
+  class?: HTMLAttributes['class'];
+}>();
 </script>
 
 <template>

@@ -1,7 +1,4 @@
-import type {
-  ICommandTemplate,
-  TExecutorKind,
-} from '@/types/editor';
+import type { ICommandTemplate, TExecutorKind } from '@/types/editor';
 
 export const DEFAULT_SCRIPT = `#!/bin/bash
 
@@ -13,7 +10,6 @@ main() {
 
 main "$@"
 `;
-
 
 export const DEFAULT_EXECUTOR: TExecutorKind = 'wsl';
 

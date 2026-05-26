@@ -1,14 +1,10 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
 import { reactiveOmit } from '@vueuse/core';
-import Check from '~icons/lucide/check';
 import type { ContextMenuCheckboxItemEmits, ContextMenuCheckboxItemProps } from 'reka-ui';
-import {
-    ContextMenuCheckboxItem,
-    ContextMenuItemIndicator,
-    useForwardPropsEmits,
-} from 'reka-ui';
+import { ContextMenuCheckboxItem, ContextMenuItemIndicator, useForwardPropsEmits } from 'reka-ui';
 import type { HTMLAttributes } from 'vue';
+import { cn } from '@/lib/utils';
+import Check from '~icons/lucide/check';
 
 const props = defineProps<ContextMenuCheckboxItemProps & { class?: HTMLAttributes['class'] }>();
 const emits = defineEmits<ContextMenuCheckboxItemEmits>();

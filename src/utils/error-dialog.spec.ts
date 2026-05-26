@@ -1,7 +1,7 @@
+import { describe, expect, it, vi } from 'vitest';
 import { AppError } from '@/types/app-error';
 import { APP_DIALOG_EVENT, type IAppDialogEventDetail } from '@/types/dialog';
 import { presentErrorDialog } from '@/utils/error-dialog';
-import { describe, expect, it, vi } from 'vitest';
 
 describe('presentErrorDialog', () => {
   it('把阻断型错误转成全局确认弹窗', async () => {

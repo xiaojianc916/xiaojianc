@@ -1,9 +1,6 @@
 import { z } from 'zod';
 
-import {
-  aiSuggestionPoolPayloadSchema,
-  aiSuggestionPoolRequestSchema,
-} from '@/types/ai/schema';
+import { aiSuggestionPoolPayloadSchema, aiSuggestionPoolRequestSchema } from '@/types/ai/schema';
 
 export const aiSuggestionTextSchema = z.string().trim().min(1).max(120);
 
@@ -23,7 +20,4 @@ export const aiSuggestionLayoutSchema = z.object({
   columnCount: z.number().int().min(1).max(4),
 });
 
-export {
-  aiSuggestionPoolPayloadSchema,
-  aiSuggestionPoolRequestSchema,
-};
+export { aiSuggestionPoolPayloadSchema, aiSuggestionPoolRequestSchema };

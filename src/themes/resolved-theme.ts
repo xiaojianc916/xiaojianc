@@ -20,71 +20,71 @@ import type { TAccentColor, TRadiusPreset, TUiDensity } from '@/types/app';
 
 /** 各强调色预设对应的 CSS 变量值 */
 export const ACCENT_STYLE_MAP: Record<
-    TAccentColor,
-    {
-        accent: string;
-        accentStrong: string;
-        accentMuted: string;
-        accentSoft: string;
-        statusbarAccent: string;
-    }
+  TAccentColor,
+  {
+    accent: string;
+    accentStrong: string;
+    accentMuted: string;
+    accentSoft: string;
+    statusbarAccent: string;
+  }
 > = {
-    indigo: {
-        accent: 'var(--r-accent-default)',
-        accentStrong: 'var(--r-accent-strong)',
-        accentMuted: 'var(--r-accent-muted)',
-        accentSoft: 'var(--r-accent-soft)',
-        statusbarAccent: 'var(--r-accent-statusbar)',
-    },
-    violet: {
-        accent: '#7c3aed',
-        accentStrong: '#9462ff',
-        accentMuted: 'rgba(124, 58, 237, 0.18)',
-        accentSoft: 'rgba(124, 58, 237, 0.34)',
-        statusbarAccent: '#7c3aed',
-    },
-    blue: {
-        accent: '#2f80ed',
-        accentStrong: '#4295ff',
-        accentMuted: 'rgba(47, 128, 237, 0.18)',
-        accentSoft: 'rgba(47, 128, 237, 0.34)',
-        statusbarAccent: '#2f80ed',
-    },
-    teal: {
-        accent: '#14b8a6',
-        accentStrong: '#1ecfbc',
-        accentMuted: 'rgba(20, 184, 166, 0.18)',
-        accentSoft: 'rgba(20, 184, 166, 0.34)',
-        statusbarAccent: '#14b8a6',
-    },
-    gold: {
-        accent: '#e5b800',
-        accentStrong: '#f4c91c',
-        accentMuted: 'rgba(229, 184, 0, 0.18)',
-        accentSoft: 'rgba(229, 184, 0, 0.34)',
-        statusbarAccent: '#c99f00',
-    },
-    red: {
-        accent: '#e5484d',
-        accentStrong: '#ff6468',
-        accentMuted: 'rgba(229, 72, 77, 0.18)',
-        accentSoft: 'rgba(229, 72, 77, 0.34)',
-        statusbarAccent: '#d93c42',
-    },
+  indigo: {
+    accent: 'var(--r-accent-default)',
+    accentStrong: 'var(--r-accent-strong)',
+    accentMuted: 'var(--r-accent-muted)',
+    accentSoft: 'var(--r-accent-soft)',
+    statusbarAccent: 'var(--r-accent-statusbar)',
+  },
+  violet: {
+    accent: '#7c3aed',
+    accentStrong: '#9462ff',
+    accentMuted: 'rgba(124, 58, 237, 0.18)',
+    accentSoft: 'rgba(124, 58, 237, 0.34)',
+    statusbarAccent: '#7c3aed',
+  },
+  blue: {
+    accent: '#2f80ed',
+    accentStrong: '#4295ff',
+    accentMuted: 'rgba(47, 128, 237, 0.18)',
+    accentSoft: 'rgba(47, 128, 237, 0.34)',
+    statusbarAccent: '#2f80ed',
+  },
+  teal: {
+    accent: '#14b8a6',
+    accentStrong: '#1ecfbc',
+    accentMuted: 'rgba(20, 184, 166, 0.18)',
+    accentSoft: 'rgba(20, 184, 166, 0.34)',
+    statusbarAccent: '#14b8a6',
+  },
+  gold: {
+    accent: '#e5b800',
+    accentStrong: '#f4c91c',
+    accentMuted: 'rgba(229, 184, 0, 0.18)',
+    accentSoft: 'rgba(229, 184, 0, 0.34)',
+    statusbarAccent: '#c99f00',
+  },
+  red: {
+    accent: '#e5484d',
+    accentStrong: '#ff6468',
+    accentMuted: 'rgba(229, 72, 77, 0.18)',
+    accentSoft: 'rgba(229, 72, 77, 0.34)',
+    statusbarAccent: '#d93c42',
+  },
 };
 
 /** 各圆角预设对应的 CSS 值 */
 export const RADIUS_VALUE_MAP: Record<TRadiusPreset, string> = {
-    sharp: '0.375rem',
-    default: '0.625rem',
-    rounded: '0.95rem',
+  sharp: '0.375rem',
+  default: '0.625rem',
+  rounded: '0.95rem',
 };
 
 /** 各 UI 密度对应的缩放比 */
 export const UI_DENSITY_SCALE_MAP: Record<TUiDensity, string> = {
-    compact: '0.94',
-    default: '1',
-    comfortable: '1.08',
+  compact: '0.94',
+  default: '1',
+  comfortable: '1.08',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -96,16 +96,16 @@ export const UI_DENSITY_SCALE_MAP: Record<TUiDensity, string> = {
  * 纯函数：无副作用，不写 DOM。
  */
 function buildAccentCssVars(accentColor: TAccentColor): Record<string, string> {
-    const s = ACCENT_STYLE_MAP[accentColor];
-    return {
-        '--accent': s.accent,
-        '--accent-strong': s.accentStrong,
-        '--accent-muted': s.accentMuted,
-        '--settings-accent': s.accent,
-        '--settings-accent-soft': s.accentSoft,
-        '--settings-accent-muted': s.accentMuted,
-        '--statusbar-accent': s.statusbarAccent,
-    };
+  const s = ACCENT_STYLE_MAP[accentColor];
+  return {
+    '--accent': s.accent,
+    '--accent-strong': s.accentStrong,
+    '--accent-muted': s.accentMuted,
+    '--settings-accent': s.accent,
+    '--settings-accent-soft': s.accentSoft,
+    '--settings-accent-muted': s.accentMuted,
+    '--statusbar-accent': s.statusbarAccent,
+  };
 }
 
 /**
@@ -113,15 +113,15 @@ function buildAccentCssVars(accentColor: TAccentColor): Record<string, string> {
  * 纯函数：无副作用，不写 DOM。
  */
 function buildUserOverrideCssVars(opts: {
-    accentColor: TAccentColor;
-    radiusPreset: TRadiusPreset;
-    uiDensity: TUiDensity;
-    interfaceFontSize: number;
+  accentColor: TAccentColor;
+  radiusPreset: TRadiusPreset;
+  uiDensity: TUiDensity;
+  interfaceFontSize: number;
 }): Record<string, string> {
-    return {
-        ...buildAccentCssVars(opts.accentColor),
-        '--radius': RADIUS_VALUE_MAP[opts.radiusPreset],
-        '--app-ui-font-size': `${opts.interfaceFontSize}px`,
-        '--app-density-scale': UI_DENSITY_SCALE_MAP[opts.uiDensity],
-    };
+  return {
+    ...buildAccentCssVars(opts.accentColor),
+    '--radius': RADIUS_VALUE_MAP[opts.radiusPreset],
+    '--app-ui-font-size': `${opts.interfaceFontSize}px`,
+    '--app-density-scale': UI_DENSITY_SCALE_MAP[opts.uiDensity],
+  };
 }

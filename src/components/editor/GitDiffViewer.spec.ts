@@ -2,9 +2,9 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import GitDiffViewer from '@/components/editor/GitDiffViewer.vue';
-import { createDefaultAppSettings } from '@/types/settings';
 import type { IGitDiffPreviewPayload } from '@/types/git';
 import type { IEditorSettings } from '@/types/settings';
+import { createDefaultAppSettings } from '@/types/settings';
 
 const mergeViewMock = vi.hoisted(() => {
   const configs: unknown[] = [];
@@ -51,7 +51,8 @@ const createPreview = (): IGitDiffPreviewPayload => ({
   title: 'demo.c · 工作区 Diff',
   mode: 'worktree',
   originalContent: 'int main(void) {\n  return 0;\n}',
-  modifiedContent: 'int main(void) {\n  printf("这是一行很长的中文内容，需要在视口边界自动换行");\n  return 0;\n}',
+  modifiedContent:
+    'int main(void) {\n  printf("这是一行很长的中文内容，需要在视口边界自动换行");\n  return 0;\n}',
   isEmpty: false,
 });
 
@@ -71,10 +72,13 @@ const getFirstMergeViewConfig = (): Record<string, unknown> => {
 describe('GitDiffViewer', () => {
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
-    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
-    }));
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      }),
+    );
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
     mergeViewMock.configs.splice(0);
   });

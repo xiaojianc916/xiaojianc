@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import type { HTMLAttributes } from 'vue';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import XIcon from '~icons/lucide/x';
-import type { HTMLAttributes } from 'vue';
 import { useAttachmentContext } from './context';
 
 interface IProps {

@@ -3,8 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useAiAgentPlan } from '@/composables/ai/useAiAgentPlan';
 import { useAiAgentStore } from '@/store/aiAgent';
-import type { IAgentPlan, IAgentPlanRecord, IAgentSidecarResponsePayload } from '@/types/ai/sidecar';
 import type { IAiAgentRun, IAiTaskPlanStep } from '@/types/ai';
+import type {
+  IAgentPlan,
+  IAgentPlanRecord,
+  IAgentSidecarResponsePayload,
+} from '@/types/ai/sidecar';
 
 const aiServiceMock = vi.hoisted(() => {
   const classifyTask = vi.fn();

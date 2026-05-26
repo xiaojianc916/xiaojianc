@@ -1,10 +1,6 @@
 <script setup lang="ts">
 import 'katex/dist/katex.min.css';
 
-import AiMarkdownCodeBlock from '@/components/business/ai/chat/AiMarkdownCodeBlock.vue';
-import AiMarkdownTable from '@/components/business/ai/chat/AiMarkdownTable.vue';
-import type { IAiChatStreamRenderState } from '@/types/ai';
-import { normalizeAiMath } from '@/components/business/ai/chat/normalize-math';
 import type { CustomComponents } from 'markstream-vue';
 import MarkdownRender, {
   enableKatex,
@@ -14,6 +10,10 @@ import MarkdownRender, {
   setDefaultI18nMap,
 } from 'markstream-vue';
 import { computed, onBeforeUnmount, watch } from 'vue';
+import AiMarkdownCodeBlock from '@/components/business/ai/chat/AiMarkdownCodeBlock.vue';
+import AiMarkdownTable from '@/components/business/ai/chat/AiMarkdownTable.vue';
+import { normalizeAiMath } from '@/components/business/ai/chat/normalize-math';
+import type { IAiChatStreamRenderState } from '@/types/ai';
 
 type TI18nMap = Parameters<typeof setDefaultI18nMap>[0];
 
@@ -61,8 +61,8 @@ const props = defineProps<{
 }>();
 
 const renderContent = computed(() => normalizeAiMath(props.content));
-const isFinal = computed(() =>
-  props.streamStatus !== 'streaming' && props.streamStatus !== 'waiting-confirmation',
+const isFinal = computed(
+  () => props.streamStatus !== 'streaming' && props.streamStatus !== 'waiting-confirmation',
 );
 const shouldFadeStreamDeltas = computed(() => props.streamStatus === 'streaming');
 const rendererId = computed(() => `ai-message-${props.messageId}`);

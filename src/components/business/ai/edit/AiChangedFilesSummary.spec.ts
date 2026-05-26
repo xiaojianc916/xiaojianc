@@ -114,10 +114,7 @@ describe('AiChangedFilesSummary', () => {
                 oldLines: 2,
                 newStart: 110,
                 newLines: 2,
-                lines: [
-                  " const mode = 'chat';",
-                  "+const mode = 'agent';",
-                ],
+                lines: [" const mode = 'chat';", "+const mode = 'agent';"],
               },
             ],
           },

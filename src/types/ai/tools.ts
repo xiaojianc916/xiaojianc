@@ -42,4 +42,3 @@ export interface IAiToolDefinition {
   minPermissionLevel: TAiAgentPermissionLevel;
   emitsAuditEvent: boolean;
 }
-

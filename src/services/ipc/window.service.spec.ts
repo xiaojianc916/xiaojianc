@@ -1,10 +1,7 @@
-import { AppError } from '@/types/app-error';
 import { invoke } from '@tauri-apps/api/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  applyWindowStage,
-  setWindowBackground,
-} from './window.service';
+import { AppError } from '@/types/app-error';
+import { applyWindowStage, setWindowBackground } from './window.service';
 
 declare global {
   interface Window {

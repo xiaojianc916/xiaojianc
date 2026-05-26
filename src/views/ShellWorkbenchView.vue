@@ -25,6 +25,7 @@
             :data-diagnostics-resizing="diagnosticsTransitionsEnabled ? 'false' : 'true'">
             <div class="@container/main workbench-content-stage">
                 <div class="workbench-content-dock">
+                    <div class="workbench-content-frame flex min-h-0 flex-1 flex-col workbench-content-card">
                     <DeferredAiWorkspaceSurface
 v-if="isAiMode || hasPinnedAiWorkspace" v-show="isAiMode" class="min-w-0 flex-1"
                         :aria-hidden="!isAiMode" :document="editorStore.document"
@@ -33,7 +34,7 @@ v-if="isAiMode || hasPinnedAiWorkspace" v-show="isAiMode" class="min-w-0 flex-1"
                         :workspace-root-path="editorStore.workspaceRootPath"
                         @open-patch-diff="openGitDiffPreviewPayload" />
 
-                    <Card v-show="!isAiMode" class="workbench-content-card flex h-full min-h-0 flex-1 flex-col gap-0 py-0">
+                    <Card v-show="!isAiMode" class="flex h-full min-h-0 flex-1 flex-col gap-0 rounded-none border-0 py-0 shadow-none bg-transparent">
                         <StartupWorkbenchShell
 v-if="isStartupShellVisible && startupShellState"
                             :state="startupShellState" :show-terminal="isTerminalPanelVisible"
@@ -174,6 +175,7 @@ v-else-if="editorStore.document.path"
                             </div>
                         </CardContent>
                     </Card>
+                    </div>
                 </div>
             </div>
         </section>
@@ -182,6 +184,7 @@ v-else-if="editorStore.document.path"
 </template>
 
 <script setup lang="ts">
+import { computed, defineAsyncComponent, nextTick } from 'vue';
 import EmptyEditorState from '@/components/editor/EmptyEditorState.vue';
 import { Card, CardContent } from '@/components/ui/card';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
@@ -192,185 +195,191 @@ import AppShellLayout from '@/layouts/AppShellLayout.vue';
 import { useAiAgentStore } from '@/store/aiAgent';
 import type { TWorkbenchOpenFilePayload } from '@/types/editor';
 import type { IGitDiffPreviewRequest } from '@/types/git';
-import { computed, defineAsyncComponent, nextTick } from 'vue';
 
 const DeferredAiWorkspaceSurface = defineAsyncComponent({
-    loader: () => import('@/components/business/ai/shell/AiWorkspaceSurface.vue'),
-    suspensible: false,
+  loader: () => import('@/components/business/ai/shell/AiWorkspaceSurface.vue'),
+  suspensible: false,
 });
 
 const DeferredAiDiffPreviewEditor = defineAsyncComponent({
-    loader: () => import('@/components/business/ai/edit/AiDiffPreviewEditor.vue'),
-    suspensible: false,
+  loader: () => import('@/components/business/ai/edit/AiDiffPreviewEditor.vue'),
+  suspensible: false,
 });
 
 const DeferredGitDiffViewer = defineAsyncComponent({
-    loader: () => import('@/components/editor/GitDiffViewer.vue'),
-    suspensible: false,
+  loader: () => import('@/components/editor/GitDiffViewer.vue'),
+  suspensible: false,
 });
 
 const DeferredImageAssetPreview = defineAsyncComponent({
-    loader: () => import('@/components/editor/ImageAssetPreview.vue'),
-    suspensible: false,
+  loader: () => import('@/components/editor/ImageAssetPreview.vue'),
+  suspensible: false,
 });
 
 const DeferredSmartScriptEditor = defineAsyncComponent({
-    loader: () => import('@/components/editor/SmartScriptEditor.vue'),
-    suspensible: false,
+  loader: () => import('@/components/editor/SmartScriptEditor.vue'),
+  suspensible: false,
 });
 
+
+// 预加载 AI 工作区组件，避免首次切换时出现空白帧
+import('@/components/business/ai/shell/AiWorkspaceSurface.vue');
 const DeferredRunPanel = defineAsyncComponent({
-    loader: () => import('@/components/workbench/RunPanel.vue'),
-    suspensible: false,
+  loader: () => import('@/components/workbench/RunPanel.vue'),
+  suspensible: false,
 });
 
 const emit = defineEmits<{
-    ready: [];
+  ready: [];
 }>();
 
 const {
-    appStore,
-    editorStore,
-    gitStore,
-    runPanelRef,
-    isDesktopRuntime,
-    canRun,
-    commandTemplates,
-    createNewDocument,
-    openDocument,
-    openDocumentByPath,
-    openFolder,
-    openGitDiffPreview,
-    openGitDiffPreviewPayload,
-    updateContent,
-    editorRef,
-    editorViewportRef,
-    isTerminalVisible,
-    isSidebarVisible,
-    isAiMode,
-    terminalHeight,
-    isTerminalMaximized,
-    activeSidebarView,
-    sidebarWidth,
-    startupShellState,
-    isStartupShellVisible,
-    visibleWorkspaceRootPath,
-    diagnosticsTransitionsEnabled,
-    startupWorkspaceRoot,
-    handleFormatDocument,
-    handleCursorPositionChange,
-    handleSelectionChange,
-    handleDiagnosticsChange,
-    handleSelectDiagnostic,
-    handleRerunDiagnostics,
-    handleTerminalHeightChange,
-    toggleTerminalMaximize,
-    openAiMode,
-    openEditorMode,
-    handleSelectSidebarView,
-    handleExplorerSessionStateChange,
-    handleRequestCloseApplication,
-    hideTerminal,
-    openTerminal,
-    clearTerminalLogs,
-    handleRunScript,
-    handleInsertTemplate,
-    handleIntegratedTerminalRunCompleted,
-    handleOpenCommandPalette,
-    handleAiFixDiagnostic,
+  appStore,
+  editorStore,
+  gitStore,
+  runPanelRef,
+  isDesktopRuntime,
+  canRun,
+  commandTemplates,
+  createNewDocument,
+  openDocument,
+  openDocumentByPath,
+  openFolder,
+  openGitDiffPreview,
+  openGitDiffPreviewPayload,
+  updateContent,
+  editorRef,
+  editorViewportRef,
+  isTerminalVisible,
+  isSidebarVisible,
+  isAiMode,
+  terminalHeight,
+  isTerminalMaximized,
+  activeSidebarView,
+  sidebarWidth,
+  startupShellState,
+  isStartupShellVisible,
+  visibleWorkspaceRootPath,
+  diagnosticsTransitionsEnabled,
+  startupWorkspaceRoot,
+  handleFormatDocument,
+  handleCursorPositionChange,
+  handleSelectionChange,
+  handleDiagnosticsChange,
+  handleSelectDiagnostic,
+  handleRerunDiagnostics,
+  handleTerminalHeightChange,
+  toggleTerminalMaximize,
+  openAiMode,
+  openEditorMode,
+  handleSelectSidebarView,
+  handleExplorerSessionStateChange,
+  handleRequestCloseApplication,
+  hideTerminal,
+  openTerminal,
+  clearTerminalLogs,
+  handleRunScript,
+  handleInsertTemplate,
+  handleIntegratedTerminalRunCompleted,
+  handleOpenCommandPalette,
+  handleAiFixDiagnostic,
 } = useShellWorkbenchView(() => emit('ready'));
 
 const isTerminalAllowed = computed(() => !isAiMode.value);
 const isTerminalPanelVisible = computed(() => isTerminalAllowed.value && isTerminalVisible.value);
 const isTerminalSplitVisible = computed(
-    () => isTerminalPanelVisible.value && !isTerminalMaximized.value,
+  () => isTerminalPanelVisible.value && !isTerminalMaximized.value,
 );
 const aiAgentStore = useAiAgentStore();
 const terminalAgentRunStatuses = new Set(['completed', 'failed', 'cancelled']);
 const terminalPlanStatuses = new Set(['completed', 'failed', 'rejected']);
 const hasPinnedAiWorkspace = computed(() => {
-    const activeRun = aiAgentStore.activeRun;
+  const activeRun = aiAgentStore.activeRun;
 
-    if (activeRun && !terminalAgentRunStatuses.has(activeRun.status)) {
-        return true;
-    }
+  if (activeRun && !terminalAgentRunStatuses.has(activeRun.status)) {
+    return true;
+  }
 
-    if (aiAgentStore.isClassifying || aiAgentStore.isPlanning) {
-        return true;
-    }
+  if (aiAgentStore.isClassifying || aiAgentStore.isPlanning) {
+    return true;
+  }
 
-    if (aiAgentStore.hasPlan && !aiAgentStore.planStatus) {
-        return true;
-    }
+  if (aiAgentStore.hasPlan && !aiAgentStore.planStatus) {
+    return true;
+  }
 
-    return Boolean(aiAgentStore.planId && aiAgentStore.planStatus && !terminalPlanStatuses.has(aiAgentStore.planStatus));
+  return Boolean(
+    aiAgentStore.planId &&
+      aiAgentStore.planStatus &&
+      !terminalPlanStatuses.has(aiAgentStore.planStatus),
+  );
 });
 
 const handleSidebarOpenFile = async (payload: TWorkbenchOpenFilePayload): Promise<void> => {
-    const request = typeof payload === 'string' ? { path: payload } : payload;
+  const request = typeof payload === 'string' ? { path: payload } : payload;
 
-    openEditorMode();
-    await openDocumentByPath(request.path);
+  openEditorMode();
+  await openDocumentByPath(request.path);
 
-    if (typeof request.lineNumber === 'number') {
-        await nextTick();
-        editorRef.value?.revealPosition(request.lineNumber, request.column ?? 1);
-    }
+  if (typeof request.lineNumber === 'number') {
+    await nextTick();
+    editorRef.value?.revealPosition(request.lineNumber, request.column ?? 1);
+  }
 };
 
 const handleSidebarOpenGitDiff = async (payload: IGitDiffPreviewRequest): Promise<void> => {
-    openEditorMode();
-    await openGitDiffPreview(payload);
+  openEditorMode();
+  await openGitDiffPreview(payload);
 };
 
 const handleClearRunHistory = (): void => {
-    editorStore.clearLogs();
+  editorStore.clearLogs();
 };
 
 const handleTogglePrimaryMode = (): void => {
-    if (isAiMode.value) {
-        openEditorMode();
-        return;
-    }
+  if (isAiMode.value) {
+    openEditorMode();
+    return;
+  }
 
-    openAiMode();
+  openAiMode();
 };
 
 const isRunPanelExpose = (value: unknown): value is NonNullable<typeof runPanelRef.value> => {
-    return (
-        typeof value === 'object' &&
-        value !== null &&
-        'openShellCheck' in value &&
-        typeof value.openShellCheck === 'function'
-    );
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'openShellCheck' in value &&
+    typeof value.openShellCheck === 'function'
+  );
 };
 
 const isEditorExpose = (value: unknown): value is NonNullable<typeof editorRef.value> => {
-    return (
-        typeof value === 'object' &&
-        value !== null &&
-        'focusEditor' in value &&
-        typeof value.focusEditor === 'function' &&
-        'insertSnippet' in value &&
-        typeof value.insertSnippet === 'function' &&
-        'revealPosition' in value &&
-        typeof value.revealPosition === 'function' &&
-        'rerunDiagnostics' in value &&
-        typeof value.rerunDiagnostics === 'function' &&
-        'layoutEditor' in value &&
-        typeof value.layoutEditor === 'function'
-    );
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'focusEditor' in value &&
+    typeof value.focusEditor === 'function' &&
+    'insertSnippet' in value &&
+    typeof value.insertSnippet === 'function' &&
+    'revealPosition' in value &&
+    typeof value.revealPosition === 'function' &&
+    'rerunDiagnostics' in value &&
+    typeof value.rerunDiagnostics === 'function' &&
+    'layoutEditor' in value &&
+    typeof value.layoutEditor === 'function'
+  );
 };
 
 const bindRunPanelRef = (value: unknown): void => {
-    runPanelRef.value = isRunPanelExpose(value) ? value : null;
+  runPanelRef.value = isRunPanelExpose(value) ? value : null;
 };
 
 const bindEditorRef = (value: unknown): void => {
-    editorRef.value = isEditorExpose(value) ? value : null;
+  editorRef.value = isEditorExpose(value) ? value : null;
 };
 
 const bindEditorViewportRef = (value: unknown): void => {
-    editorViewportRef.value = value instanceof HTMLElement ? value : null;
+  editorViewportRef.value = value instanceof HTMLElement ? value : null;
 };
 </script>

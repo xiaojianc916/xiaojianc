@@ -1,13 +1,15 @@
 <script setup lang="ts">
+import { ProgressIndicator, ProgressRoot, type ProgressRootProps } from 'reka-ui';
 import type { HTMLAttributes } from 'vue';
 import { computed } from 'vue';
-import { ProgressIndicator, ProgressRoot, type ProgressRootProps } from 'reka-ui';
 import { cn } from '@/lib/utils';
 
 const props = withDefaults(
-  defineProps<ProgressRootProps & {
-    class?: HTMLAttributes['class'];
-  }>(),
+  defineProps<
+    ProgressRootProps & {
+      class?: HTMLAttributes['class'];
+    }
+  >(),
   {
     class: undefined,
     modelValue: 0,

@@ -1,9 +1,6 @@
 import { z } from 'zod';
 
-import {
-  AI_AGENT_CHANGED_FILE_STATUSES,
-  AI_DIFF_PREVIEW_LINE_KINDS,
-} from '@/types/ai/patch';
+import { AI_AGENT_CHANGED_FILE_STATUSES, AI_DIFF_PREVIEW_LINE_KINDS } from '@/types/ai/patch';
 
 export const aiAgentChangedFileStatusSchema = z.enum(AI_AGENT_CHANGED_FILE_STATUSES);
 

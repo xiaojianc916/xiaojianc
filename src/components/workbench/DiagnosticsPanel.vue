@@ -1,75 +1,75 @@
 <script setup lang="ts">
-import type {
-    IAnalyzeScriptPayload,
-    IScriptDiagnostic,
-    TScriptDiagnosticSeverity,
-} from '@/types/editor';
-import { writeClipboardText } from '@/utils/clipboard';
-import { openExternalUrl } from '@/utils/browser';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import type {
+  IAnalyzeScriptPayload,
+  IScriptDiagnostic,
+  TScriptDiagnosticSeverity,
+} from '@/types/editor';
+import { openExternalUrl } from '@/utils/browser';
+import { writeClipboardText } from '@/utils/clipboard';
 
 type TDiagnosticFilter = 'all' | 'error' | 'warning' | 'info';
 type TDiagnosticGroup = 'error' | 'warning' | 'info';
 
 interface ISnippetFragment {
-    text: string;
-    highlighted: boolean;
+  text: string;
+  highlighted: boolean;
 }
 
 interface ISnippetLine {
-    key: string;
-    fragments: ISnippetFragment[];
-    isEmpty: boolean;
+  key: string;
+  fragments: ISnippetFragment[];
+  isEmpty: boolean;
 }
 
 interface IDiagnosticCard extends IScriptDiagnostic {
-    key: string;
-    group: TDiagnosticGroup;
-    previewLines: ISnippetLine[];
-    isEmptyLine: boolean;
+  key: string;
+  group: TDiagnosticGroup;
+  previewLines: ISnippetLine[];
+  isEmptyLine: boolean;
 }
 
 interface IDiagnosticFilterOption {
-    id: TDiagnosticFilter;
-    label: string;
-    tone: TDiagnosticGroup | null;
+  id: TDiagnosticFilter;
+  label: string;
+  tone: TDiagnosticGroup | null;
 }
 
 interface IDiagnosticGroupOption {
-    id: TDiagnosticGroup;
-    label: string;
+  id: TDiagnosticGroup;
+  label: string;
 }
 
 interface IDiagnosticGroupData extends IDiagnosticGroupOption {
-    visibleCount: number;
-    visibleItems: IDiagnosticCard[];
+  visibleCount: number;
+  visibleItems: IDiagnosticCard[];
 }
 
 const FILTER_OPTIONS: IDiagnosticFilterOption[] = [
-    { id: 'all', label: '全部', tone: null },
-    { id: 'error', label: '错误', tone: 'error' },
-    { id: 'warning', label: '警告', tone: 'warning' },
-    { id: 'info', label: '提示', tone: 'info' },
+  { id: 'all', label: '全部', tone: null },
+  { id: 'error', label: '错误', tone: 'error' },
+  { id: 'warning', label: '警告', tone: 'warning' },
+  { id: 'info', label: '提示', tone: 'info' },
 ];
 
 const GROUP_OPTIONS: IDiagnosticGroupOption[] = [
-    { id: 'error', label: '错误' },
-    { id: 'warning', label: '警告' },
-    { id: 'info', label: '提示' },
+  { id: 'error', label: '错误' },
+  { id: 'warning', label: '警告' },
+  { id: 'info', label: '提示' },
 ];
 
 const RULES_URL = 'https://www.shellcheck.net/wiki/';
 
 const props = defineProps<{
-    analysis: IAnalyzeScriptPayload;
-    content: string;
-    documentName: string;
+  analysis: IAnalyzeScriptPayload;
+  content: string;
+  documentName: string;
 }>();
 
 const emit = defineEmits<{
-    'select-diagnostic': [line: number, column: number];
-    'rerun-analysis': [];
-    'ai-fix-diagnostic': [diagnostic: IScriptDiagnostic];
+  'select-diagnostic': [line: number, column: number];
+  'rerun-analysis': [];
+  'ai-fix-diagnostic': [diagnostic: IScriptDiagnostic];
 }>();
 
 const activeFilter = ref<TDiagnosticFilter>('all');
@@ -77,139 +77,139 @@ const selectedItemKey = ref<string | null>(null);
 const lastCheckedAt = ref(Date.now());
 const nowTick = ref(Date.now());
 const collapsedGroups = ref<Record<TDiagnosticGroup, boolean>>({
-    error: false,
-    warning: true,
-    info: true,
+  error: false,
+  warning: true,
+  info: true,
 });
 
 let nowTimerId: number | null = null;
 
 const normalizedLines = computed(() =>
-    props.content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n'),
+  props.content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n'),
 );
 
 const panelAriaLabel = computed(() =>
-    props.documentName ? `ShellCheck 面板 · ${props.documentName}` : 'ShellCheck 面板',
+  props.documentName ? `ShellCheck 面板 · ${props.documentName}` : 'ShellCheck 面板',
 );
 
 const documentLineCount = computed(() => Math.max(1, normalizedLines.value.length));
 
 const resolveDiagnosticGroup = (level: TScriptDiagnosticSeverity): TDiagnosticGroup => {
-    switch (level) {
-        case 'error':
-            return 'error';
-        case 'warning':
-            return 'warning';
-        default:
-            return 'info';
-    }
+  switch (level) {
+    case 'error':
+      return 'error';
+    case 'warning':
+      return 'warning';
+    default:
+      return 'info';
+  }
 };
 
 const resolveFragmentBounds = (
-    lineText: string,
-    startColumn: number,
-    endColumn: number,
+  lineText: string,
+  startColumn: number,
+  endColumn: number,
 ): { startIndex: number; endIndex: number } => {
-    if (lineText.length === 0) {
-        return {
-            startIndex: 0,
-            endIndex: 0,
-        };
-    }
-
-    const startIndex = Math.min(Math.max(startColumn - 1, 0), lineText.length - 1);
-    const requestedEnd = endColumn > startColumn ? endColumn - 1 : startIndex + 1;
-    const endIndex = Math.max(startIndex + 1, Math.min(requestedEnd, lineText.length));
-
+  if (lineText.length === 0) {
     return {
-        startIndex,
-        endIndex,
+      startIndex: 0,
+      endIndex: 0,
     };
+  }
+
+  const startIndex = Math.min(Math.max(startColumn - 1, 0), lineText.length - 1);
+  const requestedEnd = endColumn > startColumn ? endColumn - 1 : startIndex + 1;
+  const endIndex = Math.max(startIndex + 1, Math.min(requestedEnd, lineText.length));
+
+  return {
+    startIndex,
+    endIndex,
+  };
 };
 
 const resolvePreviewLines = (item: IScriptDiagnostic): ISnippetLine[] => {
-    const startLine = Math.max(1, item.line);
-    const endLine = Math.max(startLine, item.endLine);
-    const previewLines: ISnippetLine[] = [];
+  const startLine = Math.max(1, item.line);
+  const endLine = Math.max(startLine, item.endLine);
+  const previewLines: ISnippetLine[] = [];
 
-    for (let currentLine = startLine; currentLine <= endLine; currentLine += 1) {
-        const lineText = normalizedLines.value[currentLine - 1] ?? '';
+  for (let currentLine = startLine; currentLine <= endLine; currentLine += 1) {
+    const lineText = normalizedLines.value[currentLine - 1] ?? '';
 
-        if (lineText.length === 0) {
-            previewLines.push({
-                key: `${item.code}-${currentLine}`,
-                fragments: [{ text: '', highlighted: false }],
-                isEmpty: true,
-            });
-            continue;
-        }
-
-        const startColumn = currentLine === startLine ? item.column : 1;
-        const endColumn = currentLine === endLine ? item.endColumn : lineText.length + 1;
-        const { startIndex, endIndex } = resolveFragmentBounds(lineText, startColumn, endColumn);
-        const fragments: ISnippetFragment[] = [];
-
-        if (startIndex > 0) {
-            fragments.push({
-                text: lineText.slice(0, startIndex),
-                highlighted: false,
-            });
-        }
-
-        fragments.push({
-            text: lineText.slice(startIndex, endIndex),
-            highlighted: true,
-        });
-
-        if (endIndex < lineText.length) {
-            fragments.push({
-                text: lineText.slice(endIndex),
-                highlighted: false,
-            });
-        }
-
-        previewLines.push({
-            key: `${item.code}-${currentLine}`,
-            fragments,
-            isEmpty: false,
-        });
+    if (lineText.length === 0) {
+      previewLines.push({
+        key: `${item.code}-${currentLine}`,
+        fragments: [{ text: '', highlighted: false }],
+        isEmpty: true,
+      });
+      continue;
     }
 
-    return previewLines;
+    const startColumn = currentLine === startLine ? item.column : 1;
+    const endColumn = currentLine === endLine ? item.endColumn : lineText.length + 1;
+    const { startIndex, endIndex } = resolveFragmentBounds(lineText, startColumn, endColumn);
+    const fragments: ISnippetFragment[] = [];
+
+    if (startIndex > 0) {
+      fragments.push({
+        text: lineText.slice(0, startIndex),
+        highlighted: false,
+      });
+    }
+
+    fragments.push({
+      text: lineText.slice(startIndex, endIndex),
+      highlighted: true,
+    });
+
+    if (endIndex < lineText.length) {
+      fragments.push({
+        text: lineText.slice(endIndex),
+        highlighted: false,
+      });
+    }
+
+    previewLines.push({
+      key: `${item.code}-${currentLine}`,
+      fragments,
+      isEmpty: false,
+    });
+  }
+
+  return previewLines;
 };
 
 const diagnosticCards = computed<IDiagnosticCard[]>(() =>
-    props.analysis.diagnostics.map((item) => {
-        const previewLines = resolvePreviewLines(item);
+  props.analysis.diagnostics.map((item) => {
+    const previewLines = resolvePreviewLines(item);
 
-        return {
-            ...item,
-            key: `${item.code}-${item.line}-${item.column}-${item.message}`,
-            group: resolveDiagnosticGroup(item.level),
-            previewLines,
-            isEmptyLine: previewLines.every((previewLine) => previewLine.isEmpty),
-        };
-    }),
+    return {
+      ...item,
+      key: `${item.code}-${item.line}-${item.column}-${item.message}`,
+      group: resolveDiagnosticGroup(item.level),
+      previewLines,
+      isEmptyLine: previewLines.every((previewLine) => previewLine.isEmpty),
+    };
+  }),
 );
 
 const matchesFilter = (group: TDiagnosticGroup, filter: TDiagnosticFilter): boolean => {
-    if (filter === 'all') {
-        return true;
-    }
+  if (filter === 'all') {
+    return true;
+  }
 
-    return group === filter;
+  return group === filter;
 };
 
 const errorCount = computed(
-    () => diagnosticCards.value.filter((item) => item.group === 'error').length,
+  () => diagnosticCards.value.filter((item) => item.group === 'error').length,
 );
 
 const warningCount = computed(
-    () => diagnosticCards.value.filter((item) => item.group === 'warning').length,
+  () => diagnosticCards.value.filter((item) => item.group === 'warning').length,
 );
 
 const infoCount = computed(
-    () => diagnosticCards.value.filter((item) => item.group === 'info').length,
+  () => diagnosticCards.value.filter((item) => item.group === 'info').length,
 );
 
 const hasAnyDiagnostics = computed(() => diagnosticCards.value.length > 0);
@@ -217,170 +217,170 @@ const hasAnyDiagnostics = computed(() => diagnosticCards.value.length > 0);
 const showPassBadge = computed(() => props.analysis.available && !hasAnyDiagnostics.value);
 
 const diagnosticGroups = computed<IDiagnosticGroupData[]>(() =>
-    GROUP_OPTIONS.map((group) => {
-        const visibleItems = diagnosticCards.value.filter((item) =>
-            item.group === group.id && matchesFilter(item.group, activeFilter.value),
-        );
+  GROUP_OPTIONS.map((group) => {
+    const visibleItems = diagnosticCards.value.filter(
+      (item) => item.group === group.id && matchesFilter(item.group, activeFilter.value),
+    );
 
-        return {
-            ...group,
-            visibleCount: visibleItems.length,
-            visibleItems,
-        };
-    }),
+    return {
+      ...group,
+      visibleCount: visibleItems.length,
+      visibleItems,
+    };
+  }),
 );
 
 const visibleDiagnosticItems = computed(() =>
-    diagnosticGroups.value.flatMap((group) => group.visibleItems),
+  diagnosticGroups.value.flatMap((group) => group.visibleItems),
 );
 
 const hasExpandedVisibleGroups = computed(() =>
-    diagnosticGroups.value.some((group) => group.visibleCount > 0 && !collapsedGroups.value[group.id]),
+  diagnosticGroups.value.some(
+    (group) => group.visibleCount > 0 && !collapsedGroups.value[group.id],
+  ),
 );
 
-const collapseAllLabel = computed(() =>
-    hasExpandedVisibleGroups.value ? '折叠全部' : '展开全部',
-);
+const collapseAllLabel = computed(() => (hasExpandedVisibleGroups.value ? '折叠全部' : '展开全部'));
 
 const formatRelativeTime = (value: number): string => {
-    const elapsedSeconds = Math.max(0, Math.floor((nowTick.value - value) / 1000));
+  const elapsedSeconds = Math.max(0, Math.floor((nowTick.value - value) / 1000));
 
-    if (elapsedSeconds < 5) {
-        return '刚刚';
-    }
+  if (elapsedSeconds < 5) {
+    return '刚刚';
+  }
 
-    if (elapsedSeconds < 60) {
-        return `${elapsedSeconds}s 前`;
-    }
+  if (elapsedSeconds < 60) {
+    return `${elapsedSeconds}s 前`;
+  }
 
-    if (elapsedSeconds < 3600) {
-        return `${Math.floor(elapsedSeconds / 60)}m 前`;
-    }
+  if (elapsedSeconds < 3600) {
+    return `${Math.floor(elapsedSeconds / 60)}m 前`;
+  }
 
-    if (elapsedSeconds < 86400) {
-        return `${Math.floor(elapsedSeconds / 3600)}h 前`;
-    }
+  if (elapsedSeconds < 86400) {
+    return `${Math.floor(elapsedSeconds / 3600)}h 前`;
+  }
 
-    return `${Math.floor(elapsedSeconds / 86400)}d 前`;
+  return `${Math.floor(elapsedSeconds / 86400)}d 前`;
 };
 
 const lastCheckedLabel = computed(
-    () => `${formatRelativeTime(lastCheckedAt.value)} · ${documentLineCount.value} 行`,
+  () => `${formatRelativeTime(lastCheckedAt.value)} · ${documentLineCount.value} 行`,
 );
 
 watch(
-    () => props.analysis,
-    () => {
-        lastCheckedAt.value = Date.now();
-    },
-    { immediate: true },
+  () => props.analysis,
+  () => {
+    lastCheckedAt.value = Date.now();
+  },
+  { immediate: true },
 );
 
 watch(
-    diagnosticGroups,
-    (groups) => {
-        collapsedGroups.value = {
-            error: (groups.find((group) => group.id === 'error')?.visibleCount ?? 0) === 0,
-            warning: (groups.find((group) => group.id === 'warning')?.visibleCount ?? 0) === 0,
-            info: (groups.find((group) => group.id === 'info')?.visibleCount ?? 0) === 0,
-        };
-    },
-    { immediate: true },
+  diagnosticGroups,
+  (groups) => {
+    collapsedGroups.value = {
+      error: (groups.find((group) => group.id === 'error')?.visibleCount ?? 0) === 0,
+      warning: (groups.find((group) => group.id === 'warning')?.visibleCount ?? 0) === 0,
+      info: (groups.find((group) => group.id === 'info')?.visibleCount ?? 0) === 0,
+    };
+  },
+  { immediate: true },
 );
 
 watch(
-    visibleDiagnosticItems,
-    (items) => {
-        if (items.length === 0) {
-            selectedItemKey.value = null;
-            return;
-        }
+  visibleDiagnosticItems,
+  (items) => {
+    if (items.length === 0) {
+      selectedItemKey.value = null;
+      return;
+    }
 
-        if (!selectedItemKey.value || !items.some((item) => item.key === selectedItemKey.value)) {
-            selectedItemKey.value = items[0].key;
-        }
-    },
-    { immediate: true },
+    if (!selectedItemKey.value || !items.some((item) => item.key === selectedItemKey.value)) {
+      selectedItemKey.value = items[0].key;
+    }
+  },
+  { immediate: true },
 );
 
 onMounted(() => {
-    nowTimerId = window.setInterval(() => {
-        nowTick.value = Date.now();
-    }, 1000);
+  nowTimerId = window.setInterval(() => {
+    nowTick.value = Date.now();
+  }, 1000);
 });
 
 onBeforeUnmount(() => {
-    if (nowTimerId !== null) {
-        window.clearInterval(nowTimerId);
-        nowTimerId = null;
-    }
+  if (nowTimerId !== null) {
+    window.clearInterval(nowTimerId);
+    nowTimerId = null;
+  }
 });
 
 const countForFilter = (filter: TDiagnosticFilter): number => {
-    switch (filter) {
-        case 'error':
-            return errorCount.value;
-        case 'warning':
-            return warningCount.value;
-        case 'info':
-            return infoCount.value;
-        default:
-            return diagnosticCards.value.length;
-    }
+  switch (filter) {
+    case 'error':
+      return errorCount.value;
+    case 'warning':
+      return warningCount.value;
+    case 'info':
+      return infoCount.value;
+    default:
+      return diagnosticCards.value.length;
+  }
 };
 
 const isGroupCollapsed = (group: TDiagnosticGroup): boolean => collapsedGroups.value[group];
 
 const handleFilterSelect = (filter: TDiagnosticFilter): void => {
-    activeFilter.value = filter;
+  activeFilter.value = filter;
 };
 
 const toggleGroupCollapse = (group: TDiagnosticGroup): void => {
-    collapsedGroups.value[group] = !collapsedGroups.value[group];
+  collapsedGroups.value[group] = !collapsedGroups.value[group];
 };
 
 const toggleCollapseAll = (): void => {
-    const nextCollapsed = hasExpandedVisibleGroups.value;
+  const nextCollapsed = hasExpandedVisibleGroups.value;
 
-    collapsedGroups.value = {
-        error:
-            diagnosticGroups.value.find((group) => group.id === 'error')?.visibleCount === 0
-                ? collapsedGroups.value.error
-                : nextCollapsed,
-        warning:
-            diagnosticGroups.value.find((group) => group.id === 'warning')?.visibleCount === 0
-                ? collapsedGroups.value.warning
-                : nextCollapsed,
-        info:
-            diagnosticGroups.value.find((group) => group.id === 'info')?.visibleCount === 0
-                ? collapsedGroups.value.info
-                : nextCollapsed,
-    };
+  collapsedGroups.value = {
+    error:
+      diagnosticGroups.value.find((group) => group.id === 'error')?.visibleCount === 0
+        ? collapsedGroups.value.error
+        : nextCollapsed,
+    warning:
+      diagnosticGroups.value.find((group) => group.id === 'warning')?.visibleCount === 0
+        ? collapsedGroups.value.warning
+        : nextCollapsed,
+    info:
+      diagnosticGroups.value.find((group) => group.id === 'info')?.visibleCount === 0
+        ? collapsedGroups.value.info
+        : nextCollapsed,
+  };
 };
 
 const emitRerunAnalysis = (): void => {
-    emit('rerun-analysis');
+  emit('rerun-analysis');
 };
 
 const handleSelect = (item: IDiagnosticCard): void => {
-    selectedItemKey.value = item.key;
-    emit('select-diagnostic', item.line, item.column);
+  selectedItemKey.value = item.key;
+  emit('select-diagnostic', item.line, item.column);
 };
 
 const openRulesOverview = (): void => {
-    openExternalUrl(RULES_URL);
+  openExternalUrl(RULES_URL);
 };
 
 const openRuleDocumentation = (code: string): void => {
-    openExternalUrl(`${RULES_URL}${encodeURIComponent(code)}`);
+  openExternalUrl(`${RULES_URL}${encodeURIComponent(code)}`);
 };
 
 const copyRuleCode = async (code: string): Promise<void> => {
-    try {
-        await writeClipboardText(code);
-    } catch {
-        // 忽略剪贴板失败，避免把 UI 交互变成阻断错误。
-    }
+  try {
+    await writeClipboardText(code);
+  } catch {
+    // 忽略剪贴板失败，避免把 UI 交互变成阻断错误。
+  }
 };
 
 const itemToneClass = (group: TDiagnosticGroup): string => `diagnostics-panel__item--${group}`;
@@ -388,7 +388,7 @@ const itemToneClass = (group: TDiagnosticGroup): string => `diagnostics-panel__i
 const toneClass = (group: TDiagnosticGroup): string => `diagnostics-panel__tone--${group}`;
 
 const highlightToneClass = (group: TDiagnosticGroup): string =>
-    `diagnostics-panel__highlight--${group}`;
+  `diagnostics-panel__highlight--${group}`;
 </script>
 
 <template>

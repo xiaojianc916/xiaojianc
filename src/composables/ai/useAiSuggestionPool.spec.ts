@@ -9,14 +9,11 @@ vi.mock('@/services/ipc/ai.service', () => ({
   aiService: aiServiceMock,
 }));
 
-import {
-  AI_SUGGESTION_BATCH_SIZE,
-  AI_SUGGESTION_POOL_SIZE,
-} from '@/constants/ai/suggestions';
-import { useAiSuggestionPool } from '@/composables/ai/useAiSuggestionPool';
-import type { IAiSuggestionPoolPayload, IAiSuggestionPoolRequest } from '@/types/ai';
 import { flushPromises, mount } from '@vue/test-utils';
-import { defineComponent, ref, type Ref } from 'vue';
+import { defineComponent, type Ref, ref } from 'vue';
+import { useAiSuggestionPool } from '@/composables/ai/useAiSuggestionPool';
+import { AI_SUGGESTION_BATCH_SIZE, AI_SUGGESTION_POOL_SIZE } from '@/constants/ai/suggestions';
+import type { IAiSuggestionPoolPayload, IAiSuggestionPoolRequest } from '@/types/ai';
 
 const createGeneratedPayload = (): IAiSuggestionPoolPayload => ({
   suggestions: Array.from(
@@ -54,24 +51,27 @@ const mountSuggestionPool = (params: {
   isRefreshEnabled: Ref<boolean>;
   getSuggestionPoolCache?: () => Promise<IAiSuggestionPoolPayload | null>;
   generateSuggestionPool: (payload: IAiSuggestionPoolRequest) => Promise<IAiSuggestionPoolPayload>;
-}) => mount(defineComponent({
-  setup() {
-    const pool = useAiSuggestionPool({
-      isRefreshEnabled: params.isRefreshEnabled,
-      service: {
-        getSuggestionPoolCache: params.getSuggestionPoolCache ?? (async () => null),
-        generateSuggestionPool: params.generateSuggestionPool,
-      },
-      random: () => 0.42,
-    });
+}) =>
+  mount(
+    defineComponent({
+      setup() {
+        const pool = useAiSuggestionPool({
+          isRefreshEnabled: params.isRefreshEnabled,
+          service: {
+            getSuggestionPoolCache: params.getSuggestionPoolCache ?? (async () => null),
+            generateSuggestionPool: params.generateSuggestionPool,
+          },
+          random: () => 0.42,
+        });
 
-    return {
-      suggestions: pool.suggestions,
-      refreshPool: pool.refreshPool,
-    };
-  },
-  template: '<div>{{ suggestions.length }}</div>',
-}));
+        return {
+          suggestions: pool.suggestions,
+          refreshPool: pool.refreshPool,
+        };
+      },
+      template: '<div>{{ suggestions.length }}</div>',
+    }),
+  );
 
 describe('useAiSuggestionPool', () => {
   afterEach(() => {
@@ -131,10 +131,12 @@ describe('useAiSuggestionPool', () => {
 
     const vm = wrapper.vm as unknown as { suggestions: string[] };
 
-    expect(generateSuggestionPool).toHaveBeenCalledWith(expect.objectContaining({
-      count: AI_SUGGESTION_POOL_SIZE,
-      locale: 'zh-CN',
-    }));
+    expect(generateSuggestionPool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        count: AI_SUGGESTION_POOL_SIZE,
+        locale: 'zh-CN',
+      }),
+    );
     expect(vm.suggestions).toHaveLength(AI_SUGGESTION_BATCH_SIZE);
     expect(vm.suggestions.some((suggestion) => suggestion.startsWith('模型提示词'))).toBe(true);
   });
@@ -157,7 +159,9 @@ describe('useAiSuggestionPool', () => {
 
     expect(vm.suggestions).toHaveLength(AI_SUGGESTION_BATCH_SIZE);
     expect(templateCount).toBeLessThanOrEqual(2);
-    expect(vm.suggestions.some((suggestion) => !suggestion.startsWith('如何选择合适的'))).toBe(true);
+    expect(vm.suggestions.some((suggestion) => !suggestion.startsWith('如何选择合适的'))).toBe(
+      true,
+    );
   });
 
   it('小模型启用后按现实时间下一个 10 分钟边界刷新', async () => {
@@ -216,9 +220,8 @@ describe('useAiSuggestionPool', () => {
   it('当前窗口首次刷新失败后会用短退避自动重试', async () => {
     vi.useFakeTimers();
 
-    const generateSuggestionPool = vi.fn<
-      (payload: IAiSuggestionPoolRequest) => Promise<IAiSuggestionPoolPayload>
-    >()
+    const generateSuggestionPool = vi
+      .fn<(payload: IAiSuggestionPoolRequest) => Promise<IAiSuggestionPoolPayload>>()
       .mockRejectedValueOnce(new Error('429 Too Many Requests'))
       .mockResolvedValueOnce(createGeneratedPayload());
     const wrapper = mountSuggestionPool({

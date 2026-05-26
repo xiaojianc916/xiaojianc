@@ -1,5 +1,5 @@
-import { AppError } from '@/types/app-error';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AppError } from '@/types/app-error';
 
 const mockStore = {
   get: vi.fn(),

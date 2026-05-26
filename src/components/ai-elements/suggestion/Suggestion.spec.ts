@@ -1,6 +1,6 @@
-import { Suggestion } from '@/components/ai-elements/suggestion';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
+import { Suggestion } from '@/components/ai-elements/suggestion';
 
 describe('Suggestion', () => {
   it('点击时把提示词作为 payload 抛出', async () => {

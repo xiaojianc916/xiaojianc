@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { CodeBlockNodeProps } from 'markstream-vue';
+import { computed, ref, watch } from 'vue';
 import {
   CodeBlock,
   CodeBlockActions,
@@ -7,12 +9,14 @@ import {
   CodeBlockHeader,
   CodeBlockTitle,
 } from '@/components/ai-elements/code-block';
-import { normalizeLanguageTag, resolveShikiLanguage, SHIKI_LANGUAGE_LABELS } from '@/utils/shiki-language';
-import type { CodeBlockNodeProps } from 'markstream-vue';
+import {
+  normalizeLanguageTag,
+  resolveShikiLanguage,
+  SHIKI_LANGUAGE_LABELS,
+} from '@/utils/shiki-language';
 import ChevronDown from '~icons/lucide/chevron-down';
 import ChevronUp from '~icons/lucide/chevron-up';
 import FileIcon from '~icons/lucide/file';
-import { computed, ref, watch } from 'vue';
 
 const props = defineProps<Pick<CodeBlockNodeProps, 'node'>>();
 
@@ -21,8 +25,12 @@ const renderedSourceCode = ref(getCurrentSourceCode());
 
 const normalizedLanguage = computed(() => normalizeLanguageTag(props.node.language));
 const shikiLanguage = computed(() => resolveShikiLanguage(normalizedLanguage.value));
-const languageLabel = computed(() => SHIKI_LANGUAGE_LABELS[shikiLanguage.value] ?? shikiLanguage.value);
-const filename = computed(() => resolveCodeBlockFilename(String(props.node.raw ?? ''), languageLabel.value));
+const languageLabel = computed(
+  () => SHIKI_LANGUAGE_LABELS[shikiLanguage.value] ?? shikiLanguage.value,
+);
+const filename = computed(() =>
+  resolveCodeBlockFilename(String(props.node.raw ?? ''), languageLabel.value),
+);
 
 watch(
   () => [props.node, props.node.code] as const,
@@ -57,7 +65,7 @@ function resolveCodeBlockFilename(raw: string, fallback: string): string {
   const info = firstLine.slice(3).trim();
   const infoParts = info.split(/\s+/u).filter(Boolean);
   const filename = infoParts
-    .map((part) => part.includes(':') ? part.slice(part.indexOf(':') + 1) : part)
+    .map((part) => (part.includes(':') ? part.slice(part.indexOf(':') + 1) : part))
     .find((part) => /[./\\-]/u.test(part));
 
   return filename || fallback;

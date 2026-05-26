@@ -53,9 +53,6 @@ export const isWorkspaceRootAccessible = async (
   }
 };
 
-
-
-
 const workspaceEntryMatchesSearch = (entry: IWorkspaceEntry, query: string): boolean => {
   const normalizedQuery = normalizeWorkspaceQuery(query);
   if (!normalizedQuery) {
@@ -142,4 +139,3 @@ export const collectWorkspaceExpandedPathsByQuery = (
 
   return expandedPaths;
 };
-

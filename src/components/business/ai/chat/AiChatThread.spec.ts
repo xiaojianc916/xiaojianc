@@ -7,11 +7,11 @@ import AiChatThread from '@/components/business/ai/chat/AiChatThread.vue';
 import type { IAiChatMessage } from '@/types/ai';
 
 class ResizeObserverMock {
-  observe(): void { }
+  observe(): void {}
 
-  unobserve(): void { }
+  unobserve(): void {}
 
-  disconnect(): void { }
+  disconnect(): void {}
 }
 
 vi.stubGlobal('ResizeObserver', ResizeObserverMock);
@@ -146,12 +146,16 @@ describe('AiChatThread', () => {
   it('forwards message actions with both payload arguments intact', async () => {
     const wrapper = mount(AiChatThread, {
       props: {
-        messages: [createMessage({
-          actions: [{
-            id: 'allow-agent-execution',
-            label: '鍏佽鎵ц',
-          }],
-        })],
+        messages: [
+          createMessage({
+            actions: [
+              {
+                id: 'allow-agent-execution',
+                label: '鍏佽鎵ц',
+              },
+            ],
+          }),
+        ],
         isTyping: false,
         platformId: 'deepseek',
         providerLabel: 'DeepSeek',
@@ -161,7 +165,8 @@ describe('AiChatThread', () => {
           AiMessageItem: {
             props: ['message'],
             emits: ['messageAction'],
-            template: '<button class="message-action-stub" @click="$emit(\'messageAction\', message.id, \'allow-agent-execution\')">action</button>',
+            template:
+              '<button class="message-action-stub" @click="$emit(\'messageAction\', message.id, \'allow-agent-execution\')">action</button>',
           },
         },
       },
@@ -169,9 +174,7 @@ describe('AiChatThread', () => {
 
     await wrapper.find('.message-action-stub').trigger('click');
 
-    expect(wrapper.emitted('messageAction')).toEqual([
-      ['message-1', 'allow-agent-execution'],
-    ]);
+    expect(wrapper.emitted('messageAction')).toEqual([['message-1', 'allow-agent-execution']]);
   });
 
   it('renders the per-message trailing slot with the current message payload', () => {
@@ -209,12 +212,14 @@ describe('AiChatThread', () => {
         messages: [
           createMessage({
             content: 'AI 姝ｅ湪鑷姩浣跨敤宸ュ叿锛歳ead_file',
-            toolCalls: [{
-              id: 'tool-call-read-file',
-              name: 'read_file',
-              status: 'running',
-              summary: 'test.sh',
-            }],
+            toolCalls: [
+              {
+                id: 'tool-call-read-file',
+                name: 'read_file',
+                status: 'running',
+                summary: 'test.sh',
+              },
+            ],
             stream: {
               status: 'streaming',
             },

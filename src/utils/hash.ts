@@ -29,7 +29,7 @@ const computeFnv1a32CodePoints = (value: string): number => {
  * 不可互操作性参见 {@link computeFnv1a32CodePoints} 的说明。
  */
 export const fnv1a32 = (value: string): string =>
-  computeFnv1a32CodePoints(value).toString(16).padStart(8, "0");
+  computeFnv1a32CodePoints(value).toString(16).padStart(8, '0');
 
 /**
  * FNV-1a 32-bit（code-point 变体），以 base36 输出固定长度字符串。
@@ -37,12 +37,11 @@ export const fnv1a32 = (value: string): string =>
  * @param padLength 输出最小字符数（默认 7；32-bit 无符号上限正好是 7 位 base36）。
  */
 export const fnv1a32Base36 = (value: string, padLength = 7): string =>
-  computeFnv1a32CodePoints(value).toString(36).padStart(padLength, "0");
+  computeFnv1a32CodePoints(value).toString(36).padStart(padLength, '0');
 
 // --- 跨端标准版（新增，不替换上面任何函数） ---------------------------------
 
-const UTF8_ENCODER =
-  typeof TextEncoder !== "undefined" ? new TextEncoder() : undefined;
+const UTF8_ENCODER = typeof TextEncoder !== 'undefined' ? new TextEncoder() : undefined;
 
 /**
  * 标准 FNV-1a 32-bit 哈希（按 **UTF-8 字节**），结果与其他语言/库的标准实现一致。
@@ -54,7 +53,7 @@ const UTF8_ENCODER =
  */
 export const fnv1a32Bytes = (value: string): string => {
   if (!UTF8_ENCODER) {
-    throw new Error("fnv1a32Bytes: 当前环境缺少 TextEncoder");
+    throw new Error('fnv1a32Bytes: 当前环境缺少 TextEncoder');
   }
   const bytes = UTF8_ENCODER.encode(value);
   let hash = 0x811c9dc5;
@@ -62,5 +61,5 @@ export const fnv1a32Bytes = (value: string): string => {
     hash ^= bytes[i]!;
     hash = Math.imul(hash, 0x01000193);
   }
-  return (hash >>> 0).toString(16).padStart(8, "0");
+  return (hash >>> 0).toString(16).padStart(8, '0');
 };

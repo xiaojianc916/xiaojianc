@@ -1,6 +1,10 @@
-import { SHIKI_THEME } from '@/constants/editor/shiki';
-import { ensureShikiLanguageLoaded, ensureShikiReady, getShikiHighlighter } from '@/services/editor/shiki';
 import type { BundledLanguage, ThemedToken } from 'shiki';
+import { SHIKI_THEME } from '@/constants/editor/shiki';
+import {
+  ensureShikiLanguageLoaded,
+  ensureShikiReady,
+  getShikiHighlighter,
+} from '@/services/editor/shiki';
 
 export interface ITokenizedCode {
   tokens: ThemedToken[][];
@@ -30,10 +34,12 @@ export const createRawTokens = (code: string): ITokenizedCode => ({
   tokens: code.split('\n').map((line) =>
     line === ''
       ? []
-      : [{
-          content: line,
-          color: 'inherit',
-        } as ThemedToken],
+      : [
+          {
+            content: line,
+            color: 'inherit',
+          } as ThemedToken,
+        ],
   ),
   fg: 'inherit',
   bg: 'transparent',

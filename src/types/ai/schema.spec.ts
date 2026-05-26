@@ -1,10 +1,10 @@
+import { describe, expect, it } from 'vitest';
 import {
   aiChatRequestSchema,
   aiConfigPayloadSchema,
   aiCredentialStatusPayloadSchema,
   aiProviderTypeSchema,
 } from '@/types/ai/schema';
-import { describe, expect, it } from 'vitest';
 
 const reference = {
   id: 'current-file:/tmp/a.sh',

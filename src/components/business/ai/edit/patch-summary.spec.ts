@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
-
-import type { IAiPatchSet } from '@/types/ai';
 import {
+  buildAiAedPatchRef,
   buildAiAgentPatchSummaryFromAedDiffs,
   buildAiAgentPatchSummaryFromApplyResult,
-  buildAiAedPatchRef,
   countAiPatchFileLineStats,
   parseAiAedPatchRef,
 } from '@/components/business/ai/edit/patch-summary';
+import type { IAiPatchSet } from '@/types/ai';
 
 const createPatch = (): IAiPatchSet => ({
   summary: '更新 Agent 计划面板',
@@ -181,29 +180,33 @@ describe('ai-patch-summary utils', () => {
   });
 
   it('returns null when there is no active Agent run metadata or applied file', () => {
-    expect(buildAiAgentPatchSummaryFromApplyResult({
-      patch: createPatch(),
-      applyResult: { appliedFiles: [] },
-      taskId: 'thread-1',
-      runId: 'run-1',
-      stepId: 'step-1',
-      appliedAt: '2026-04-29T10:00:00.000Z',
-    })).toBeNull();
+    expect(
+      buildAiAgentPatchSummaryFromApplyResult({
+        patch: createPatch(),
+        applyResult: { appliedFiles: [] },
+        taskId: 'thread-1',
+        runId: 'run-1',
+        stepId: 'step-1',
+        appliedAt: '2026-04-29T10:00:00.000Z',
+      }),
+    ).toBeNull();
 
-    expect(buildAiAgentPatchSummaryFromApplyResult({
-      patch: createPatch(),
-      applyResult: {
-        appliedFiles: [
-          {
-            path: 'D:/workspace/src/App.vue',
-            byteSize: 128,
-          },
-        ],
-      },
-      taskId: '',
-      runId: 'run-1',
-      stepId: 'step-1',
-      appliedAt: '2026-04-29T10:00:00.000Z',
-    })).toBeNull();
+    expect(
+      buildAiAgentPatchSummaryFromApplyResult({
+        patch: createPatch(),
+        applyResult: {
+          appliedFiles: [
+            {
+              path: 'D:/workspace/src/App.vue',
+              byteSize: 128,
+            },
+          ],
+        },
+        taskId: '',
+        runId: 'run-1',
+        stepId: 'step-1',
+        appliedAt: '2026-04-29T10:00:00.000Z',
+      }),
+    ).toBeNull();
   });
 });

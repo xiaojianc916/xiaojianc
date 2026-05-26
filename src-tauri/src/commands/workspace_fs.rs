@@ -156,11 +156,8 @@ pub fn delete_workspace_path(
         return Err("目标文件或文件夹不存在。".into());
     }
 
-    if target_path.is_dir() {
-        fs::remove_dir_all(&target_path).map_err(|error| format!("删除文件夹失败：{error}"))?;
-    } else {
-        fs::remove_file(&target_path).map_err(|error| format!("删除文件失败：{error}"))?;
-    }
+    trash::delete(&target_path)
+        .map_err(|error| format!("移动到回收站失败：{error}"))?;
 
     Ok(WorkspacePathDeletePayload {
         path: target_path.to_string_lossy().to_string(),

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
-import Copy from '~icons/lucide/copy';
 import type { HTMLAttributes } from 'vue';
 import { inject } from 'vue';
+import { cn } from '@/lib/utils';
+import Copy from '~icons/lucide/copy';
 import { TerminalKey } from './context';
 
 const props = defineProps<{ class?: HTMLAttributes['class'] }>();

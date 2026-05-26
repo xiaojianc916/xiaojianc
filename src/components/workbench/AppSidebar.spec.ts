@@ -1,164 +1,164 @@
-import type { IEditorDocument, IWorkspaceDirectoryPayload } from '@/types/editor';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { describe, expect, it } from 'vitest';
+import type { IEditorDocument, IWorkspaceDirectoryPayload } from '@/types/editor';
 import AppSidebar from './AppSidebar.vue';
 
 const documentFixture: IEditorDocument = {
-    id: 'doc-1',
-    path: null,
-    name: 'untitled.sh',
-    kind: 'text',
-    content: '',
-    encoding: 'utf-8',
-    savedContent: '',
-    savedEncoding: 'utf-8',
-    isDirty: false,
-    lineCount: 1,
-    charCount: 0,
+  id: 'doc-1',
+  path: null,
+  name: 'untitled.sh',
+  kind: 'text',
+  content: '',
+  encoding: 'utf-8',
+  savedContent: '',
+  savedEncoding: 'utf-8',
+  isDirty: false,
+  lineCount: 1,
+  charCount: 0,
 };
 
 const emptyWorkspaceRoot: IWorkspaceDirectoryPayload = {
-    rootPath: 'D:/repo',
-    rootName: 'repo',
-    entries: [],
+  rootPath: 'D:/repo',
+  rootName: 'repo',
+  entries: [],
 };
 
 const populatedWorkspaceRoot: IWorkspaceDirectoryPayload = {
-    rootPath: 'D:/repo',
-    rootName: 'repo',
-    entries: [
-        {
-            path: 'D:/repo/demo.c',
-            name: 'demo.c',
-            kind: 'file',
-            hasChildren: false,
-        },
-    ],
+  rootPath: 'D:/repo',
+  rootName: 'repo',
+  entries: [
+    {
+      path: 'D:/repo/demo.c',
+      name: 'demo.c',
+      kind: 'file',
+      hasChildren: false,
+    },
+  ],
 };
 
 const mountExplorerSidebar = (document: IEditorDocument) => {
-    return mount(AppSidebar, {
-        props: {
-            document,
-            view: 'explorer',
-            isDesktopRuntime: true,
-            workspaceRootPath: 'D:/repo',
-            preloadedWorkspaceRoot: populatedWorkspaceRoot,
-            startupExplorerExpandedPaths: [],
-            startupExplorerSelectedPath: null,
-            canRun: true,
-            isRunning: false,
-            hasRunArtifacts: false,
-            activeRun: null,
-            runHistory: [],
-            commandTemplates: [],
-            executor: 'wsl',
-        },
-        global: {
-            plugins: [createPinia()],
-            stubs: {
-                SourceControlPanel: true,
-                DeferredSearchSidebarPanel: true,
-                DeferredRunSidebarPanel: true,
-                DeferredSshSidebarPanel: true,
-                DeferredLinearContextMenu: true,
-            },
-        },
-    });
+  return mount(AppSidebar, {
+    props: {
+      document,
+      view: 'explorer',
+      isDesktopRuntime: true,
+      workspaceRootPath: 'D:/repo',
+      preloadedWorkspaceRoot: populatedWorkspaceRoot,
+      startupExplorerExpandedPaths: [],
+      startupExplorerSelectedPath: null,
+      canRun: true,
+      isRunning: false,
+      hasRunArtifacts: false,
+      activeRun: null,
+      runHistory: [],
+      commandTemplates: [],
+      executor: 'wsl',
+    },
+    global: {
+      plugins: [createPinia()],
+      stubs: {
+        SourceControlPanel: true,
+        DeferredSearchSidebarPanel: true,
+        DeferredRunSidebarPanel: true,
+        DeferredSshSidebarPanel: true,
+        DeferredLinearContextMenu: true,
+      },
+    },
+  });
 };
 
 describe('AppSidebar', () => {
-    it('空工作区时显示 Empty 装饰并允许打开文件夹', async () => {
-        const wrapper = mount(AppSidebar, {
-            props: {
-                document: documentFixture,
-                view: 'explorer',
-                isDesktopRuntime: true,
-                workspaceRootPath: 'D:/repo',
-                preloadedWorkspaceRoot: emptyWorkspaceRoot,
-                startupExplorerExpandedPaths: [],
-                startupExplorerSelectedPath: null,
-                canRun: true,
-                isRunning: false,
-                hasRunArtifacts: false,
-                activeRun: null,
-                runHistory: [],
-                commandTemplates: [],
-                executor: 'wsl',
-            },
-            global: {
-                plugins: [createPinia()],
-                stubs: {
-                    SourceControlPanel: true,
-                    DeferredSearchSidebarPanel: true,
-                    DeferredRunSidebarPanel: true,
-                    DeferredSshSidebarPanel: true,
-                    DeferredLinearContextMenu: true,
-                    FileTree: true,
-                    WorkspaceTreeNode: true,
-                },
-            },
-        });
-
-        await flushPromises();
-
-        expect(wrapper.text()).toContain('This folder is empty');
-
-        await wrapper.get('.explorer-empty-action').trigger('click');
-
-        expect(wrapper.emitted('open-folder')).toHaveLength(1);
+  it('空工作区时显示 Empty 装饰并允许打开文件夹', async () => {
+    const wrapper = mount(AppSidebar, {
+      props: {
+        document: documentFixture,
+        view: 'explorer',
+        isDesktopRuntime: true,
+        workspaceRootPath: 'D:/repo',
+        preloadedWorkspaceRoot: emptyWorkspaceRoot,
+        startupExplorerExpandedPaths: [],
+        startupExplorerSelectedPath: null,
+        canRun: true,
+        isRunning: false,
+        hasRunArtifacts: false,
+        activeRun: null,
+        runHistory: [],
+        commandTemplates: [],
+        executor: 'wsl',
+      },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          SourceControlPanel: true,
+          DeferredSearchSidebarPanel: true,
+          DeferredRunSidebarPanel: true,
+          DeferredSshSidebarPanel: true,
+          DeferredLinearContextMenu: true,
+          FileTree: true,
+          WorkspaceTreeNode: true,
+        },
+      },
     });
 
-    it('右键未选中文件时会保留临时高亮，菜单关闭后清除', async () => {
-        const wrapper = mountExplorerSidebar(documentFixture);
+    await flushPromises();
 
-        await flushPromises();
+    expect(wrapper.text()).toContain('This folder is empty');
 
-        const row = wrapper
-            .findAll('.explorer-tree-row')
-            .find((candidate) => candidate.text().includes('demo.c'));
+    await wrapper.get('.explorer-empty-action').trigger('click');
 
-        expect(row).toBeDefined();
+    expect(wrapper.emitted('open-folder')).toHaveLength(1);
+  });
 
-        await row!.trigger('contextmenu', {
-            clientX: 80,
-            clientY: 120,
-        });
-        await flushPromises();
+  it('右键未选中文件时会保留临时高亮，菜单关闭后清除', async () => {
+    const wrapper = mountExplorerSidebar(documentFixture);
 
-        expect(row!.classes()).toContain('is-context-target');
-        expect(row!.classes()).not.toContain('is-active');
+    await flushPromises();
 
-        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-        await flushPromises();
+    const row = wrapper
+      .findAll('.explorer-tree-row')
+      .find((candidate) => candidate.text().includes('demo.c'));
 
-        expect(row!.classes()).not.toContain('is-context-target');
+    expect(row).toBeDefined();
+
+    await row!.trigger('contextmenu', {
+      clientX: 80,
+      clientY: 120,
+    });
+    await flushPromises();
+
+    expect(row!.classes()).toContain('is-context-target');
+    expect(row!.classes()).not.toContain('is-active');
+
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await flushPromises();
+
+    expect(row!.classes()).not.toContain('is-context-target');
+  });
+
+  it('右键当前已选中文件时不叠加临时高亮类', async () => {
+    const wrapper = mountExplorerSidebar({
+      ...documentFixture,
+      path: 'D:/repo/demo.c',
+      name: 'demo.c',
     });
 
-    it('右键当前已选中文件时不叠加临时高亮类', async () => {
-        const wrapper = mountExplorerSidebar({
-            ...documentFixture,
-            path: 'D:/repo/demo.c',
-            name: 'demo.c',
-        });
+    await flushPromises();
 
-        await flushPromises();
+    const row = wrapper
+      .findAll('.explorer-tree-row')
+      .find((candidate) => candidate.text().includes('demo.c'));
 
-        const row = wrapper
-            .findAll('.explorer-tree-row')
-            .find((candidate) => candidate.text().includes('demo.c'));
+    expect(row).toBeDefined();
+    expect(row!.classes()).toContain('is-active');
 
-        expect(row).toBeDefined();
-        expect(row!.classes()).toContain('is-active');
-
-        await row!.trigger('contextmenu', {
-            clientX: 80,
-            clientY: 120,
-        });
-        await flushPromises();
-
-        expect(row!.classes()).toContain('is-active');
-        expect(row!.classes()).not.toContain('is-context-target');
+    await row!.trigger('contextmenu', {
+      clientX: 80,
+      clientY: 120,
     });
+    await flushPromises();
+
+    expect(row!.classes()).toContain('is-active');
+    expect(row!.classes()).not.toContain('is-context-target');
+  });
 });

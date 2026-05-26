@@ -1,13 +1,13 @@
+import { describe, expect, it } from 'vitest';
 import {
-  extractVisibleAgentRuntimeEvents,
   extractSidecarChangedFilePaths,
+  extractVisibleAgentRuntimeEvents,
   hasSidecarFileMutationEvent,
   mapSidecarEventsToToolCalls,
-  projectSidecarExecuteResponse,
   projectSidecarEventsToToolState,
+  projectSidecarExecuteResponse,
 } from '@/composables/ai/sidecar-events';
 import type { TAgentUiEvent } from '@/types/ai/sidecar';
-import { describe, expect, it } from 'vitest';
 
 describe('agent-sidecar-events', () => {
   it('等待 sidecar 审批时不把回答投影成已完成', () => {
@@ -119,10 +119,7 @@ describe('agent-sidecar-events', () => {
       name: 'tavily_search',
       status: 'succeeded',
       targetPreview: '今日热点新闻',
-      detailItems: [
-        '平台：Tavily',
-        '查询：今日热点新闻',
-      ],
+      detailItems: ['平台：Tavily', '查询：今日热点新闻'],
     });
     expect(toolCalls[0]?.summary).toContain('5-year-old aspiring astronaut Jack visits NASA');
     expect(toolCalls[0]?.summary).not.toContain('toolResult');
@@ -134,7 +131,8 @@ describe('agent-sidecar-events', () => {
       {
         type: 'tool_result',
         toolName: 'list_directory',
-        output: '{"toolResult":{"content":[{"text":"Detailed Results:\\n\\nTitle: src/components/business/ai\\nURL: file:///repo/src/components/business/ai"}]}}',
+        output:
+          '{"toolResult":{"content":[{"text":"Detailed Results:\\n\\nTitle: src/components/business/ai\\nURL: file:///repo/src/components/business/ai"}]}}',
       },
     ]);
 
@@ -164,10 +162,7 @@ describe('agent-sidecar-events', () => {
       name: 'search_files',
       status: 'running',
       targetPreview: 'AiAgentRuntimeTimeline · D:/repo/src',
-      detailItems: [
-        '搜索：AiAgentRuntimeTimeline',
-        '范围：D:/repo/src',
-      ],
+      detailItems: ['搜索：AiAgentRuntimeTimeline', '范围：D:/repo/src'],
     });
   });
 
@@ -204,10 +199,7 @@ describe('agent-sidecar-events', () => {
       name: 'search_symbols',
       status: 'running',
       targetPreview: 'useAiAssistant · 工作区',
-      detailItems: [
-        '搜索：useAiAssistant',
-        '范围：工作区',
-      ],
+      detailItems: ['搜索：useAiAssistant', '范围：工作区'],
     });
     expect(toolCalls[1]).toMatchObject({
       name: 'propose_file_patch',
@@ -230,9 +222,7 @@ describe('agent-sidecar-events', () => {
     expect(toolCalls[0]).toMatchObject({
       name: 'read_media_file',
       targetPreview: 'D:/repo/assets/news.png',
-      detailItems: [
-        '文件：D:/repo/assets/news.png',
-      ],
+      detailItems: ['文件：D:/repo/assets/news.png'],
     });
   });
 
@@ -274,7 +264,8 @@ describe('agent-sidecar-events', () => {
           toolUseId: 'tool-use-1',
           toolName: 'tavily_search',
           ok: true,
-          resultPreview: '{"toolResult":{"content":[{"text":"Title: Taobao launches new product page\\nURL: https://taobao.com/new"}]}}',
+          resultPreview:
+            '{"toolResult":{"content":[{"text":"Title: Taobao launches new product page\\nURL: https://taobao.com/new"}]}}',
         },
       },
     ]);
@@ -285,11 +276,7 @@ describe('agent-sidecar-events', () => {
       name: 'tavily_search',
       status: 'succeeded',
       targetPreview: '淘宝网 最新商品 2026 · taobao.com',
-      detailItems: [
-        '平台：Tavily',
-        '查询：淘宝网 最新商品 2026',
-        '站点：taobao.com',
-      ],
+      detailItems: ['平台：Tavily', '查询：淘宝网 最新商品 2026', '站点：taobao.com'],
     });
     expect(toolCalls[0]?.summary).toContain('Taobao launches new product page');
     expect(toolCalls[0]?.summary).not.toContain('toolResult');
@@ -384,9 +371,7 @@ describe('agent-sidecar-events', () => {
     ];
 
     expect(hasSidecarFileMutationEvent(events)).toBe(true);
-    expect(extractSidecarChangedFilePaths(events)).toEqual([
-      'D:/repo/src/App.vue',
-    ]);
+    expect(extractSidecarChangedFilePaths(events)).toEqual(['D:/repo/src/App.vue']);
   });
 
   it('把 sidecar 事件统一投影成新时间线需要的工具状态和活动文案', () => {

@@ -4,16 +4,16 @@ import type {
   IAgentSidecarCheckpointRestoreRequest,
   IAgentSidecarExecuteRequest,
   IAgentSidecarHealthPayload,
-  IAgentSidecarWarmupPayload,
   IAgentSidecarPlanApproveRequest,
   IAgentSidecarPlanFinishRequest,
   IAgentSidecarPlanQueryRequest,
+  IAgentSidecarPlanRejectRequest,
   IAgentSidecarPlanReplanRequest,
   IAgentSidecarPlanRequest,
-  IAgentSidecarPlanRejectRequest,
   IAgentSidecarPlanValidateRequest,
   IAgentSidecarResponsePayload,
   IAgentSidecarStreamEventPayload,
+  IAgentSidecarWarmupPayload,
 } from './agent-sidecar';
 import type {
   IAiAgentClassifyTaskPayload,
@@ -132,8 +132,8 @@ import type {
   IStartWslLinkSupervisorRequest,
   IWslLinkAgentArtifactPayload,
   IWslLinkEnvironmentReport,
-  IWslLinkSupervisorControlPayload,
   IWslLinkStatusPayload,
+  IWslLinkSupervisorControlPayload,
 } from './wsl-link';
 
 export interface ISshConnectionTestRequest {
@@ -334,6 +334,8 @@ export interface ITauriService {
   createWorkspacePath(payload: IWorkspacePathCreateRequest): Promise<IWorkspacePathCreatePayload>;
   renameWorkspacePath(payload: IWorkspacePathRenameRequest): Promise<IWorkspacePathRenamePayload>;
   deleteWorkspacePath(payload: IWorkspacePathDeleteRequest): Promise<IWorkspacePathDeletePayload>;
+  startWorkspaceWatching(rootPath: string): Promise<void>;
+  stopWorkspaceWatching(): Promise<void>;
   searchWorkspace(
     payload: IWorkspaceSearchRequest,
     options?: ITauriCallOptions,
@@ -419,9 +421,7 @@ export interface ITauriService {
   aiEditRestoreSnapshot(
     payload: IAiEditRestoreSnapshotRequest,
   ): Promise<IAiEditRestoreSnapshotPayload>;
-  aiEditUndoOperation(
-    payload: IAiEditUndoOperationRequest,
-  ): Promise<IAiEditUndoOperationPayload>;
+  aiEditUndoOperation(payload: IAiEditUndoOperationRequest): Promise<IAiEditUndoOperationPayload>;
   aiEditRevertFile(payload: IAiEditRevertFileRequest): Promise<IAiEditRevertFilePayload>;
   aiEditRevertHunk(payload: IAiEditRevertHunkRequest): Promise<IAiEditRevertHunkPayload>;
   aiEditRevertTask(payload: IAiEditRevertTaskRequest): Promise<IAiEditRevertTaskPayload>;

@@ -121,10 +121,12 @@ describe('agent sidecar event contract', () => {
         },
         {
           type: 'done',
-          result: '已完成第一阶段：Agent 默认不生成计划；只有 Plan 模式会生成计划；sidecar 事件协议能表达工具读取、审批、diff 和最终回答。',
+          result:
+            '已完成第一阶段：Agent 默认不生成计划；只有 Plan 模式会生成计划；sidecar 事件协议能表达工具读取、审批、diff 和最终回答。',
         },
       ],
-      result: '已完成第一阶段：Agent 默认不生成计划；只有 Plan 模式会生成计划；sidecar 事件协议能表达工具读取、审批、diff 和最终回答。',
+      result:
+        '已完成第一阶段：Agent 默认不生成计划；只有 Plan 模式会生成计划；sidecar 事件协议能表达工具读取、审批、diff 和最终回答。',
     };
 
     const parsedRequest = agentSidecarChatRequestSchema.parse({

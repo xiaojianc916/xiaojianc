@@ -1,4 +1,6 @@
-﻿import type {
+﻿import { defineStore } from 'pinia';
+import { computed, ref } from 'vue';
+import type {
   ITerminalBufferDiagnostic,
   ITerminalDataEvent,
   ITerminalRunHandle,
@@ -9,8 +11,6 @@
   TTerminalInputRoute,
   TTerminalRuntimeState,
 } from '@/types/terminal';
-import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
 
 export type { TTerminalInputRoute };
 
@@ -78,8 +78,7 @@ const textEncoder = typeof TextEncoder !== 'undefined' ? new TextEncoder() : nul
 
 const nowIso = (): string => new Date().toISOString();
 
-const numericOrNull = (value: unknown): number | null =>
-  typeof value === 'number' ? value : null;
+const numericOrNull = (value: unknown): number | null => (typeof value === 'number' ? value : null);
 
 const measureBytes = (value: string | Uint8Array): number => {
   if (value instanceof Uint8Array) {
@@ -134,8 +133,7 @@ const mergeRunHandle = (
   cwd: next.cwd || current.cwd,
   commandLine: next.commandLine || current.commandLine,
   // Only adopt next.usedTempFile if next carries fresh command/cwd context.
-  usedTempFile:
-    next.commandLine || next.cwd ? next.usedTempFile : current.usedTempFile,
+  usedTempFile: next.commandLine || next.cwd ? next.usedTempFile : current.usedTempFile,
   startedAt: next.startedAt || current.startedAt,
   startedAtMs: next.startedAtMs ?? current.startedAtMs,
   pid: next.pid ?? current.pid ?? null,
@@ -252,11 +250,7 @@ export const useTerminalRuntimeStore = defineStore('terminal-runtime', () => {
     markEvent('terminal:switching-to-idle');
   };
 
-  const markRunCompleted = (
-    runId: string,
-    exitCode: number | null,
-    finishedAt: string,
-  ): void => {
+  const markRunCompleted = (runId: string, exitCode: number | null, finishedAt: string): void => {
     if (activeRun.value?.runId === runId) {
       activeRun.value = null;
     }
@@ -336,10 +330,7 @@ export const useTerminalRuntimeStore = defineStore('terminal-runtime', () => {
     markEvent('cancel_terminal_run');
   };
 
-  const recordInputRoute = (
-    route: TTerminalInputRoute,
-    data: Uint8Array,
-  ): void => {
+  const recordInputRoute = (route: TTerminalInputRoute, data: Uint8Array): void => {
     if (!deepDiagnosticsEnabled.value) return;
     diagnostics.value.inputEvents += 1;
     diagnostics.value.lastInputRoute = route;
@@ -353,9 +344,7 @@ export const useTerminalRuntimeStore = defineStore('terminal-runtime', () => {
 
   const setRunSeparatorVisible = (visible: boolean): void => {
     showRunSeparator.value = visible;
-    markEvent(
-      visible ? 'terminal:separator-visible' : 'terminal:separator-hidden',
-    );
+    markEvent(visible ? 'terminal:separator-visible' : 'terminal:separator-hidden');
   };
 
   const setDeepDiagnosticsEnabled = (enabled: boolean): void => {

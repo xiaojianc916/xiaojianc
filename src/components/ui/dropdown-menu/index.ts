@@ -2,5 +2,5 @@ export {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuRoot,
-  DropdownMenuTrigger
+  DropdownMenuTrigger,
 } from 'reka-ui';

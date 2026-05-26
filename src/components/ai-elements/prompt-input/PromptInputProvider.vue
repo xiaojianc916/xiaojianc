@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { PromptInputMessage } from './types';
 import { getCurrentInstance } from 'vue';
 import { usePromptInputProvider } from './context';
+import type { PromptInputMessage } from './types';
 
 const props = defineProps<{
   initialInput?: string | undefined;

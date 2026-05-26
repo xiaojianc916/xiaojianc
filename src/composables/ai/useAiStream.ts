@@ -1,5 +1,5 @@
-import { splitTextGraphemes } from '@/utils/text-preview';
 import { computed, getCurrentScope, onScopeDispose, ref } from 'vue';
+import { splitTextGraphemes } from '@/utils/text-preview';
 
 type TAiStreamStatus = 'idle' | 'streaming' | 'completed' | 'cancelled';
 
@@ -71,9 +71,7 @@ export const useAiStream = (options: IUseAiStreamOptions = {}) => {
   };
 
   const getFrameElapsedMs = (timestamp: number): number => {
-    const elapsed = lastFrameTimestamp === null
-      ? DEFAULT_FRAME_MS
-      : timestamp - lastFrameTimestamp;
+    const elapsed = lastFrameTimestamp === null ? DEFAULT_FRAME_MS : timestamp - lastFrameTimestamp;
     lastFrameTimestamp = timestamp;
 
     if (!Number.isFinite(elapsed) || elapsed <= 0) {
@@ -107,10 +105,7 @@ export const useAiStream = (options: IUseAiStreamOptions = {}) => {
     const elapsedMs = getFrameElapsedMs(timestamp);
     const nextBudget =
       pacingBudgetRemainder + getPacingRate(graphemes.length) * (elapsedMs / 1_000);
-    const drainCount = Math.min(
-      graphemes.length,
-      Math.max(1, Math.floor(nextBudget)),
-    );
+    const drainCount = Math.min(graphemes.length, Math.max(1, Math.floor(nextBudget)));
     pacingBudgetRemainder = Math.max(0, nextBudget - drainCount);
     content.value += graphemes.slice(0, drainCount).join('');
     pendingText = graphemes.slice(drainCount).join('');

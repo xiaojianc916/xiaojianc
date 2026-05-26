@@ -1,8 +1,8 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import ChevronDown from '~icons/lucide/chevron-down';
-import { ref } from 'vue';
 
 const props = withDefaults(
   defineProps<{

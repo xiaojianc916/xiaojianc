@@ -1,36 +1,33 @@
 <script setup lang="ts">
-import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from '@/components/ui/collapsible'
-import { cn } from '@/lib/utils'
+import type { HTMLAttributes } from 'vue';
+import { computed, provide } from 'vue';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { cn } from '@/lib/utils';
 import ChevronRightIcon from '~icons/lucide/chevron-right';
 import FolderIcon from '~icons/lucide/folder';
-import FolderOpenIcon from '~icons/lucide/folder-open';import type { HTMLAttributes } from 'vue'
-import { computed, provide } from 'vue'
-import { FileTreeFolderKey, useFileTreeContext } from './context'
-import FileTreeIcon from './FileTreeIcon.vue'
-import FileTreeName from './FileTreeName.vue'
+import FolderOpenIcon from '~icons/lucide/folder-open';
+import { FileTreeFolderKey, useFileTreeContext } from './context';
+import FileTreeIcon from './FileTreeIcon.vue';
+import FileTreeName from './FileTreeName.vue';
 
 interface Props extends /* @vue-ignore */ HTMLAttributes {
-    path: string
-    name: string
-    class?: HTMLAttributes['class']
+  path: string;
+  name: string;
+  class?: HTMLAttributes['class'];
 }
 
-const props = defineProps<Props>()
+const props = defineProps<Props>();
 
-const { expandedPaths, togglePath, selectedPath, onSelect } = useFileTreeContext()
+const { expandedPaths, togglePath, selectedPath, onSelect } = useFileTreeContext();
 
-const isExpanded = computed(() => expandedPaths.value.has(props.path))
-const isSelected = computed(() => selectedPath.value === props.path)
+const isExpanded = computed(() => expandedPaths.value.has(props.path));
+const isSelected = computed(() => selectedPath.value === props.path);
 
 provide(FileTreeFolderKey, {
-    path: props.path,
-    name: props.name,
-    isExpanded: isExpanded.value,
-})
+  path: props.path,
+  name: props.name,
+  isExpanded: isExpanded.value,
+});
 </script>
 
 <template>

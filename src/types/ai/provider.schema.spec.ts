@@ -1,9 +1,9 @@
+import { describe, expect, it } from 'vitest';
 import {
-  aiProviderCatalogEntrySchema,
   aiCredentialStatusPayloadSchema,
+  aiProviderCatalogEntrySchema,
   aiProviderTypeSchema,
 } from '@/types/ai/provider.schema';
-import { describe, expect, it } from 'vitest';
 
 describe('AI provider schema', () => {
   it('校验 provider 类型和目录项', () => {

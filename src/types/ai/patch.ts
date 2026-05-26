@@ -1,22 +1,10 @@
-export const AI_AGENT_CHANGED_FILE_STATUSES = [
-  'added',
-  'modified',
-  'deleted',
-  'renamed',
-] as const;
+export const AI_AGENT_CHANGED_FILE_STATUSES = ['added', 'modified', 'deleted', 'renamed'] as const;
 
-export const AI_DIFF_PREVIEW_LINE_KINDS = [
-  'add',
-  'delete',
-  'hunk',
-  'context',
-] as const;
+export const AI_DIFF_PREVIEW_LINE_KINDS = ['add', 'delete', 'hunk', 'context'] as const;
 
-export type TAiAgentChangedFileStatus =
-  (typeof AI_AGENT_CHANGED_FILE_STATUSES)[number];
+export type TAiAgentChangedFileStatus = (typeof AI_AGENT_CHANGED_FILE_STATUSES)[number];
 
-export type TAiDiffPreviewLineKind =
-  (typeof AI_DIFF_PREVIEW_LINE_KINDS)[number];
+export type TAiDiffPreviewLineKind = (typeof AI_DIFF_PREVIEW_LINE_KINDS)[number];
 
 export interface IAiAgentChangedFile {
   path: string;

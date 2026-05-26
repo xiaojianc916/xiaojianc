@@ -1,10 +1,10 @@
 import pierreIconTheme from '@/assets/icons/pierre/theme-complete.json';
-import { getPathBaseName } from '@/utils/path';
 import type {
   IFileIconAsset,
   IFileIconResolveOptions,
   IPierreFileIconTheme,
 } from '@/types/file-icon';
+import { getPathBaseName } from '@/utils/path';
 
 const PIERRE_ICON_THEME = pierreIconTheme as IPierreFileIconTheme;
 const PIERRE_MONOCHROME_DARK_FILL = '#adadb1';
@@ -66,9 +66,7 @@ const MONOCHROME_ICON_COLOR_SEED_OVERRIDES: Readonly<Record<string, string>> = O
   'folder-open-duo': 'folder-duo',
 });
 
-const normalizeThemeMap = (
-  value: Record<string, string> | undefined,
-): Record<string, string> => {
+const normalizeThemeMap = (value: Record<string, string> | undefined): Record<string, string> => {
   if (!value) {
     return {};
   }
@@ -88,7 +86,7 @@ const FILE_EXTENSION_ICON_MAP: Readonly<Record<string, string>> = Object.freeze(
 );
 
 const hasThemeIconDefinition = (key: string): boolean =>
-  Object.prototype.hasOwnProperty.call(PIERRE_ICON_THEME.iconDefinitions, key);
+  Object.hasOwn(PIERRE_ICON_THEME.iconDefinitions, key);
 
 const getFileName = (path: string | null | undefined): string => {
   if (!path) {
@@ -130,10 +128,10 @@ const resolveNamedFileIconKey = (fileName: string): string | null => {
   }
 
   if (
-    fileName === 'license'
-    || fileName.startsWith('license.')
-    || fileName === 'licence'
-    || fileName.startsWith('licence.')
+    fileName === 'license' ||
+    fileName.startsWith('license.') ||
+    fileName === 'licence' ||
+    fileName.startsWith('licence.')
   ) {
     return 'file-text-duo';
   }
@@ -157,11 +155,8 @@ const hashText = (value: string): number => {
 const encodeSvgDataUri = (svg: string): string =>
   `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 
-const applyPierreFallbackColor = (
-  svg: string,
-  fillColor: string,
-  monochromeFill: string,
-): string => svg.replace(new RegExp(monochromeFill, 'gi'), fillColor);
+const applyPierreFallbackColor = (svg: string, fillColor: string, monochromeFill: string): string =>
+  svg.replace(new RegExp(monochromeFill, 'gi'), fillColor);
 
 const resolveColorizedFallbackIconAsset = (key: string): IFileIconAsset | null => {
   const palettePool = MONOCHROME_ICON_COLOR_POOLS[key];
@@ -178,8 +173,7 @@ const resolveColorizedFallbackIconAsset = (key: string): IFileIconAsset | null =
   }
 
   const lightDefinition = PIERRE_ICON_THEME.iconDefinitions[`${key}_light`] ?? darkDefinition;
-  const darkRaw =
-    FILE_ICON_RAW_MODULES[resolveAssetModuleKey(darkDefinition.iconPath)] ?? null;
+  const darkRaw = FILE_ICON_RAW_MODULES[resolveAssetModuleKey(darkDefinition.iconPath)] ?? null;
   const lightRaw =
     FILE_ICON_RAW_MODULES[resolveAssetModuleKey(lightDefinition.iconPath)] ?? darkRaw;
 
@@ -216,8 +210,7 @@ const resolveThemeIconAssetByKey = (key: string): IFileIconAsset | null => {
     return null;
   }
 
-  const lightDefinition =
-    PIERRE_ICON_THEME.iconDefinitions[`${key}_light`] ?? darkDefinition;
+  const lightDefinition = PIERRE_ICON_THEME.iconDefinitions[`${key}_light`] ?? darkDefinition;
 
   const darkSrc = FILE_ICON_ASSET_MODULES[resolveAssetModuleKey(darkDefinition.iconPath)] ?? null;
   const lightSrc =
@@ -249,11 +242,7 @@ const resolveRequiredThemeIconAsset = (key: string): IFileIconAsset => {
 
 const DEFAULT_FILE_ICON_ASSET = resolveRequiredThemeIconAsset(PIERRE_ICON_THEME.file);
 
-const resolveFileIconKey = ({
-  kind,
-  path,
-  expanded = false,
-}: IFileIconResolveOptions): string => {
+const resolveFileIconKey = ({ kind, path, expanded = false }: IFileIconResolveOptions): string => {
   if (kind === 'directory') {
     return expanded ? PIERRE_ICON_THEME.folderExpanded : PIERRE_ICON_THEME.folder;
   }
@@ -279,6 +268,6 @@ const resolveFileIconKey = ({
 };
 
 export const resolveFileIconAsset = (options: IFileIconResolveOptions): IFileIconAsset =>
-  resolveColorizedFallbackIconAsset(resolveFileIconKey(options))
-  ?? resolveThemeIconAssetByKey(resolveFileIconKey(options))
-  ?? DEFAULT_FILE_ICON_ASSET;
+  resolveColorizedFallbackIconAsset(resolveFileIconKey(options)) ??
+  resolveThemeIconAssetByKey(resolveFileIconKey(options)) ??
+  DEFAULT_FILE_ICON_ASSET;

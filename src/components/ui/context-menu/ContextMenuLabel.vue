@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
 import { reactiveOmit } from '@vueuse/core';
 import type { ContextMenuLabelProps } from 'reka-ui';
 import { ContextMenuLabel, useForwardProps } from 'reka-ui';
 import type { HTMLAttributes } from 'vue';
+import { cn } from '@/lib/utils';
 
-const props = defineProps<ContextMenuLabelProps & { class?: HTMLAttributes['class']; inset?: boolean }>();
+const props = defineProps<
+  ContextMenuLabelProps & { class?: HTMLAttributes['class']; inset?: boolean }
+>();
 
 const delegatedProps = reactiveOmit(props, 'class', 'inset');
 const forwardedProps = useForwardProps(delegatedProps);

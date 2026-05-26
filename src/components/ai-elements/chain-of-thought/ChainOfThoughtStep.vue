@@ -1,17 +1,20 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
 import type { HTMLAttributes } from 'vue';
+import { cn } from '@/lib/utils';
 
-const props = withDefaults(defineProps<{
-  label: string;
-  description?: string;
-  status?: 'complete' | 'active' | 'pending';
-  class?: HTMLAttributes['class'];
-}>(), {
-  description: undefined,
-  status: 'complete',
-  class: undefined,
-});
+const props = withDefaults(
+  defineProps<{
+    label: string;
+    description?: string;
+    status?: 'complete' | 'active' | 'pending';
+    class?: HTMLAttributes['class'];
+  }>(),
+  {
+    description: undefined,
+    status: 'complete',
+    class: undefined,
+  },
+);
 
 const statusStyles = {
   complete: 'text-muted-foreground',

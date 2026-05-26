@@ -18,9 +18,11 @@ mod shell_tools;
 mod tauri_bindings;
 #[path = "../commands/workspace_fs.rs"]
 mod workspace_fs;
+#[path = "../commands/workspace_watcher.rs"]
+mod workspace_watcher;
 
 mod commands {
-    pub(crate) use crate::{script_run, search, shell_tools, window, window_stage, workspace_fs};
+    pub(crate) use crate::{script_run, search, shell_tools, window, window_stage, workspace_fs, workspace_watcher};
 }
 
 pub use contracts::{

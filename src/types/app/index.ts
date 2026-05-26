@@ -1,61 +1,60 @@
 export type TThemeMode = 'dark' | 'light';
 
-
 export type TThemePreference = TThemeMode | 'system';
 
 export const THEME_PREFERENCES = [
-    'dark',
-    'light',
-    'system',
+  'dark',
+  'light',
+  'system',
 ] as const satisfies ReadonlyArray<TThemePreference>;
 
 export type TAccentColor = 'indigo' | 'violet' | 'blue' | 'teal' | 'gold' | 'red';
 
 export const ACCENT_COLORS = [
-    'indigo',
-    'violet',
-    'blue',
-    'teal',
-    'gold',
-    'red',
+  'indigo',
+  'violet',
+  'blue',
+  'teal',
+  'gold',
+  'red',
 ] as const satisfies ReadonlyArray<TAccentColor>;
 
 export type TUiDensity = 'compact' | 'default' | 'comfortable';
 
 export const UI_DENSITIES = [
-    'compact',
-    'default',
-    'comfortable',
+  'compact',
+  'default',
+  'comfortable',
 ] as const satisfies ReadonlyArray<TUiDensity>;
 
 export type TRadiusPreset = 'sharp' | 'default' | 'rounded';
 
 export const RADIUS_PRESETS = [
-    'sharp',
-    'default',
-    'rounded',
+  'sharp',
+  'default',
+  'rounded',
 ] as const satisfies ReadonlyArray<TRadiusPreset>;
 
 export type TWorkbenchPrimaryMode = 'editor' | 'ai';
 
 export const WORKBENCH_PRIMARY_MODES = [
-    'editor',
-    'ai',
+  'editor',
+  'ai',
 ] as const satisfies ReadonlyArray<TWorkbenchPrimaryMode>;
 
 export type TWorkbenchSidebarView =
-    | 'explorer'
-    | 'search'
-    | 'source-control'
-    | 'run'
-    | 'ai'
-    | 'extensions';
+  | 'explorer'
+  | 'search'
+  | 'source-control'
+  | 'run'
+  | 'ai'
+  | 'extensions';
 
 export const WORKBENCH_SIDEBAR_VIEWS = [
-    'explorer',
-    'search',
-    'source-control',
-    'run',
-    'ai',
-    'extensions',
+  'explorer',
+  'search',
+  'source-control',
+  'run',
+  'ai',
+  'extensions',
 ] as const satisfies ReadonlyArray<TWorkbenchSidebarView>;

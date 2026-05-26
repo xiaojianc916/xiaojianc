@@ -1,28 +1,29 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils'
-import FileIcon from '~icons/lucide/file';import type { HTMLAttributes, VNode } from 'vue'
-import { computed, provide } from 'vue'
-import { FileTreeFileKey, useFileTreeContext } from './context'
-import FileTreeIcon from './FileTreeIcon.vue'
-import FileTreeName from './FileTreeName.vue'
+import type { HTMLAttributes, VNode } from 'vue';
+import { computed, provide } from 'vue';
+import { cn } from '@/lib/utils';
+import FileIcon from '~icons/lucide/file';
+import { FileTreeFileKey, useFileTreeContext } from './context';
+import FileTreeIcon from './FileTreeIcon.vue';
+import FileTreeName from './FileTreeName.vue';
 
 interface Props extends /* @vue-ignore */ HTMLAttributes {
-    path: string
-    name: string
-    icon?: VNode
-    class?: HTMLAttributes['class']
+  path: string;
+  name: string;
+  icon?: VNode;
+  class?: HTMLAttributes['class'];
 }
 
-const props = defineProps<Props>()
+const props = defineProps<Props>();
 
-const { selectedPath, onSelect } = useFileTreeContext()
+const { selectedPath, onSelect } = useFileTreeContext();
 
-const isSelected = computed(() => selectedPath.value === props.path)
+const isSelected = computed(() => selectedPath.value === props.path);
 
 provide(FileTreeFileKey, {
-    path: props.path,
-    name: props.name,
-})
+  path: props.path,
+  name: props.name,
+});
 </script>
 
 <template>

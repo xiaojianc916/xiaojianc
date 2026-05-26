@@ -13,11 +13,7 @@
 import type { TThemeMode } from '@/types/app';
 import type { IAppSettings } from '@/types/settings';
 import { getThemeManager } from './index';
-import {
-    ACCENT_STYLE_MAP,
-    RADIUS_VALUE_MAP,
-    UI_DENSITY_SCALE_MAP,
-} from './resolved-theme';
+import { ACCENT_STYLE_MAP, RADIUS_VALUE_MAP, UI_DENSITY_SCALE_MAP } from './resolved-theme';
 
 const hasDocument = (): boolean => typeof document !== 'undefined';
 
@@ -31,40 +27,37 @@ const hasDocument = (): boolean => typeof document !== 'undefined';
  * @param settings   当前应用设置（来自 useAppStore）
  * @param effectiveTheme  已解析的有效主题（'dark' | 'light'，system 已解析）
  */
-export function applyResolvedThemeEffect(
-    settings: IAppSettings,
-    effectiveTheme: TThemeMode,
-): void {
-    if (!hasDocument()) return;
+export function applyResolvedThemeEffect(settings: IAppSettings, effectiveTheme: TThemeMode): void {
+  if (!hasDocument()) return;
 
-    const root = document.documentElement;
-    if (!root) return;
+  const root = document.documentElement;
+  if (!root) return;
 
-    // ── 1. 基础令牌管道：ThemeManager 负责 emitCssVars + html.dark/light 切换 ──
-    getThemeManager().set(effectiveTheme);
+  // ── 1. 基础令牌管道：ThemeManager 负责 emitCssVars + html.dark/light 切换 ──
+  getThemeManager().set(effectiveTheme);
 
-    // ── 2. 用户偏好叠加：覆盖管道产出的默认 accent 等变量 ──────────────────────
-    const accentStyle = ACCENT_STYLE_MAP[settings.appearance.accentColor];
+  // ── 2. 用户偏好叠加：覆盖管道产出的默认 accent 等变量 ──────────────────────
+  const accentStyle = ACCENT_STYLE_MAP[settings.appearance.accentColor];
 
-    // html 数据属性（供选择器 / JS 读取）
-    root.dataset['themePreference'] = settings.appearance.themePreference;
-    root.dataset['uiDensity'] = settings.appearance.uiDensity;
-    root.classList.toggle('reduce-motion', settings.appearance.reduceMotion);
+  // html 数据属性（供选择器 / JS 读取）
+  root.dataset['themePreference'] = settings.appearance.themePreference;
+  root.dataset['uiDensity'] = settings.appearance.uiDensity;
+  root.classList.toggle('reduce-motion', settings.appearance.reduceMotion);
 
-    // accent 系列：覆盖主题管理器注入的默认值
-    root.style.setProperty('--accent', accentStyle.accent);
-    root.style.setProperty('--accent-strong', accentStyle.accentStrong);
-    root.style.setProperty('--accent-muted', accentStyle.accentMuted);
-    root.style.setProperty('--settings-accent', accentStyle.accent);
-    root.style.setProperty('--settings-accent-soft', accentStyle.accentSoft);
-    root.style.setProperty('--settings-accent-muted', accentStyle.accentMuted);
-    root.style.setProperty('--statusbar-accent', accentStyle.statusbarAccent);
+  // accent 系列：覆盖主题管理器注入的默认值
+  root.style.setProperty('--accent', accentStyle.accent);
+  root.style.setProperty('--accent-strong', accentStyle.accentStrong);
+  root.style.setProperty('--accent-muted', accentStyle.accentMuted);
+  root.style.setProperty('--settings-accent', accentStyle.accent);
+  root.style.setProperty('--settings-accent-soft', accentStyle.accentSoft);
+  root.style.setProperty('--settings-accent-muted', accentStyle.accentMuted);
+  root.style.setProperty('--statusbar-accent', accentStyle.statusbarAccent);
 
-    // 几何与排版参数
-    root.style.setProperty('--radius', RADIUS_VALUE_MAP[settings.appearance.radiusPreset]);
-    root.style.setProperty('--app-ui-font-size', `${settings.appearance.interfaceFontSize}px`);
-    root.style.setProperty(
-        '--app-density-scale',
-        UI_DENSITY_SCALE_MAP[settings.appearance.uiDensity],
-    );
+  // 几何与排版参数
+  root.style.setProperty('--radius', RADIUS_VALUE_MAP[settings.appearance.radiusPreset]);
+  root.style.setProperty('--app-ui-font-size', `${settings.appearance.interfaceFontSize}px`);
+  root.style.setProperty(
+    '--app-density-scale',
+    UI_DENSITY_SCALE_MAP[settings.appearance.uiDensity],
+  );
 }

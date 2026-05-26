@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, type HTMLAttributes, type VNode } from 'vue';
 import { cn } from '@/lib/utils';
 import FileTextIcon from '~icons/lucide/file-text';
 import GlobeIcon from '~icons/lucide/globe';
@@ -6,7 +7,6 @@ import ImageIcon from '~icons/lucide/image';
 import Music2Icon from '~icons/lucide/music2';
 import PaperclipIcon from '~icons/lucide/paperclip';
 import VideoIcon from '~icons/lucide/video';
-import { computed, type HTMLAttributes, type VNode } from 'vue';
 import { useAttachmentContext } from './context';
 import type { TAttachmentMediaCategory } from './types';
 
@@ -20,8 +20,8 @@ const props = defineProps<IProps>();
 const { data, mediaCategory, variant } = useAttachmentContext();
 
 const isGrid = computed(() => variant.value === 'grid');
-const iconSize = computed(() => variant.value === 'inline' ? 'size-3' : 'size-4');
-const fileUrl = computed(() => data.value.type === 'file' ? data.value.url : undefined);
+const iconSize = computed(() => (variant.value === 'inline' ? 'size-3' : 'size-4'));
+const fileUrl = computed(() => (data.value.type === 'file' ? data.value.url : undefined));
 const showImage = computed(
   () => mediaCategory.value === 'image' && data.value.type === 'file' && Boolean(fileUrl.value),
 );
@@ -39,8 +39,8 @@ const iconMap: Record<TAttachmentMediaCategory, typeof ImageIcon> = {
 };
 
 const iconComponent = computed(() => iconMap[mediaCategory.value]);
-const imageAlt = computed(() =>
-  (data.value.type === 'file' ? data.value.filename : undefined) || 'Image',
+const imageAlt = computed(
+  () => (data.value.type === 'file' ? data.value.filename : undefined) || 'Image',
 );
 </script>
 

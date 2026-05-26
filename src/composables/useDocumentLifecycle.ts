@@ -45,25 +45,25 @@ const resolveCloseConfirmMessage = (
   if (scene === 'close-workspace') {
     return dirtyDocuments.length === 1
       ? {
-        title: '保存更改？',
-        message: `关闭工作区前，文件“${fileName}”的未保存修改将会丢失。`,
-      }
+          title: '保存更改？',
+          message: `关闭工作区前，文件“${fileName}”的未保存修改将会丢失。`,
+        }
       : {
-        title: '保存更改？',
-        message: `关闭工作区前，${dirtyDocuments.length} 个文件的未保存修改将会丢失。`,
-      };
+          title: '保存更改？',
+          message: `关闭工作区前，${dirtyDocuments.length} 个文件的未保存修改将会丢失。`,
+        };
   }
 
   if (scene === 'switch-workspace') {
     return dirtyDocuments.length === 1
       ? {
-        title: '保存更改？',
-        message: `切换工作区前，文件“${fileName}”的未保存修改将会丢失。`,
-      }
+          title: '保存更改？',
+          message: `切换工作区前，文件“${fileName}”的未保存修改将会丢失。`,
+        }
       : {
-        title: '保存更改？',
-        message: `切换工作区前，${dirtyDocuments.length} 个文件的未保存修改将会丢失。`,
-      };
+          title: '保存更改？',
+          message: `切换工作区前，${dirtyDocuments.length} 个文件的未保存修改将会丢失。`,
+        };
   }
 
   if (dirtyDocuments.length === 1) {

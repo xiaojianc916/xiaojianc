@@ -1,14 +1,15 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import AppSidebar from '@/components/workbench/AppSidebar.vue';
 import type { TWorkbenchSidebarView } from '@/types/app';
 import type {
-    IActiveRunSummary,
-    ICommandTemplate,
-    IEditorDocument,
-    IRunHistoryEntry,
-    IWorkspaceDirectoryPayload,
-    TExecutorKind,
-    TWorkbenchOpenFilePayload,
+  IActiveRunSummary,
+  ICommandTemplate,
+  IEditorDocument,
+  IRunHistoryEntry,
+  IWorkspaceDirectoryPayload,
+  TExecutorKind,
+  TWorkbenchOpenFilePayload,
 } from '@/types/editor';
 import type { IGitDiffPreviewRequest } from '@/types/git';
 import FolderTree from '~icons/lucide/folder-tree';
@@ -16,76 +17,77 @@ import GitBranch from '~icons/lucide/git-branch';
 import LibraryBig from '~icons/lucide/library-big';
 import Search from '~icons/lucide/search';
 import TerminalSquare from '~icons/lucide/terminal-square';
-import { computed, ref, watch } from 'vue';
 import appBrandIcon from '../../../resources/logo.svg';
 
 type TPrimarySidebarView = Exclude<TWorkbenchSidebarView, 'ai'>;
 
 interface ISidebarTabItem {
-    label: string;
-    view: TPrimarySidebarView;
+  label: string;
+  view: TPrimarySidebarView;
 }
 
 type TSidebarSwitchDirection = 'forward' | 'backward' | 'none';
 
 const props = defineProps<{
-    activeView: TWorkbenchSidebarView;
-    isAiMode: boolean;
-    document: IEditorDocument;
-    isDesktopRuntime: boolean;
-    workspaceRootPath: string | null;
-    preloadedWorkspaceRoot: IWorkspaceDirectoryPayload | null;
-    startupExplorerExpandedPaths: string[];
-    startupExplorerSelectedPath: string | null;
-    canRun: boolean;
-    isRunning: boolean;
-    hasRunArtifacts: boolean;
-    activeRun: IActiveRunSummary | null;
-    runHistory: IRunHistoryEntry[];
-    commandTemplates: ICommandTemplate[];
-    executor: TExecutorKind;
+  activeView: TWorkbenchSidebarView;
+  isAiMode: boolean;
+  document: IEditorDocument;
+  isDesktopRuntime: boolean;
+  workspaceRootPath: string | null;
+  preloadedWorkspaceRoot: IWorkspaceDirectoryPayload | null;
+  startupExplorerExpandedPaths: string[];
+  startupExplorerSelectedPath: string | null;
+  canRun: boolean;
+  isRunning: boolean;
+  hasRunArtifacts: boolean;
+  activeRun: IActiveRunSummary | null;
+  runHistory: IRunHistoryEntry[];
+  commandTemplates: ICommandTemplate[];
+  executor: TExecutorKind;
 }>();
 
 const emit = defineEmits<{
-    'select-view': [view: TWorkbenchSidebarView];
-    'toggle-primary-mode': [];
-    'open-file': [payload: TWorkbenchOpenFilePayload];
-    'open-folder': [];
-    'open-git-diff': [payload: IGitDiffPreviewRequest];
-    run: [];
-    'create-document': [];
-    'open-terminal': [];
-    'insert-template': [template: ICommandTemplate];
-    'clear-run-history': [];
-    'explorer-state-change': [payload: { expandedPaths: string[]; selectedPath: string | null }];
+  'select-view': [view: TWorkbenchSidebarView];
+  'toggle-primary-mode': [];
+  'open-file': [payload: TWorkbenchOpenFilePayload];
+  'open-folder': [];
+  'open-git-diff': [payload: IGitDiffPreviewRequest];
+  run: [];
+  'create-document': [];
+  'open-terminal': [];
+  'insert-template': [template: ICommandTemplate];
+  'clear-run-history': [];
+  'explorer-state-change': [payload: { expandedPaths: string[]; selectedPath: string | null }];
 }>();
 
 const sidebarTabs: readonly ISidebarTabItem[] = [
-    { label: '文件', view: 'explorer' },
-    { label: '搜索', view: 'search' },
-    { label: 'Git', view: 'source-control' },
-    { label: '模板', view: 'run' },
-    { label: 'SSH', view: 'extensions' },
+  { label: '文件', view: 'explorer' },
+  { label: '搜索', view: 'search' },
+  { label: 'Git', view: 'source-control' },
+  { label: '模板', view: 'run' },
+  { label: 'SSH', view: 'extensions' },
 ] as const;
 
 const activeTabIndex = computed(() =>
-    Math.max(0, sidebarTabs.findIndex((item) => item.view === props.activeView)),
+  Math.max(
+    0,
+    sidebarTabs.findIndex((item) => item.view === props.activeView),
+  ),
 );
 const switchDirection = ref<TSidebarSwitchDirection>('none');
 
 watch(
-    activeTabIndex,
-    (nextIndex, previousIndex) => {
-        if (previousIndex === undefined || nextIndex === previousIndex) {
-            switchDirection.value = 'none';
-            return;
-        }
+  activeTabIndex,
+  (nextIndex, previousIndex) => {
+    if (previousIndex === undefined || nextIndex === previousIndex) {
+      switchDirection.value = 'none';
+      return;
+    }
 
-        switchDirection.value = nextIndex > previousIndex ? 'forward' : 'backward';
-    },
-    { flush: 'sync' },
+    switchDirection.value = nextIndex > previousIndex ? 'forward' : 'backward';
+  },
+  { flush: 'sync' },
 );
-
 </script>
 
 <template>

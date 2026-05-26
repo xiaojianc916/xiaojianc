@@ -1,9 +1,9 @@
-import AiMarkdown from '@/components/business/ai/chat/AiMarkdown.vue';
-import AiMarkdownCodeBlock from '@/components/business/ai/chat/AiMarkdownCodeBlock.vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import MarkdownRender from 'markstream-vue';
 import { describe, expect, it } from 'vitest';
 import { nextTick } from 'vue';
+import AiMarkdown from '@/components/business/ai/chat/AiMarkdown.vue';
+import AiMarkdownCodeBlock from '@/components/business/ai/chat/AiMarkdownCodeBlock.vue';
 
 const flushRender = async (): Promise<void> => {
   for (let tickIndex = 0; tickIndex < 4; tickIndex += 1) {
@@ -169,7 +169,8 @@ describe('AiMarkdown rendering', () => {
     const wrapper = mount(AiMarkdown, {
       props: {
         messageId: 'm-boxed',
-        content: '$$\\boxed{\\zeta(s)=2^s\\pi^{s-1}\\sin\\left(\\frac{\\pi s}{2}\\right)\\Gamma(1-s)\\zeta(1-s)}$$',
+        content:
+          '$$\\boxed{\\zeta(s)=2^s\\pi^{s-1}\\sin\\left(\\frac{\\pi s}{2}\\right)\\Gamma(1-s)\\zeta(1-s)}$$',
         streamStatus: 'completed',
       },
     });

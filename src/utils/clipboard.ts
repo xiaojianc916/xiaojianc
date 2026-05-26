@@ -1,4 +1,4 @@
-import { formatFileSystemPathForDisplay } from "@/utils/path";
+import { formatFileSystemPathForDisplay } from '@/utils/path';
 
 export const writeClipboardText = async (value: string): Promise<void> => {
   await navigator.clipboard.writeText(value);

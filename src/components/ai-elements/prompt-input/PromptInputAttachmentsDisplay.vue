@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { ImageAttachmentPreviewGrid } from '@/components/ai-elements/image';
 import type { IAiAttachedFile } from '@/types/ai';
-import { computed } from 'vue';
 
 const props = defineProps<{
   attachments: readonly IAiAttachedFile[];

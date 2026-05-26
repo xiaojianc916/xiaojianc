@@ -10,7 +10,10 @@
   color: var(--terminal-muted);
   cursor: default;
   padding: 0;
-  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease;
 }
 
 .ai-terminal-icon-button:hover {

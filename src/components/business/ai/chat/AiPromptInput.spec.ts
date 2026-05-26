@@ -1,9 +1,9 @@
-import AiPromptInput from '@/components/business/ai/chat/AiPromptInput.vue';
-import type { IAiTokenContextProps } from '@/composables/ai/useAiTokenContext';
-import { createDefaultAiConfigPayload } from '@/services/ipc/ai-config.service';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { nextTick } from 'vue';
+import AiPromptInput from '@/components/business/ai/chat/AiPromptInput.vue';
+import type { IAiTokenContextProps } from '@/composables/ai/useAiTokenContext';
+import { createDefaultAiConfigPayload } from '@/services/ipc/ai-config.service';
 
 interface IAiPromptInputTestAttachment {
   id: string;
@@ -114,9 +114,10 @@ describe('AiPromptInput', () => {
 
     expect(wrapper.get('.ai-attachments').element.closest('[data-slot="input-group"]')).toBeNull();
     expect(
-      wrapper.get('.ai-attachments').element.compareDocumentPosition(
-        wrapper.get('.ai-prompt-shell').element,
-      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+      wrapper
+        .get('.ai-attachments')
+        .element.compareDocumentPosition(wrapper.get('.ai-prompt-shell').element) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(wrapper.find('.ai-image-attachment-preview-link').exists()).toBe(true);
     expect(wrapper.find('.ai-image-attachment-preview-link img').attributes('src')).toBe(

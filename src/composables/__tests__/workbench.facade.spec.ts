@@ -3,12 +3,13 @@
  * 目的：拆分前锁定 useWorkbench 对外可观察行为，作为 T-2.6 的安全网。
  * 约束：MUST NOT 依赖真实 Tauri / CodeMirror / xterm。
  */
+
+import { createPinia, setActivePinia } from 'pinia';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { type EffectScope, effectScope } from 'vue';
 import { useAppStore } from '@/store/app';
 import { useEditorStore } from '@/store/editor';
 import { useTerminalRegistryStore } from '@/terminal/registry';
-import { createPinia, setActivePinia } from 'pinia';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { effectScope, type EffectScope } from 'vue';
 import { useWorkbench } from '../useWorkbench';
 
 // ─────────────────────────────────────────────
@@ -24,59 +25,58 @@ const {
   capturedTerminalEventListeners,
   capturedTerminalEventListenerSets,
   mockListen,
-} =
-  vi.hoisted(() => ({
-    capturedTerminalEventListeners: new Map<string, (event: { payload: unknown }) => void>(),
-    capturedTerminalEventListenerSets: new Map<string, Set<(event: { payload: unknown }) => void>>(),
-    mockTauriService: {
-      detectEnvironment: vi.fn(),
-      getGitRepositoryStatus: vi.fn(),
-      listWorkspaceEntries: vi.fn(),
-      loadScript: vi.fn(),
-      saveScript: vi.fn(),
-      pickOpenPath: vi.fn(),
-      pickOpenFolderPath: vi.fn(),
-      pickSavePath: vi.fn(),
-      dispatchScriptToTerminal: vi.fn(),
-      ensureTerminalSession: vi.fn(),
-      writeTerminalInput: vi.fn(),
-      resizeTerminalSession: vi.fn(),
-      cancelTerminalRun: vi.fn(),
-    },
-    mockDialogConfirm: vi.fn<[], Promise<'confirm' | 'cancel' | 'dismiss'>>(),
-    mockMessages: {
-      success: vi.fn(),
-      error: vi.fn(),
-      warning: vi.fn(),
-      info: vi.fn(),
-    },
-    mockAppWindow: { close: vi.fn(() => Promise.resolve()) },
-    mockSessionStore: {
-      saveSession: vi.fn(() => Promise.resolve()),
-    },
-    mockWindowService: {
-      setWindowBackground: vi.fn(() => Promise.resolve()),
-      applyWindowStage: vi.fn(() => Promise.resolve()),
-    },
-    mockListen: vi.fn(async (eventName: string, handler: unknown) => {
-      const typedHandler = handler as (event: { payload: unknown }) => void;
-      const handlers = capturedTerminalEventListenerSets.get(eventName) ?? new Set();
-      handlers.add(typedHandler);
-      capturedTerminalEventListenerSets.set(eventName, handlers);
-      capturedTerminalEventListeners.set(eventName, (event) => {
-        for (const item of handlers) {
-          item(event);
-        }
-      });
-      return () => {
-        handlers.delete(typedHandler);
-        if (handlers.size === 0) {
-          capturedTerminalEventListenerSets.delete(eventName);
-          capturedTerminalEventListeners.delete(eventName);
-        }
-      };
-    }),
-  }));
+} = vi.hoisted(() => ({
+  capturedTerminalEventListeners: new Map<string, (event: { payload: unknown }) => void>(),
+  capturedTerminalEventListenerSets: new Map<string, Set<(event: { payload: unknown }) => void>>(),
+  mockTauriService: {
+    detectEnvironment: vi.fn(),
+    getGitRepositoryStatus: vi.fn(),
+    listWorkspaceEntries: vi.fn(),
+    loadScript: vi.fn(),
+    saveScript: vi.fn(),
+    pickOpenPath: vi.fn(),
+    pickOpenFolderPath: vi.fn(),
+    pickSavePath: vi.fn(),
+    dispatchScriptToTerminal: vi.fn(),
+    ensureTerminalSession: vi.fn(),
+    writeTerminalInput: vi.fn(),
+    resizeTerminalSession: vi.fn(),
+    cancelTerminalRun: vi.fn(),
+  },
+  mockDialogConfirm: vi.fn<[], Promise<'confirm' | 'cancel' | 'dismiss'>>(),
+  mockMessages: {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+  },
+  mockAppWindow: { close: vi.fn(() => Promise.resolve()) },
+  mockSessionStore: {
+    saveSession: vi.fn(() => Promise.resolve()),
+  },
+  mockWindowService: {
+    setWindowBackground: vi.fn(() => Promise.resolve()),
+    applyWindowStage: vi.fn(() => Promise.resolve()),
+  },
+  mockListen: vi.fn(async (eventName: string, handler: unknown) => {
+    const typedHandler = handler as (event: { payload: unknown }) => void;
+    const handlers = capturedTerminalEventListenerSets.get(eventName) ?? new Set();
+    handlers.add(typedHandler);
+    capturedTerminalEventListenerSets.set(eventName, handlers);
+    capturedTerminalEventListeners.set(eventName, (event) => {
+      for (const item of handlers) {
+        item(event);
+      }
+    });
+    return () => {
+      handlers.delete(typedHandler);
+      if (handlers.size === 0) {
+        capturedTerminalEventListenerSets.delete(eventName);
+        capturedTerminalEventListeners.delete(eventName);
+      }
+    };
+  }),
+}));
 
 vi.mock('@/services/tauri', () => ({
   tauriService: mockTauriService,
@@ -352,14 +352,16 @@ describe('useWorkbench 特征化快照', () => {
         rootName: 'workspace',
         entries: [],
       });
-      mockTauriService.loadScript.mockImplementation((path: string) => Promise.resolve({
-        path,
-        name: path.endsWith('a.sh') ? 'a.sh' : 'b.sh',
-        content: '#!/bin/bash\necho ok',
-        encoding: 'utf-8',
-        lineCount: 2,
-        charCount: 20,
-      }));
+      mockTauriService.loadScript.mockImplementation((path: string) =>
+        Promise.resolve({
+          path,
+          name: path.endsWith('a.sh') ? 'a.sh' : 'b.sh',
+          content: '#!/bin/bash\necho ok',
+          encoding: 'utf-8',
+          lineCount: 2,
+          charCount: 20,
+        }),
+      );
 
       await workbench.restoreSession();
 

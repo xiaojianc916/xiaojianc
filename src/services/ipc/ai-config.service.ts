@@ -5,11 +5,7 @@ import {
   DEFAULT_PROVIDER_TYPE,
   findAiServicePlatformByModel,
 } from '@/constants/ai/providers';
-import type {
-  IAiConfigPayload,
-  IAiModelEndpointConfigPayload,
-  TAiModelRole,
-} from '@/types/ai';
+import type { IAiConfigPayload, IAiModelEndpointConfigPayload, TAiModelRole } from '@/types/ai';
 
 /**
  * 取出指定 model 的 base URL。
@@ -52,9 +48,7 @@ export const createDefaultAiConfigPayload = (): IAiConfigPayload => ({
   credentials: [],
 });
 
-export const cloneAiConfigPayload = (
-  config: IAiConfigPayload,
-): IAiConfigPayload => ({
+export const cloneAiConfigPayload = (config: IAiConfigPayload): IAiConfigPayload => ({
   ...config,
   narrator: { ...config.narrator },
 });
@@ -63,9 +57,7 @@ export const cloneAiConfigPayload = (
  * 把 IAiConfigPayload 的 "main" 端点字段(扁平存储)抽取成 endpoint payload 形状。
  * 单独抽出来,确保 `getAiModelEndpointConfig` 两条分支返回的对象身份一致(都是新对象)。
  */
-const extractMainEndpointConfig = (
-  config: IAiConfigPayload,
-): IAiModelEndpointConfigPayload => ({
+const extractMainEndpointConfig = (config: IAiConfigPayload): IAiModelEndpointConfigPayload => ({
   providerType: config.providerType,
   selectedModel: config.selectedModel,
   baseUrl: config.baseUrl,
@@ -111,8 +103,7 @@ export const getAiModelEndpointConfig = (
 export const patchAiModelEndpointConfig = (
   config: IAiConfigPayload,
   role: TAiModelRole,
-  patch: Partial<Pick<IAiModelEndpointConfigPayload,
-    'providerType' | 'selectedModel' | 'baseUrl'>>,
+  patch: Partial<Pick<IAiModelEndpointConfigPayload, 'providerType' | 'selectedModel' | 'baseUrl'>>,
 ): void => {
   switch (role) {
     case 'narrator':

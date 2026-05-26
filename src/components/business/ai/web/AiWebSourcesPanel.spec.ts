@@ -37,9 +37,7 @@ describe('AiWebSourcesPanel', () => {
     await wrapper.find('input[type="search"]').setValue('Tauri capability docs');
     await wrapper.find('form').trigger('submit');
 
-    expect(wrapper.emitted('search')).toEqual([
-      ['Tauri capability docs'],
-    ]);
+    expect(wrapper.emitted('search')).toEqual([['Tauri capability docs']]);
   });
 
   it('展示搜索来源并支持读取网页', async () => {
@@ -53,9 +51,7 @@ describe('AiWebSourcesPanel', () => {
 
     await wrapper.find('.ai-web-source-action').trigger('click');
 
-    expect(wrapper.emitted('fetchSource')).toEqual([
-      ['web-source-1'],
-    ]);
+    expect(wrapper.emitted('fetchSource')).toEqual([['web-source-1']]);
   });
 
   it('单个网页读取失败时在来源卡片内展示局部错误', () => {

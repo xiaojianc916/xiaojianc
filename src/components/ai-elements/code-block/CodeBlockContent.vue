@@ -1,8 +1,15 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
 import type { BundledLanguage, ThemedToken } from 'shiki';
 import { computed, ref, watch } from 'vue';
-import { createRawTokens, highlightCode, type ITokenizedCode, isBold, isItalic, isUnderline } from './utils';
+import { cn } from '@/lib/utils';
+import {
+  createRawTokens,
+  highlightCode,
+  type ITokenizedCode,
+  isBold,
+  isItalic,
+  isUnderline,
+} from './utils';
 
 const props = withDefaults(
   defineProps<{

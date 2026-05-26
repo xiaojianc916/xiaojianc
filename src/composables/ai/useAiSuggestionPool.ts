@@ -1,3 +1,8 @@
+import { onScopeDispose, type Ref, readonly, ref, watch } from 'vue';
+import {
+  normalizeSuggestionPool,
+  pickSuggestionBatch,
+} from '@/components/business/ai/suggestion/suggestion-selection';
 import {
   AI_ASSISTANT_FALLBACK_SUGGESTIONS,
   AI_SUGGESTION_BATCH_SIZE,
@@ -9,17 +14,6 @@ import {
 import { aiService } from '@/services/ipc/ai.service';
 import type { IAiSuggestionPoolPayload, IAiSuggestionPoolRequest } from '@/types/ai';
 import { toErrorMessage } from '@/utils/error';
-import {
-  normalizeSuggestionPool,
-  pickSuggestionBatch,
-} from '@/components/business/ai/suggestion/suggestion-selection';
-import {
-  onScopeDispose,
-  readonly,
-  ref,
-  watch,
-  type Ref,
-} from 'vue';
 
 interface IAiSuggestionPoolService {
   getSuggestionPoolCache(): Promise<IAiSuggestionPoolPayload | null>;
@@ -39,8 +33,10 @@ const SUGGESTION_REFRESH_WINDOW_MINUTES = AI_SUGGESTION_REFRESH_INTERVAL_MS / MS
 const SUGGESTION_REFRESH_RETRY_DELAYS_MS = [1500, 3000, 5000, 9000, 16000, 30000, 60000] as const;
 
 const getUltimateFallbackPool = (): string[] =>
-  normalizeSuggestionPool(AI_ASSISTANT_FALLBACK_SUGGESTIONS, AI_SUGGESTION_LOCALE)
-    .slice(0, AI_SUGGESTION_POOL_SIZE);
+  normalizeSuggestionPool(AI_ASSISTANT_FALLBACK_SUGGESTIONS, AI_SUGGESTION_LOCALE).slice(
+    0,
+    AI_SUGGESTION_POOL_SIZE,
+  );
 
 const ULTIMATE_FALLBACK_POOL = getUltimateFallbackPool();
 
@@ -88,11 +84,13 @@ export const useAiSuggestionPool = (options: IUseAiSuggestionPoolOptions = {}) =
   const now = options.now ?? Date.now;
   const isRefreshEnabled = options.isRefreshEnabled ?? ref(false);
   const suggestionPool = ref<string[]>(ULTIMATE_FALLBACK_POOL);
-  const suggestions = ref<string[]>(pickSuggestionBatch(suggestionPool.value, ULTIMATE_FALLBACK_POOL, {
-    batchSize: AI_SUGGESTION_BATCH_SIZE,
-    locale: AI_SUGGESTION_LOCALE,
-    random,
-  }));
+  const suggestions = ref<string[]>(
+    pickSuggestionBatch(suggestionPool.value, ULTIMATE_FALLBACK_POOL, {
+      batchSize: AI_SUGGESTION_BATCH_SIZE,
+      locale: AI_SUGGESTION_LOCALE,
+      random,
+    }),
+  );
   const isRefreshing = ref(false);
   const refreshErrorMessage = ref('');
   let refreshTimer: ReturnType<typeof window.setTimeout> | null = null;
@@ -143,8 +141,10 @@ export const useAiSuggestionPool = (options: IUseAiSuggestionPoolOptions = {}) =
   };
 
   const applyLocalPool = (pool: readonly string[]): boolean => {
-    const normalizedPool = normalizeSuggestionPool(pool, AI_SUGGESTION_LOCALE)
-      .slice(0, AI_SUGGESTION_POOL_SIZE);
+    const normalizedPool = normalizeSuggestionPool(pool, AI_SUGGESTION_LOCALE).slice(
+      0,
+      AI_SUGGESTION_POOL_SIZE,
+    );
 
     if (normalizedPool.length < AI_SUGGESTION_BATCH_SIZE) {
       return false;
@@ -221,8 +221,10 @@ export const useAiSuggestionPool = (options: IUseAiSuggestionPoolOptions = {}) =
         locale: AI_SUGGESTION_LOCALE,
         topics: [...AI_SUGGESTION_TOPICS],
       });
-      const generatedPool = normalizeSuggestionPool(payload.suggestions, AI_SUGGESTION_LOCALE)
-        .slice(0, AI_SUGGESTION_POOL_SIZE);
+      const generatedPool = normalizeSuggestionPool(
+        payload.suggestions,
+        AI_SUGGESTION_LOCALE,
+      ).slice(0, AI_SUGGESTION_POOL_SIZE);
 
       if (generatedPool.length < AI_SUGGESTION_BATCH_SIZE) {
         throw new Error('小模型返回的提示词数量不足，已保留本地提示词池。');
@@ -231,7 +233,8 @@ export const useAiSuggestionPool = (options: IUseAiSuggestionPoolOptions = {}) =
       applyLocalPool(generatedPool);
       activePoolGeneratedAt = payload.generatedAt;
       refreshErrorMessage.value = '';
-      refreshRetryWindowKey = resolveGeneratedAtWindowKey(payload.generatedAt) ?? refreshRetryWindowKey;
+      refreshRetryWindowKey =
+        resolveGeneratedAtWindowKey(payload.generatedAt) ?? refreshRetryWindowKey;
       refreshRetryAttempt = 0;
     } catch (error) {
       refreshErrorMessage.value = toErrorMessage(error, '提示词池刷新失败。');

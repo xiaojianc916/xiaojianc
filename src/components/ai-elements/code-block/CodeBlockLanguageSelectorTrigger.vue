@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import type { HTMLAttributes } from 'vue';
 import { SelectTrigger } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import type { HTMLAttributes } from 'vue';
 
 interface IProps {
   class?: HTMLAttributes['class'];

@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
 import type { HTMLAttributes } from 'vue';
 import { computed, inject } from 'vue';
+import { cn } from '@/lib/utils';
 import { TerminalKey } from './context';
 
 const props = defineProps<{ class?: HTMLAttributes['class'] }>();
 const terminal = inject(TerminalKey);
-const label = computed(() => terminal?.isStreaming.value ? '运行中' : '已完成');
+const label = computed(() => (terminal?.isStreaming.value ? '运行中' : '已完成'));
 </script>
 
 <template>

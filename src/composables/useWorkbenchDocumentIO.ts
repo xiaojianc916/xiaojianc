@@ -25,13 +25,8 @@ type TRestoredSessionTab = {
   order: number;
 };
 
-type TRestorableSessionSnapshot = Pick<
-  TSessionSnapshot,
-  'workspaceRoot' | 'activeTabPath'
-> & {
-  openTabs: Array<
-    Pick<TSessionSnapshot['openTabs'][number], 'path' | 'order' | 'kind'>
-  >;
+type TRestorableSessionSnapshot = Pick<TSessionSnapshot, 'workspaceRoot' | 'activeTabPath'> & {
+  openTabs: Array<Pick<TSessionSnapshot['openTabs'][number], 'path' | 'order' | 'kind'>>;
 };
 
 interface IUseWorkbenchDocumentIOOptions {
@@ -53,10 +48,7 @@ interface IUseWorkbenchDocumentIOOptions {
 const MAX_OPEN_TABS = 30;
 
 /** 文件 / 图片打开后的日志短语。 */
-const ACTION_LABEL_TABLE: Record<
-  TWorkbenchOpenTarget,
-  { reused: string; opened: string }
-> = {
+const ACTION_LABEL_TABLE: Record<TWorkbenchOpenTarget, { reused: string; opened: string }> = {
   image: { reused: '切换到已打开图片', opened: '已加载图片' },
   file: { reused: '切换到已打开文件', opened: '已加载文件' },
 };
@@ -76,12 +68,10 @@ const TOAST_TEMPLATE_TABLE: Record<
   },
 };
 
-const buildLogDetail = (title: string, detail: string): string =>
-  `${title}：${detail}`;
+const buildLogDetail = (title: string, detail: string): string => `${title}：${detail}`;
 
-const isRestoredSessionTab = (
-  value: TRestoredSessionTab | null,
-): value is TRestoredSessionTab => value !== null;
+const isRestoredSessionTab = (value: TRestoredSessionTab | null): value is TRestoredSessionTab =>
+  value !== null;
 
 const isSameGitDiffPreview = (
   left: IGitDiffPreviewPayload,
@@ -92,9 +82,7 @@ const resolveSessionTabKind = (
   tab: TRestorableSessionSnapshot['openTabs'][number],
 ): TSessionTabKind => tab.kind ?? (isImageAssetPath(tab.path) ? 'image' : 'text');
 
-const pickRestorableSessionSnapshot = (
-  snapshot: TSessionSnapshot,
-): TRestorableSessionSnapshot => ({
+const pickRestorableSessionSnapshot = (snapshot: TSessionSnapshot): TRestorableSessionSnapshot => ({
   workspaceRoot: snapshot.workspaceRoot,
   activeTabPath: snapshot.activeTabPath,
   openTabs: snapshot.openTabs.map(({ path, order, kind }) => ({
@@ -230,9 +218,7 @@ export const useWorkbenchDocumentIO = ({
         }
       }),
     );
-    return loadedTabs
-      .filter(isRestoredSessionTab)
-      .sort((left, right) => left.order - right.order);
+    return loadedTabs.filter(isRestoredSessionTab).sort((left, right) => left.order - right.order);
   };
 
   /** 把单个还原后的 tab 派发回 editorStore，分支语义与原版一致。 */
@@ -248,9 +234,7 @@ export const useWorkbenchDocumentIO = ({
 
   const restoreActiveDocument = (activePath: string | null): void => {
     if (activePath) {
-      const activeDocument = editorStore.documents.find(
-        (item) => item.path === activePath,
-      );
+      const activeDocument = editorStore.documents.find((item) => item.path === activePath);
       if (activeDocument) {
         editorStore.setActiveDocument(activeDocument.id);
         return;
@@ -294,11 +278,7 @@ export const useWorkbenchDocumentIO = ({
     const nextDocument = editorStore.createDocumentTab({
       content: buildDefaultScriptContent(),
     });
-    editorStore.appendLog(
-      'info',
-      '新建脚本',
-      `已创建新的脚本草稿：${nextDocument.name}。`,
-    );
+    editorStore.appendLog('info', '新建脚本', `已创建新的脚本草稿：${nextDocument.name}。`);
     notifier.success('已创建新的脚本草稿');
   };
 
@@ -327,11 +307,7 @@ export const useWorkbenchDocumentIO = ({
       editorStore.setWorkspaceRootPath(path);
       void refreshGitRepositoryStatus(path);
 
-      editorStore.appendLog(
-        'success',
-        '打开文件夹',
-        buildLogDetail('资源目录', path),
-      );
+      editorStore.appendLog('success', '打开文件夹', buildLogDetail('资源目录', path));
       notifier.success(`已打开文件夹 ${getPathBaseName(path)}`);
     } catch (error) {
       reportError('打开文件夹失败', error, '打开文件夹失败');
@@ -373,7 +349,9 @@ export const useWorkbenchDocumentIO = ({
       );
 
       editorStore.appendLog(preview.isEmpty ? 'info' : 'success', '查看 Git Diff', detail);
-      notifier.success(preview.isEmpty ? '没有可显示的 Diff' : `已打开 Diff ${preview.relativePath}`);
+      notifier.success(
+        preview.isEmpty ? '没有可显示的 Diff' : `已打开 Diff ${preview.relativePath}`,
+      );
     } catch (error) {
       reportError('打开 Git Diff 失败', error, '打开 Git Diff 失败');
     }

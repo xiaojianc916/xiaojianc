@@ -1,7 +1,7 @@
-import { AppError } from '@/types/app-error';
 import { invoke } from '@tauri-apps/api/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { AppError } from '@/types/app-error';
 import { defineIpc, tauriService } from './tauri';
 import { zTauriVoid } from './tauri.contracts';
 
@@ -339,11 +339,13 @@ describe('tauriService', () => {
       result: 'sidecar plan ready',
     });
 
-    await expect(tauriService.agentSidecarPlan({
-      goal: '你修改一下',
-      messages: [{ role: 'user', content: '你修改一下' }],
-      context: [],
-    })).resolves.toMatchObject({
+    await expect(
+      tauriService.agentSidecarPlan({
+        goal: '你修改一下',
+        messages: [{ role: 'user', content: '你修改一下' }],
+        context: [],
+      }),
+    ).resolves.toMatchObject({
       events: [
         expect.objectContaining({
           type: 'plan_ready',

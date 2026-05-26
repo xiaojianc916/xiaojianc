@@ -1,5 +1,5 @@
-import { v7 as uuidv7 } from 'uuid';
 import { Store } from '@tauri-apps/plugin-store';
+import { v7 as uuidv7 } from 'uuid';
 
 import { AppError } from '@/types/app-error';
 import { SessionSnapshotSchema, type TSessionSnapshot } from '@/types/session';
@@ -140,10 +140,7 @@ const writeFallbackSnapshot = (snapshot: TSessionSnapshot): void => {
   if (!isFallbackStorageAvailable()) {
     throw new Error('fallback storage unavailable');
   }
-  window.localStorage.setItem(
-    SESSION_FALLBACK_STORAGE_KEY,
-    JSON.stringify(snapshot),
-  );
+  window.localStorage.setItem(SESSION_FALLBACK_STORAGE_KEY, JSON.stringify(snapshot));
 };
 
 const clearFallbackSnapshot = (): void => {
@@ -182,10 +179,7 @@ const migrate = (raw: TRawSnapshot): TRawSnapshot | null => {
 };
 
 /** migrate + schema parse 的统一管线;校验失败返回 null 并打 warn。 */
-const validateRawSnapshot = (
-  raw: TRawSnapshot,
-  invalidEvent: string,
-): TSessionSnapshot | null => {
+const validateRawSnapshot = (raw: TRawSnapshot, invalidEvent: string): TSessionSnapshot | null => {
   const migrated = migrate(raw);
   if (migrated == null) {
     return null;

@@ -1,4 +1,3 @@
-import type { IEditorSettings } from '@/types/settings';
 import { closeBrackets } from '@codemirror/autocomplete';
 import { foldGutter, indentUnit } from '@codemirror/language';
 import { EditorState, type Extension } from '@codemirror/state';
@@ -9,6 +8,7 @@ import {
   highlightActiveLineGutter,
   lineNumbers,
 } from '@codemirror/view';
+import type { IEditorSettings } from '@/types/settings';
 
 export const resolveCodeMirrorIndentUnit = (editorSettings: IEditorSettings): string => {
   const tabSize = Math.max(1, editorSettings.tabSize);

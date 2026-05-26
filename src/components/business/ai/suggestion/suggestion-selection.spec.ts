@@ -1,11 +1,11 @@
+import { describe, expect, it } from 'vitest';
 import {
+  type IAiSuggestionSelectionItem,
   mmr,
   pickSuggestionBatch,
   resolveSuggestionHead,
   resolveSuggestionShape,
-  type IAiSuggestionSelectionItem,
 } from '@/components/business/ai/suggestion/suggestion-selection';
-import { describe, expect, it } from 'vitest';
 
 const createItems = (heads: string[]): IAiSuggestionSelectionItem[] =>
   heads.map((head, index) => ({
@@ -70,9 +70,7 @@ describe('ai-suggestion-selection', () => {
       random: () => 0.42,
     });
 
-    const repeatedMainCount = picked.filter((item) =>
-      item.startsWith('如何选择合适的'),
-    ).length;
+    const repeatedMainCount = picked.filter((item) => item.startsWith('如何选择合适的')).length;
     const shapeSet = new Set(picked.map((item) => resolveSuggestionShape(item)));
 
     expect(picked).toHaveLength(9);

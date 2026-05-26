@@ -162,9 +162,10 @@ export class TerminalRunStore {
       return record.cachedOutput;
     }
     const ordered = this.resolveChunks(record);
-    const output = ordered.length === record.chunks.length && ordered === record.chunks
-      ? this.joinChunks(record.chunks)
-      : this.joinChunks(ordered);
+    const output =
+      ordered.length === record.chunks.length && ordered === record.chunks
+        ? this.joinChunks(record.chunks)
+        : this.joinChunks(ordered);
     record.cachedOutput = output;
     return output;
   }

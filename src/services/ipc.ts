@@ -1,9 +1,5 @@
-import {
-  defineIpc,
-  type IIpcCallOptions,
-  type TIpcAuditLevel,
-} from '@/services/tauri';
-import { z } from 'zod';
+import type { z } from 'zod';
+import { defineIpc, type IIpcCallOptions, type TIpcAuditLevel } from '@/services/tauri';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -90,10 +86,7 @@ export interface IIpcOptions<TInSchema extends z.ZodTypeAny> extends IIpcCallOpt
  * );
  * ```
  */
-export const ipc = async <
-  TInSchema extends z.ZodTypeAny,
-  TOutSchema extends z.ZodTypeAny,
->(
+export const ipc = async <TInSchema extends z.ZodTypeAny, TOutSchema extends z.ZodTypeAny>(
   command: string,
   input: z.input<TInSchema>,
   inputSchema: TInSchema,

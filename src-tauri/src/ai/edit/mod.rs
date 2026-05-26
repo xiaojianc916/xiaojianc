@@ -1,4 +1,4 @@
-﻿pub mod apply;
+pub mod apply;
 pub mod errors;
 pub mod history;
 pub mod io;
@@ -410,9 +410,9 @@ pub fn create_snapshot(
     let snapshot_sources = file_buffers
         .iter()
         .map(|file| snapshot::SnapshotSourceFile {
-            path: file.0.as_str(),
-            content_hash: file.1.as_str(),
-            content: file.2.as_str(),
+            path: &file.0,
+            content_hash: &file.1,
+            content: &file.2,
         })
         .collect::<Vec<_>>();
     let metadata = AiApplyPatchMetadataRequest {
@@ -433,10 +433,10 @@ pub fn create_snapshot(
     tracing::info!(
         target: "ai.audit",
         event = "ai.edit.checkpoint_created",
-        snapshot_id = snapshot.id.as_str(),
-        task_id = snapshot.task_id.as_str(),
+        snapshot_id = &snapshot.id,
+        task_id = &snapshot.task_id,
         file_count = snapshot.file_refs.len(),
-        label = snapshot.label.as_str(),
+        label = &snapshot.label,
         "AI edit checkpoint created"
     );
     audit::emit(AiAuditEventKind::AiEditCheckpointCreated);
@@ -646,12 +646,12 @@ mod tests {
             let snapshot_payload = snapshot::store_manual_snapshot(
                 &storage_root,
                 &[snapshot::SnapshotSourceFile {
-                    path: path.as_str(),
-                    content_hash: content_hash.as_str(),
-                    content: content.as_str(),
+                    path: &path,
+                    content_hash: &content_hash,
+                    content: &content,
                 }],
                 None,
-                label.as_str(),
+                &label,
             )
             .expect("snapshot should be written");
             super::append_snapshot(&state, &storage_root, snapshot_payload)

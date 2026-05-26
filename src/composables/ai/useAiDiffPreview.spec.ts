@@ -1,10 +1,9 @@
-import { computed } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
-
+import { computed } from 'vue';
+import { buildAiAedDiffRef } from '@/components/business/ai/edit/diff-ref';
+import { useAiDiffPreview } from '@/composables/ai/useAiDiffPreview';
 import { aiService } from '@/services/ipc/ai.service';
 import type { IAiDiffEditorPreview } from '@/types/ai';
-import { useAiDiffPreview } from '@/composables/ai/useAiDiffPreview';
-import { buildAiAedDiffRef } from '@/components/business/ai/edit/diff-ref';
 
 vi.mock('@/services/ipc/ai.service', () => ({
   aiService: {
@@ -29,22 +28,25 @@ describe('useAiDiffPreview', () => {
       kind: 'modify',
       additions: 1,
       deletions: 1,
-      hunks: [{
-        hunkIndex: 0,
-        oldStart: 1,
-        oldLines: 1,
-        newStart: 1,
-        newLines: 1,
-        lines: [
-          "-const mode = 'chat'",
-          "+const mode = 'agent'",
-        ],
-      }],
+      hunks: [
+        {
+          hunkIndex: 0,
+          oldStart: 1,
+          oldLines: 1,
+          newStart: 1,
+          newLines: 1,
+          lines: ["-const mode = 'chat'", "+const mode = 'agent'"],
+        },
+      ],
     });
-    const preview = computed(() => createPreview(buildAiAedDiffRef({
-      taskId: 'task-1',
-      path: 'src/agent/runtime.ts',
-    })));
+    const preview = computed(() =>
+      createPreview(
+        buildAiAedDiffRef({
+          taskId: 'task-1',
+          path: 'src/agent/runtime.ts',
+        }),
+      ),
+    );
     const state = useAiDiffPreview(preview);
 
     await state.load();

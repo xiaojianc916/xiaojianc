@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import {
   Conversation,
   ConversationContent,
@@ -8,7 +9,6 @@ import {
 import { Message } from '@/components/ai-elements/message';
 import type { TAiServicePlatformId } from '@/constants/ai/providers';
 import type { IAiChatMessage, TAiChatMessageActionId } from '@/types/ai';
-import { computed } from 'vue';
 import ArchiveIcon from '~icons/lucide/archive';
 import MessageSquareIcon from '~icons/lucide/message-square';
 import AiMessageItem from './AiMessageItem.vue';
@@ -21,27 +21,30 @@ interface IAiChatScrollState {
   distanceFromBottom: number;
 }
 
-const props = withDefaults(defineProps<{
-  messages: IAiChatMessage[];
-  isTyping: boolean;
-  platformId: TAiServicePlatformId;
-  providerLabel: string;
-  typingLabel?: string;
-  conversationId?: string | null;
-  workspaceRootPath?: string | null;
-  scrollState?: IAiChatScrollState | null;
-  hasExtraContent?: boolean;
-  revertingChangedFilesSummaryId?: string | null;
-  pinningChangedFilesSummaryId?: string | null;
-}>(), {
-  typingLabel: '正在思考',
-  conversationId: null,
-  workspaceRootPath: null,
-  scrollState: null,
-  hasExtraContent: false,
-  revertingChangedFilesSummaryId: null,
-  pinningChangedFilesSummaryId: null,
-});
+const props = withDefaults(
+  defineProps<{
+    messages: IAiChatMessage[];
+    isTyping: boolean;
+    platformId: TAiServicePlatformId;
+    providerLabel: string;
+    typingLabel?: string;
+    conversationId?: string | null;
+    workspaceRootPath?: string | null;
+    scrollState?: IAiChatScrollState | null;
+    hasExtraContent?: boolean;
+    revertingChangedFilesSummaryId?: string | null;
+    pinningChangedFilesSummaryId?: string | null;
+  }>(),
+  {
+    typingLabel: '正在思考',
+    conversationId: null,
+    workspaceRootPath: null,
+    scrollState: null,
+    hasExtraContent: false,
+    revertingChangedFilesSummaryId: null,
+    pinningChangedFilesSummaryId: null,
+  },
+);
 
 const emit = defineEmits<{
   messageAction: [messageId: string, actionId: TAiChatMessageActionId];
@@ -79,7 +82,8 @@ const shouldRenderStandaloneTyping = computed(
   () => props.isTyping && !hasInlineProgressMessage.value,
 );
 const shouldRenderEmptyState = computed(
-  () => props.messages.length === 0 && !props.hasExtraContent && !shouldRenderStandaloneTyping.value,
+  () =>
+    props.messages.length === 0 && !props.hasExtraContent && !shouldRenderStandaloneTyping.value,
 );
 
 const lastAssistantMessageId = computed(() => {
@@ -93,8 +97,8 @@ const lastAssistantMessageId = computed(() => {
 
   return null;
 });
-const conversationInitialScroll = computed(() => props.scrollState ? false : true);
-const conversationResizeMode = computed(() => props.isTyping ? undefined : 'instant');
+const conversationInitialScroll = computed(() => (props.scrollState ? false : true));
+const conversationResizeMode = computed(() => (props.isTyping ? undefined : 'instant'));
 
 const handleMessageAction = (messageId: string, actionId: TAiChatMessageActionId): void => {
   emit('messageAction', messageId, actionId);
@@ -113,7 +117,9 @@ const handleScrollStateChange = (state: IAiChatScrollState): void => {
 };
 
 const hasContextCompressionMarker = (message: IAiChatMessage): boolean =>
-  Boolean(message.stream?.runtimeEvents?.some((event) => event.type === CONTEXT_COMPRESSION_EVENT_TYPE));
+  Boolean(
+    message.stream?.runtimeEvents?.some((event) => event.type === CONTEXT_COMPRESSION_EVENT_TYPE),
+  );
 </script>
 
 <template>

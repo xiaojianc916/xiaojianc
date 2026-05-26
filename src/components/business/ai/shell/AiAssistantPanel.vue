@@ -1,26 +1,28 @@
 <script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import Checkpoint from '@/components/ai-elements/checkpoint/Checkpoint.vue';
 import CheckpointIcon from '@/components/ai-elements/checkpoint/CheckpointIcon.vue';
 import CheckpointTrigger from '@/components/ai-elements/checkpoint/CheckpointTrigger.vue';
 import { Loader } from '@/components/ai-elements/loader';
 import AiChatThread from '@/components/business/ai/chat/AiChatThread.vue';
-import AiFloatingSuggestions from '@/components/business/ai/suggestion/AiFloatingSuggestions.vue';
+import AiPromptInput from '@/components/business/ai/chat/AiPromptInput.vue';
 import AiPatchPreview from '@/components/business/ai/edit/AiPatchPreview.vue';
 import AiPlanConfirmationMessage from '@/components/business/ai/plan/AiPlanConfirmationMessage.vue';
 import AiPlanModePanel from '@/components/business/ai/plan/AiPlanModePanel.vue';
-import AiPromptInput from '@/components/business/ai/chat/AiPromptInput.vue';
 import AiProviderIcon from '@/components/business/ai/provider/AiProviderIcon.vue';
 import AiProviderSettings from '@/components/business/ai/provider/AiProviderSettings.vue';
 import AiToolConfirmationCard from '@/components/business/ai/shell/AiToolConfirmationCard.vue';
+import AiFloatingSuggestions from '@/components/business/ai/suggestion/AiFloatingSuggestions.vue';
 import AiWebSourcesPanel from '@/components/business/ai/web/AiWebSourcesPanel.vue';
 import { useAiAgentNetwork } from '@/composables/ai/useAiAgentNetwork';
 import { useAiAgentRun } from '@/composables/ai/useAiAgentRun';
-import { useAiAssistant, type IAiConversationCheckpoint } from '@/composables/ai/useAiAssistant';
+import { type IAiConversationCheckpoint, useAiAssistant } from '@/composables/ai/useAiAssistant';
 import { useAiSuggestionPool } from '@/composables/ai/useAiSuggestionPool';
 import { useAiTokenContext } from '@/composables/ai/useAiTokenContext';
 import { useAiWebSources } from '@/composables/ai/useAiWebSources';
 import { findAiServicePlatformByModel } from '@/constants/ai/providers';
 import { aiService } from '@/services/ipc/ai.service';
+import { cloneAiConfigPayload, resolveDefaultAiBaseUrl } from '@/services/ipc/ai-config.service';
 import type {
   IAiAgentRun,
   IAiAgentStepFinalAnswer,
@@ -40,11 +42,9 @@ import type {
   IEditorSelectionSummary,
 } from '@/types/editor';
 import type { IGitDiffPreviewPayload, IGitRepositoryStatusPayload } from '@/types/git';
-import { cloneAiConfigPayload, resolveDefaultAiBaseUrl } from '@/services/ipc/ai-config.service';
 import { toErrorMessage } from '@/utils/error';
 import SquarePen from '~icons/lucide/square-pen';
 import Trash2 from '~icons/lucide/trash2';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 const MAX_HISTORY_MESSAGES = 20;
 const props = defineProps<{
@@ -111,28 +111,37 @@ const providerMarkTitle = computed(() => {
 
   return `${aiIconTitle.value} · ${selectedModel}`;
 });
-const historyThreads = computed(() => assistant.historyThreads.value.slice(-MAX_HISTORY_MESSAGES).reverse());
-const activeHistoryThread = computed(() =>
-  assistant.historyThreads.value.find((thread) => thread.id === assistant.activeConversationId.value) ?? null,
+const historyThreads = computed(() =>
+  assistant.historyThreads.value.slice(-MAX_HISTORY_MESSAGES).reverse(),
 );
-const pendingDeleteThread = computed(() =>
-  assistant.historyThreads.value.find((thread) => thread.id === pendingDeleteThreadId.value) ?? null,
+const activeHistoryThread = computed(
+  () =>
+    assistant.historyThreads.value.find(
+      (thread) => thread.id === assistant.activeConversationId.value,
+    ) ?? null,
 );
-const conversationCheckpointByMessageId = computed<Record<string, IAiConversationCheckpoint>>(() => {
-  const checkpointMap: Record<string, IAiConversationCheckpoint> = {};
+const pendingDeleteThread = computed(
+  () =>
+    assistant.historyThreads.value.find((thread) => thread.id === pendingDeleteThreadId.value) ??
+    null,
+);
+const conversationCheckpointByMessageId = computed<Record<string, IAiConversationCheckpoint>>(
+  () => {
+    const checkpointMap: Record<string, IAiConversationCheckpoint> = {};
 
-  assistant.conversationCheckpoints.value.forEach((checkpoint) => {
-    checkpointMap[checkpoint.messageId] = checkpoint;
-  });
+    assistant.conversationCheckpoints.value.forEach((checkpoint) => {
+      checkpointMap[checkpoint.messageId] = checkpoint;
+    });
 
-  return checkpointMap;
-});
+    return checkpointMap;
+  },
+);
 const isCheckpointRestorePending = computed(() => assistant.restoringCheckpointId.value !== null);
 const isConversationCheckpointDisabled = computed(
   () => assistant.isSending.value || isCheckpointRestorePending.value,
 );
 const planStore = computed(() => assistant.agentPlan.store);
-const readPlanStoreValue = <T,>(value: T | { value: T }): T => {
+const readPlanStoreValue = <T>(value: T | { value: T }): T => {
   if (typeof value === 'object' && value !== null && 'value' in value) {
     return value.value;
   }
@@ -142,7 +151,9 @@ const readPlanStoreValue = <T,>(value: T | { value: T }): T => {
 const planHasPlan = computed(() => readPlanStoreValue(planStore.value.hasPlan));
 const planIsClassifying = computed(() => readPlanStoreValue(planStore.value.isClassifying));
 const planIsPlanning = computed(() => readPlanStoreValue(planStore.value.isPlanning));
-const planClassificationReason = computed(() => readPlanStoreValue(planStore.value.classificationReason));
+const planClassificationReason = computed(() =>
+  readPlanStoreValue(planStore.value.classificationReason),
+);
 const planErrorMessage = computed(() => readPlanStoreValue(planStore.value.errorMessage));
 const planIsApproving = computed(() => readPlanStoreValue(planStore.value.isApproving));
 const planApprovedAt = computed(() => readPlanStoreValue(planStore.value.approvedAt));
@@ -155,14 +166,22 @@ const planCreatedAt = computed(() => readPlanStoreValue(planStore.value.planCrea
 const planUpdatedAt = computed(() => readPlanStoreValue(planStore.value.planUpdatedAt));
 const planExecutedAt = computed(() => readPlanStoreValue(planStore.value.planExecutedAt));
 const planRejectionReason = computed(() => readPlanStoreValue(planStore.value.planRejectionReason));
-const planExecutionErrorMessage = computed(() => readPlanStoreValue(planStore.value.planErrorMessage));
+const planExecutionErrorMessage = computed(() =>
+  readPlanStoreValue(planStore.value.planErrorMessage),
+);
 const planVersions = computed(() => readPlanStoreValue(planStore.value.planVersions));
-const planActiveRun = computed<IAiAgentRun | null>(() => readPlanStoreValue(planStore.value.activeRun));
+const planActiveRun = computed<IAiAgentRun | null>(() =>
+  readPlanStoreValue(planStore.value.activeRun),
+);
 const planActiveToolActivity = computed<IAiToolActivityInline | null>(() =>
   readPlanStoreValue(planStore.value.activeToolActivity),
 );
-const planPendingToolConfirmation = computed(() => readPlanStoreValue(planStore.value.pendingToolConfirmation));
-const planPendingSidecarSession = computed(() => readPlanStoreValue(planStore.value.pendingSidecarAgentSession));
+const planPendingToolConfirmation = computed(() =>
+  readPlanStoreValue(planStore.value.pendingToolConfirmation),
+);
+const planPendingSidecarSession = computed(() =>
+  readPlanStoreValue(planStore.value.pendingSidecarAgentSession),
+);
 const visibleDirectToolConfirmation = computed(() => {
   const confirmation = planPendingToolConfirmation.value;
 
@@ -180,77 +199,80 @@ const visibleDirectToolConfirmation = computed(() => {
 });
 const planSteps = computed<IAiTaskPlanStep[]>(() => readPlanStoreValue(planStore.value.steps));
 const planActiveGoal = computed(() => readPlanStoreValue(planStore.value.activeGoal));
-const planActiveRunId = computed<string | null>(() => readPlanStoreValue(planStore.value.activeRunId));
+const planActiveRunId = computed<string | null>(() =>
+  readPlanStoreValue(planStore.value.activeRunId),
+);
 const networkPermission = computed(() => readPlanStoreValue(agentNetwork.store.networkPermission));
 const setPlanErrorMessage = (message: string): void => {
   Reflect.set(planStore.value, 'errorMessage', message);
 };
-const hasPlannedAgentState = computed(() =>
-  planHasPlan.value ||
-  planIsClassifying.value ||
-  planIsPlanning.value ||
-  Boolean(planErrorMessage.value) ||
-  Boolean(planId.value) ||
-  Boolean(planStatus.value) ||
-  Boolean(planActiveRun.value),
+const hasPlannedAgentState = computed(
+  () =>
+    planHasPlan.value ||
+    planIsClassifying.value ||
+    planIsPlanning.value ||
+    Boolean(planErrorMessage.value) ||
+    Boolean(planId.value) ||
+    Boolean(planStatus.value) ||
+    Boolean(planActiveRun.value),
 );
-const isPlanConfirmationStatus = computed(() =>
-  planStatus.value === 'pending_approval' ||
-  planStatus.value === 'draft' ||
-  planStatus.value === 'rejected' ||
-  !planStatus.value,
+const isPlanConfirmationStatus = computed(
+  () =>
+    planStatus.value === 'pending_approval' ||
+    planStatus.value === 'draft' ||
+    planStatus.value === 'rejected' ||
+    !planStatus.value,
 );
 const planConfirmationVisible = computed(() => {
   if (assistant.activeMode.value !== 'plan') {
     return false;
   }
 
-  return planSteps.value.length > 0 &&
+  return (
+    planSteps.value.length > 0 &&
     !planActiveRun.value &&
     !planApprovedAt.value &&
-    isPlanConfirmationStatus.value;
+    isPlanConfirmationStatus.value
+  );
 });
-const canApprovePlan = computed(() =>
-  planSteps.value.length >= 2 &&
-  planSteps.value.length <= 6 &&
-  !planActiveRun.value &&
-  !planApprovedAt.value &&
-  (
-    planStatus.value === 'pending_approval' ||
-    planStatus.value === 'draft' ||
-    !planStatus.value
-  ),
+const canApprovePlan = computed(
+  () =>
+    planSteps.value.length >= 2 &&
+    planSteps.value.length <= 6 &&
+    !planActiveRun.value &&
+    !planApprovedAt.value &&
+    (planStatus.value === 'pending_approval' || planStatus.value === 'draft' || !planStatus.value),
 );
-const canEditPlan = computed(() =>
-  !planActiveRun.value &&
-  !planApprovedAt.value &&
-  !planIsPlanning.value &&
-  !planIsApproving.value &&
-  !planIsClassifying.value &&
-  (
-    planStatus.value === 'draft' ||
-    !planStatus.value
-  ),
+const canEditPlan = computed(
+  () =>
+    !planActiveRun.value &&
+    !planApprovedAt.value &&
+    !planIsPlanning.value &&
+    !planIsApproving.value &&
+    !planIsClassifying.value &&
+    (planStatus.value === 'draft' || !planStatus.value),
 );
-const visiblePatchPreview = computed(() =>
-  assistant.proposedPatch.value ?? assistant.appliedPatchPreview.value,
+const visiblePatchPreview = computed(
+  () => assistant.proposedPatch.value ?? assistant.appliedPatchPreview.value,
 );
-const isVisiblePatchApplied = computed(() =>
-  !assistant.proposedPatch.value && Boolean(assistant.appliedPatchPreview.value),
+const isVisiblePatchApplied = computed(
+  () => !assistant.proposedPatch.value && Boolean(assistant.appliedPatchPreview.value),
 );
 const planProgressVisible = computed(() => {
   if (assistant.activeMode.value !== 'plan') {
     return false;
   }
 
-  return Boolean(planActiveRun.value) ||
+  return (
+    Boolean(planActiveRun.value) ||
     Boolean(planActiveToolActivity.value) ||
     Boolean(planPendingToolConfirmation.value && planActiveRun.value) ||
     Boolean(planApprovedAt.value) ||
     planStatus.value === 'approved' ||
     planStatus.value === 'executing' ||
     planStatus.value === 'completed' ||
-    planStatus.value === 'failed';
+    planStatus.value === 'failed'
+  );
 });
 const directToolConfirmationVisible = computed(() => {
   if (assistant.activeMode.value !== 'agent') {
@@ -259,8 +281,8 @@ const directToolConfirmationVisible = computed(() => {
 
   return Boolean(visibleDirectToolConfirmation.value) && !planProgressVisible.value;
 });
-const composerDisabled = computed(() =>
-  assistant.isSending.value || Boolean(visibleDirectToolConfirmation.value),
+const composerDisabled = computed(
+  () => assistant.isSending.value || Boolean(visibleDirectToolConfirmation.value),
 );
 const activePlanStep = computed(() => {
   const currentStepId = planActiveRun.value?.currentStepId;
@@ -276,9 +298,11 @@ const webSourcesVisible = computed(() => {
     return false;
   }
 
-  return webSources.sources.value.length > 0 ||
+  return (
+    webSources.sources.value.length > 0 ||
     Boolean(webSources.activity.value) ||
-    Boolean(webSources.errorMessage.value);
+    Boolean(webSources.errorMessage.value)
+  );
 });
 
 const mapActivityToToolCallStatus = (
@@ -345,14 +369,14 @@ const buildPlanRunFinalAnswer = (
     return '计划执行已取消。';
   }
 
-  const answerByStepId = new Map(stepFinalAnswers.map((answer) => [answer.stepId, answer.content.trim()]));
+  const answerByStepId = new Map(
+    stepFinalAnswers.map((answer) => [answer.stepId, answer.content.trim()]),
+  );
   const resultLines = run.steps
     .filter((step) => step.status === 'done')
     .map((step) => {
       const answer = answerByStepId.get(step.id);
-      return answer
-        ? `- ${step.title}：${answer}`
-        : `- ${step.title}：已完成。`;
+      return answer ? `- ${step.title}：${answer}` : `- ${step.title}：已完成。`;
     });
 
   return [
@@ -375,9 +399,11 @@ const resolvePlanTokenStep = (run: IAiAgentRun | null): IAiTaskPlanStep | null =
     return run.steps.find((step) => step.id === run.currentStepId) ?? null;
   }
 
-  return run.steps.find((step) => step.status === 'running')
-    ?? run.steps.find((step) => step.status === 'pending')
-    ?? null;
+  return (
+    run.steps.find((step) => step.status === 'running') ??
+    run.steps.find((step) => step.status === 'pending') ??
+    null
+  );
 };
 
 const buildPlanTokenEstimationMessages = (
@@ -488,7 +514,8 @@ const tokenEstimationMessages = computed<IAiChatMessage[]>(() => {
     return [];
   }
 
-  const hasManualInput = assistant.draft.value.trim().length > 0 || assistant.attachedFiles.value.length > 0;
+  const hasManualInput =
+    assistant.draft.value.trim().length > 0 || assistant.attachedFiles.value.length > 0;
 
   if (hasManualInput) {
     return [];
@@ -514,7 +541,8 @@ const tokenContextReferences = computed(() => {
   }
 
   const hasManualInput = assistant.draft.value.trim().length > 0 || attachmentReferences.length > 0;
-  const hasPlanExecutionEstimate = assistant.activeMode.value === 'plan' && tokenEstimationMessages.value.length > 0;
+  const hasPlanExecutionEstimate =
+    assistant.activeMode.value === 'plan' && tokenEstimationMessages.value.length > 0;
 
   if (!hasManualInput && !hasPlanExecutionEstimate) {
     return [];
@@ -522,10 +550,11 @@ const tokenContextReferences = computed(() => {
 
   return assistant.buildSidecarContextReferences(attachmentReferences);
 });
-const hasPendingTokenRequest = computed(() =>
-  assistant.draft.value.trim().length > 0 ||
-  assistant.attachedFiles.value.length > 0 ||
-  (assistant.activeMode.value === 'plan' && tokenEstimationMessages.value.length > 0),
+const hasPendingTokenRequest = computed(
+  () =>
+    assistant.draft.value.trim().length > 0 ||
+    assistant.attachedFiles.value.length > 0 ||
+    (assistant.activeMode.value === 'plan' && tokenEstimationMessages.value.length > 0),
 );
 const tokenOfficialUsage = computed(() => {
   if (assistant.activeMode.value !== 'plan') {
@@ -559,17 +588,14 @@ const submitLabel = computed(() => {
   return assistant.sendButtonLabel.value;
 });
 const assistantTypingLabel = computed(() => {
-  if (
-    assistant.activeMode.value === 'plan' &&
-    (planIsPlanning.value || planIsClassifying.value)
-  ) {
+  if (assistant.activeMode.value === 'plan' && (planIsPlanning.value || planIsClassifying.value)) {
     return '正在生成计划';
   }
 
   return '正在准备回复';
 });
 
-if (planStore.value.mode === 'plan' || Boolean(planId.value) || Boolean(planActiveRun.value)) {
+if (planStore.value.mode === 'plan' || planId.value || planActiveRun.value) {
   assistant.activeMode.value = 'plan';
 }
 
@@ -601,8 +627,7 @@ const isHistoryEventInside = (eventTarget: EventTarget | null): boolean => {
   }
 
   return Boolean(
-    historyAnchorRef.value?.contains(targetNode) ||
-    historyPopoverRef.value?.contains(targetNode),
+    historyAnchorRef.value?.contains(targetNode) || historyPopoverRef.value?.contains(targetNode),
   );
 };
 
@@ -628,11 +653,14 @@ const openSettings = (): void => {
   settingsTavilyApiKey.value = '';
   isHistoryOpen.value = false;
   assistant.isSettingsOpen.value = true;
-  assistant.loadTavilyApiKey().then((apiKey) => {
-    if (assistant.isSettingsOpen.value) {
-      settingsTavilyApiKey.value = apiKey;
-    }
-  }).catch(() => undefined);
+  assistant
+    .loadTavilyApiKey()
+    .then((apiKey) => {
+      if (assistant.isSettingsOpen.value) {
+        settingsTavilyApiKey.value = apiKey;
+      }
+    })
+    .catch(() => undefined);
 };
 
 const startNewConversation = (): void => {
@@ -729,7 +757,8 @@ const handleRestoreConversationCheckpoint = async (messageId: string): Promise<v
   await assistant.restoreConversationCheckpoint(checkpoint.id);
 };
 
-const getHistoryMessageCountLabel = (messages: IAiChatMessage[]): string => `${messages.length} 条消息`;
+const getHistoryMessageCountLabel = (messages: IAiChatMessage[]): string =>
+  `${messages.length} 条消息`;
 
 const handleConversationScrollStateChange = (state: {
   scrollTop: number;
@@ -839,19 +868,21 @@ const handlePromptPrewarm = (): void => {
 
   aiConnectionPrewarmStarted = true;
   void aiService.sidecarWarmup().catch((error) => {
-    console.info(JSON.stringify({
-      level: 'info',
-      scope: 'ai',
-      event: 'agent_sidecar_warmup.skipped',
-      reason: toErrorMessage(error, '预热连接失败'),
-    }));
+    console.info(
+      JSON.stringify({
+        level: 'info',
+        scope: 'ai',
+        event: 'agent_sidecar_warmup.skipped',
+        reason: toErrorMessage(error, '预热连接失败'),
+      }),
+    );
   });
 };
 
 const getActiveAgentRunId = (): string | null =>
   planActiveRunId.value ?? planActiveRun.value?.id ?? null;
 
-const withAgentRunAction = async <T,>(
+const withAgentRunAction = async <T>(
   action: (runId: string) => Promise<T>,
   fallback: string,
 ): Promise<T | null> => {
@@ -897,14 +928,10 @@ const handleRegeneratePlan = async (): Promise<void> => {
 const handleApprovePlan = async (): Promise<void> => {
   try {
     await assistant.agentPlan.approvePlan();
-    await agentRun.runPlanToCompletion(
-      planActiveGoal.value,
-      planSteps.value,
-      {
-        context: assistant.buildSidecarContextReferences(),
-        workspaceRootPath: props.workspaceRootPath,
-      },
-    );
+    await agentRun.runPlanToCompletion(planActiveGoal.value, planSteps.value, {
+      context: assistant.buildSidecarContextReferences(),
+      workspaceRootPath: props.workspaceRootPath,
+    });
   } catch (error) {
     setPlanError(error, '批准或启动计划失败。');
   }
@@ -924,19 +951,17 @@ const handleRejectPlan = async (): Promise<void> => {
 
 const handleRunStep = async (): Promise<void> => {
   await withAgentRunAction(
-    (runId) => agentRun.runStepWithSidecar(runId, {
-      goal: planActiveGoal.value,
-      context: assistant.buildSidecarContextReferences(),
-      workspaceRootPath: props.workspaceRootPath,
-    }),
+    (runId) =>
+      agentRun.runStepWithSidecar(runId, {
+        goal: planActiveGoal.value,
+        context: assistant.buildSidecarContextReferences(),
+        workspaceRootPath: props.workspaceRootPath,
+      }),
     '执行 Agent step 失败。',
   );
 };
 const handlePauseRun = async (): Promise<void> => {
-  await withAgentRunAction(
-    (runId) => agentRun.pauseRun(runId),
-    '暂停 Agent run 失败。',
-  );
+  await withAgentRunAction((runId) => agentRun.pauseRun(runId), '暂停 Agent run 失败。');
 };
 
 const handleResumeRun = async (): Promise<void> => {
@@ -961,10 +986,7 @@ const handleResumeRun = async (): Promise<void> => {
 };
 
 const handleCancelRun = async (): Promise<void> => {
-  await withAgentRunAction(
-    (runId) => agentRun.cancelRun(runId),
-    '取消 Agent run 失败。',
-  );
+  await withAgentRunAction((runId) => agentRun.cancelRun(runId), '取消 Agent run 失败。');
 };
 
 const handleResolveToolConfirmation = async (
@@ -1095,9 +1117,12 @@ onMounted(() => {
   restorePersistedPlanUiState().catch((error) => {
     setPlanError(error, '恢复计划状态失败。');
   });
-  assistant.loadConfig().then(() => {
-    settingsDraft.value = cloneAiConfigPayload(assistant.config.value);
-  }).catch(() => undefined);
+  assistant
+    .loadConfig()
+    .then(() => {
+      settingsDraft.value = cloneAiConfigPayload(assistant.config.value);
+    })
+    .catch(() => undefined);
 });
 
 onBeforeUnmount(() => {

@@ -43,47 +43,6 @@ export type TAiChatRole = 'user' | 'assistant' | 'system' | 'tool';
  * ========================================================================== */
 
 export type {
-  IAiContextRange,
-  IAiContextReference,
-  IAiImageAttachmentPreview,
-  TAiContextKind
-} from '@/types/ai/context';
-
-export type {
-  IAiWebActivity,
-  IAiWebFetchInput,
-  IAiWebFetchPayload,
-  IAiWebFetchResult,
-  IAiWebSearchInput,
-  IAiWebSearchPayload,
-  IAiWebSearchResult,
-  IAiWebSourceEntry,
-  TAiWebActivityState,
-  TAiWebSearchIntent,
-  TAiWebSearchRecency,
-  TAiWebSourceEntryStatus,
-  TAiWebSourceType
-} from '@/types/ai/web';
-
-export type {
-  IAiAgentChangedFile,
-  IAiAgentPatchSummary,
-  IAiDiffEditorPreview,
-  IAiDiffHunkPreview,
-  IAiDiffPreviewLine,
-  TAiAgentChangedFileStatus,
-  TAiDiffPreviewLineKind
-} from '@/types/ai/patch';
-
-export type {
-  IAiAgentStreamErrorPayload,
-  IAiToolActivityInline,
-  TAiAgentStreamEndReason,
-  TAiAgentStreamEvent,
-  TAiToolActivityState
-} from '@/types/ai/stream';
-
-export type {
   IAiAgentClassifyTaskPayload,
   IAiAgentClassifyTaskRequest,
   IAiAgentListRunsPayload,
@@ -117,8 +76,47 @@ export type {
   TAiAgentTimelineItemType,
   TAiToolConfirmationDecision,
   TAiToolConfirmationOptionId,
-  TAiToolConfirmationOptionTone
+  TAiToolConfirmationOptionTone,
 } from '@/types/ai/agent';
+export type {
+  IAiContextRange,
+  IAiContextReference,
+  IAiImageAttachmentPreview,
+  TAiContextKind,
+} from '@/types/ai/context';
+
+export type {
+  IAiAgentChangedFile,
+  IAiAgentPatchSummary,
+  IAiDiffEditorPreview,
+  IAiDiffHunkPreview,
+  IAiDiffPreviewLine,
+  TAiAgentChangedFileStatus,
+  TAiDiffPreviewLineKind,
+} from '@/types/ai/patch';
+
+export type {
+  IAiAgentStreamErrorPayload,
+  IAiToolActivityInline,
+  TAiAgentStreamEndReason,
+  TAiAgentStreamEvent,
+  TAiToolActivityState,
+} from '@/types/ai/stream';
+export type {
+  IAiWebActivity,
+  IAiWebFetchInput,
+  IAiWebFetchPayload,
+  IAiWebFetchResult,
+  IAiWebSearchInput,
+  IAiWebSearchPayload,
+  IAiWebSearchResult,
+  IAiWebSourceEntry,
+  TAiWebActivityState,
+  TAiWebSearchIntent,
+  TAiWebSearchRecency,
+  TAiWebSourceEntryStatus,
+  TAiWebSourceType,
+} from '@/types/ai/web';
 
 /* ============================================================================
  * Schema-inferred wire types (single source of truth = ai.schema.ts)

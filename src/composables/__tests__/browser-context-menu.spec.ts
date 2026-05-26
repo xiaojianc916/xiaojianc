@@ -1,22 +1,22 @@
-import type { ILinearContextMenuItem } from '@/components/common/linear-context-menu.types';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent, type ComponentPublicInstance } from 'vue';
+import { type ComponentPublicInstance, defineComponent } from 'vue';
+import type { ILinearContextMenuItem } from '@/components/common/linear-context-menu.types';
 import { useBrowserContextMenu } from '../useBrowserContextMenu';
 
 type TBrowserContextMenuApi = ReturnType<typeof useBrowserContextMenu>;
 
 const mockTerminalControls = vi.hoisted(() => ({
   getSelectionText: vi.fn<[], string>(() => ''),
-  copySelection: vi.fn<[], Promise<void>>(async () => { }),
-  pasteFromClipboard: vi.fn<[], Promise<void>>(async () => { }),
-  selectAll: vi.fn<[], void>(() => { }),
+  copySelection: vi.fn<[], Promise<void>>(async () => {}),
+  pasteFromClipboard: vi.fn<[], Promise<void>>(async () => {}),
+  selectAll: vi.fn<[], void>(() => {}),
 }));
 
 const mockClipboard = vi.hoisted(() => ({
   tryReadClipboardText: vi.fn<[], Promise<string | null>>(async () => null),
   tryWriteClipboardText: vi.fn<[string], Promise<boolean>>(async () => true),
-  writeClipboardText: vi.fn<[string], Promise<void>>(async () => { }),
+  writeClipboardText: vi.fn<[string], Promise<void>>(async () => {}),
 }));
 
 vi.mock('@/composables/useIntegratedTerminal', () => ({
@@ -69,10 +69,7 @@ const dispatchContextMenu = (target: HTMLElement): MouseEvent => {
   return event;
 };
 
-const findMenuItem = (
-  api: TBrowserContextMenuApi,
-  key: string,
-): ILinearContextMenuItem => {
+const findMenuItem = (api: TBrowserContextMenuApi, key: string): ILinearContextMenuItem => {
   const item = api.contextMenuGroups.value
     .flatMap((group) => group.items)
     .find((candidate) => candidate.key === key);
@@ -121,11 +118,7 @@ describe('useBrowserContextMenu', () => {
     const terminalGroup = api.contextMenuGroups.value.find(
       (group) => group.key === 'terminal-clipboard',
     );
-    expect(terminalGroup?.items.map((item) => item.key)).toEqual([
-      'copy',
-      'paste',
-      'select-all',
-    ]);
+    expect(terminalGroup?.items.map((item) => item.key)).toEqual(['copy', 'paste', 'select-all']);
     expect(terminalGroup?.items[0]?.disabled).toBe(false);
 
     wrapper.unmount();

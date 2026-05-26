@@ -5,10 +5,10 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useAppStore } from '@/store/app';
 import type { TFileIconEntryKind } from '@/types/file-icon';
 import { resolveFileIconAsset } from '@/utils/file-icons';
-import { computed } from 'vue';
 
 const props = withDefaults(
   defineProps<{

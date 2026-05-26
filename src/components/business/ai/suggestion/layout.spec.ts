@@ -1,9 +1,9 @@
+import { describe, expect, it } from 'vitest';
 import {
   estimateSuggestionChipWidth,
   getSuggestionVisualLength,
   groupSuggestionsByEstimatedWidth,
 } from '@/components/business/ai/suggestion/layout';
-import { describe, expect, it } from 'vitest';
 
 describe('suggestion-layout', () => {
   it('按宽字符和 emoji 估算提示词视觉长度', () => {
@@ -34,12 +34,9 @@ describe('suggestion-layout', () => {
   });
 
   it('为空白提示词做过滤且保持单个过宽提示词可独占一行', () => {
-    const rows = groupSuggestionsByEstimatedWidth(
-      ['  ', '解释一个特别长的中文提示词并保留它'],
-      {
-        targetWidth: 120,
-      },
-    );
+    const rows = groupSuggestionsByEstimatedWidth(['  ', '解释一个特别长的中文提示词并保留它'], {
+      targetWidth: 120,
+    });
 
     expect(rows).toEqual([['解释一个特别长的中文提示词并保留它']]);
     expect(estimateSuggestionChipWidth(rows[0]?.[0] ?? '', { maxChipWidth: 160 })).toBe(160);

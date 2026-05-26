@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { type Component, computed, ref } from 'vue';
 import {
   ChainOfThought,
   ChainOfThoughtContent,
@@ -44,14 +45,13 @@ import GitBranch from '~icons/lucide/git-branch';
 import Globe from '~icons/lucide/globe';
 import HardDrive from '~icons/lucide/hard-drive';
 import ImageIcon from '~icons/lucide/image';
-import ListTree from '~icons/lucide/list-tree';
 import ListTodo from '~icons/lucide/list-todo';
+import ListTree from '~icons/lucide/list-tree';
 import Pencil from '~icons/lucide/pencil';
 import Play from '~icons/lucide/play';
 import Search from '~icons/lucide/search';
 import Terminal from '~icons/lucide/terminal';
 import Workflow from '~icons/lucide/workflow';
-import { computed, ref, type Component } from 'vue';
 
 const REASONING_SEGMENT_CHARS = 420;
 const PREVIEW_TAG_LIMIT = 96;
@@ -108,21 +108,21 @@ interface IWebSearchSourceChip {
 
 type TTimelineItem =
   | {
-    type: 'reasoning';
-    id: string;
-    segments: string[];
-    isLong: boolean;
-  }
+      type: 'reasoning';
+      id: string;
+      segments: string[];
+      isLong: boolean;
+    }
   | {
-    type: 'event';
-    id: string;
-    text: string;
-  }
+      type: 'event';
+      id: string;
+      text: string;
+    }
   | {
-    type: 'task';
-    id: string;
-    node: ITaskNodeItem;
-  };
+      type: 'task';
+      id: string;
+      node: ITaskNodeItem;
+    };
 
 type TToolRuntimeEvent = Extract<
   TAgentRuntimeEvent,
@@ -131,7 +131,10 @@ type TToolRuntimeEvent = Extract<
   }
 >;
 type TTokenBudgetRuntimeEvent = Extract<TAgentRuntimeEvent, { type: 'acontext.token.checked' }>;
-type TProviderPayloadRuntimeEvent = Extract<TAgentRuntimeEvent, { type: 'acontext.provider_payload.checked' }>;
+type TProviderPayloadRuntimeEvent = Extract<
+  TAgentRuntimeEvent,
+  { type: 'acontext.provider_payload.checked' }
+>;
 
 interface IToolIconMatcher {
   icon: TTaskIcon;
@@ -162,14 +165,17 @@ interface IReasoningMarkdownBlock {
   info?: string;
 }
 
-const props = withDefaults(defineProps<{
-  events: TAgentRuntimeEvent[];
-  isStreaming?: boolean;
-  isWaitingConfirmation?: boolean;
-}>(), {
-  isStreaming: false,
-  isWaitingConfirmation: false,
-});
+const props = withDefaults(
+  defineProps<{
+    events: TAgentRuntimeEvent[];
+    isStreaming?: boolean;
+    isWaitingConfirmation?: boolean;
+  }>(),
+  {
+    isStreaming: false,
+    isWaitingConfirmation: false,
+  },
+);
 
 const WAITING_DECISION_LABEL = '正在等待决策';
 
@@ -179,9 +185,7 @@ const reasoningMarkdownBlockCache = new Map<string, IReasoningMarkdownBlock[]>()
 const TOOL_ICON_MATCHERS: readonly IToolIconMatcher[] = [
   {
     icon: 'catalog',
-    patterns: [
-      /^mcp_list_tools$/u,
-    ],
+    patterns: [/^mcp_list_tools$/u],
   },
   {
     icon: 'folder',
@@ -198,17 +202,11 @@ const TOOL_ICON_MATCHERS: readonly IToolIconMatcher[] = [
   },
   {
     icon: 'files',
-    patterns: [
-      /read_multiple_files/u,
-      /copilot_getnotebooksummary/u,
-    ],
+    patterns: [/read_multiple_files/u, /copilot_getnotebooksummary/u],
   },
   {
     icon: 'image',
-    patterns: [
-      /view_image/u,
-      /read_media_file/u,
-    ],
+    patterns: [/view_image/u, /read_media_file/u],
   },
   {
     icon: 'file',
@@ -253,30 +251,15 @@ const TOOL_ICON_MATCHERS: readonly IToolIconMatcher[] = [
   },
   {
     icon: 'git',
-    patterns: [
-      /^git_/u,
-      /get_git_/u,
-      /github_repo/u,
-      /stage_file/u,
-      /create_commit/u,
-    ],
+    patterns: [/^git_/u, /get_git_/u, /github_repo/u, /stage_file/u, /create_commit/u],
   },
   {
     icon: 'book',
-    patterns: [
-      /query-docs/u,
-      /query_docs/u,
-      /docs/u,
-    ],
+    patterns: [/query-docs/u, /query_docs/u, /docs/u],
   },
   {
     icon: 'play',
-    patterns: [
-      /^browser_/u,
-      /browser_evaluate/u,
-      /run_vscode_command/u,
-      /create_and_run_task/u,
-    ],
+    patterns: [/^browser_/u, /browser_evaluate/u, /run_vscode_command/u, /create_and_run_task/u],
   },
   {
     icon: 'globe',
@@ -319,48 +302,27 @@ const TOOL_ICON_MATCHERS: readonly IToolIconMatcher[] = [
   },
   {
     icon: 'chart',
-    patterns: [
-      /get_errors/u,
-      /test_failure/u,
-    ],
+    patterns: [/get_errors/u, /test_failure/u],
   },
   {
     icon: 'brain',
-    patterns: [
-      /sequentialthinking/u,
-      /thinking/u,
-      /reason/u,
-    ],
+    patterns: [/sequentialthinking/u, /thinking/u, /reason/u],
   },
   {
     icon: 'task',
-    patterns: [
-      /manage_todo_list/u,
-      /runsubagent/u,
-      /vscode_askquestions/u,
-    ],
+    patterns: [/manage_todo_list/u, /runsubagent/u, /vscode_askquestions/u],
   },
   {
     icon: 'clock',
-    patterns: [
-      /get_current_time/u,
-      /convert_time/u,
-      /time/u,
-    ],
+    patterns: [/get_current_time/u, /convert_time/u, /time/u],
   },
   {
     icon: 'alert',
-    patterns: [
-      /debug_/u,
-      /get_debug_/u,
-      /stop_debug_session/u,
-    ],
+    patterns: [/debug_/u, /get_debug_/u, /stop_debug_session/u],
   },
   {
     icon: 'diagram',
-    patterns: [
-      /rendermermaiddiagram/u,
-    ],
+    patterns: [/rendermermaiddiagram/u],
   },
   {
     icon: 'memory',
@@ -407,10 +369,8 @@ const TASK_ICON_MAP: Record<TTaskIcon, Component> = {
   alert: CircleAlert,
 };
 
-const createEventKey = (
-  event: Pick<TAgentRuntimeEvent, 'id' | 'type'>,
-  index: number,
-): string => `${event.type}:${event.id}:${index}`;
+const createEventKey = (event: Pick<TAgentRuntimeEvent, 'id' | 'type'>, index: number): string =>
+  `${event.type}:${event.id}:${index}`;
 
 const getStableRuntimeEvents = (events: readonly TAgentRuntimeEvent[]): TAgentRuntimeEvent[] => {
   const deduped = new Map<string, TAgentRuntimeEvent>();
@@ -477,11 +437,7 @@ const clipTag = (value: string, limit = PREVIEW_TAG_LIMIT): string => {
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
 
-const collectPreviewTextCandidates = (
-  value: unknown,
-  output: string[],
-  depth = 0,
-): void => {
+const collectPreviewTextCandidates = (value: unknown, output: string[], depth = 0): void => {
   if (output.length >= MAX_TOOL_TAGS || depth > 3) {
     return;
   }
@@ -529,10 +485,7 @@ const collectPreviewTextCandidates = (
   }
 };
 
-const resolveRuntimeToolIcon = (
-  toolName: string,
-  fallbackKind: TAiRuntimeToolKind,
-): TTaskIcon => {
+const resolveRuntimeToolIcon = (toolName: string, fallbackKind: TAiRuntimeToolKind): TTaskIcon => {
   const normalized = normalizeRuntimeToolName(toolName).toLowerCase();
 
   for (const matcher of TOOL_ICON_MATCHERS) {
@@ -578,7 +531,7 @@ const parsePreviewRecord = (value: string | undefined): Record<string, unknown> 
   try {
     const parsed: unknown = JSON.parse(value.trim());
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
+      ? (parsed as Record<string, unknown>)
       : null;
   } catch {
     return null;
@@ -614,11 +567,8 @@ const hasShellcheckPassSummary = (value: string | undefined): boolean =>
 const hasShellcheckUnavailableSummary = (value: string | undefined): boolean =>
   isNonEmptyString(value) && value.includes('ShellCheck 不可用');
 
-const formatShellcheckIssueAction = (codes: readonly string[]): string => (
-  codes.length > 0
-    ? `语法存在一些问题：${codes.join('、')}`
-    : '语法存在一些问题'
-);
+const formatShellcheckIssueAction = (codes: readonly string[]): string =>
+  codes.length > 0 ? `语法存在一些问题：${codes.join('、')}` : '语法存在一些问题';
 
 const PREVIEW_PATH_KEYS = ['path', 'filePath', 'file_path', 'targetPath', 'target_path'] as const;
 const PREVIEW_QUERY_KEYS = [
@@ -653,23 +603,13 @@ const READ_FILE_TOOL_NAMES = new Set([
   'mastra_workspace_lsp_inspect',
 ]);
 
-const CURRENT_FILE_TOOL_NAMES = new Set([
-  'read_current_file',
-]);
+const CURRENT_FILE_TOOL_NAMES = new Set(['read_current_file']);
 
-const DIRECTORY_READ_TOOL_NAMES = new Set([
-  'mastra_workspace_list_files',
-  'list_dir',
-]);
+const DIRECTORY_READ_TOOL_NAMES = new Set(['mastra_workspace_list_files', 'list_dir']);
 
-const TEXT_SEARCH_TOOL_NAMES = new Set([
-  'grep_in_files',
-  'mastra_workspace_grep',
-]);
+const TEXT_SEARCH_TOOL_NAMES = new Set(['grep_in_files', 'mastra_workspace_grep']);
 
-const SYMBOL_SEARCH_TOOL_NAMES = new Set([
-  'search_symbols',
-]);
+const SYMBOL_SEARCH_TOOL_NAMES = new Set(['search_symbols']);
 
 const WRITE_FILE_TOOL_NAMES = new Set([
   'write_file',
@@ -682,20 +622,11 @@ const WRITE_FILE_TOOL_NAMES = new Set([
   'mastra_workspace_delete',
 ]);
 
-const APPLY_FILE_EDIT_TOOL_NAMES = new Set([
-  'apply_file_edits',
-]);
+const APPLY_FILE_EDIT_TOOL_NAMES = new Set(['apply_file_edits']);
 
-const COMMAND_TOOL_NAMES = new Set([
-  'run_command',
-  'mastra_workspace_execute_command',
-]);
+const COMMAND_TOOL_NAMES = new Set(['run_command', 'mastra_workspace_execute_command']);
 
-const WEB_SEARCH_SOURCE_URL_KEYS = [
-  'url',
-  'href',
-  'link',
-] as const;
+const WEB_SEARCH_SOURCE_URL_KEYS = ['url', 'href', 'link'] as const;
 
 const WEB_SEARCH_SOURCE_HOST_KEYS = [
   'domain',
@@ -762,7 +693,9 @@ const extractPathFromTextPreview = (value: string): string | null => {
     return windowsMatch[0].trim();
   }
 
-  const unixMatch = normalized.match(/(?:^|[\s"'])((?:\.{1,2}[\\/]|[\\/])[^"]+?\.[A-Za-z0-9_-]{1,12})/u);
+  const unixMatch = normalized.match(
+    /(?:^|[\s"'])((?:\.{1,2}[\\/]|[\\/])[^"]+?\.[A-Za-z0-9_-]{1,12})/u,
+  );
 
   if (unixMatch?.[1]) {
     return unixMatch[1].trim();
@@ -924,7 +857,7 @@ const getPreviewRecordField = (
   const candidate = value?.[key];
 
   return candidate && typeof candidate === 'object' && !Array.isArray(candidate)
-    ? candidate as Record<string, unknown>
+    ? (candidate as Record<string, unknown>)
     : null;
 };
 
@@ -939,9 +872,7 @@ const removePowerShellCliXml = (value: string): string => {
 };
 
 const normalizeTerminalOutput = (value: string): string =>
-  removePowerShellCliXml(value)
-    .replace(/\r\n/gu, '\n')
-    .replace(/\r/gu, '\n');
+  removePowerShellCliXml(value).replace(/\r\n/gu, '\n').replace(/\r/gu, '\n');
 
 const parseCommandProgressPreview = (
   value: string | undefined,
@@ -979,30 +910,31 @@ const resolveCommandTerminalOutput = (
   event: Extract<TToolRuntimeEvent, { type: 'agent.tool.started' | 'agent.tool.completed' }>,
   command: string,
 ): string | undefined => {
-  const parsedInput = event.type === 'agent.tool.started'
-    ? parsePreviewRecord(event.inputPreview)
-    : null;
-  const parsedResult = event.type === 'agent.tool.completed'
-    ? parsePreviewRecord(event.resultPreview)
-    : null;
-  const resultOutput = getPreviewRecordField(parsedResult, 'output')
-    ?? getPreviewRecordField(parsedResult, 'result')
-    ?? getPreviewRecordField(parsedResult, 'toolResult');
-  const resolvedCommand = getPreviewStringField(parsedResult, 'command')
-    ?? getPreviewStringField(parsedInput, 'command')
-    ?? command;
+  const parsedInput =
+    event.type === 'agent.tool.started' ? parsePreviewRecord(event.inputPreview) : null;
+  const parsedResult =
+    event.type === 'agent.tool.completed' ? parsePreviewRecord(event.resultPreview) : null;
+  const resultOutput =
+    getPreviewRecordField(parsedResult, 'output') ??
+    getPreviewRecordField(parsedResult, 'result') ??
+    getPreviewRecordField(parsedResult, 'toolResult');
+  const resolvedCommand =
+    getPreviewStringField(parsedResult, 'command') ??
+    getPreviewStringField(parsedInput, 'command') ??
+    command;
   const lines: string[] = [`> ${resolvedCommand}`];
 
   if (event.type === 'agent.tool.started') {
     return `${lines.join('\n')}\n`;
   }
 
-  const stdout = getPreviewStringField(parsedResult, 'stdout')
-    ?? getPreviewStringField(resultOutput, 'stdout')
-    ?? getPreviewStringField(parsedResult, 'output')
-    ?? getPreviewStringField(parsedResult, 'text');
-  const stderr = getPreviewStringField(parsedResult, 'stderr')
-    ?? getPreviewStringField(resultOutput, 'stderr');
+  const stdout =
+    getPreviewStringField(parsedResult, 'stdout') ??
+    getPreviewStringField(resultOutput, 'stdout') ??
+    getPreviewStringField(parsedResult, 'output') ??
+    getPreviewStringField(parsedResult, 'text');
+  const stderr =
+    getPreviewStringField(parsedResult, 'stderr') ?? getPreviewStringField(resultOutput, 'stderr');
 
   const alreadyStreamed = Boolean(event.type === 'agent.tool.completed' && event.toolUseId);
 
@@ -1119,7 +1051,10 @@ const getHostname = (url: string): string => {
 };
 
 const normalizeWebSearchHost = (host: string): string =>
-  host.trim().toLowerCase().replace(/^www\./u, '');
+  host
+    .trim()
+    .toLowerCase()
+    .replace(/^www\./u, '');
 
 const getDisplayWebSearchUrl = (url: string): string => {
   const host = normalizeWebSearchHost(getHostname(url));
@@ -1292,14 +1227,14 @@ const mergeWebSearchSources = (
 };
 
 const isWebSearchToolName = (toolName: string | undefined): boolean =>
-  Boolean(toolName && (
-    WEB_SEARCH_TOOL_NAMES.has(toolName)
-    || /^tavily(?:-|_)/iu.test(toolName)
-    || /(?:^|[_-])tavily(?:[_-]|$)/iu.test(toolName)
-  ));
+  Boolean(
+    toolName &&
+      (WEB_SEARCH_TOOL_NAMES.has(toolName) ||
+        /^tavily(?:-|_)/iu.test(toolName) ||
+        /(?:^|[_-])tavily(?:[_-]|$)/iu.test(toolName)),
+  );
 
-const isMcpListToolsName = (toolName: string | undefined): boolean =>
-  toolName === 'mcp_list_tools';
+const isMcpListToolsName = (toolName: string | undefined): boolean => toolName === 'mcp_list_tools';
 
 interface IToolActionDescriptor {
   action: string;
@@ -1313,9 +1248,12 @@ const describeToolAction = (
   toolName: string,
   fallbackResourceLabel?: string,
 ): IToolActionDescriptor => {
-  const resourceLabel = fallbackResourceLabel
-    ?? resolvePreviewPath(event.type === 'agent.tool.started' ? event.inputPreview : event.resultPreview)
-    ?? undefined;
+  const resourceLabel =
+    fallbackResourceLabel ??
+    resolvePreviewPath(
+      event.type === 'agent.tool.started' ? event.inputPreview : event.resultPreview,
+    ) ??
+    undefined;
 
   if (toolName === 'shellcheck') {
     if (event.type !== 'agent.tool.completed') {
@@ -1356,11 +1294,12 @@ const describeToolAction = (
 
   if (isMcpListToolsName(toolName)) {
     return {
-      action: event.type === 'agent.tool.started'
-        ? '正在查找MCP工具集'
-        : event.ok
-          ? '成功获取MCP工具集'
-          : '查找MCP工具集失败',
+      action:
+        event.type === 'agent.tool.started'
+          ? '正在查找MCP工具集'
+          : event.ok
+            ? '成功获取MCP工具集'
+            : '查找MCP工具集失败',
       suppressMeta: true,
     };
   }
@@ -1374,9 +1313,7 @@ const describeToolAction = (
     }
 
     return {
-      action: event.type === 'agent.tool.started'
-        ? '正在读取当前文件'
-        : '当前文件读取完成',
+      action: event.type === 'agent.tool.started' ? '正在读取当前文件' : '当前文件读取完成',
       suppressMeta: true,
     };
   }
@@ -1390,17 +1327,16 @@ const describeToolAction = (
     }
 
     return {
-      action: event.type === 'agent.tool.started'
-        ? '正在读取工作区目录'
-        : '工作区目录读取完成',
+      action: event.type === 'agent.tool.started' ? '正在读取工作区目录' : '工作区目录读取完成',
       suppressMeta: true,
     };
   }
 
   if (TEXT_SEARCH_TOOL_NAMES.has(toolName)) {
-    const query = fallbackResourceLabel
-      ?? (event.type === 'agent.tool.started' ? resolvePreviewQuery(event.inputPreview) : null)
-      ?? '搜索词';
+    const query =
+      fallbackResourceLabel ??
+      (event.type === 'agent.tool.started' ? resolvePreviewQuery(event.inputPreview) : null) ??
+      '搜索词';
 
     if (event.type === 'agent.tool.completed' && !event.ok) {
       return {
@@ -1411,20 +1347,22 @@ const describeToolAction = (
     }
 
     return {
-      action: event.type === 'agent.tool.started'
-        ? `正在搜索 ${query}`
-        : previewHasResultItems(event.resultPreview)
-          ? `成功读取到 ${query}`
-          : `未读取到 ${query}`,
+      action:
+        event.type === 'agent.tool.started'
+          ? `正在搜索 ${query}`
+          : previewHasResultItems(event.resultPreview)
+            ? `成功读取到 ${query}`
+            : `未读取到 ${query}`,
       resourceLabel: query,
       suppressMeta: true,
     };
   }
 
   if (SYMBOL_SEARCH_TOOL_NAMES.has(toolName)) {
-    const query = fallbackResourceLabel
-      ?? (event.type === 'agent.tool.started' ? resolvePreviewQuery(event.inputPreview) : null)
-      ?? '搜索词';
+    const query =
+      fallbackResourceLabel ??
+      (event.type === 'agent.tool.started' ? resolvePreviewQuery(event.inputPreview) : null) ??
+      '搜索词';
 
     if (event.type === 'agent.tool.completed' && !event.ok) {
       return {
@@ -1435,20 +1373,22 @@ const describeToolAction = (
     }
 
     return {
-      action: event.type === 'agent.tool.started'
-        ? `正在结构化搜索 ${query}`
-        : previewHasResultItems(event.resultPreview)
-          ? `成功搜索到 ${query}`
-          : `未搜索到 ${query}`,
+      action:
+        event.type === 'agent.tool.started'
+          ? `正在结构化搜索 ${query}`
+          : previewHasResultItems(event.resultPreview)
+            ? `成功搜索到 ${query}`
+            : `未搜索到 ${query}`,
       resourceLabel: query,
       suppressMeta: true,
     };
   }
 
   if (APPLY_FILE_EDIT_TOOL_NAMES.has(toolName)) {
-    const fileName = fallbackResourceLabel
-      ?? (event.type === 'agent.tool.started' ? extractFileNameFromPath(event.inputPreview) : null)
-      ?? '文件';
+    const fileName =
+      fallbackResourceLabel ??
+      (event.type === 'agent.tool.started' ? extractFileNameFromPath(event.inputPreview) : null) ??
+      '文件';
 
     if (event.type === 'agent.tool.completed' && !event.ok) {
       return {
@@ -1459,9 +1399,7 @@ const describeToolAction = (
     }
 
     return {
-      action: event.type === 'agent.tool.started'
-        ? `正在编辑 ${fileName}`
-        : `编辑完成 ${fileName}`,
+      action: event.type === 'agent.tool.started' ? `正在编辑 ${fileName}` : `编辑完成 ${fileName}`,
       resourceLabel: fileName,
       suppressMeta: true,
     };
@@ -1477,9 +1415,10 @@ const describeToolAction = (
     }
 
     return {
-      action: event.type === 'agent.tool.started'
-        ? `正在读取 ${resourceLabel}`
-        : `读取完成 ${resourceLabel}`,
+      action:
+        event.type === 'agent.tool.started'
+          ? `正在读取 ${resourceLabel}`
+          : `读取完成 ${resourceLabel}`,
       resourceLabel,
       suppressMeta: true,
     };
@@ -1495,18 +1434,20 @@ const describeToolAction = (
     }
 
     return {
-      action: event.type === 'agent.tool.started'
-        ? `正在编辑 ${resourceLabel}`
-        : `编辑完成 ${resourceLabel}`,
+      action:
+        event.type === 'agent.tool.started'
+          ? `正在编辑 ${resourceLabel}`
+          : `编辑完成 ${resourceLabel}`,
       resourceLabel,
       suppressMeta: true,
     };
   }
 
   if (COMMAND_TOOL_NAMES.has(toolName)) {
-    const command = fallbackResourceLabel
-      ?? (event.type === 'agent.tool.started' ? resolvePreviewCommand(event.inputPreview) : null)
-      ?? '命令';
+    const command =
+      fallbackResourceLabel ??
+      (event.type === 'agent.tool.started' ? resolvePreviewCommand(event.inputPreview) : null) ??
+      '命令';
 
     if (event.type === 'agent.tool.completed' && !event.ok) {
       return {
@@ -1517,9 +1458,7 @@ const describeToolAction = (
     }
 
     return {
-      action: event.type === 'agent.tool.started'
-        ? `正在执行 ${command}`
-        : `执行完成 ${command}`,
+      action: event.type === 'agent.tool.started' ? `正在执行 ${command}` : `执行完成 ${command}`,
       resourceLabel: command,
       suppressMeta: true,
     };
@@ -1534,17 +1473,16 @@ const describeToolAction = (
     }
 
     return {
-      action: event.type === 'agent.tool.started'
-        ? '正在读取当前时间'
-        : '当前时间读取完成',
+      action: event.type === 'agent.tool.started' ? '正在读取当前时间' : '当前时间读取完成',
       suppressMeta: true,
     };
   }
 
   if (isWebSearchToolName(toolName)) {
-    const query = resolveWebSearchQuery(event.type === 'agent.tool.started' ? event.inputPreview : undefined)
-      ?? fallbackResourceLabel
-      ?? undefined;
+    const query =
+      resolveWebSearchQuery(event.type === 'agent.tool.started' ? event.inputPreview : undefined) ??
+      fallbackResourceLabel ??
+      undefined;
     const webSearchSources = resolveWebSearchSources(
       event.type === 'agent.tool.completed' ? event.resultPreview : event.inputPreview,
     );
@@ -1559,9 +1497,10 @@ const describeToolAction = (
     }
 
     return {
-      action: event.type === 'agent.tool.started'
-        ? `Search for ${query ?? 'web results'}`
-        : 'Complete Search',
+      action:
+        event.type === 'agent.tool.started'
+          ? `Search for ${query ?? 'web results'}`
+          : 'Complete Search',
       resourceLabel: query,
       suppressMeta: true,
       webSearchSources,
@@ -1569,9 +1508,7 @@ const describeToolAction = (
   }
 
   return {
-    action: event.type === 'agent.tool.started'
-      ? `开始调用 ${toolName}`
-      : `完成调用 ${toolName}`,
+    action: event.type === 'agent.tool.started' ? `开始调用 ${toolName}` : `完成调用 ${toolName}`,
     resourceLabel,
   };
 };
@@ -1590,12 +1527,10 @@ const resolveToolEventIcon = (
   }
 
   if (
-    event.type === 'agent.tool.completed'
-    && (
-      extractShellcheckDiagnosticCodes(event.resultPreview).length > 0
-      || hasShellcheckUnavailableSummary(event.resultPreview)
-      || !event.ok
-    )
+    event.type === 'agent.tool.completed' &&
+    (extractShellcheckDiagnosticCodes(event.resultPreview).length > 0 ||
+      hasShellcheckUnavailableSummary(event.resultPreview) ||
+      !event.ok)
   ) {
     return 'alert';
   }
@@ -1603,11 +1538,8 @@ const resolveToolEventIcon = (
   return 'check';
 };
 
-const formatOptionalNumber = (value: number | undefined): string | null => (
-  typeof value === 'number' && Number.isFinite(value)
-    ? tokenNumberFormatter.format(value)
-    : null
-);
+const formatOptionalNumber = (value: number | undefined): string | null =>
+  typeof value === 'number' && Number.isFinite(value) ? tokenNumberFormatter.format(value) : null;
 
 const describeLargestTokenBudgetSource = (event: TTokenBudgetRuntimeEvent): string | null => {
   const candidates = [
@@ -1616,8 +1548,11 @@ const describeLargestTokenBudgetSource = (event: TTokenBudgetRuntimeEvent): stri
     { label: '系统提示', value: event.systemPromptCharCount },
     { label: 'UI 上下文', value: event.contextCharCount },
   ]
-    .filter((candidate): candidate is { label: string; value: number } =>
-      typeof candidate.value === 'number' && Number.isFinite(candidate.value) && candidate.value > 0,
+    .filter(
+      (candidate): candidate is { label: string; value: number } =>
+        typeof candidate.value === 'number' &&
+        Number.isFinite(candidate.value) &&
+        candidate.value > 0,
     )
     .sort((left, right) => right.value - left.value);
 
@@ -1641,9 +1576,9 @@ const describeTokenBudgetEvent = (event: TTokenBudgetRuntimeEvent): string => {
   const mcpToolCount = formatOptionalNumber(event.mcpToolCount);
 
   if (toolCount) {
-    segments.push(mcpToolCount
-      ? `工具 ${toolCount} 个（MCP ${mcpToolCount} 个）`
-      : `工具 ${toolCount} 个`);
+    segments.push(
+      mcpToolCount ? `工具 ${toolCount} 个（MCP ${mcpToolCount} 个）` : `工具 ${toolCount} 个`,
+    );
   }
 
   return segments.filter((segment): segment is string => Boolean(segment)).join('；');
@@ -1711,9 +1646,9 @@ const describeRunEvent = (event: TAgentRuntimeEvent): string | null => {
 };
 
 const isToolEvent = (event: TAgentRuntimeEvent): event is TToolRuntimeEvent =>
-  event.type === 'agent.tool.started'
-  || event.type === 'agent.tool.completed'
-  || event.type === 'agent.tool.progress';
+  event.type === 'agent.tool.started' ||
+  event.type === 'agent.tool.completed' ||
+  event.type === 'agent.tool.progress';
 
 const createToolNode = (
   event: TToolRuntimeEvent,
@@ -1723,7 +1658,9 @@ const createToolNode = (
   const id = createEventKey(event, eventIndex);
 
   if (event.type === 'agent.tool.progress') {
-    const progressToolName = event.toolName ? normalizeRuntimeToolName(event.toolName) : previousNode?.toolName;
+    const progressToolName = event.toolName
+      ? normalizeRuntimeToolName(event.toolName)
+      : previousNode?.toolName;
     const commandProgress = COMMAND_TOOL_NAMES.has(progressToolName ?? '')
       ? parseCommandProgressPreview(event.dataPreview)
       : null;
@@ -1742,9 +1679,7 @@ const createToolNode = (
       suppressMeta: previousNode?.suppressMeta,
       webSearchSources,
       action: previousNode?.action ?? '工具执行中',
-      tags: previousNode?.suppressMeta
-        ? []
-        : parsePreviewValue(event.dataPreview),
+      tags: previousNode?.suppressMeta ? [] : parsePreviewValue(event.dataPreview),
       status: 'running',
       tail: previousNode?.tail,
       terminalOutput: commandProgress
@@ -1759,15 +1694,15 @@ const createToolNode = (
   const toolName = normalizeRuntimeToolName(event.toolName);
   const actionDescriptor = describeToolAction(event, toolName, previousNode?.resourceLabel);
   const icon = resolveToolEventIcon(event, toolName, resolveRuntimeToolIcon(event.toolName, kind));
-  const hasStreamedCommandOutput = COMMAND_TOOL_NAMES.has(toolName)
-    && isNonEmptyString(previousNode?.terminalOutput);
+  const hasStreamedCommandOutput =
+    COMMAND_TOOL_NAMES.has(toolName) && isNonEmptyString(previousNode?.terminalOutput);
   const commandTerminalOutput = COMMAND_TOOL_NAMES.has(toolName)
     ? hasStreamedCommandOutput && event.type === 'agent.tool.completed'
       ? previousNode?.terminalOutput
       : resolveCommandTerminalOutput(
-        event,
-        actionDescriptor.resourceLabel ?? previousNode?.resourceLabel ?? '命令',
-      )
+          event,
+          actionDescriptor.resourceLabel ?? previousNode?.resourceLabel ?? '命令',
+        )
     : undefined;
 
   if (event.type === 'agent.tool.started') {
@@ -1866,10 +1801,10 @@ const findPendingCommandTaskIndex = (
     const item = items[index];
 
     if (
-      item.type === 'task'
-      && item.node.status === 'running'
-      && COMMAND_TOOL_NAMES.has(item.node.toolName ?? '')
-      && (!event.toolUseId || item.node.toolUseId === event.toolUseId)
+      item.type === 'task' &&
+      item.node.status === 'running' &&
+      COMMAND_TOOL_NAMES.has(item.node.toolName ?? '') &&
+      (!event.toolUseId || item.node.toolUseId === event.toolUseId)
     ) {
       return index;
     }
@@ -1878,16 +1813,14 @@ const findPendingCommandTaskIndex = (
   return -1;
 };
 
-const findPendingWebSearchTaskIndex = (
-  items: readonly TTimelineItem[],
-): number => {
+const findPendingWebSearchTaskIndex = (items: readonly TTimelineItem[]): number => {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
 
     if (
-      item.type === 'task'
-      && item.node.status === 'running'
-      && isWebSearchToolName(item.node.toolName)
+      item.type === 'task' &&
+      item.node.status === 'running' &&
+      isWebSearchToolName(item.node.toolName)
     ) {
       return index;
     }
@@ -1896,14 +1829,10 @@ const findPendingWebSearchTaskIndex = (
   return -1;
 };
 
-const findAdjacentWebSearchTaskIndex = (
-  items: readonly TTimelineItem[],
-): number => {
+const findAdjacentWebSearchTaskIndex = (items: readonly TTimelineItem[]): number => {
   const item = items.at(-1);
 
-  return item?.type === 'task' && isWebSearchToolName(item.node.toolName)
-    ? items.length - 1
-    : -1;
+  return item?.type === 'task' && isWebSearchToolName(item.node.toolName) ? items.length - 1 : -1;
 };
 
 const buildTimelineItems = (
@@ -2020,8 +1949,8 @@ const buildTimelineItems = (
       }
 
       if (
-        event.type === 'agent.tool.started'
-        && isWebSearchToolName(normalizeRuntimeToolName(event.toolName))
+        event.type === 'agent.tool.started' &&
+        isWebSearchToolName(normalizeRuntimeToolName(event.toolName))
       ) {
         const adjacentTaskIndex = findAdjacentWebSearchTaskIndex(items);
 
@@ -2062,11 +1991,11 @@ const buildTimelineItems = (
       }
 
       if (
-        (event.type === 'agent.tool.started' || event.type === 'agent.tool.completed')
-        && isMcpListToolsName(normalizeRuntimeToolName(event.toolName))
+        (event.type === 'agent.tool.started' || event.type === 'agent.tool.completed') &&
+        isMcpListToolsName(normalizeRuntimeToolName(event.toolName))
       ) {
-        const existingTaskIndex = items.findIndex((item) =>
-          item.type === 'task' && isMcpListToolsName(item.node.toolName)
+        const existingTaskIndex = items.findIndex(
+          (item) => item.type === 'task' && isMcpListToolsName(item.node.toolName),
         );
 
         if (existingTaskIndex >= 0) {
@@ -2130,22 +2059,20 @@ const timelineItems = computed(() => buildTimelineItems(props.events, props.isWa
 const expandedTerminalNodeIds = ref<Set<string>>(new Set());
 const clearedTerminalNodeOffsets = ref<Record<string, number>>({});
 
-const shouldRenderTimeline = computed(() =>
-  timelineItems.value.length > 0 || props.isStreaming || props.isWaitingConfirmation,
+const shouldRenderTimeline = computed(
+  () => timelineItems.value.length > 0 || props.isStreaming || props.isWaitingConfirmation,
 );
 
 const chainHeaderLabel = computed(() =>
   props.isStreaming || props.isWaitingConfirmation ? '正在思考' : '思考完成',
 );
 
-const getTaskIcon = (node: ITaskNodeItem): Component =>
-  TASK_ICON_MAP[node.icon];
+const getTaskIcon = (node: ITaskNodeItem): Component => TASK_ICON_MAP[node.icon];
 
 const hasCommandTerminal = (node: ITaskNodeItem): boolean =>
   Boolean(node.toolName && COMMAND_TOOL_NAMES.has(node.toolName) && node.terminalOutput);
 
-const isTerminalExpanded = (nodeId: string): boolean =>
-  expandedTerminalNodeIds.value.has(nodeId);
+const isTerminalExpanded = (nodeId: string): boolean => expandedTerminalNodeIds.value.has(nodeId);
 
 const getTerminalOutput = (node: ITaskNodeItem): string => {
   const output = node.terminalOutput ?? '';
@@ -2159,8 +2086,7 @@ const toggleTerminalNode = (nodeId: string): void => {
 
   if (next.has(nodeId)) {
     next.delete(nodeId);
-  }
-  else {
+  } else {
     next.add(nodeId);
   }
 
@@ -2169,7 +2095,7 @@ const toggleTerminalNode = (nodeId: string): void => {
 
 const handleTerminalClear = (nodeId: string): void => {
   const node = timelineItems.value.find((item) => item.type === 'task' && item.node.id === nodeId);
-  const outputLength = node?.type === 'task' ? node.node.terminalOutput?.length ?? 0 : 0;
+  const outputLength = node?.type === 'task' ? (node.node.terminalOutput?.length ?? 0) : 0;
 
   clearedTerminalNodeOffsets.value = {
     ...clearedTerminalNodeOffsets.value,
@@ -2204,8 +2130,7 @@ const getTaskStepStatus = (node: ITaskNodeItem): 'complete' | 'active' | 'pendin
   return 'complete';
 };
 
-const shouldShowTaskStatus = (node: ITaskNodeItem): boolean =>
-  node.status !== 'succeeded';
+const shouldShowTaskStatus = (node: ITaskNodeItem): boolean => node.status !== 'succeeded';
 
 const pushInlineMarkdownToken = (
   tokens: IInlineMarkdownToken[],
@@ -2320,16 +2245,13 @@ const normalizeReasoningHeadingText = (line: string): string =>
     .replace(/^\s{0,3}#{1,6}\s+/u, '')
     .replace(/\s+#*\s*$/u, '');
 
-const resolveFenceLanguage = (info: string): string =>
-  info.trim().split(/\s+/u, 1)[0] ?? '';
+const resolveFenceLanguage = (info: string): string => info.trim().split(/\s+/u, 1)[0] ?? '';
 
 const isClosingFenceLine = (line: string, openingFence: string): boolean => {
   const match = /^\s{0,3}(```+|~~~+)\s*$/u.exec(line);
 
   return Boolean(
-    match
-    && match[1][0] === openingFence[0]
-    && match[1].length >= openingFence.length,
+    match && match[1][0] === openingFence[0] && match[1].length >= openingFence.length,
   );
 };
 

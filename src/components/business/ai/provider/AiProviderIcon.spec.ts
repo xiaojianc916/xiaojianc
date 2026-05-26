@@ -1,7 +1,7 @@
-import AiProviderIcon from '@/components/business/ai/provider/AiProviderIcon.vue';
-import { findAiProviderIconDefinition } from '@/constants/ai/provider-icons';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
+import AiProviderIcon from '@/components/business/ai/provider/AiProviderIcon.vue';
+import { findAiProviderIconDefinition } from '@/constants/ai/provider-icons';
 
 describe('AiProviderIcon', () => {
   it('renders all configured service platform icons without crashing', () => {
@@ -24,7 +24,9 @@ describe('AiProviderIcon', () => {
       });
 
       expect(wrapper.get('.ai-provider-icon').exists()).toBe(true);
-      expect(wrapper.find('img').exists() || wrapper.find('.ai-provider-icon__fallback').exists()).toBeTruthy();
+      expect(
+        wrapper.find('img').exists() || wrapper.find('.ai-provider-icon__fallback').exists(),
+      ).toBeTruthy();
     }
   });
 

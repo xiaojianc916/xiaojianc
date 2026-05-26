@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import LoaderCircle from '~icons/lucide/loader-circle';
 import { computed } from 'vue';
-
 import type { IAiWebActivity } from '@/types/ai';
+import LoaderCircle from '~icons/lucide/loader-circle';
 
 const props = defineProps<{
   activity: IAiWebActivity | null;

@@ -1,20 +1,23 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
 import type { HTMLAttributes } from 'vue';
 import { computed, provide } from 'vue';
+import { cn } from '@/lib/utils';
 import { TerminalKey } from './context';
 
-const props = withDefaults(defineProps<{
-  output?: string;
-  isStreaming?: boolean;
-  autoScroll?: boolean;
-  class?: HTMLAttributes['class'];
-}>(), {
-  output: '',
-  isStreaming: false,
-  autoScroll: true,
-  class: undefined,
-});
+const props = withDefaults(
+  defineProps<{
+    output?: string;
+    isStreaming?: boolean;
+    autoScroll?: boolean;
+    class?: HTMLAttributes['class'];
+  }>(),
+  {
+    output: '',
+    isStreaming: false,
+    autoScroll: true,
+    class: undefined,
+  },
+);
 
 const emit = defineEmits<{
   clear: [];

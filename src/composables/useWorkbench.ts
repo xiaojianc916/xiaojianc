@@ -1,3 +1,4 @@
+import { computed, onScopeDispose } from 'vue';
 import { useDocumentLifecycle } from '@/composables/useDocumentLifecycle';
 import { useDocumentPersistence } from '@/composables/useDocumentPersistence';
 import { useMessage } from '@/composables/useMessage';
@@ -20,7 +21,6 @@ import { desktopRuntimeReady, waitForDesktopRuntime } from '@/utils/desktop-runt
 import { toErrorMessage } from '@/utils/error';
 import { isShellScriptPath } from '@/utils/file-assets';
 import { COMMAND_TEMPLATES, COMMENT_TEMPLATES, DEFAULT_EXECUTOR } from '@/utils/templates';
-import { computed, onScopeDispose } from 'vue';
 
 const EMPTY_ENVIRONMENT: IExecutionEnvironment = {
   recommended: DEFAULT_EXECUTOR,
@@ -31,8 +31,11 @@ const WORKBENCH_RUNTIME_WAIT_MS = 160;
 
 const isTextDocument = (document: { kind: string }): boolean => document.kind === 'text';
 
-const isShellScriptDocument = (document: { kind: string; path: string | null; name: string }): boolean =>
-  isTextDocument(document) && isShellScriptPath(document.path ?? document.name);
+const isShellScriptDocument = (document: {
+  kind: string;
+  path: string | null;
+  name: string;
+}): boolean => isTextDocument(document) && isShellScriptPath(document.path ?? document.name);
 
 export const useWorkbench = () => {
   const appStore = useAppStore();
@@ -140,15 +143,22 @@ export const useWorkbench = () => {
     editorStore,
   });
 
-  const { createNewDocument, restoreSession, openDocument, openFolder, openDocumentByPath, openGitDiffPreview, openGitDiffPreviewPayload } =
-    useWorkbenchDocumentIO({
-      editorStore,
-      notifier,
-      reportError,
-      buildDefaultScriptContent,
-      ensureDirtyDocumentsHandled,
-      refreshGitRepositoryStatus,
-    });
+  const {
+    createNewDocument,
+    restoreSession,
+    openDocument,
+    openFolder,
+    openDocumentByPath,
+    openGitDiffPreview,
+    openGitDiffPreviewPayload,
+  } = useWorkbenchDocumentIO({
+    editorStore,
+    notifier,
+    reportError,
+    buildDefaultScriptContent,
+    ensureDirtyDocumentsHandled,
+    refreshGitRepositoryStatus,
+  });
 
   const initialize = async (): Promise<{
     startupWorkspaceDirectory: IWorkspaceDirectoryPayload | null;
@@ -176,7 +186,6 @@ export const useWorkbench = () => {
       executionEnvironmentSyncTimerId = null;
       void syncExecutionEnvironment();
     }, 0);
-
 
     return {
       startupWorkspaceDirectory,

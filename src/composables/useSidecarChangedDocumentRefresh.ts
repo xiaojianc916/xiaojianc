@@ -1,8 +1,7 @@
 import { tauriService } from '@/services/tauri';
 import { useEditorStore } from '@/store/editor';
-import { areFileSystemPathsEqual } from '@/utils/path';
-
 import type { IEditorDocument, IScriptFilePayload } from '@/types/editor';
+import { areFileSystemPathsEqual } from '@/utils/path';
 
 interface IRefreshSidecarChangedDocumentsRequest {
   changedFilePaths: readonly string[];
@@ -57,14 +56,13 @@ const appendUniquePath = (paths: string[], path: string): void => {
   paths.push(path);
 };
 
-const buildCandidatePaths = (
-  request: IRefreshSidecarChangedDocumentsRequest,
-): string[] => {
-  const rawPaths = request.changedFilePaths.length > 0
-    ? request.changedFilePaths
-    : request.currentDocument?.path
-      ? [request.currentDocument.path]
-      : [];
+const buildCandidatePaths = (request: IRefreshSidecarChangedDocumentsRequest): string[] => {
+  const rawPaths =
+    request.changedFilePaths.length > 0
+      ? request.changedFilePaths
+      : request.currentDocument?.path
+        ? [request.currentDocument.path]
+        : [];
   const paths: string[] = [];
 
   for (const rawPath of rawPaths) {

@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import {
   aiSuggestionLayoutSchema,
   aiSuggestionPoolItemSchema,
@@ -5,7 +6,6 @@ import {
   aiSuggestionPoolRequestSchema,
   aiSuggestionSelectionSchema,
 } from '@/types/ai/suggestion.schema';
-import { describe, expect, it } from 'vitest';
 
 describe('AI suggestion schema', () => {
   it('校验建议词池请求和生成结果', () => {

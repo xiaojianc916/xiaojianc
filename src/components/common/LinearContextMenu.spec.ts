@@ -1,7 +1,7 @@
-import LinearContextMenu from '@/components/common/LinearContextMenu.vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
+import LinearContextMenu from '@/components/common/LinearContextMenu.vue';
 
 const flushUi = async (): Promise<void> => {
   await nextTick();

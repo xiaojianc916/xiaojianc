@@ -1,6 +1,6 @@
+import { describe, expect, it } from 'vitest';
 import type { TSessionSnapshot } from '@/types/session';
 import { createStartupShellState } from '@/utils/startup-shell';
-import { describe, expect, it } from 'vitest';
 
 const createSnapshot = (overrides: Partial<TSessionSnapshot> = {}): TSessionSnapshot => ({
   schemaVersion: 1,

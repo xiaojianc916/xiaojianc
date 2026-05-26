@@ -1,10 +1,10 @@
+import { onBeforeUnmount, reactive, ref } from 'vue';
 import type {
   ILinearContextMenuGroup,
   ILinearContextMenuItem,
 } from '@/components/common/linear-context-menu.types';
 import { openExternalUrl } from '@/utils/browser';
 import { tryReadClipboardText, tryWriteClipboardText, writeClipboardText } from '@/utils/clipboard';
-import { onBeforeUnmount, reactive, ref } from 'vue';
 
 const MENU_WIDTH = 224;
 const MENU_HEIGHT = 320;
@@ -59,8 +59,14 @@ const isTargetInsideMenu = (target: EventTarget | null): boolean =>
   target instanceof Element && target.closest(MENU_ROOT_SELECTOR) !== null;
 
 const clampMenuPosition = (clientX: number, clientY: number) => ({
-  x: Math.min(clientX, Math.max(VIEWPORT_PADDING, window.innerWidth - MENU_WIDTH - VIEWPORT_PADDING)),
-  y: Math.min(clientY, Math.max(VIEWPORT_PADDING, window.innerHeight - MENU_HEIGHT - VIEWPORT_PADDING)),
+  x: Math.min(
+    clientX,
+    Math.max(VIEWPORT_PADDING, window.innerWidth - MENU_WIDTH - VIEWPORT_PADDING),
+  ),
+  y: Math.min(
+    clientY,
+    Math.max(VIEWPORT_PADDING, window.innerHeight - MENU_HEIGHT - VIEWPORT_PADDING),
+  ),
 });
 
 const resolveShortcutModifierLabels = (): {
@@ -96,9 +102,7 @@ const SHORTCUT_MAP = createShortcutMap();
 const isHtmlTextInputElement = (element: Element | null): element is HTMLInputElement =>
   element instanceof HTMLInputElement && TEXT_INPUT_TYPES.has((element.type ?? '').toLowerCase());
 
-const isTextEditableElement = (
-  element: Element | null,
-): boolean =>
+const isTextEditableElement = (element: Element | null): boolean =>
   isHtmlTextInputElement(element) ||
   element instanceof HTMLTextAreaElement ||
   (element instanceof HTMLElement && element.isContentEditable);
@@ -178,7 +182,7 @@ const resolveContextTarget = (target: EventTarget | null): IResolvedContextTarge
     target instanceof HTMLElement
       ? target
       : target instanceof SVGElement
-        ? target as unknown as HTMLElement
+        ? (target as unknown as HTMLElement)
         : null;
   const editableElement = resolveEditableElement(element);
   const isEditableText = editableElement !== null;
@@ -193,7 +197,9 @@ const resolveContextTarget = (target: EventTarget | null): IResolvedContextTarge
     editableElement instanceof HTMLInputElement || editableElement instanceof HTMLTextAreaElement
       ? resolveInputSelection(editableElement)
       : null;
-  const documentSelection = inputSelection ? { text: '', range: null } : resolveDocumentSelection(element);
+  const documentSelection = inputSelection
+    ? { text: '', range: null }
+    : resolveDocumentSelection(element);
   const selectedText = inputSelection?.text ?? documentSelection.text;
 
   return {
@@ -203,9 +209,12 @@ const resolveContextTarget = (target: EventTarget | null): IResolvedContextTarge
     isReadOnly,
     linkHref: resolveLinkHref(element),
     selectedText,
-    inputSelection: inputSelection ? { start: inputSelection.start, end: inputSelection.end } : null,
+    inputSelection: inputSelection
+      ? { start: inputSelection.start, end: inputSelection.end }
+      : null,
     documentSelectionRange: documentSelection.range,
-    isTerminalSurface: element?.closest('.embedded-terminal-host, .embedded-terminal-shell') !== null,
+    isTerminalSurface:
+      element?.closest('.embedded-terminal-host, .embedded-terminal-shell') !== null,
   };
 };
 

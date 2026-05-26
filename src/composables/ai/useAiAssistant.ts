@@ -2,31 +2,12 @@ import {
   computed,
   getCurrentScope,
   onScopeDispose,
+  type Ref,
   ref,
   shallowRef,
   unref,
   watch,
-  type Ref,
 } from 'vue';
-
-import { useAiAgentPlan } from '@/composables/ai/useAiAgentPlan';
-import { useAiStream } from '@/composables/ai/useAiStream';
-import { useSidecarChangedDocumentRefresh } from '@/composables/useSidecarChangedDocumentRefresh';
-import { DEFAULT_LITELLM_MODEL_ID, findAiServicePlatformByModel } from '@/constants/ai/providers';
-import { aiService } from '@/services/ipc/ai.service';
-import { buildCurrentFileReference } from '@/services/ipc/ai-context.service';
-import { aiEditService } from '@/services/ipc/ai-edit.service';
-import { tauriService } from '@/services/tauri';
-import { useAiAgentStore, type IAiPersistedSidecarAgentSession } from '@/store/aiAgent';
-import { useAiConversationStore, type IAiConversationScrollState } from '@/store/aiConversation';
-import {
-  extractVisibleAgentRuntimeEvents,
-  projectSidecarEventsToToolState,
-  projectSidecarExecuteResponse,
-  type IAgentSidecarExecuteProjection,
-  type TAgentSidecarToolStreamStatus,
-} from '@/composables/ai/sidecar-events';
-import { createDefaultAiConfigPayload } from '@/services/ipc/ai-config.service';
 import {
   buildAiAgentPatchSummaryFromAedDiffs,
   buildAiAgentPatchSummaryFromApplyResult,
@@ -34,14 +15,24 @@ import {
   mergeAiAgentPatchSummaries,
   parseAiAedPatchRef,
 } from '@/components/business/ai/edit/patch-summary';
-
 import {
-  AGENT_RUNTIME_EVENT_SCHEMA_VERSION,
-  type IAgentCheckpointEvent,
-  type IAgentSidecarMessage,
-  type TAgentRuntimeEvent,
-  type TAgentUiEvent,
-} from '@/types/ai/sidecar';
+  extractVisibleAgentRuntimeEvents,
+  type IAgentSidecarExecuteProjection,
+  projectSidecarEventsToToolState,
+  projectSidecarExecuteResponse,
+  type TAgentSidecarToolStreamStatus,
+} from '@/composables/ai/sidecar-events';
+import { useAiAgentPlan } from '@/composables/ai/useAiAgentPlan';
+import { useAiStream } from '@/composables/ai/useAiStream';
+import { useSidecarChangedDocumentRefresh } from '@/composables/useSidecarChangedDocumentRefresh';
+import { DEFAULT_LITELLM_MODEL_ID, findAiServicePlatformByModel } from '@/constants/ai/providers';
+import { aiService } from '@/services/ipc/ai.service';
+import { createDefaultAiConfigPayload } from '@/services/ipc/ai-config.service';
+import { buildCurrentFileReference } from '@/services/ipc/ai-context.service';
+import { aiEditService } from '@/services/ipc/ai-edit.service';
+import { tauriService } from '@/services/tauri';
+import { type IAiPersistedSidecarAgentSession, useAiAgentStore } from '@/store/aiAgent';
+import { type IAiConversationScrollState, useAiConversationStore } from '@/store/aiConversation';
 import type {
   IAiAgentPatchSummary,
   IAiApplyPatchMetadata,
@@ -63,6 +54,13 @@ import type {
   IAiEditOperation,
   IAiEditTimelineEntry,
 } from '@/types/ai/edit';
+import {
+  AGENT_RUNTIME_EVENT_SCHEMA_VERSION,
+  type IAgentCheckpointEvent,
+  type IAgentSidecarMessage,
+  type TAgentRuntimeEvent,
+  type TAgentUiEvent,
+} from '@/types/ai/sidecar';
 import type {
   IActiveRunSummary,
   IAnalyzeScriptPayload,
@@ -1012,8 +1010,7 @@ const resolveSidecarWaitingStreamStatus = (
 
 const resolveSidecarToolProjectionStatus = (
   projection: IAgentSidecarExecuteProjection,
-): TAgentSidecarToolStreamStatus =>
-  projection.pendingConfirmation ? 'streaming' : 'completed';
+): TAgentSidecarToolStreamStatus => (projection.pendingConfirmation ? 'streaming' : 'completed');
 
 const mapToolConfirmationDecisionToSidecarDecision = (
   decision: TAiToolConfirmationDecision,
@@ -1314,7 +1311,6 @@ const extractNewVisibleRuntimeEvents = (
 // ---------------------------------------------------------------------------
 // Public quick actions
 // ---------------------------------------------------------------------------
-
 
 export const useAiAssistant = (options: IUseAiAssistantOptions) => {
   const agentStore = useAiAgentStore();
@@ -2193,8 +2189,8 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     const streamStatus = errorEvent || doneEvent ? 'completed' : 'streaming';
     const finalAnswerStarted = Boolean(
       doneResult ||
-      finalMessageEvent ||
-      (currentMessage?.stream?.finalAnswerStarted && messageEvent?.text !== ''),
+        finalMessageEvent ||
+        (currentMessage?.stream?.finalAnswerStarted && messageEvent?.text !== ''),
     );
     const toolProjection = projectSidecarEventsToToolState({
       events,
@@ -2924,13 +2920,9 @@ export const useAiAssistant = (options: IUseAiAssistantOptions) => {
     });
   };
 
-  const getProviderIdForRoleConfig = (
-    nextConfig: IAiConfigPayload,
-    role: TAiModelRole,
-  ): string => {
-    const selectedModel = role === 'narrator'
-      ? nextConfig.narrator.selectedModel
-      : nextConfig.selectedModel;
+  const getProviderIdForRoleConfig = (nextConfig: IAiConfigPayload, role: TAiModelRole): string => {
+    const selectedModel =
+      role === 'narrator' ? nextConfig.narrator.selectedModel : nextConfig.selectedModel;
 
     return findAiServicePlatformByModel(selectedModel).id;
   };

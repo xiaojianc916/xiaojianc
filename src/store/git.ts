@@ -73,18 +73,14 @@ const deduplicatePaths = (paths: string[]): string[] => {
 // Types
 // ---------------------------------------------------------------------------
 
-type TStatusFetcher = (
-  workspaceRootPath: string,
-) => Promise<IGitRepositoryStatusPayload>;
+type TStatusFetcher = (workspaceRootPath: string) => Promise<IGitRepositoryStatusPayload>;
 
 type TPathsMutationRequest = {
   repositoryRootPath: string;
   paths: string[];
 };
 
-type TPathsMutator = (
-  request: TPathsMutationRequest,
-) => Promise<IGitRepositoryStatusPayload>;
+type TPathsMutator = (request: TPathsMutationRequest) => Promise<IGitRepositoryStatusPayload>;
 
 // ---------------------------------------------------------------------------
 // Store
@@ -111,9 +107,7 @@ export const useGitStore = defineStore('git', () => {
   const stashes = ref<IGitStashEntryPayload[]>([]);
   const isStashesLoading = ref(false);
 
-  const pullRequestSupport = ref<IGitPullRequestSupportPayload>(
-    createEmptyPullRequestSupport(),
-  );
+  const pullRequestSupport = ref<IGitPullRequestSupportPayload>(createEmptyPullRequestSupport());
   const isPullRequestSupportLoading = ref(false);
 
   // -- request-id staleness tokens -----------------------------------------
@@ -203,9 +197,7 @@ export const useGitStore = defineStore('git', () => {
     baselineEpoch.value += 1;
   };
 
-  const getFileBaseline = async (
-    path: string,
-  ): Promise<IGitFileBaselinePayload> => {
+  const getFileBaseline = async (path: string): Promise<IGitFileBaselinePayload> => {
     const cacheKey = normalizeFileSystemPath(path);
     const cached = baselineCache.value[cacheKey];
     if (cached) return cached;
@@ -259,12 +251,8 @@ export const useGitStore = defineStore('git', () => {
     resetSupplementaryData();
   };
 
-  const applyStatus = (
-    payload: IGitRepositoryStatusPayload,
-  ): IGitRepositoryStatusPayload => {
-    const previousRepositoryRoot = normalizeFileSystemPath(
-      status.value.repositoryRootPath,
-    );
+  const applyStatus = (payload: IGitRepositoryStatusPayload): IGitRepositoryStatusPayload => {
+    const previousRepositoryRoot = normalizeFileSystemPath(status.value.repositoryRootPath);
     const nextRepositoryRoot = normalizeFileSystemPath(payload.repositoryRootPath);
     status.value = payload;
     if (previousRepositoryRoot !== nextRepositoryRoot || !payload.available) {
@@ -282,9 +270,7 @@ export const useGitStore = defineStore('git', () => {
       throw new Error(payload.message ?? MSG_GIT_INIT_NO_REPOSITORY);
     }
     if (!areFileSystemPathsEqual(payload.repositoryRootPath, workspaceRootPath)) {
-      throw new Error(
-        formatGitInitMismatch(workspaceRootPath, payload.repositoryRootPath),
-      );
+      throw new Error(formatGitInitMismatch(workspaceRootPath, payload.repositoryRootPath));
     }
   };
 
@@ -295,10 +281,7 @@ export const useGitStore = defineStore('git', () => {
   const runStatusRequest = async (
     workspaceRootPath: string | null | undefined,
     fetchPayload: TStatusFetcher,
-    validatePayload?: (
-      payload: IGitRepositoryStatusPayload,
-      workspaceRootPath: string,
-    ) => void,
+    validatePayload?: (payload: IGitRepositoryStatusPayload, workspaceRootPath: string) => void,
   ): Promise<IGitRepositoryStatusPayload> => {
     if (!workspaceRootPath) {
       reset();
@@ -323,9 +306,7 @@ export const useGitStore = defineStore('git', () => {
   const refreshRepositoryStatus = (
     workspaceRootPath?: string | null,
   ): Promise<IGitRepositoryStatusPayload> =>
-    runStatusRequest(workspaceRootPath, (path) =>
-      tauriService.getGitRepositoryStatus(path),
-    );
+    runStatusRequest(workspaceRootPath, (path) => tauriService.getGitRepositoryStatus(path));
 
   const initRepository = (
     workspaceRootPath?: string | null,
@@ -380,9 +361,7 @@ export const useGitStore = defineStore('git', () => {
       (deduplicatedPaths) => deduplicatedPaths.forEach(invalidateFileBaseline),
     );
 
-  const commitIndex = async (
-    message: string,
-  ): Promise<IGitCommitResultPayload> => {
+  const commitIndex = async (message: string): Promise<IGitCommitResultPayload> => {
     isCommitting.value = true;
     try {
       const payload = await tauriService.commitGitIndex({
@@ -423,9 +402,7 @@ export const useGitStore = defineStore('git', () => {
       if (requestId !== commitHistoryRequestId) {
         return commitHistory.value;
       }
-      commitHistory.value = append
-        ? [...commitHistory.value, ...payload.entries]
-        : payload.entries;
+      commitHistory.value = append ? [...commitHistory.value, ...payload.entries] : payload.entries;
       commitHistoryHasMore.value = payload.hasMore;
       commitHistoryNextOffset.value = payload.nextOffset;
       return commitHistory.value;
@@ -495,9 +472,7 @@ export const useGitStore = defineStore('git', () => {
 
   // -- branch / stash write ops ---------------------------------------------
 
-  const checkoutBranch = async (
-    branchName: string,
-  ): Promise<IGitRepositoryStatusPayload> => {
+  const checkoutBranch = async (branchName: string): Promise<IGitRepositoryStatusPayload> => {
     const payload = await tauriService.checkoutGitBranch({
       repositoryRootPath: requireRepositoryRootPath(),
       branchName,
@@ -551,9 +526,7 @@ export const useGitStore = defineStore('git', () => {
     return applyStatus(payload);
   };
 
-  const dropStash = async (
-    stashIndex: number,
-  ): Promise<IGitRepositoryStatusPayload> => {
+  const dropStash = async (stashIndex: number): Promise<IGitRepositoryStatusPayload> => {
     const payload = await tauriService.dropGitStash({
       repositoryRootPath: requireRepositoryRootPath(),
       stashIndex,

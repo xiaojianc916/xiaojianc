@@ -41,10 +41,11 @@ const createTooltipTarget = (): HTMLButtonElement => {
   target.type = 'button';
   target.className = 'app-tooltip-target';
   target.dataset.tooltip = TOOLTIP_TEXT;
-  target.getBoundingClientRect = (): DOMRect => ({
-    ...TARGET_RECT,
-    toJSON: () => undefined,
-  }) as DOMRect;
+  target.getBoundingClientRect = (): DOMRect =>
+    ({
+      ...TARGET_RECT,
+      toJSON: () => undefined,
+    }) as DOMRect;
 
   document.body.appendChild(target);
   return target;

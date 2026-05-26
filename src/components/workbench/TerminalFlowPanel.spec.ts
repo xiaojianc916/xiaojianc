@@ -1,7 +1,7 @@
-import { useTerminalRuntimeStore } from '@/store/terminal';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useTerminalRuntimeStore } from '@/store/terminal';
 import TerminalFlowPanel from './TerminalFlowPanel.vue';
 
 const mountPanel = () =>

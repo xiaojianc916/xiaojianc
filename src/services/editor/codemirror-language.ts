@@ -28,9 +28,8 @@ import { toml } from '@codemirror/legacy-modes/mode/toml';
 import { yaml } from '@codemirror/legacy-modes/mode/yaml';
 import type { Extension } from '@codemirror/state';
 
-const streamLanguage = (
-  parser: Parameters<typeof StreamLanguage.define>[0],
-): LanguageSupport => new LanguageSupport(StreamLanguage.define(parser));
+const streamLanguage = (parser: Parameters<typeof StreamLanguage.define>[0]): LanguageSupport =>
+  new LanguageSupport(StreamLanguage.define(parser));
 
 const languageDescriptions: readonly LanguageDescription[] = [
   LanguageDescription.of({
@@ -224,6 +223,5 @@ export const resolveCodeMirrorLanguageExtension = (language: string): Extension 
   return LanguageDescription.matchLanguageName(languageDescriptions, language, true)?.support ?? [];
 };
 
-export const isCodeMirrorLanguageSupport = (
-  value: Extension,
-): value is LanguageSupport => value instanceof LanguageSupport;
+export const isCodeMirrorLanguageSupport = (value: Extension): value is LanguageSupport =>
+  value instanceof LanguageSupport;

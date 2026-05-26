@@ -1,7 +1,26 @@
 <script setup lang="ts">
-import { createRawTokens, highlightCode, isBold, isItalic, isUnderline, type ITokenizedCode } from '@/components/ai-elements/code-block/utils';
+import type { ThemedToken } from 'shiki';
+import {
+  type CSSProperties,
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from 'vue';
+import {
+  createRawTokens,
+  highlightCode,
+  type ITokenizedCode,
+  isBold,
+  isItalic,
+  isUnderline,
+} from '@/components/ai-elements/code-block/utils';
 import { useMessage } from '@/composables/useMessage';
 import { light as lightThemeRoles } from '@/themes/variants/light';
+import type { ISshFileItem } from '@/types/ssh';
+import type { ISshFileReadPayload } from '@/types/tauri';
 import { writeClipboardText } from '@/utils/clipboard';
 import {
   buildSshPreviewMatchHits,
@@ -10,16 +29,12 @@ import {
   formatSshPreviewEncoding,
   formatSshPreviewLineEnding,
   formatSshPreviewModifiedAt,
+  type ISshPreviewMatchHit,
   normalizeSshPreviewContent,
   resolveSshPreviewCursorPosition,
   resolveSshPreviewLanguageInfo,
-  type ISshPreviewMatchHit,
 } from '@/utils/ssh-file-preview';
 import { splitTextGraphemes } from '@/utils/text-preview';
-import type { ISshFileItem } from '@/types/ssh';
-import type { ISshFileReadPayload } from '@/types/tauri';
-import type { ThemedToken } from 'shiki';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue';
 import ChevronDown from '~icons/lucide/chevron-down';
 import ChevronUp from '~icons/lucide/chevron-up';
 import Clock3 from '~icons/lucide/clock-3';
@@ -124,8 +139,8 @@ const byteSizeLabel = computed(() => {
     ),
   );
 });
-const hasUnsavedChanges = computed(() =>
-  isEditing.value && currentContent.value !== previewContent.value,
+const hasUnsavedChanges = computed(
+  () => isEditing.value && currentContent.value !== previewContent.value,
 );
 const statusLabel = computed(() => {
   if (props.isSaving) {
@@ -183,7 +198,7 @@ const findCountLabel = computed(() => {
 
 const tokenized = ref<ITokenizedCode>(
   highlightCode(currentContent.value, languageInfo.value.shikiLanguage) ??
-  createRawTokens(currentContent.value),
+    createRawTokens(currentContent.value),
 );
 
 watch(
@@ -219,10 +234,7 @@ watch(
 
     void Promise.resolve().then(() => {
       highlightCode(code, language, (result) => {
-        if (
-          currentContent.value === code &&
-          languageInfo.value.shikiLanguage === language
-        ) {
+        if (currentContent.value === code && languageInfo.value.shikiLanguage === language) {
           tokenized.value = result;
         }
       });
@@ -492,8 +504,7 @@ function selectActiveHitInEditor(): void {
 
   const lineHeight = Number.parseFloat(window.getComputedStyle(editor).lineHeight);
   if (Number.isFinite(lineHeight) && lineHeight > 0) {
-    const targetTop =
-      activeHit.lineIndex * lineHeight - editor.clientHeight / 2 + lineHeight;
+    const targetTop = activeHit.lineIndex * lineHeight - editor.clientHeight / 2 + lineHeight;
     editor.scrollTop = Math.max(0, targetTop);
     syncEditorScroll(editor);
   }

@@ -1,5 +1,10 @@
 export {
-    AlertDialogRoot as AlertDialog, AlertDialogAction,
-    AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogPortal, AlertDialogTitle, AlertDialogTrigger
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogPortal,
+  AlertDialogRoot as AlertDialog,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from 'reka-ui';
-

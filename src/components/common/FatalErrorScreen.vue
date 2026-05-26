@@ -1,10 +1,10 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue';
 import ErrorDetails from '@/components/common/ErrorDetails.vue';
 import { Button } from '@/components/ui/button';
 import { writeClipboardText } from '@/utils/clipboard';
 import RotateCcw from '~icons/lucide/rotate-ccw';
 import ShieldAlert from '~icons/lucide/shield-alert';
-import { computed, ref } from 'vue';
 
 const props = withDefaults(
   defineProps<{

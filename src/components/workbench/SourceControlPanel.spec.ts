@@ -1,8 +1,8 @@
-import { APP_DIALOG_EVENT } from '@/types/dialog';
-import type { IGitRepositoryStatusPayload } from '@/types/git';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { APP_DIALOG_EVENT } from '@/types/dialog';
+import type { IGitRepositoryStatusPayload } from '@/types/git';
 import SourceControlPanel from './SourceControlPanel.vue';
 
 const tauriServiceMock = vi.hoisted(() => ({
@@ -249,7 +249,9 @@ describe('SourceControlPanel', () => {
     });
     tauriServiceMock.listGitStashes.mockResolvedValue(stashListPayload);
     tauriServiceMock.saveGitStash.mockResolvedValue(cleanStatus);
-    tauriServiceMock.applyGitStash.mockResolvedValue(createStatus({ unstagedCount: 1, isClean: false }));
+    tauriServiceMock.applyGitStash.mockResolvedValue(
+      createStatus({ unstagedCount: 1, isClean: false }),
+    );
     tauriServiceMock.dropGitStash.mockResolvedValue(cleanStatus);
     tauriServiceMock.getGitPullRequestSupport.mockResolvedValue(pullRequestSupportPayload);
     window.addEventListener(APP_DIALOG_EVENT, confirmDialog);
@@ -278,11 +280,13 @@ describe('SourceControlPanel', () => {
 
   it('初始化后仍未得到当前工作区仓库时停留在引导页并显示错误', async () => {
     const wrapper = await mountPanel(unavailableStatus);
-    tauriServiceMock.initGitRepository.mockResolvedValueOnce(createStatus({
-      repositoryRootPath: 'D:/parent',
-      repositoryName: 'parent',
-      gitDirPath: 'D:/parent/.git',
-    }));
+    tauriServiceMock.initGitRepository.mockResolvedValueOnce(
+      createStatus({
+        repositoryRootPath: 'D:/parent',
+        repositoryName: 'parent',
+        gitDirPath: 'D:/parent/.git',
+      }),
+    );
 
     await wrapper.find('.source-control-setup-btn-primary').trigger('click');
     await flushPromises();
@@ -395,21 +399,23 @@ describe('SourceControlPanel', () => {
   });
 
   it('右键菜单的复制路径会走文件系统路径剪贴板封装', async () => {
-    const wrapper = await mountPanel(createStatus({
-      files: [
-        {
-          path: String.raw`\\?\D:\repo\src\app.sh`,
-          relativePath: 'src/app.sh',
-          fileName: 'app.sh',
-          previousPath: null,
-          previousRelativePath: null,
-          indexStatus: null,
-          worktreeStatus: 'modified',
-          isConflicted: false,
-          isUntracked: false,
-        },
-      ],
-    }));
+    const wrapper = await mountPanel(
+      createStatus({
+        files: [
+          {
+            path: String.raw`\\?\D:\repo\src\app.sh`,
+            relativePath: 'src/app.sh',
+            fileName: 'app.sh',
+            previousPath: null,
+            previousRelativePath: null,
+            indexStatus: null,
+            worktreeStatus: 'modified',
+            isConflicted: false,
+            isUntracked: false,
+          },
+        ],
+      }),
+    );
 
     await wrapper.find('.source-control-file').trigger('contextmenu', {
       clientX: 160,

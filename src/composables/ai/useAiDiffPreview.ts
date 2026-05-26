@@ -1,3 +1,5 @@
+import { computed, type Ref, ref } from 'vue';
+import { parseAiAedDiffRef } from '@/components/business/ai/edit/diff-ref';
 import { aiService } from '@/services/ipc/ai.service';
 import type {
   IAiDiffEditorPreview,
@@ -6,8 +8,6 @@ import type {
   TAiDiffPreviewLineKind,
 } from '@/types/ai';
 import type { IAiEditDiffHunk, IAiEditGetDiffPayload } from '@/types/ai/edit';
-import { parseAiAedDiffRef } from '@/components/business/ai/edit/diff-ref';
-import { computed, ref, type Ref } from 'vue';
 
 const getDiffLineKind = (line: string): TAiDiffPreviewLineKind => {
   if (line.startsWith('+')) {

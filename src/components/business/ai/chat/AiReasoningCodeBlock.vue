@@ -1,53 +1,62 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue';
 import {
-    CodeBlock,
-    CodeBlockActions,
-    CodeBlockCopyButton,
-    CodeBlockFilename,
-    CodeBlockHeader,
-    CodeBlockTitle,
+  CodeBlock,
+  CodeBlockActions,
+  CodeBlockCopyButton,
+  CodeBlockFilename,
+  CodeBlockHeader,
+  CodeBlockTitle,
 } from '@/components/ai-elements/code-block';
-import { normalizeLanguageTag, resolveShikiLanguage, SHIKI_LANGUAGE_LABELS } from '@/utils/shiki-language';
+import {
+  normalizeLanguageTag,
+  resolveShikiLanguage,
+  SHIKI_LANGUAGE_LABELS,
+} from '@/utils/shiki-language';
 import ChevronDown from '~icons/lucide/chevron-down';
 import ChevronUp from '~icons/lucide/chevron-up';
 import FileIcon from '~icons/lucide/file';
-import { computed, ref } from 'vue';
 
-const props = withDefaults(defineProps<{
+const props = withDefaults(
+  defineProps<{
     code: string;
     language?: string;
     fenceInfo?: string;
-}>(), {
+  }>(),
+  {
     language: '',
     fenceInfo: '',
-});
+  },
+);
 
 const isExpanded = ref(true);
 
 const normalizedLanguage = computed(() => normalizeLanguageTag(props.language || props.fenceInfo));
 const shikiLanguage = computed(() => resolveShikiLanguage(normalizedLanguage.value));
-const languageLabel = computed(() => SHIKI_LANGUAGE_LABELS[shikiLanguage.value] ?? shikiLanguage.value);
+const languageLabel = computed(
+  () => SHIKI_LANGUAGE_LABELS[shikiLanguage.value] ?? shikiLanguage.value,
+);
 const filename = computed(() => resolveCodeBlockFilename(props.fenceInfo, languageLabel.value));
 
 function resolveCodeBlockFilename(info: string, fallback: string): string {
-    const infoParts = info.trim().split(/\s+/u).filter(Boolean);
-    const filename = infoParts
-        .map((part) => part.includes(':') ? part.slice(part.indexOf(':') + 1) : part)
-        .find((part) => /[./\\-]/u.test(part));
+  const infoParts = info.trim().split(/\s+/u).filter(Boolean);
+  const filename = infoParts
+    .map((part) => (part.includes(':') ? part.slice(part.indexOf(':') + 1) : part))
+    .find((part) => /[./\\-]/u.test(part));
 
-    return filename || fallback;
+  return filename || fallback;
 }
 
 function toggleExpanded(): void {
-    isExpanded.value = !isExpanded.value;
+  isExpanded.value = !isExpanded.value;
 }
 
 function handleCopy(): void {
-    // 复制状态由 CodeBlockCopyButton 自己管理。
+  // 复制状态由 CodeBlockCopyButton 自己管理。
 }
 
 function handleError(error: Error): void {
-    console.error('复制代码失败', error);
+  console.error('复制代码失败', error);
 }
 </script>
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
+import { computed, type HTMLAttributes, provide } from 'vue';
 import { cn } from '@/lib/utils';
-import { computed, provide, type HTMLAttributes } from 'vue';
 import { AttachmentKey, useAttachmentsContext } from './context';
 import type { TAttachmentData } from './types';
 import { getMediaCategory } from './utils';

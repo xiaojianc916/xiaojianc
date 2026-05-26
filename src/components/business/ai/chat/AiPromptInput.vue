@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref, useAttrs } from 'vue';
 import {
   Context,
   ContextContent,
@@ -35,12 +36,7 @@ import {
   SelectSeparator,
   SelectTrigger,
 } from '@/components/ui/select';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { IAiTokenContextProps } from '@/composables/ai/useAiTokenContext';
 import type { TAiServicePlatformId } from '@/constants/ai/providers';
 import {
@@ -48,7 +44,6 @@ import {
   findAiServicePlatformByModel,
 } from '@/constants/ai/providers';
 import type { IAiAttachedFile, IAiConfigPayload, TAiAgentNetworkPermission } from '@/types/ai';
-import { computed, ref, useAttrs } from 'vue';
 import ArrowUpIcon from '~icons/lucide/arrow-up';
 import CheckIcon from '~icons/lucide/check';
 import ChevronRightIcon from '~icons/lucide/chevron-right';
@@ -201,12 +196,10 @@ const isPromptInputMode = (value: unknown): value is TAiPromptInputMode =>
 const canSubmit = computed(() => modelValue.value.trim().length > 0 || props.hasAttachments);
 const modelSelectDisabled = computed(() => props.disabled || props.isModelSaving);
 const networkPermissionEnabled = computed(() => props.networkPermission === 'allowed-this-run');
-const activeModeOption = computed(() =>
-  modeOptions.find((option) => option.key === activeMode.value) ?? modeOptions[0],
+const activeModeOption = computed(
+  () => modeOptions.find((option) => option.key === activeMode.value) ?? modeOptions[0],
 );
-const networkPermissionLabel = computed(() =>
-  networkPermissionEnabled.value ? '已允许' : '询问',
-);
+const networkPermissionLabel = computed(() => (networkPermissionEnabled.value ? '已允许' : '询问'));
 
 const formatModelLabel = (label: string): string =>
   label
@@ -264,10 +257,7 @@ const toggleNetworkPermission = (): void => {
   if (props.disabled || props.isNetworkPermissionSaving) {
     return;
   }
-  emit(
-    'networkPermissionChange',
-    networkPermissionEnabled.value ? 'ask' : 'allowed-this-run',
-  );
+  emit('networkPermissionChange', networkPermissionEnabled.value ? 'ask' : 'allowed-this-run');
 };
 
 const handleOpenInformationSources = (): void => {

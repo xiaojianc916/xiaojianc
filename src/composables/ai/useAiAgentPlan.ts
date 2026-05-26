@@ -1,21 +1,21 @@
-import { aiService } from '@/services/ipc/ai.service';
-import { useAiAgentStore } from '@/store/aiAgent';
-import type { IAgentSidecarResponsePayload } from '@/types/ai/sidecar';
-import type {
-  IAiAgentPlanMetadata,
-  IAiContextReference,
-  IAiTaskPlanStep,
-  IAiToolCall,
-} from '@/types/ai';
+import { ref } from 'vue';
 import {
   mapSidecarPlanToTaskSteps,
   projectSidecarPlanRecordResponse,
   projectSidecarPlanResponse,
   resolveSidecarOfficialUsage,
 } from '@/composables/ai/sidecar-events';
+import { aiService } from '@/services/ipc/ai.service';
+import { useAiAgentStore } from '@/store/aiAgent';
+import type {
+  IAiAgentPlanMetadata,
+  IAiContextReference,
+  IAiTaskPlanStep,
+  IAiToolCall,
+} from '@/types/ai';
+import type { IAgentSidecarResponsePayload } from '@/types/ai/sidecar';
 import { toErrorMessage } from '@/utils/error';
 import { logger } from '@/utils/logger';
-import { ref } from 'vue';
 
 const MIN_PLAN_STEPS = 2;
 const MAX_PLAN_STEPS = 6;
@@ -33,9 +33,8 @@ interface IAiAgentCreatePlanOptions {
   threadId?: string;
 }
 
-const cloneContext = (
-  context: IAiContextReference[],
-): IAiContextReference[] => context.map((item) => ({ ...item }));
+const cloneContext = (context: IAiContextReference[]): IAiContextReference[] =>
+  context.map((item) => ({ ...item }));
 
 const assertValidGoal = (goal: string, message: string): void => {
   if (!goal.trim()) {
@@ -50,14 +49,12 @@ const assertValidPlanSteps = (steps: IAiTaskPlanStep[]): void => {
 };
 
 const getSidecarErrorMessage = (payload: IAgentSidecarResponsePayload): string | null =>
-  payload.events.find((event): event is Extract<(typeof payload.events)[number], { type: 'error' }> =>
-    event.type === 'error'
+  payload.events.find(
+    (event): event is Extract<(typeof payload.events)[number], { type: 'error' }> =>
+      event.type === 'error',
   )?.message ?? null;
 
-const assertSidecarSuccess = (
-  payload: IAgentSidecarResponsePayload,
-  fallback: string,
-): void => {
+const assertSidecarSuccess = (payload: IAgentSidecarResponsePayload, fallback: string): void => {
   const errorMessage = getSidecarErrorMessage(payload);
   if (errorMessage) {
     throw new Error(errorMessage);
@@ -102,10 +99,7 @@ export const useAiAgentPlan = () => {
     store.applyPlanMetadata(metadata, projection.versions);
   };
 
-  const classifyTask = async (
-    goal: string,
-    context: IAiContextReference[],
-  ): Promise<void> => {
+  const classifyTask = async (goal: string, context: IAiContextReference[]): Promise<void> => {
     store.beginPlanning(goal);
     store.isClassifying = true;
     try {
@@ -178,10 +172,7 @@ export const useAiAgentPlan = () => {
       latestWorkspaceRootPath.value = workspaceRootPath;
       store.mode = 'plan';
       store.setPlan(projection.goal, projection.steps, planMetadata);
-      await refreshPlanRecord(
-        planMetadata.planId,
-        planMetadata.version,
-      ).catch((error: unknown) => {
+      await refreshPlanRecord(planMetadata.planId, planMetadata.version).catch((error: unknown) => {
         logger.warn({
           event: 'ai-agent-plan-record-refresh-failed',
           err: error,
@@ -207,17 +198,19 @@ export const useAiAgentPlan = () => {
 
   const regeneratePlan = async (): Promise<IAiTaskPlanStep[]> => {
     assertValidGoal(store.activeGoal, '当前没有可重新生成的计划目标。');
-    return (await createPlan(
-      store.activeGoal,
-      latestContext.value,
-      latestWorkspaceRootPath.value,
-      store.planId
-        ? {
-          planId: store.planId,
-          ...(store.planThreadId ? { threadId: store.planThreadId } : {}),
-        }
-        : {},
-    )).steps;
+    return (
+      await createPlan(
+        store.activeGoal,
+        latestContext.value,
+        latestWorkspaceRootPath.value,
+        store.planId
+          ? {
+              planId: store.planId,
+              ...(store.planThreadId ? { threadId: store.planThreadId } : {}),
+            }
+          : {},
+      )
+    ).steps;
   };
 
   const refreshPlanRecord = async (
@@ -235,9 +228,8 @@ export const useAiAgentPlan = () => {
   };
 
   const restorePersistedPlanState = async (): Promise<void> => {
-    const hasPersistedSnapshot = store.steps.length > 0 ||
-      Boolean(store.activeRun) ||
-      Boolean(store.planId);
+    const hasPersistedSnapshot =
+      store.steps.length > 0 || Boolean(store.activeRun) || Boolean(store.planId);
     if (!hasPersistedSnapshot) {
       return;
     }
@@ -248,20 +240,19 @@ export const useAiAgentPlan = () => {
     if (!store.planId) {
       return;
     }
-    await refreshPlanRecord(store.planId, store.planVersion ?? undefined).catch((error: unknown) => {
-      logger.warn({
-        event: 'ai-agent-plan-persisted-refresh-failed',
-        err: error,
-        planId: store.planId,
-        planVersion: store.planVersion,
-      });
-    });
+    await refreshPlanRecord(store.planId, store.planVersion ?? undefined).catch(
+      (error: unknown) => {
+        logger.warn({
+          event: 'ai-agent-plan-persisted-refresh-failed',
+          err: error,
+          planId: store.planId,
+          planVersion: store.planVersion,
+        });
+      },
+    );
   };
 
-  const updateStep = (
-    stepId: string,
-    partial: Partial<IAiTaskPlanStep>,
-  ): void => {
+  const updateStep = (stepId: string, partial: Partial<IAiTaskPlanStep>): void => {
     const current = store.steps.find((step) => step.id === stepId);
     if (!current) {
       return;

@@ -418,18 +418,19 @@
 </template>
 
 <script setup lang="ts">
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import LinearContextMenu from '@/components/common/LinearContextMenu.vue';
 import type { ILinearContextMenuItem } from '@/components/common/linear-context-menu.types';
 import { useDialog } from '@/composables/useDialog';
 import { useMessage } from '@/composables/useMessage';
 import {
-  useSourceControlActions,
   type TGitEntryActionKey,
+  useSourceControlActions,
 } from '@/composables/useSourceControlActions';
 import {
-  useSourceControlContextMenu,
   type TGitSectionKey,
   type TSourceControlMenuGroup,
+  useSourceControlContextMenu,
 } from '@/composables/useSourceControlContextMenu';
 import { useGitStore } from '@/store/git';
 import type {
@@ -445,13 +446,8 @@ import type {
 import { openExternalUrl } from '@/utils/browser';
 import { writeFileSystemPathToClipboard } from '@/utils/clipboard';
 import { toErrorMessage } from '@/utils/error';
-import {
-  areFileSystemPathsEqual,
-  getPathBaseName,
-  getPathDirectory,
-} from '@/utils/path';
+import { areFileSystemPathsEqual, getPathBaseName, getPathDirectory } from '@/utils/path';
 import RefreshCw from '~icons/lucide/refresh-cw';
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 
 const GIT_GETTING_STARTED_URL = 'https://git-scm.com/book/zh/v2';
 const GIT_CLONE_GUIDE_URL =
@@ -709,7 +705,9 @@ const branchEntries = computed<IGitBranchPayload[]>(() => gitStore.branches);
 const isBranchesLoading = computed(() => gitStore.isBranchesLoading);
 const stashEntries = computed<IGitStashEntryPayload[]>(() => gitStore.stashes);
 const isStashesLoading = computed(() => gitStore.isStashesLoading);
-const pullRequestSupport = computed<IGitPullRequestSupportPayload>(() => gitStore.pullRequestSupport);
+const pullRequestSupport = computed<IGitPullRequestSupportPayload>(
+  () => gitStore.pullRequestSupport,
+);
 const isPullRequestSupportLoading = computed(() => gitStore.isPullRequestSupportLoading);
 
 const sections = computed<IGitSection[]>(() => {
@@ -762,18 +760,18 @@ const filteredSections = computed<IGitSection[]>(() => {
       const entries = matchesSection
         ? section.entries
         : section.entries.filter((entry) => {
-          const haystack = [
-            entry.fileName,
-            entry.relativePath,
-            entry.previousRelativePath ?? '',
-            entry.indexStatus ?? '',
-            entry.worktreeStatus ?? '',
-          ]
-            .join(' ')
-            .toLowerCase();
+            const haystack = [
+              entry.fileName,
+              entry.relativePath,
+              entry.previousRelativePath ?? '',
+              entry.indexStatus ?? '',
+              entry.worktreeStatus ?? '',
+            ]
+              .join(' ')
+              .toLowerCase();
 
-          return haystack.includes(keyword);
-        });
+            return haystack.includes(keyword);
+          });
 
       return {
         ...section,
@@ -783,12 +781,11 @@ const filteredSections = computed<IGitSection[]>(() => {
     .filter((section) => section.entries.length > 0);
 });
 
-const hasVisibleChanges = computed(() => filteredSections.value.some((section) => section.entries.length > 0));
+const hasVisibleChanges = computed(() =>
+  filteredSections.value.some((section) => section.entries.length > 0),
+);
 const canCommit = computed(
-  () =>
-    status.value.stagedCount > 0 &&
-    commitMessage.value.trim().length > 0 &&
-    !isBusy.value,
+  () => status.value.stagedCount > 0 && commitMessage.value.trim().length > 0 && !isBusy.value,
 );
 
 const branchLabel = computed(() => {
@@ -1034,8 +1031,8 @@ const canOpenPullRequestList = computed(() =>
 const canOpenPullRequestCreate = computed(() =>
   Boolean(
     pullRequestSupport.value.createPullRequestUrl ??
-    pullRequestSupport.value.pullRequestsUrl ??
-    pullRequestSupport.value.repositoryUrl,
+      pullRequestSupport.value.pullRequestsUrl ??
+      pullRequestSupport.value.repositoryUrl,
   ),
 );
 
@@ -1416,10 +1413,13 @@ const handleApplyStash = async (entry: IGitStashEntryPayload, pop: boolean): Pro
   }
 
   try {
-    const didRun = await runWithPending(`${pop ? 'pop' : 'apply'}-stash:${entry.stashId}`, async () => {
-      await gitStore.applyStash(entry.index, pop);
-      await gitStore.loadStashes();
-    });
+    const didRun = await runWithPending(
+      `${pop ? 'pop' : 'apply'}-stash:${entry.stashId}`,
+      async () => {
+        await gitStore.applyStash(entry.index, pop);
+        await gitStore.loadStashes();
+      },
+    );
 
     if (!didRun) {
       return;
@@ -1462,7 +1462,8 @@ const handleDropStash = async (entry: IGitStashEntryPayload): Promise<void> => {
 };
 
 const handleOpenPullRequestList = (): void => {
-  const targetUrl = pullRequestSupport.value.pullRequestsUrl ?? pullRequestSupport.value.repositoryUrl;
+  const targetUrl =
+    pullRequestSupport.value.pullRequestsUrl ?? pullRequestSupport.value.repositoryUrl;
   if (!targetUrl) {
     message.warning('当前没有可打开的 Pull Request 列表。');
     return;

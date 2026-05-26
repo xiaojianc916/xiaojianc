@@ -26,10 +26,7 @@ interface IGraphemeSegmenter {
 }
 
 type TIntlWithSegmenter = typeof Intl & {
-  Segmenter?: new (
-    locale: string,
-    options: { granularity: 'grapheme' },
-  ) => IGraphemeSegmenter;
+  Segmenter?: new (locale: string, options: { granularity: 'grapheme' }) => IGraphemeSegmenter;
 };
 
 const DEFAULT_LOCALE = 'zh-CN';
@@ -45,36 +42,72 @@ const LEADING_FILLERS = ['麻烦', '请'];
 
 // 句首疑问前缀。同语义族内长前缀必须排在短前缀之前。
 const QUESTION_PREFIXES = [
-  '可不可以', '值不值得',
-  '能不能', '为什么',
-  '会不会', '该不该', '要不要',
-  '能否', '可以', '是否',
-  '如何', '怎么', '为何',
-  '哪些', '哪种', '哪类', '哪个',
-  '什么', '多少',
-  '几种', '几条',
+  '可不可以',
+  '值不值得',
+  '能不能',
+  '为什么',
+  '会不会',
+  '该不该',
+  '要不要',
+  '能否',
+  '可以',
+  '是否',
+  '如何',
+  '怎么',
+  '为何',
+  '哪些',
+  '哪种',
+  '哪类',
+  '哪个',
+  '什么',
+  '多少',
+  '几种',
+  '几条',
 ];
 
 // 句中疑问标记。wh- 完整词在前(指纹粒度更细),句末助词作兜底。
 // 严禁单字 '么'(误命中 '那么'/'这么')、'哪'(误命中 '哪怕')。
 const QUESTION_HINTS = [
-  '为什么', '为何',
+  '为什么',
+  '为何',
   '什么',
-  '哪些', '哪种', '哪类', '哪个',
+  '哪些',
+  '哪种',
+  '哪类',
+  '哪个',
   '多少',
-  '几种', '几条',
-  '是否', '能否',
-  '吗', '呢',
+  '几种',
+  '几条',
+  '是否',
+  '能否',
+  '吗',
+  '呢',
 ];
 
 // 祈使前缀。必须 ≥ 2 字;1 字动词('帮'/'写'/'改')歧义太大,排除。
 const IMPERATIVE_PREFIXES = [
-  '列一个', '写一段', '写一篇', '讲一个', '做一个',
-  '帮我', '给我',
-  '推荐', '介绍', '解释', '分享', '生成', '整理',
-  '列出', '设计', '安排', '分析',
-  '讲讲', '说说',
-  '总结', '拆解', '提供',
+  '列一个',
+  '写一段',
+  '写一篇',
+  '讲一个',
+  '做一个',
+  '帮我',
+  '给我',
+  '推荐',
+  '介绍',
+  '解释',
+  '分享',
+  '生成',
+  '整理',
+  '列出',
+  '设计',
+  '安排',
+  '分析',
+  '讲讲',
+  '说说',
+  '总结',
+  '拆解',
+  '提供',
 ];
 
 const clampRandomValue = (value: number): number => {
@@ -85,10 +118,7 @@ const clampRandomValue = (value: number): number => {
 };
 
 const normalizeSuggestionText = (value: string): string =>
-  value
-    .normalize('NFC')
-    .replace(/\s+/gu, ' ')
-    .trim();
+  value.normalize('NFC').replace(/\s+/gu, ' ').trim();
 
 export const normalizeSuggestionPool = (
   suggestions: readonly string[],
@@ -162,9 +192,7 @@ const findHintInWindow = (
   hints: readonly string[],
   locale: string,
 ): string | null => {
-  const windowText = createGraphemeList(value, locale)
-    .slice(0, QUESTION_WINDOW_GRAPHEMES)
-    .join('');
+  const windowText = createGraphemeList(value, locale).slice(0, QUESTION_WINDOW_GRAPHEMES).join('');
   for (const hint of hints) {
     if (windowText.includes(hint)) {
       return hint;
@@ -198,11 +226,7 @@ export const resolveSuggestionShape = (
   return 'statement';
 };
 
-const resolveSuggestionLead = (
-  value: string,
-  shape: TSuggestionShape,
-  locale: string,
-): string => {
+const resolveSuggestionLead = (value: string, shape: TSuggestionShape, locale: string): string => {
   const normalizedValue = stripLeadingFillers(
     normalizeSuggestionText(value).toLocaleLowerCase(locale),
   );
@@ -211,24 +235,21 @@ const resolveSuggestionLead = (
   }
   if (shape === 'question') {
     return (
-      findPrefix(normalizedValue, QUESTION_PREFIXES)
-      ?? findHintInWindow(normalizedValue, QUESTION_HINTS, locale)
-      ?? createGraphemeList(normalizedValue, locale).slice(0, LEAD_SIGNATURE_GRAPHEMES).join('')
+      findPrefix(normalizedValue, QUESTION_PREFIXES) ??
+      findHintInWindow(normalizedValue, QUESTION_HINTS, locale) ??
+      createGraphemeList(normalizedValue, locale).slice(0, LEAD_SIGNATURE_GRAPHEMES).join('')
     );
   }
   if (shape === 'imperative') {
     return (
-      findPrefix(normalizedValue, IMPERATIVE_PREFIXES)
-      ?? createGraphemeList(normalizedValue, locale).slice(0, LEAD_SIGNATURE_GRAPHEMES).join('')
+      findPrefix(normalizedValue, IMPERATIVE_PREFIXES) ??
+      createGraphemeList(normalizedValue, locale).slice(0, LEAD_SIGNATURE_GRAPHEMES).join('')
     );
   }
   return createGraphemeList(normalizedValue, locale).slice(0, LEAD_SIGNATURE_GRAPHEMES).join('');
 };
 
-export const resolveSuggestionHead = (
-  value: string,
-  locale = DEFAULT_LOCALE,
-): string => {
+export const resolveSuggestionHead = (value: string, locale = DEFAULT_LOCALE): string => {
   const shape = resolveSuggestionShape(value, locale);
   const lead = resolveSuggestionLead(value, shape, locale);
   return `${shape}:${lead}`;
@@ -255,9 +276,10 @@ export const mmr = (
         continue;
       }
       const relevance = candidate.score;
-      const diversityPenalty = picked.length > 0
-        ? Math.max(...picked.map((item) => suggestionSimilarity(candidate, item)))
-        : 0;
+      const diversityPenalty =
+        picked.length > 0
+          ? Math.max(...picked.map((item) => suggestionSimilarity(candidate, item)))
+          : 0;
       const score = lambda * relevance - (1 - lambda) * diversityPenalty;
       if (score > bestScore) {
         bestScore = score;
@@ -352,5 +374,4 @@ export const pickSuggestionBatch = (
   pool: readonly string[],
   fallback: readonly string[],
   options: IPickSuggestionBatchOptions = {},
-): string[] =>
-  pickSuggestionBatchDetailed(pool, fallback, options).map((item) => item.text);
+): string[] => pickSuggestionBatchDetailed(pool, fallback, options).map((item) => item.text);

@@ -1,16 +1,19 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import { findAiProviderIconDefinition } from '@/constants/ai/provider-icons';
 import type { TAiServicePlatformId } from '@/constants/ai/providers';
-import { computed, ref, watch } from 'vue';
 
-const props = withDefaults(defineProps<{
-  platformId: TAiServicePlatformId;
-  title?: string;
-  decorative?: boolean;
-}>(), {
-  title: '',
-  decorative: false,
-});
+const props = withDefaults(
+  defineProps<{
+    platformId: TAiServicePlatformId;
+    title?: string;
+    decorative?: boolean;
+  }>(),
+  {
+    title: '',
+    decorative: false,
+  },
+);
 
 const iconDefinition = computed(() => findAiProviderIconDefinition(props.platformId));
 const titleText = computed(() => props.title.trim() || iconDefinition.value.label);

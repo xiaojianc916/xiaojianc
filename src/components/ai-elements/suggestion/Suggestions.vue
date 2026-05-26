@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
 import type { HTMLAttributes } from 'vue';
+import { cn } from '@/lib/utils';
 
 defineOptions({
   inheritAttrs: false,
 });
 
-const props = withDefaults(defineProps<{
-  class?: HTMLAttributes['class'];
-}>(), {
-  class: undefined,
-});
+const props = withDefaults(
+  defineProps<{
+    class?: HTMLAttributes['class'];
+  }>(),
+  {
+    class: undefined,
+  },
+);
 </script>
 
 <template>

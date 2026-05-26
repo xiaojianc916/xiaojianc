@@ -2,7 +2,7 @@ import {
   basename as patheBasename,
   dirname as patheDirname,
   normalize as patheNormalize,
-} from "pathe";
+} from 'pathe';
 
 export interface INormalizeFileSystemPathOptions {
   collapseDuplicateSeparators?: boolean;
@@ -49,16 +49,16 @@ const stripWindowsVerbatimPrefix = (value: string): string => {
   if (match[1]) {
     // UNC 形态：还原成双分隔符 + 主机/共享名
     const isBackslash = value.charCodeAt(0) === 0x5c;
-    return (isBackslash ? "\\\\" : "//") + rest;
+    return (isBackslash ? '\\\\' : '//') + rest;
   }
   return rest;
 };
 
 const collapseDuplicateSeparators = (value: string): string => {
-  if (value.startsWith("//")) {
-    return `//${value.slice(2).replace(/\/+/g, "/")}`;
+  if (value.startsWith('//')) {
+    return `//${value.slice(2).replace(/\/+/g, '/')}`;
   }
-  return value.replace(/\/+/g, "/");
+  return value.replace(/\/+/g, '/');
 };
 
 const isWindowsStylePath = (value: string): boolean =>
@@ -70,13 +70,13 @@ const isAbsoluteDisplayPath = (value: string): boolean =>
 const trimTrailingSeparator = (value: string): string => {
   if (
     !value ||
-    value === "/" ||
+    value === '/' ||
     WINDOWS_DRIVE_ROOT_PATTERN.test(value) ||
     UNC_SHARE_ROOT_PATTERN.test(value)
   ) {
     return value;
   }
-  return value.replace(/\/+$/g, "");
+  return value.replace(/\/+$/g, '');
 };
 
 // ---- public API -------------------------------------------------------------
@@ -85,10 +85,10 @@ export const normalizeFileSystemPath = (
   value: string | null | undefined,
   options: INormalizeFileSystemPathOptions = {},
 ): string => {
-  if (!value) return "";
+  if (!value) return '';
 
   let normalized = stripWindowsVerbatimPrefix(value);
-  normalized = patheNormalize(normalized).replace(/\\/g, "/");
+  normalized = patheNormalize(normalized).replace(/\\/g, '/');
   normalized = stripWindowsVerbatimPrefix(normalized);
 
   if (options.collapseDuplicateSeparators) {
@@ -104,23 +104,23 @@ export const normalizeFileSystemPath = (
 };
 
 export const formatFileSystemPathForDisplay = (value: string | null | undefined): string => {
-  if (!value) return "";
+  if (!value) return '';
   let formatted = stripWindowsVerbatimPrefix(value);
-  formatted = stripWindowsVerbatimPrefix(formatted.replace(/\\/g, "/"));
+  formatted = stripWindowsVerbatimPrefix(formatted.replace(/\\/g, '/'));
 
   if (isWindowsStylePath(formatted)) {
-    return collapseDuplicateSeparators(formatted).replace(/\//g, "\\");
+    return collapseDuplicateSeparators(formatted).replace(/\//g, '\\');
   }
   return collapseDuplicateSeparators(formatted);
 };
 
 export const formatFileSystemTextForDisplay = (value: string | null | undefined): string => {
-  if (!value) return "";
+  if (!value) return '';
   return value
-    .replace(/\\\\\?\\UNC\\/gi, "\\\\")
-    .replace(/\\\\\?\\/g, "")
-    .replace(/\/\/\?\/UNC\//gi, "//")
-    .replace(/\/\/\?\//g, "");
+    .replace(/\\\\\?\\UNC\\/gi, '\\\\')
+    .replace(/\\\\\?\\/g, '')
+    .replace(/\/\/\?\/UNC\//gi, '//')
+    .replace(/\/\/\?\//g, '');
 };
 
 export const joinDisplayedPath = (
@@ -130,14 +130,14 @@ export const joinDisplayedPath = (
   const formattedPrefix = formatFileSystemPathForDisplay(prefix).trim();
   const formattedLeaf = formatFileSystemPathForDisplay(leaf)
     .trim()
-    .replace(/^[\\/]+/g, "");
+    .replace(/^[\\/]+/g, '');
 
   if (!formattedPrefix) return formattedLeaf;
   if (!formattedLeaf) return formattedPrefix;
 
   if (isAbsoluteDisplayPath(formattedPrefix)) {
-    const separator = WINDOWS_DISPLAY_PATH_PATTERN.test(formattedPrefix) ? "\\" : "/";
-    return `${formattedPrefix.replace(/[\\/]+$/g, "")}${separator}${formattedLeaf}`;
+    const separator = WINDOWS_DISPLAY_PATH_PATTERN.test(formattedPrefix) ? '\\' : '/';
+    return `${formattedPrefix.replace(/[\\/]+$/g, '')}${separator}${formattedLeaf}`;
   }
   return `${formattedPrefix} / ${formattedLeaf}`;
 };
@@ -155,7 +155,7 @@ export const areFileSystemPathsEqual = (
 
 export const getPathBaseName = (value: string | null | undefined): string => {
   const normalized = normalizeFileSystemPath(value, { trimTrailingSeparator: true });
-  if (!normalized) return "";
+  if (!normalized) return '';
   return patheBasename(normalized);
 };
 
@@ -173,9 +173,9 @@ export const getRelativeFileSystemPath = (
   });
 
   if (!normalizedFullPath || !normalizedRootPath) return null;
-  if (normalizedFullPath === normalizedRootPath) return "";
+  if (normalizedFullPath === normalizedRootPath) return '';
 
-  const rootWithSep = normalizedRootPath.endsWith("/")
+  const rootWithSep = normalizedRootPath.endsWith('/')
     ? normalizedRootPath
     : `${normalizedRootPath}/`;
 
@@ -185,7 +185,7 @@ export const getRelativeFileSystemPath = (
 
 export const getPathDirectory = (value: string | null | undefined): string => {
   const normalized = normalizeFileSystemPath(value, { trimTrailingSeparator: true });
-  if (!normalized) return "";
+  if (!normalized) return '';
   const dir = patheDirname(normalized);
-  return dir === "." ? "" : `${dir}/`;
+  return dir === '.' ? '' : `${dir}/`;
 };

@@ -1,6 +1,5 @@
-import { describe, expect, it } from 'vitest';
-
 import { LanguageSupport, StreamLanguage } from '@codemirror/language';
+import { describe, expect, it } from 'vitest';
 
 import { resolveCodeMirrorLanguageExtension } from './codemirror-language';
 

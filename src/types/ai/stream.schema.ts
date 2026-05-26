@@ -1,9 +1,4 @@
 import { z } from 'zod';
-
-import {
-  AI_AGENT_STREAM_END_REASONS,
-  AI_TOOL_ACTIVITY_STATES,
-} from '@/types/ai/stream';
 import {
   aiAgentRunSchema,
   aiAgentToolNameSchema,
@@ -11,6 +6,7 @@ import {
   aiToolConfirmationRequestSchema,
 } from '@/types/ai/agent.schema';
 import { aiAgentPatchSummarySchema } from '@/types/ai/patch.schema';
+import { AI_AGENT_STREAM_END_REASONS, AI_TOOL_ACTIVITY_STATES } from '@/types/ai/stream';
 
 export const aiToolActivityStateSchema = z.enum(AI_TOOL_ACTIVITY_STATES);
 

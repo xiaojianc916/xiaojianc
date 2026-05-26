@@ -1,9 +1,9 @@
+import { toast } from 'vue-sonner';
 import type { IErrorPresentationAction } from '@/types/app-error';
 import {
-  resolveErrorPresentation,
   type IResolveErrorPresentationOptions,
+  resolveErrorPresentation,
 } from '@/utils/error-presentation';
-import { toast } from 'vue-sonner';
 
 const ERROR_TOAST_DURATION_MS = 7_000;
 const INFO_TOAST_DURATION_MS = 4_000;

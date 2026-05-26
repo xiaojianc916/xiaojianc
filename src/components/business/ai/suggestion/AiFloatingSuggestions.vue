@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion';
-import { cn } from '@/lib/utils';
-import { groupSuggestionsByEstimatedWidth } from '@/components/business/ai/suggestion/layout';
 import { computed, type HTMLAttributes } from 'vue';
+import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion';
+import { groupSuggestionsByEstimatedWidth } from '@/components/business/ai/suggestion/layout';
+import { cn } from '@/lib/utils';
 
 interface IAiSuggestionRow {
   id: string;
@@ -14,18 +14,21 @@ interface IAiSuggestionItem {
   text: string;
 }
 
-const props = withDefaults(defineProps<{
-  suggestions: readonly string[];
-  class?: HTMLAttributes['class'];
-  title?: string;
-  targetWidth?: number;
-  disabled?: boolean;
-}>(), {
-  class: undefined,
-  title: '有什么我能帮你的吗？',
-  targetWidth: 720,
-  disabled: false,
-});
+const props = withDefaults(
+  defineProps<{
+    suggestions: readonly string[];
+    class?: HTMLAttributes['class'];
+    title?: string;
+    targetWidth?: number;
+    disabled?: boolean;
+  }>(),
+  {
+    class: undefined,
+    title: '有什么我能帮你的吗？',
+    targetWidth: 720,
+    disabled: false,
+  },
+);
 
 const emit = defineEmits<{
   select: [suggestion: string];

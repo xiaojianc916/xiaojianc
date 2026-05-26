@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import '@/assets/css/ssh-sidebar.css'
-import FieldError from '@/components/common/FieldError.vue'
-import LinearContextMenu from '@/components/common/LinearContextMenu.vue'
-import SshFilePreviewDialog from '@/components/workbench/SshFilePreviewDialog.vue'
+import '@/assets/css/ssh-sidebar.css';
+import { toTypedSchema } from '@vee-validate/zod';
+import { storeToRefs } from 'pinia';
+import { useForm } from 'vee-validate';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import FieldError from '@/components/common/FieldError.vue';
+import LinearContextMenu from '@/components/common/LinearContextMenu.vue';
 import type {
   ILinearContextMenuGroup,
   ILinearContextMenuItem,
-} from '@/components/common/linear-context-menu.types'
+} from '@/components/common/linear-context-menu.types';
 import {
   Breadcrumb,
   BreadcrumbEllipsis,
@@ -15,32 +18,26 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb'
-import { Button } from '@/components/ui/button'
-import DropdownMenu from '@/components/ui/dropdown-menu/DropdownMenu.vue'
-import DropdownMenuContent from '@/components/ui/dropdown-menu/DropdownMenuContent.vue'
-import DropdownMenuItem from '@/components/ui/dropdown-menu/DropdownMenuItem.vue'
-import DropdownMenuTrigger from '@/components/ui/dropdown-menu/DropdownMenuTrigger.vue'
-import { Field, FieldGroup, FieldLabel, FieldSet } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+} from '@/components/ui/breadcrumb';
+import { Button } from '@/components/ui/button';
+import DropdownMenu from '@/components/ui/dropdown-menu/DropdownMenu.vue';
+import DropdownMenuContent from '@/components/ui/dropdown-menu/DropdownMenuContent.vue';
+import DropdownMenuItem from '@/components/ui/dropdown-menu/DropdownMenuItem.vue';
+import DropdownMenuTrigger from '@/components/ui/dropdown-menu/DropdownMenuTrigger.vue';
+import { Field, FieldGroup, FieldLabel, FieldSet } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { useIntegratedTerminalControls } from '@/composables/useIntegratedTerminal'
-import { useMessage } from '@/composables/useMessage'
-import {
-  sshConnectionSchema,
-  toSshConnectionPayload,
-  type SshAuthMode,
-  type SshConnectionFormValues,
-  type SshConnectionPayload
-} from '@/types/ssh/connection.schema'
-import { tauriService } from '@/services/tauri'
-import { useSshStore } from '@/store/ssh'
+} from '@/components/ui/select';
+import SshFilePreviewDialog from '@/components/workbench/SshFilePreviewDialog.vue';
+import { useIntegratedTerminalControls } from '@/composables/useIntegratedTerminal';
+import { useMessage } from '@/composables/useMessage';
+import { tauriService } from '@/services/tauri';
+import { useSshStore } from '@/store/ssh';
 import type {
   ISshAuthOption,
   ISshFileItem,
@@ -51,28 +48,31 @@ import type {
   TSshFileKind,
   TSshPanelTab,
   TSshTransferDirection,
-} from '@/types/ssh'
-import type { ISshFileReadPayload } from '@/types/tauri'
-import { toTypedSchema } from '@vee-validate/zod'
-import { storeToRefs } from 'pinia'
-import { useForm } from 'vee-validate'
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import Clock3 from '~icons/lucide/clock3'
-import Eye from '~icons/lucide/eye'
-import EyeOff from '~icons/lucide/eye-off'
-import RefreshCw from '~icons/lucide/refresh-cw'
-import Server from '~icons/lucide/server'
-import Unplug from '~icons/lucide/unplug'
+} from '@/types/ssh';
+import {
+  type SshAuthMode,
+  type SshConnectionFormValues,
+  type SshConnectionPayload,
+  sshConnectionSchema,
+  toSshConnectionPayload,
+} from '@/types/ssh/connection.schema';
+import type { ISshFileReadPayload } from '@/types/tauri';
+import Clock3 from '~icons/lucide/clock3';
+import Eye from '~icons/lucide/eye';
+import EyeOff from '~icons/lucide/eye-off';
+import RefreshCw from '~icons/lucide/refresh-cw';
+import Server from '~icons/lucide/server';
+import Unplug from '~icons/lucide/unplug';
 
-const CONTEXT_MENU_WIDTH = 172
-const CONTEXT_MENU_HEIGHT = 252
-const SSH_BREADCRUMB_COLLAPSE_THRESHOLD = 4
-const SSH_BREADCRUMB_TAIL_COUNT = 2
-const DEFAULT_SELECTED_FILE_ID = 'ssh-client'
-const MANUAL_CONNECTION_ID = 'manual'
-const DEFAULT_SSH_PORT = '22'
-const TERMINAL_OPEN_DELAY_MS = 120
-const SSH_PASSWORD_SEND_DELAY_MS = 180
+const CONTEXT_MENU_WIDTH = 172;
+const CONTEXT_MENU_HEIGHT = 252;
+const SSH_BREADCRUMB_COLLAPSE_THRESHOLD = 4;
+const SSH_BREADCRUMB_TAIL_COUNT = 2;
+const DEFAULT_SELECTED_FILE_ID = 'ssh-client';
+const MANUAL_CONNECTION_ID = 'manual';
+const DEFAULT_SSH_PORT = '22';
+const TERMINAL_OPEN_DELAY_MS = 120;
+const SSH_PASSWORD_SEND_DELAY_MS = 180;
 
 const SSH_CONTEXT_MENU_GROUPS: ILinearContextMenuGroup[] = [
   {
@@ -91,16 +91,16 @@ const SSH_CONTEXT_MENU_GROUPS: ILinearContextMenuGroup[] = [
     title: '',
     items: [{ key: 'delete', label: '删除', icon: 'trash', variant: 'destructive' }],
   },
-]
+];
 
 const SSH_AUTH_OPTIONS: ISshAuthOption[] = [
   { value: 'password', label: '密码认证' },
   { value: 'key', label: '密钥认证' },
-]
+];
 
 type TSshBreadcrumbItem =
   | (ISshPathSegment & { type: 'segment' })
-  | { id: 'ssh-path-ellipsis'; type: 'ellipsis'; segments: ISshPathSegment[] }
+  | { id: 'ssh-path-ellipsis'; type: 'ellipsis'; segments: ISshPathSegment[] };
 
 const FALLBACK_SELECTED_FILE: ISshFileItem = {
   id: DEFAULT_SELECTED_FILE_ID,
@@ -109,15 +109,15 @@ const FALLBACK_SELECTED_FILE: ISshFileItem = {
   metaLabel: '8.7 KB',
   path: 'ssh_client.rs',
   isDirectory: false,
-}
+};
 
 const emit = defineEmits<{
-  'open-terminal': []
-}>()
+  'open-terminal': [];
+}>();
 
-const message = useMessage()
-const terminalControls = useIntegratedTerminalControls()
-const sshStore = useSshStore()
+const message = useMessage();
+const terminalControls = useIntegratedTerminalControls();
+const sshStore = useSshStore();
 const {
   activeContentTab,
   isConnectFormVisible,
@@ -127,14 +127,14 @@ const {
   sshFileItems,
   transferItems,
   currentRemotePath,
-} = storeToRefs(sshStore)
+} = storeToRefs(sshStore);
 
 // ── 表单状态:useForm 取代 sshStore.connectionForm 作为 UI 表单源 ─────────────────
 const isAuthMode = (value: unknown): value is SshAuthMode =>
-  value === 'password' || value === 'key'
+  value === 'password' || value === 'key';
 
 const buildInitialFormValues = (): SshConnectionFormValues => {
-  const stored = sshStore.connectionForm
+  const stored = sshStore.connectionForm;
   return {
     host: stored?.host ?? '',
     port: stored?.port ?? DEFAULT_SSH_PORT,
@@ -142,8 +142,8 @@ const buildInitialFormValues = (): SshConnectionFormValues => {
     authMode: isAuthMode(stored?.authMode) ? stored.authMode : 'password',
     identityPath: stored?.identityPath ?? '',
     password: stored?.password ?? '',
-  }
-}
+  };
+};
 
 const {
   values: connectionForm,
@@ -157,64 +157,63 @@ const {
   validationSchema: toTypedSchema(sshConnectionSchema),
   initialValues: buildInitialFormValues(),
   validateOnMount: false,
-})
+});
 
-const [host] = defineField('host')
-const [port] = defineField('port')
-const [username] = defineField('username')
-const [authMode] = defineField('authMode')
-const [identityPath] = defineField('identityPath')
-const [password] = defineField('password')
+const [host] = defineField('host');
+const [port] = defineField('port');
+const [username] = defineField('username');
+const [authMode] = defineField('authMode');
+const [identityPath] = defineField('identityPath');
+const [password] = defineField('password');
 
 /** 把表单当前值写回 Pinia store(用于 recent 持久化) */
 const syncFormToStore = (): void => {
-  sshStore.connectionForm.host = connectionForm.host
-  sshStore.connectionForm.port = connectionForm.port
-  sshStore.connectionForm.username = connectionForm.username
-  sshStore.connectionForm.authMode = connectionForm.authMode
-  sshStore.connectionForm.identityPath = connectionForm.identityPath
-  sshStore.connectionForm.password = connectionForm.password
-}
+  sshStore.connectionForm.host = connectionForm.host;
+  sshStore.connectionForm.port = connectionForm.port;
+  sshStore.connectionForm.username = connectionForm.username;
+  sshStore.connectionForm.authMode = connectionForm.authMode;
+  sshStore.connectionForm.identityPath = connectionForm.identityPath;
+  sshStore.connectionForm.password = connectionForm.password;
+};
 
-const renameInputRef = ref<HTMLInputElement | null>(null)
-const createDirectoryInputRef = ref<HTMLInputElement | null>(null)
-const isConnecting = ref(false)
-const isPasswordVisible = ref(false)
-const connectionStatusText = ref('')
-const connectionErrorText = ref('')
-const isRemoteDirectoryLoading = ref(false)
-const isUploading = ref(false)
-const isDownloading = ref(false)
-const isPathMutating = ref(false)
-const pendingRenameItem = ref<ISshFileItem | null>(null)
-const pendingDeleteItem = ref<ISshFileItem | null>(null)
-const previewFileItem = ref<ISshFileItem | null>(null)
-const previewPayload = ref<ISshFileReadPayload | null>(null)
-const isPreviewLoading = ref(false)
-const isPreviewSaving = ref(false)
-const isCreateDirectoryDialogOpen = ref(false)
-const renameInputValue = ref('')
-const createDirectoryName = ref('')
-const remoteDirectoryRequestVersion = ref(0)
-const activeSshConnectionRequest = ref<SshConnectionPayload | null>(null)
-const contextMenu = reactive({ open: false, x: 0, y: 0 })
+const renameInputRef = ref<HTMLInputElement | null>(null);
+const createDirectoryInputRef = ref<HTMLInputElement | null>(null);
+const isConnecting = ref(false);
+const isPasswordVisible = ref(false);
+const connectionStatusText = ref('');
+const connectionErrorText = ref('');
+const isRemoteDirectoryLoading = ref(false);
+const isUploading = ref(false);
+const isDownloading = ref(false);
+const isPathMutating = ref(false);
+const pendingRenameItem = ref<ISshFileItem | null>(null);
+const pendingDeleteItem = ref<ISshFileItem | null>(null);
+const previewFileItem = ref<ISshFileItem | null>(null);
+const previewPayload = ref<ISshFileReadPayload | null>(null);
+const isPreviewLoading = ref(false);
+const isPreviewSaving = ref(false);
+const isCreateDirectoryDialogOpen = ref(false);
+const renameInputValue = ref('');
+const createDirectoryName = ref('');
+const remoteDirectoryRequestVersion = ref(0);
+const activeSshConnectionRequest = ref<SshConnectionPayload | null>(null);
+const contextMenu = reactive({ open: false, x: 0, y: 0 });
 
-const isExplorerActive = computed(() => activeContentTab.value === 'explorer')
-const isTransferActive = computed(() => activeContentTab.value === 'transfer')
-const isDisconnected = computed(() => !isConnected.value)
+const isExplorerActive = computed(() => activeContentTab.value === 'explorer');
+const isTransferActive = computed(() => activeContentTab.value === 'transfer');
+const isDisconnected = computed(() => !isConnected.value);
 const selectedFile = computed<ISshFileItem>(
   () =>
-    sshFileItems.value.find((item) => item.id === selectedFileId.value) ??
-    FALLBACK_SELECTED_FILE,
-)
-const sshCommandPreview = computed(() => buildSshCommand())
+    sshFileItems.value.find((item) => item.id === selectedFileId.value) ?? FALLBACK_SELECTED_FILE,
+);
+const sshCommandPreview = computed(() => buildSshCommand());
 const sshPathSegments = computed<ISshPathSegment[]>(() =>
   buildRemotePathSegments(currentRemotePath.value),
-)
+);
 const sshBreadcrumbItems = computed<TSshBreadcrumbItem[]>(() => {
-  const segments = sshPathSegments.value
+  const segments = sshPathSegments.value;
   if (segments.length <= SSH_BREADCRUMB_COLLAPSE_THRESHOLD) {
-    return segments.map((segment) => ({ ...segment, type: 'segment' as const }))
+    return segments.map((segment) => ({ ...segment, type: 'segment' as const }));
   }
 
   return [
@@ -227,174 +226,174 @@ const sshBreadcrumbItems = computed<TSshBreadcrumbItem[]>(() => {
     ...segments
       .slice(-SSH_BREADCRUMB_TAIL_COUNT)
       .map((segment) => ({ ...segment, type: 'segment' as const })),
-  ]
-})
-const normalizedRenameInput = computed(() => renameInputValue.value.trim())
-const normalizedCreateDirectoryName = computed(() => createDirectoryName.value.trim())
+  ];
+});
+const normalizedRenameInput = computed(() => renameInputValue.value.trim());
+const normalizedCreateDirectoryName = computed(() => createDirectoryName.value.trim());
 const canConfirmRename = computed(() => {
-  const item = pendingRenameItem.value
-  const nextName = normalizedRenameInput.value
+  const item = pendingRenameItem.value;
+  const nextName = normalizedRenameInput.value;
   return Boolean(
     item &&
-    nextName &&
-    nextName !== item.name &&
-    !nextName.includes('/') &&
-    !nextName.includes('\\'),
-  )
-})
+      nextName &&
+      nextName !== item.name &&
+      !nextName.includes('/') &&
+      !nextName.includes('\\'),
+  );
+});
 const canConfirmCreateDirectory = computed(() => {
-  const nextName = normalizedCreateDirectoryName.value
+  const nextName = normalizedCreateDirectoryName.value;
   return Boolean(
     nextName &&
-    nextName !== '.' &&
-    nextName !== '..' &&
-    !nextName.includes('/') &&
-    !nextName.includes('\\'),
-  )
-})
-const passwordInputType = computed(() => (isPasswordVisible.value ? 'text' : 'password'))
+      nextName !== '.' &&
+      nextName !== '..' &&
+      !nextName.includes('/') &&
+      !nextName.includes('\\'),
+  );
+});
+const passwordInputType = computed(() => (isPasswordVisible.value ? 'text' : 'password'));
 
 const isTabActive = (tab: TSshPanelTab): boolean => {
   if (tab === 'connect') {
-    return !isConnected.value || isConnectFormVisible.value
+    return !isConnected.value || isConnectFormVisible.value;
   }
-  return isConnected.value && !isConnectFormVisible.value && activeContentTab.value === tab
-}
+  return isConnected.value && !isConnectFormVisible.value && activeContentTab.value === tab;
+};
 
 const closeContextMenu = (): void => {
-  contextMenu.open = false
-}
+  contextMenu.open = false;
+};
 
 const handleAuthModeChange = (nextMode: unknown): void => {
-  if (!isAuthMode(nextMode)) return
-  setFieldValue('authMode', nextMode)
-  isPasswordVisible.value = false
-  connectionErrorText.value = ''
-}
+  if (!isAuthMode(nextMode)) return;
+  setFieldValue('authMode', nextMode);
+  isPasswordVisible.value = false;
+  connectionErrorText.value = '';
+};
 
 const setContentTab = (tab: TSshContentTab): void => {
-  if (!isConnected.value) return
-  activeContentTab.value = tab
-  isConnectFormVisible.value = false
-  closeContextMenu()
-}
+  if (!isConnected.value) return;
+  activeContentTab.value = tab;
+  isConnectFormVisible.value = false;
+  closeContextMenu();
+};
 
 const openConnectForm = (): void => {
-  isConnectFormVisible.value = true
-  closeContextMenu()
-}
+  isConnectFormVisible.value = true;
+  closeContextMenu();
+};
 
 const toggleConnectForm = (): void => {
-  isConnectFormVisible.value = !isConnectFormVisible.value
+  isConnectFormVisible.value = !isConnectFormVisible.value;
   if (isConnected.value && !isConnectFormVisible.value) {
-    activeContentTab.value = 'explorer'
+    activeContentTab.value = 'explorer';
   }
-  closeContextMenu()
-}
+  closeContextMenu();
+};
 
 const handleCancelConnect = (): void => {
-  isConnectFormVisible.value = false
+  isConnectFormVisible.value = false;
   if (isConnected.value) {
-    activeContentTab.value = 'explorer'
+    activeContentTab.value = 'explorer';
   }
-}
+};
 
 const applyConnectionState = (connectionId: string | null): void => {
-  sshStore.applyConnectionState(connectionId)
-  activeContentTab.value = 'explorer'
-  closeContextMenu()
-}
+  sshStore.applyConnectionState(connectionId);
+  activeContentTab.value = 'explorer';
+  closeContextMenu();
+};
 
 const quoteShellArg = (value: string): string => {
-  const normalizedValue = value.trim()
+  const normalizedValue = value.trim();
   if (/^[a-zA-Z0-9_@%+=:,./~-]+$/.test(normalizedValue)) {
-    return normalizedValue
+    return normalizedValue;
   }
-  return "'" + normalizedValue.replace(/'/g, "'\\''") + "'"
-}
+  return "'" + normalizedValue.replace(/'/g, "'\\''") + "'";
+};
 
 const formatRemoteFileSize = (size: number): string => {
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
-  return `${(size / 1024 / 1024).toFixed(1)} MB`
-}
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+};
 
 const resolveFileKind = (name: string, isDirectory: boolean): TSshFileKind => {
-  if (isDirectory) return 'folder'
-  if (name.endsWith('.rs')) return 'rust'
-  if (name.endsWith('.toml')) return 'toml'
-  if (name.endsWith('.md')) return 'markdown'
-  if (name.toLowerCase().endsWith('lock')) return 'lock'
-  return 'file'
-}
+  if (isDirectory) return 'folder';
+  if (name.endsWith('.rs')) return 'rust';
+  if (name.endsWith('.toml')) return 'toml';
+  if (name.endsWith('.md')) return 'markdown';
+  if (name.toLowerCase().endsWith('lock')) return 'lock';
+  return 'file';
+};
 
 const buildRemotePathSegments = (path: string): ISshPathSegment[] => {
-  const normalizedPath = path.trim() || '.'
+  const normalizedPath = path.trim() || '.';
   if (normalizedPath === '.') {
-    return [{ id: '.', label: '.', path: '.' }]
+    return [{ id: '.', label: '.', path: '.' }];
   }
 
-  const segments: ISshPathSegment[] = []
-  const isAbsolutePath = normalizedPath.startsWith('/')
-  const parts = normalizedPath.split('/').filter(Boolean)
-  let cursor = ''
+  const segments: ISshPathSegment[] = [];
+  const isAbsolutePath = normalizedPath.startsWith('/');
+  const parts = normalizedPath.split('/').filter(Boolean);
+  let cursor = '';
 
   if (isAbsolutePath) {
-    segments.push({ id: '/', label: '/', path: '/' })
+    segments.push({ id: '/', label: '/', path: '/' });
   }
 
   for (const part of parts) {
-    cursor = cursor ? `${cursor}/${part}` : isAbsolutePath ? `/${part}` : part
-    segments.push({ id: cursor, label: part, path: cursor })
+    cursor = cursor ? `${cursor}/${part}` : isAbsolutePath ? `/${part}` : part;
+    segments.push({ id: cursor, label: part, path: cursor });
   }
 
-  return segments.length > 0 ? segments : [{ id: '.', label: '.', path: '.' }]
-}
+  return segments.length > 0 ? segments : [{ id: '.', label: '.', path: '.' }];
+};
 
 const createSshConnectionTestRequest = (): SshConnectionPayload =>
-  toSshConnectionPayload(connectionForm)
+  toSshConnectionPayload(connectionForm);
 
 const createSshConnectionRequest = (): SshConnectionPayload =>
-  activeSshConnectionRequest.value ?? createSshConnectionTestRequest()
+  activeSshConnectionRequest.value ?? createSshConnectionTestRequest();
 
 const createSshDirectoryRequest = (path: string) => ({
   ...createSshConnectionRequest(),
   path,
-})
+});
 
 const createSshFileTransferRequest = (remotePath: string, localPath: string) => ({
   ...createSshConnectionRequest(),
   remotePath,
   localPath,
-})
+});
 
 const createSshFileUploadRequest = (localPath: string, remoteDirectory: string) => ({
   ...createSshConnectionRequest(),
   localPath,
   remoteDirectory,
-})
+});
 
 const createSshPathDeleteRequest = (remotePath: string) => ({
   ...createSshConnectionRequest(),
   remotePath,
-})
+});
 
 const createSshPathRenameRequest = (remotePath: string, newName: string) => ({
   ...createSshConnectionRequest(),
   remotePath,
   newName,
-})
+});
 
 const createSshDirectoryCreateRequest = (remoteDirectory: string, name: string) => ({
   ...createSshConnectionRequest(),
   remoteDirectory,
   name,
-})
+});
 
 const createSshFileReadRequest = (remotePath: string) => ({
   ...createSshConnectionRequest(),
   remotePath,
-})
+});
 
 const createSshFileWriteRequest = (
   remotePath: string,
@@ -407,21 +406,21 @@ const createSshFileWriteRequest = (
   content,
   encoding,
   lineEnding,
-})
+});
 
 const createSshPasswordIdentityRequest = () => ({
   host: connectionForm.host.trim(),
   port: Number.parseInt(connectionForm.port.trim(), 10),
   username: connectionForm.username.trim(),
-})
+});
 
 const saveCurrentSshPassword = async (): Promise<void> => {
-  if (connectionForm.authMode !== 'password') return
+  if (connectionForm.authMode !== 'password') return;
   await tauriService.saveSshPassword({
     ...createSshPasswordIdentityRequest(),
     password: connectionForm.password,
-  })
-}
+  });
+};
 
 const createTransferItem = (
   direction: TSshTransferDirection,
@@ -435,28 +434,28 @@ const createTransferItem = (
   progressLabel,
   progress: 0,
   status: direction === 'upload' ? 'uploading' : 'downloading',
-})
+});
 
 const updateTransferItem = (
   transferId: string,
   patch: Partial<Omit<ISshTransferItem, 'id'>>,
 ): void => {
-  const target = transferItems.value.find((item) => item.id === transferId)
-  if (!target) return
-  Object.assign(target, patch)
-}
+  const target = transferItems.value.find((item) => item.id === transferId);
+  if (!target) return;
+  Object.assign(target, patch);
+};
 
 const loadRemoteDirectorySnapshot = async (path: string): Promise<void> => {
-  const requestVersion = remoteDirectoryRequestVersion.value + 1
-  remoteDirectoryRequestVersion.value = requestVersion
-  isRemoteDirectoryLoading.value = true
+  const requestVersion = remoteDirectoryRequestVersion.value + 1;
+  remoteDirectoryRequestVersion.value = requestVersion;
+  isRemoteDirectoryLoading.value = true;
 
   try {
-    const result = await tauriService.listSshDirectory(createSshDirectoryRequest(path))
-    if (requestVersion !== remoteDirectoryRequestVersion.value) return
-    currentRemotePath.value = result.path
+    const result = await tauriService.listSshDirectory(createSshDirectoryRequest(path));
+    if (requestVersion !== remoteDirectoryRequestVersion.value) return;
+    currentRemotePath.value = result.path;
     sshFileItems.value = result.entries.map((entry) => {
-      const isDirectory = entry.kind === 'directory'
+      const isDirectory = entry.kind === 'directory';
       return {
         id: entry.path,
         name: entry.name,
@@ -464,166 +463,164 @@ const loadRemoteDirectorySnapshot = async (path: string): Promise<void> => {
         metaLabel: isDirectory ? '目录' : formatRemoteFileSize(entry.size),
         path: entry.path,
         isDirectory,
-      }
-    })
-    selectedFileId.value = sshFileItems.value[0]?.id ?? ''
+      };
+    });
+    selectedFileId.value = sshFileItems.value[0]?.id ?? '';
   } finally {
     if (requestVersion === remoteDirectoryRequestVersion.value) {
-      isRemoteDirectoryLoading.value = false
+      isRemoteDirectoryLoading.value = false;
     }
   }
-}
+};
 
 const loadRemoteDirectory = async (path: string): Promise<void> => {
   try {
-    await loadRemoteDirectorySnapshot(path)
+    await loadRemoteDirectorySnapshot(path);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : '读取远端目录失败。'
-    message.error(errorMessage)
+    const errorMessage = error instanceof Error ? error.message : '读取远端目录失败。';
+    message.error(errorMessage);
   }
-}
+};
 
 const downloadRemoteFile = async (fileItem: ISshFileItem): Promise<void> => {
-  if (!isConnected.value || isDownloading.value) return
+  if (!isConnected.value || isDownloading.value) return;
   if (fileItem.isDirectory) {
-    message.info('暂不支持下载目录，请选择一个文件。')
-    return
+    message.info('暂不支持下载目录，请选择一个文件。');
+    return;
   }
 
-  const savePath = await tauriService.pickAnySavePath(fileItem.name)
-  if (!savePath) return
+  const savePath = await tauriService.pickAnySavePath(fileItem.name);
+  if (!savePath) return;
 
-  const transferItem = createTransferItem('download', fileItem.name, '下载中…')
-  transferItems.value.unshift(transferItem)
-  isDownloading.value = true
+  const transferItem = createTransferItem('download', fileItem.name, '下载中…');
+  transferItems.value.unshift(transferItem);
+  isDownloading.value = true;
 
   try {
     const result = await tauriService.downloadSshFile(
       createSshFileTransferRequest(fileItem.path, savePath),
-    )
+    );
     updateTransferItem(transferItem.id, {
       sizeLabel: formatRemoteFileSize(result.byteSize),
       progressLabel: '已完成',
       progress: 100,
       status: 'done',
-    })
-    message.success(`已下载 ${fileItem.name}，共 ${formatRemoteFileSize(result.byteSize)}。`)
+    });
+    message.success(`已下载 ${fileItem.name}，共 ${formatRemoteFileSize(result.byteSize)}。`);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : '下载远端文件失败。'
+    const errorMessage = error instanceof Error ? error.message : '下载远端文件失败。';
     updateTransferItem(transferItem.id, {
       progressLabel: errorMessage,
       progress: 100,
       status: 'failed',
-    })
-    message.error(errorMessage)
+    });
+    message.error(errorMessage);
   } finally {
-    isDownloading.value = false
+    isDownloading.value = false;
   }
-}
+};
 
 const downloadSelectedFile = async (): Promise<void> => {
-  await downloadRemoteFile(selectedFile.value)
-}
+  await downloadRemoteFile(selectedFile.value);
+};
 
 const uploadFileToCurrentDirectory = async (): Promise<void> => {
-  if (!isConnected.value || isUploading.value) return
-  const localPath = await tauriService.pickAnyOpenPath()
-  if (!localPath) return
+  if (!isConnected.value || isUploading.value) return;
+  const localPath = await tauriService.pickAnyOpenPath();
+  if (!localPath) return;
 
-  const selectedItem = sshFileItems.value.find((item) => item.id === selectedFileId.value)
-  const remoteDirectory = selectedItem?.isDirectory
-    ? selectedItem.path
-    : currentRemotePath.value
+  const selectedItem = sshFileItems.value.find((item) => item.id === selectedFileId.value);
+  const remoteDirectory = selectedItem?.isDirectory ? selectedItem.path : currentRemotePath.value;
   const transferItem = createTransferItem(
     'upload',
     localPath.split(/[\\/]/).pop() ?? localPath,
     '上传中…',
-  )
-  transferItems.value.unshift(transferItem)
-  isUploading.value = true
+  );
+  transferItems.value.unshift(transferItem);
+  isUploading.value = true;
 
   try {
     const result = await tauriService.uploadSshFile(
       createSshFileUploadRequest(localPath, remoteDirectory),
-    )
-    await loadRemoteDirectory(currentRemotePath.value)
+    );
+    await loadRemoteDirectory(currentRemotePath.value);
     updateTransferItem(transferItem.id, {
       sizeLabel: formatRemoteFileSize(result.byteSize),
       progressLabel: '已完成',
       progress: 100,
       status: 'done',
-    })
-    message.success(`已上传到 ${result.remotePath}，共 ${formatRemoteFileSize(result.byteSize)}。`)
+    });
+    message.success(`已上传到 ${result.remotePath}，共 ${formatRemoteFileSize(result.byteSize)}。`);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : '上传本地文件失败。'
+    const errorMessage = error instanceof Error ? error.message : '上传本地文件失败。';
     updateTransferItem(transferItem.id, {
       progressLabel: errorMessage,
       progress: 100,
       status: 'failed',
-    })
-    message.error(errorMessage)
+    });
+    message.error(errorMessage);
   } finally {
-    isUploading.value = false
+    isUploading.value = false;
   }
-}
+};
 
 const copySelectedPath = async (): Promise<void> => {
-  const fileItem = selectedFile.value
+  const fileItem = selectedFile.value;
   try {
-    await navigator.clipboard.writeText(fileItem.path)
-    message.success('已复制远端路径。')
+    await navigator.clipboard.writeText(fileItem.path);
+    message.success('已复制远端路径。');
   } catch {
-    message.error('复制远端路径失败。')
+    message.error('复制远端路径失败。');
   }
-}
+};
 
 const closePreviewDialog = (): void => {
-  if (isPreviewLoading.value || isPreviewSaving.value) return
-  previewFileItem.value = null
-  previewPayload.value = null
-}
+  if (isPreviewLoading.value || isPreviewSaving.value) return;
+  previewFileItem.value = null;
+  previewPayload.value = null;
+};
 
 const previewRemoteFile = async (
   fileItem: ISshFileItem,
   options: { preservePayload?: boolean } = {},
 ): Promise<void> => {
-  if (isPreviewLoading.value) return
-  previewFileItem.value = fileItem
+  if (isPreviewLoading.value) return;
+  previewFileItem.value = fileItem;
   if (!options.preservePayload) {
-    previewPayload.value = null
+    previewPayload.value = null;
   }
-  isPreviewLoading.value = true
+  isPreviewLoading.value = true;
   try {
-    const result = await tauriService.readSshFile(createSshFileReadRequest(fileItem.path))
-    previewPayload.value = result
+    const result = await tauriService.readSshFile(createSshFileReadRequest(fileItem.path));
+    previewPayload.value = result;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : '读取远端文件失败。'
-    message.error(errorMessage)
-    previewFileItem.value = null
-    previewPayload.value = null
+    const errorMessage = error instanceof Error ? error.message : '读取远端文件失败。';
+    message.error(errorMessage);
+    previewFileItem.value = null;
+    previewPayload.value = null;
   } finally {
-    isPreviewLoading.value = false
+    isPreviewLoading.value = false;
   }
-}
+};
 
 const reloadPreviewFile = async (): Promise<void> => {
-  const fileItem = previewFileItem.value
-  if (!fileItem) return
-  await previewRemoteFile(fileItem, { preservePayload: true })
-}
+  const fileItem = previewFileItem.value;
+  if (!fileItem) return;
+  await previewRemoteFile(fileItem, { preservePayload: true });
+};
 
 const downloadPreviewFile = async (): Promise<void> => {
-  const fileItem = previewFileItem.value
-  if (!fileItem) return
-  await downloadRemoteFile(fileItem)
-}
+  const fileItem = previewFileItem.value;
+  if (!fileItem) return;
+  await downloadRemoteFile(fileItem);
+};
 
 const savePreviewFile = async (content: string): Promise<void> => {
-  const fileItem = previewFileItem.value
-  const currentPreviewPayload = previewPayload.value
-  if (!fileItem || !currentPreviewPayload || isPreviewSaving.value) return
+  const fileItem = previewFileItem.value;
+  const currentPreviewPayload = previewPayload.value;
+  if (!fileItem || !currentPreviewPayload || isPreviewSaving.value) return;
 
-  isPreviewSaving.value = true
+  isPreviewSaving.value = true;
   try {
     const result = await tauriService.writeSshFile(
       createSshFileWriteRequest(
@@ -632,151 +629,151 @@ const savePreviewFile = async (content: string): Promise<void> => {
         currentPreviewPayload.encoding,
         currentPreviewPayload.lineEnding,
       ),
-    )
-    message.success(`已保存 ${fileItem.name}，共 ${formatRemoteFileSize(result.byteSize)}。`)
-    await previewRemoteFile(fileItem, { preservePayload: true })
+    );
+    message.success(`已保存 ${fileItem.name}，共 ${formatRemoteFileSize(result.byteSize)}。`);
+    await previewRemoteFile(fileItem, { preservePayload: true });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : '保存远端文件失败。'
-    message.error(errorMessage)
+    const errorMessage = error instanceof Error ? error.message : '保存远端文件失败。';
+    message.error(errorMessage);
   } finally {
-    isPreviewSaving.value = false
+    isPreviewSaving.value = false;
   }
-}
+};
 
 const resetRenameDialog = (force = false): void => {
-  if (isPathMutating.value && !force) return
-  pendingRenameItem.value = null
-  renameInputValue.value = ''
-}
+  if (isPathMutating.value && !force) return;
+  pendingRenameItem.value = null;
+  renameInputValue.value = '';
+};
 
 const closeRenameDialog = (): void => {
-  resetRenameDialog(false)
-}
+  resetRenameDialog(false);
+};
 
 const resetDeleteDialog = (force = false): void => {
-  if (isPathMutating.value && !force) return
-  pendingDeleteItem.value = null
-}
+  if (isPathMutating.value && !force) return;
+  pendingDeleteItem.value = null;
+};
 
 const closeDeleteDialog = (): void => {
-  resetDeleteDialog(false)
-}
+  resetDeleteDialog(false);
+};
 
 const resetCreateDirectoryDialog = (force = false): void => {
-  if (isPathMutating.value && !force) return
-  isCreateDirectoryDialogOpen.value = false
-  createDirectoryName.value = ''
-}
+  if (isPathMutating.value && !force) return;
+  isCreateDirectoryDialogOpen.value = false;
+  createDirectoryName.value = '';
+};
 
 const closeCreateDirectoryDialog = (): void => {
-  resetCreateDirectoryDialog(false)
-}
+  resetCreateDirectoryDialog(false);
+};
 
 const focusRenameInput = async (): Promise<void> => {
-  await nextTick()
-  renameInputRef.value?.focus()
-  renameInputRef.value?.select()
-}
+  await nextTick();
+  renameInputRef.value?.focus();
+  renameInputRef.value?.select();
+};
 
 const focusCreateDirectoryInput = async (): Promise<void> => {
-  await nextTick()
-  createDirectoryInputRef.value?.focus()
-}
+  await nextTick();
+  createDirectoryInputRef.value?.focus();
+};
 
 const renameSelectedPath = async (): Promise<void> => {
-  const fileItem = selectedFile.value
-  pendingRenameItem.value = fileItem
-  renameInputValue.value = fileItem.name
-  await focusRenameInput()
-}
+  const fileItem = selectedFile.value;
+  pendingRenameItem.value = fileItem;
+  renameInputValue.value = fileItem.name;
+  await focusRenameInput();
+};
 
 const openCreateDirectoryDialog = async (): Promise<void> => {
-  if (!isConnected.value || isPathMutating.value) return
-  createDirectoryName.value = ''
-  isCreateDirectoryDialogOpen.value = true
-  await focusCreateDirectoryInput()
-}
+  if (!isConnected.value || isPathMutating.value) return;
+  createDirectoryName.value = '';
+  isCreateDirectoryDialogOpen.value = true;
+  await focusCreateDirectoryInput();
+};
 
 const confirmRenamePath = async (): Promise<void> => {
-  const fileItem = pendingRenameItem.value
-  const newName = normalizedRenameInput.value
+  const fileItem = pendingRenameItem.value;
+  const newName = normalizedRenameInput.value;
   if (!fileItem || !newName || newName === fileItem.name) {
-    resetRenameDialog(true)
-    return
+    resetRenameDialog(true);
+    return;
   }
   if (!canConfirmRename.value) {
-    message.error('新名称不能包含路径分隔符。')
-    return
+    message.error('新名称不能包含路径分隔符。');
+    return;
   }
 
-  isPathMutating.value = true
+  isPathMutating.value = true;
   try {
-    await tauriService.renameSshPath(createSshPathRenameRequest(fileItem.path, newName))
-    closeRenameDialog()
-    await loadRemoteDirectory(currentRemotePath.value)
-    message.success('远端路径已重命名。')
+    await tauriService.renameSshPath(createSshPathRenameRequest(fileItem.path, newName));
+    closeRenameDialog();
+    await loadRemoteDirectory(currentRemotePath.value);
+    message.success('远端路径已重命名。');
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : '重命名远端路径失败。'
-    message.error(errorMessage)
+    const errorMessage = error instanceof Error ? error.message : '重命名远端路径失败。';
+    message.error(errorMessage);
   } finally {
-    isPathMutating.value = false
+    isPathMutating.value = false;
   }
-}
+};
 
 const deleteSelectedPath = (): void => {
-  pendingDeleteItem.value = selectedFile.value
-}
+  pendingDeleteItem.value = selectedFile.value;
+};
 
 const confirmCreateDirectory = async (): Promise<void> => {
-  const directoryName = normalizedCreateDirectoryName.value
+  const directoryName = normalizedCreateDirectoryName.value;
   if (!canConfirmCreateDirectory.value) {
-    message.error('目录名称不能为空，且不能包含路径分隔符。')
-    return
+    message.error('目录名称不能为空，且不能包含路径分隔符。');
+    return;
   }
 
-  isPathMutating.value = true
+  isPathMutating.value = true;
   try {
     const result = await tauriService.createSshDirectory(
       createSshDirectoryCreateRequest(currentRemotePath.value, directoryName),
-    )
-    resetCreateDirectoryDialog(true)
-    await loadRemoteDirectory(currentRemotePath.value)
-    selectedFileId.value = result.remotePath
-    message.success('远端目录已创建。')
+    );
+    resetCreateDirectoryDialog(true);
+    await loadRemoteDirectory(currentRemotePath.value);
+    selectedFileId.value = result.remotePath;
+    message.success('远端目录已创建。');
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : '创建远端目录失败。'
-    message.error(errorMessage)
+    const errorMessage = error instanceof Error ? error.message : '创建远端目录失败。';
+    message.error(errorMessage);
   } finally {
-    isPathMutating.value = false
+    isPathMutating.value = false;
   }
-}
+};
 
 const confirmDeletePath = async (): Promise<void> => {
-  const fileItem = pendingDeleteItem.value
-  if (!fileItem) return
+  const fileItem = pendingDeleteItem.value;
+  if (!fileItem) return;
 
-  isPathMutating.value = true
+  isPathMutating.value = true;
   try {
-    await tauriService.deleteSshPath(createSshPathDeleteRequest(fileItem.path))
-    resetDeleteDialog(true)
-    await loadRemoteDirectory(currentRemotePath.value)
-    message.success('远端路径已删除。')
+    await tauriService.deleteSshPath(createSshPathDeleteRequest(fileItem.path));
+    resetDeleteDialog(true);
+    await loadRemoteDirectory(currentRemotePath.value);
+    message.success('远端路径已删除。');
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : '删除远端路径失败。'
-    message.error(errorMessage)
+    const errorMessage = error instanceof Error ? error.message : '删除远端路径失败。';
+    message.error(errorMessage);
   } finally {
-    isPathMutating.value = false
+    isPathMutating.value = false;
   }
-}
+};
 
 const buildSshCommand = (): string => {
-  const hostText = connectionForm.host.trim()
-  const usernameText = connectionForm.username.trim()
-  const portText = connectionForm.port.trim() || DEFAULT_SSH_PORT
-  const parts = ['ssh', '-p', quoteShellArg(portText)]
+  const hostText = connectionForm.host.trim();
+  const usernameText = connectionForm.username.trim();
+  const portText = connectionForm.port.trim() || DEFAULT_SSH_PORT;
+  const parts = ['ssh', '-p', quoteShellArg(portText)];
 
   if (connectionForm.authMode === 'key' && connectionForm.identityPath.trim()) {
-    parts.push('-i', quoteShellArg(connectionForm.identityPath))
+    parts.push('-i', quoteShellArg(connectionForm.identityPath));
   }
 
   if (connectionForm.authMode === 'password') {
@@ -789,85 +786,83 @@ const buildSshCommand = (): string => {
       'NumberOfPasswordPrompts=1',
       '-o',
       'StrictHostKeyChecking=accept-new',
-    )
+    );
   }
 
   if (usernameText && hostText) {
-    parts.push(usernameText + '@' + hostText)
+    parts.push(usernameText + '@' + hostText);
   }
 
-  return parts.join(' ')
-}
+  return parts.join(' ');
+};
 
 const openTerminalSessionBestEffort = async (): Promise<void> => {
   try {
-    emit('open-terminal')
-    await new Promise((resolve) => window.setTimeout(resolve, TERMINAL_OPEN_DELAY_MS))
-    await terminalControls.sendCommand(sshCommandPreview.value)
+    emit('open-terminal');
+    await new Promise((resolve) => window.setTimeout(resolve, TERMINAL_OPEN_DELAY_MS));
+    await terminalControls.sendCommand(sshCommandPreview.value);
     if (connectionForm.authMode === 'password') {
-      await new Promise((resolve) => window.setTimeout(resolve, SSH_PASSWORD_SEND_DELAY_MS))
-      await terminalControls.sendInput(`${connectionForm.password}\n`)
+      await new Promise((resolve) => window.setTimeout(resolve, SSH_PASSWORD_SEND_DELAY_MS));
+      await terminalControls.sendInput(`${connectionForm.password}\n`);
     }
   } catch {
-    message.info('文件连接已建立，终端会话暂未打开。')
+    message.info('文件连接已建立，终端会话暂未打开。');
   }
-}
+};
 
 const handleConnect = async (connectionId = MANUAL_CONNECTION_ID): Promise<void> => {
-  connectionErrorText.value = ''
-  connectionStatusText.value = ''
+  connectionErrorText.value = '';
+  connectionStatusText.value = '';
 
-  const validation = await validateConnection()
-  if (!validation.valid) return
+  const validation = await validateConnection();
+  if (!validation.valid) return;
 
-  isConnecting.value = true
-  connectionStatusText.value = '正在验证 SSH 连接…'
+  isConnecting.value = true;
+  connectionStatusText.value = '正在验证 SSH 连接…';
 
   try {
-    const connectionRequest = createSshConnectionTestRequest()
-    const testResult = await tauriService.testSshConnection(connectionRequest)
+    const connectionRequest = createSshConnectionTestRequest();
+    const testResult = await tauriService.testSshConnection(connectionRequest);
 
     if (!testResult.ok) {
-      connectionErrorText.value = testResult.message
-      message.error(testResult.message)
-      return
+      connectionErrorText.value = testResult.message;
+      message.error(testResult.message);
+      return;
     }
 
-    connectionStatusText.value = '正在读取远端目录…'
-    activeSshConnectionRequest.value = connectionRequest
-    await loadRemoteDirectorySnapshot('.')
+    connectionStatusText.value = '正在读取远端目录…';
+    activeSshConnectionRequest.value = connectionRequest;
+    await loadRemoteDirectorySnapshot('.');
     try {
-      await saveCurrentSshPassword()
+      await saveCurrentSshPassword();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '保存 SSH 密码失败。'
-      message.error(`连接已成功，但保存密码失败：${errorMessage}`)
+      const errorMessage = error instanceof Error ? error.message : '保存 SSH 密码失败。';
+      message.error(`连接已成功，但保存密码失败：${errorMessage}`);
     }
-    syncFormToStore()
-    const rememberedConnectionId = sshStore.rememberCurrentConnection(connectionId)
-    applyConnectionState(rememberedConnectionId)
-    message.success('SSH 连接验证成功，已打开远端会话。')
-    void openTerminalSessionBestEffort()
+    syncFormToStore();
+    const rememberedConnectionId = sshStore.rememberCurrentConnection(connectionId);
+    applyConnectionState(rememberedConnectionId);
+    message.success('SSH 连接验证成功，已打开远端会话。');
+    void openTerminalSessionBestEffort();
   } catch (error) {
-    activeSshConnectionRequest.value = null
-    const errorMessage = error instanceof Error ? error.message : 'SSH 连接失败。'
-    connectionErrorText.value = errorMessage
-    message.error(errorMessage)
+    activeSshConnectionRequest.value = null;
+    const errorMessage = error instanceof Error ? error.message : 'SSH 连接失败。';
+    connectionErrorText.value = errorMessage;
+    message.error(errorMessage);
   } finally {
-    isConnecting.value = false
-    connectionStatusText.value = ''
+    isConnecting.value = false;
+    connectionStatusText.value = '';
   }
-}
+};
 
 const handleConnectSubmit = handleVeeSubmit(async () => {
-  if (isConnecting.value) return
-  await handleConnect()
-})
+  if (isConnecting.value) return;
+  await handleConnect();
+});
 
-const handleSelectRecentConnection = async (
-  connection: ISshRecentConnection,
-): Promise<void> => {
-  sshStore.setConnectionFormFromProfile(connection)
-  const stored = sshStore.connectionForm
+const handleSelectRecentConnection = async (connection: ISshRecentConnection): Promise<void> => {
+  sshStore.setConnectionFormFromProfile(connection);
+  const stored = sshStore.connectionForm;
   resetForm({
     values: {
       host: stored.host ?? '',
@@ -877,163 +872,161 @@ const handleSelectRecentConnection = async (
       identityPath: stored.identityPath ?? '',
       password: '',
     },
-  })
+  });
 
   if (connection.authMode === 'password') {
     try {
-      const savedCredential = await tauriService.getSshPassword(
-        createSshPasswordIdentityRequest(),
-      )
-      setFieldValue('password', savedCredential.password)
+      const savedCredential = await tauriService.getSshPassword(createSshPasswordIdentityRequest());
+      setFieldValue('password', savedCredential.password);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '未找到已保存的 SSH 密码。'
-      isConnectFormVisible.value = true
-      message.info(errorMessage)
-      return
+      const errorMessage = error instanceof Error ? error.message : '未找到已保存的 SSH 密码。';
+      isConnectFormVisible.value = true;
+      message.info(errorMessage);
+      return;
     }
-    await handleConnect(connection.id)
-    return
+    await handleConnect(connection.id);
+    return;
   }
 
-  await handleConnect(connection.id)
-}
+  await handleConnect(connection.id);
+};
 
 const handlePathSegmentClick = (segment: ISshPathSegment): void => {
-  if (segment.path === currentRemotePath.value || isRemoteDirectoryLoading.value) return
-  void loadRemoteDirectory(segment.path)
-}
+  if (segment.path === currentRemotePath.value || isRemoteDirectoryLoading.value) return;
+  void loadRemoteDirectory(segment.path);
+};
 
 const refreshCurrentRemoteDirectory = (): void => {
-  if (!isConnected.value || isRemoteDirectoryLoading.value) return
-  void loadRemoteDirectory(currentRemotePath.value)
-}
+  if (!isConnected.value || isRemoteDirectoryLoading.value) return;
+  void loadRemoteDirectory(currentRemotePath.value);
+};
 
 const disconnectSshSession = (): void => {
-  remoteDirectoryRequestVersion.value += 1
-  isRemoteDirectoryLoading.value = false
-  isPathMutating.value = false
-  isPreviewLoading.value = false
-  isPreviewSaving.value = false
-  activeSshConnectionRequest.value = null
-  resetRenameDialog(true)
-  resetDeleteDialog(true)
-  resetCreateDirectoryDialog(true)
-  closePreviewDialog()
-  closeContextMenu()
-  sshStore.clearConnectionState()
-  resetForm()
-  message.info('已断开 SSH 文件会话。')
-}
+  remoteDirectoryRequestVersion.value += 1;
+  isRemoteDirectoryLoading.value = false;
+  isPathMutating.value = false;
+  isPreviewLoading.value = false;
+  isPreviewSaving.value = false;
+  activeSshConnectionRequest.value = null;
+  resetRenameDialog(true);
+  resetDeleteDialog(true);
+  resetCreateDirectoryDialog(true);
+  closePreviewDialog();
+  closeContextMenu();
+  sshStore.clearConnectionState();
+  resetForm();
+  message.info('已断开 SSH 文件会话。');
+};
 
 const handleSelectFile = (fileId: string): void => {
-  selectedFileId.value = fileId
-  closeContextMenu()
+  selectedFileId.value = fileId;
+  closeContextMenu();
 
-  const fileItem = sshFileItems.value.find((item) => item.id === fileId)
+  const fileItem = sshFileItems.value.find((item) => item.id === fileId);
   if (fileItem?.isDirectory && !isRemoteDirectoryLoading.value) {
-    void loadRemoteDirectory(fileItem.path)
-    return
+    void loadRemoteDirectory(fileItem.path);
+    return;
   }
   if (fileItem && !fileItem.isDirectory) {
-    void previewRemoteFile(fileItem)
+    void previewRemoteFile(fileItem);
   }
-}
+};
 
 const handleFileContextMenu = (event: MouseEvent, fileId: string): void => {
-  selectedFileId.value = fileId
+  selectedFileId.value = fileId;
 
-  const maxX = Math.max(12, window.innerWidth - CONTEXT_MENU_WIDTH - 12)
-  const maxY = Math.max(12, window.innerHeight - CONTEXT_MENU_HEIGHT - 12)
+  const maxX = Math.max(12, window.innerWidth - CONTEXT_MENU_WIDTH - 12);
+  const maxY = Math.max(12, window.innerHeight - CONTEXT_MENU_HEIGHT - 12);
 
-  contextMenu.x = Math.min(event.clientX, maxX)
-  contextMenu.y = Math.min(event.clientY, maxY)
-  contextMenu.open = true
-}
+  contextMenu.x = Math.min(event.clientX, maxX);
+  contextMenu.y = Math.min(event.clientY, maxY);
+  contextMenu.open = true;
+};
 
 const handleContextMenuSelect = (action: ILinearContextMenuItem): void => {
   if (isPathMutating.value || isRemoteDirectoryLoading.value) {
-    closeContextMenu()
-    return
+    closeContextMenu();
+    return;
   }
 
-  const targetLabel = selectedFile.value.name
+  const targetLabel = selectedFile.value.name;
   if (action.key === 'new-folder') {
-    closeContextMenu()
-    void openCreateDirectoryDialog()
-    return
+    closeContextMenu();
+    void openCreateDirectoryDialog();
+    return;
   }
   if (action.key === 'download') {
-    closeContextMenu()
-    void downloadSelectedFile()
-    return
+    closeContextMenu();
+    void downloadSelectedFile();
+    return;
   }
   if (action.key === 'upload') {
-    closeContextMenu()
-    void uploadFileToCurrentDirectory()
-    return
+    closeContextMenu();
+    void uploadFileToCurrentDirectory();
+    return;
   }
   if (action.key === 'copy-path') {
-    closeContextMenu()
-    void copySelectedPath()
-    return
+    closeContextMenu();
+    void copySelectedPath();
+    return;
   }
   if (action.key === 'rename') {
-    closeContextMenu()
-    void renameSelectedPath()
-    return
+    closeContextMenu();
+    void renameSelectedPath();
+    return;
   }
   if (action.key === 'delete') {
-    closeContextMenu()
-    void deleteSelectedPath()
-    return
+    closeContextMenu();
+    void deleteSelectedPath();
+    return;
   }
 
-  message.info(`${action.label}待接入：${targetLabel}`)
-  closeContextMenu()
-}
+  message.info(`${action.label}待接入：${targetLabel}`);
+  closeContextMenu();
+};
 
 const handleWindowClick = (event: MouseEvent): void => {
-  const target = event.target
+  const target = event.target;
 
   if (contextMenu.open) {
     if (target instanceof Element && target.closest('.linear-context-menu-root') !== null) {
-      return
+      return;
     }
-    closeContextMenu()
+    closeContextMenu();
   }
-}
+};
 
 const handleWindowContextMenu = (event: MouseEvent): void => {
-  const target = event.target
+  const target = event.target;
   if (!(target instanceof Element)) {
-    closeContextMenu()
-    return
+    closeContextMenu();
+    return;
   }
   if (!target.closest('.ssh-file-item')) {
-    closeContextMenu()
+    closeContextMenu();
   }
-}
+};
 
 const handleWindowKeydown = (event: KeyboardEvent): void => {
   if (event.key === 'Escape') {
-    closeContextMenu()
-    closeRenameDialog()
-    closeDeleteDialog()
-    closeCreateDirectoryDialog()
+    closeContextMenu();
+    closeRenameDialog();
+    closeDeleteDialog();
+    closeCreateDirectoryDialog();
   }
-}
+};
 
 onMounted(() => {
-  window.addEventListener('click', handleWindowClick)
-  window.addEventListener('contextmenu', handleWindowContextMenu)
-  window.addEventListener('keydown', handleWindowKeydown)
-})
+  window.addEventListener('click', handleWindowClick);
+  window.addEventListener('contextmenu', handleWindowContextMenu);
+  window.addEventListener('keydown', handleWindowKeydown);
+});
 
 onBeforeUnmount(() => {
-  window.removeEventListener('click', handleWindowClick)
-  window.removeEventListener('contextmenu', handleWindowContextMenu)
-  window.removeEventListener('keydown', handleWindowKeydown)
-})
+  window.removeEventListener('click', handleWindowClick);
+  window.removeEventListener('contextmenu', handleWindowContextMenu);
+  window.removeEventListener('keydown', handleWindowKeydown);
+});
 </script>
 
 <template>

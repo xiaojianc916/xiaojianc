@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { Progress } from '@/components/ui/progress';
-import { cn } from '@/lib/utils';
 import type { HTMLAttributes } from 'vue';
 import { computed } from 'vue';
+import { Progress } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
 import { useContextValue } from './context';
 import { formatTokensInK } from './token-format';
 

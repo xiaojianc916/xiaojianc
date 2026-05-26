@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
 import type { HTMLAttributes } from 'vue';
 import { computed, inject, nextTick, ref, watch } from 'vue';
+import { cn } from '@/lib/utils';
 import { parseAnsiOutput } from './ansi';
 import { TerminalKey } from './context';
 
@@ -24,9 +24,13 @@ const scrollToBottom = async (): Promise<void> => {
   }
 };
 
-watch(output, () => {
-  void scrollToBottom();
-}, { immediate: true });
+watch(
+  output,
+  () => {
+    void scrollToBottom();
+  },
+  { immediate: true },
+);
 </script>
 
 <template>

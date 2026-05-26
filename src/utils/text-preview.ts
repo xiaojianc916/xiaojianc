@@ -12,7 +12,7 @@ interface ITextPreviewSegmenter {
 }
 
 interface ITextPreviewSegmenterConstructor {
-  new(
+  new (
     locale?: string | string[],
     options?: {
       granularity?: TTextPreviewSegmentGranularity;
@@ -127,10 +127,7 @@ const createSegmenter = (
 
 const ZERO_WIDTH_JOINER = '\u200d';
 
-const isCodePointInRanges = (
-  value: string,
-  ranges: readonly [number, number][],
-): boolean => {
+const isCodePointInRanges = (value: string, ranges: readonly [number, number][]): boolean => {
   const codePoint = value.codePointAt(0);
   if (codePoint === undefined) {
     return false;
@@ -214,11 +211,8 @@ const segmentText = (
   return splitGraphemesFallback(value);
 };
 
-export const splitTextGraphemes = (
-  value: string,
-  locale?: TTextPreviewLocale,
-): string[] => segmentText(value, 'grapheme', locale);
-
+export const splitTextGraphemes = (value: string, locale?: TTextPreviewLocale): string[] =>
+  segmentText(value, 'grapheme', locale);
 
 const normalizePreviewText = (value: string): string =>
   value.normalize('NFC').replace(/\s+/gu, ' ').trim();
@@ -230,7 +224,6 @@ const normalizeOptionalPreviewText = (value: string | undefined): string | undef
 
 const countSegmentedGraphemes = (value: string, locale?: TTextPreviewLocale): number =>
   segmentText(value, 'grapheme', locale).length;
-
 
 const countRenderedGraphemes = (value: string, locale?: TTextPreviewLocale): number =>
   countSegmentedGraphemes(value.normalize('NFC'), locale);
@@ -273,7 +266,10 @@ const appendEllipsisWithinBudget = (
   }
 
   const contentLimit = limit - ellipsisSize;
-  const content = segmentText(normalized, 'grapheme', locale).slice(0, contentLimit).join('').trim();
+  const content = segmentText(normalized, 'grapheme', locale)
+    .slice(0, contentLimit)
+    .join('')
+    .trim();
 
   return content ? `${content}${ellipsis}` : '';
 };
@@ -408,10 +404,7 @@ const findSemanticBoundary = (
   return clipped.length;
 };
 
-export const clipTextPreview = (
-  value: string,
-  options: IClipTextPreviewOptions = {},
-): string => {
+export const clipTextPreview = (value: string, options: IClipTextPreviewOptions = {}): string => {
   const limit = toSafeInteger(options.maxGraphemes ?? DEFAULT_MAX_GRAPHEMES, DEFAULT_MAX_GRAPHEMES);
   const locale = options.locale;
   const ellipsis = options.ellipsis ?? ELLIPSIS;
@@ -493,10 +486,8 @@ const normalizePrioritizedFields = (
     .slice(0, safeMaxFields);
 };
 
-const getFieldPrefix = (
-  field: IPrioritizedPreviewField,
-  labelSeparator: string,
-): string => field.label ? `${field.label}${labelSeparator}` : '';
+const getFieldPrefix = (field: IPrioritizedPreviewField, labelSeparator: string): string =>
+  field.label ? `${field.label}${labelSeparator}` : '';
 
 const getFixedFieldPreviewGraphemes = (
   fields: readonly INormalizedPrioritizedPreviewField[],
@@ -512,10 +503,7 @@ const getFixedFieldPreviewGraphemes = (
   );
 };
 
-const getFieldNeed = (
-  field: IPrioritizedPreviewField,
-  locale?: TTextPreviewLocale,
-): number => {
+const getFieldNeed = (field: IPrioritizedPreviewField, locale?: TTextPreviewLocale): number => {
   const rawNeed = countSegmentedGraphemes(normalizePreviewText(field.value), locale);
 
   return field.maxGraphemes === undefined
@@ -581,7 +569,7 @@ const allocateFieldBudgets = (
   const totalPriority = Math.max(1, sumNumbers(priorities));
   const needs = fields.map((field) => getFieldNeed(field, locale));
   const budgets = fields.map((field) =>
-    getInitialFieldBudget(field, safeAvailableBudget, totalPriority, locale)
+    getInitialFieldBudget(field, safeAvailableBudget, totalPriority, locale),
   );
 
   while (sumNumbers(budgets) > safeAvailableBudget) {
@@ -638,7 +626,8 @@ const formatValueOnlyPreview = (
   let selectedFields = [...fields];
 
   while (selectedFields.length > 1) {
-    const separatorBudget = Math.max(0, selectedFields.length - 1) * countRenderedGraphemes(separator, locale);
+    const separatorBudget =
+      Math.max(0, selectedFields.length - 1) * countRenderedGraphemes(separator, locale);
     const availableBudget = maxGraphemes - separatorBudget;
     const minimumRequiredBudget = getMinimumRequiredBudget(selectedFields, locale);
 
@@ -653,7 +642,8 @@ const formatValueOnlyPreview = (
     return '';
   }
 
-  const separatorBudget = Math.max(0, selectedFields.length - 1) * countRenderedGraphemes(separator, locale);
+  const separatorBudget =
+    Math.max(0, selectedFields.length - 1) * countRenderedGraphemes(separator, locale);
   const availableBudget = Math.max(0, maxGraphemes - separatorBudget);
   const budgets = allocateFieldBudgets(selectedFields, availableBudget, locale);
 
@@ -663,7 +653,7 @@ const formatValueOnlyPreview = (
         maxGraphemes: budgets[index] ?? DEFAULT_FIELD_MIN_GRAPHEMES,
         locale,
         ellipsis,
-      })
+      }),
     )
     .join(separator);
 
@@ -695,7 +685,12 @@ export const formatPrioritizedFieldPreview = (
   }
 
   while (selectedFields.length > 1) {
-    const fixedBudget = getFixedFieldPreviewGraphemes(selectedFields, separator, labelSeparator, locale);
+    const fixedBudget = getFixedFieldPreviewGraphemes(
+      selectedFields,
+      separator,
+      labelSeparator,
+      locale,
+    );
     const availableBudget = maxGraphemes - fixedBudget;
     const minimumRequiredBudget = getMinimumRequiredBudget(selectedFields, locale);
 
@@ -710,7 +705,12 @@ export const formatPrioritizedFieldPreview = (
     return '';
   }
 
-  const fixedBudget = getFixedFieldPreviewGraphemes(selectedFields, separator, labelSeparator, locale);
+  const fixedBudget = getFixedFieldPreviewGraphemes(
+    selectedFields,
+    separator,
+    labelSeparator,
+    locale,
+  );
 
   if (fixedBudget >= maxGraphemes) {
     return formatValueOnlyPreview(selectedFields, maxGraphemes, separator, locale, ellipsis);

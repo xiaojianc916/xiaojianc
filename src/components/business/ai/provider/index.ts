@@ -1,2 +1,2 @@
-export { default as AiProviderIcon } from './AiProviderIcon.vue'
-export { default as AiProviderSettings } from './AiProviderSettings.vue'
+export { default as AiProviderIcon } from './AiProviderIcon.vue';
+export { default as AiProviderSettings } from './AiProviderSettings.vue';

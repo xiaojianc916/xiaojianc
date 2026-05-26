@@ -101,10 +101,7 @@ const logSessionPersistWarn = (event: string, detail: string): void => {
   console.warn(JSON.stringify(payload));
 };
 
-const enqueuePersistOperation = (
-  operation: () => Promise<void>,
-  errorEvent: string,
-): void => {
+const enqueuePersistOperation = (operation: () => Promise<void>, errorEvent: string): void => {
   persistQueue = persistQueue
     .catch(() => undefined)
     .then(operation)

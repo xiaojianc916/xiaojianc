@@ -82,9 +82,7 @@ const withTimeout = async <T>(
   });
 };
 
-const toWindowBackgroundInput = (
-  input: TSetWindowBackgroundRequest,
-): SetWindowBackgroundInput => ({
+const toWindowBackgroundInput = (input: TSetWindowBackgroundRequest): SetWindowBackgroundInput => ({
   label: input.label ?? null,
   r: input.r,
   g: input.g,

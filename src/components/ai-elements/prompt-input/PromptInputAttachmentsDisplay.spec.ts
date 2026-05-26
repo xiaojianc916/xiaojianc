@@ -37,7 +37,10 @@ const lightboxMock = vi.hoisted(() => {
     loadAndOpen: ReturnType<typeof vi.fn>;
   }> = [];
 
-  const ctor = vi.fn(function MockPhotoSwipeLightbox(this: Record<string, unknown>, options: Record<string, unknown>) {
+  const ctor = vi.fn(function MockPhotoSwipeLightbox(
+    this: Record<string, unknown>,
+    options: Record<string, unknown>,
+  ) {
     const instance = {
       options,
       init: vi.fn(),

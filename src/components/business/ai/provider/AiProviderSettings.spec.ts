@@ -1,9 +1,9 @@
-import AiProviderSettings from '@/components/business/ai/provider/AiProviderSettings.vue';
-import type { IAiConfigPayload, IAiProviderSettingsActionFeedback } from '@/types/ai';
-import { createDefaultAiModelEndpointConfig } from '@/services/ipc/ai-config.service';
-import { mount, type DOMWrapper } from '@vue/test-utils';
+import { type DOMWrapper, mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import { nextTick } from 'vue';
+import AiProviderSettings from '@/components/business/ai/provider/AiProviderSettings.vue';
+import { createDefaultAiModelEndpointConfig } from '@/services/ipc/ai-config.service';
+import type { IAiConfigPayload, IAiProviderSettingsActionFeedback } from '@/types/ai';
 
 const createGlobalMountOptions = () => ({
   global: {
@@ -47,13 +47,15 @@ const createConfig = (overrides: Partial<IAiConfigPayload> = {}): IAiConfigPaylo
   ...overrides,
 });
 
-const mountSettings = (props: Partial<{
-  open: boolean;
-  config: IAiConfigPayload;
-  draft: IAiConfigPayload;
-  apiKey: string;
-  tavilyApiKey: string;
-}> = {}) => {
+const mountSettings = (
+  props: Partial<{
+    open: boolean;
+    config: IAiConfigPayload;
+    draft: IAiConfigPayload;
+    apiKey: string;
+    tavilyApiKey: string;
+  }> = {},
+) => {
   const config = props.config ?? createConfig();
 
   return mount(AiProviderSettings, {
@@ -137,7 +139,9 @@ describe('AiProviderSettings', () => {
     await wrapper.get('#ai-credential-alias').setValue('工作');
     await wrapper.get('#ai-provider-key').setValue('sk-deepseek-test');
     await wrapper.setProps({ apiKey: 'sk-deepseek-test' });
-    await findButtonByText(wrapper.get('.ai-credential-foot').findAll('button'), '保存').trigger('click');
+    await findButtonByText(wrapper.get('.ai-credential-foot').findAll('button'), '保存').trigger(
+      'click',
+    );
 
     const event = wrapper.emitted('saveCredentials')?.[0];
     expect(event?.[0]).toBe('sk-deepseek-test');
@@ -171,12 +175,14 @@ describe('AiProviderSettings', () => {
         hasCredentials: false,
         isConfigured: false,
       },
-      credentials: [{
-        providerId: 'deepseek',
-        hasCredentials: true,
-        alias: '默认',
-        keyPreview: 'sk-ds…1234',
-      }],
+      credentials: [
+        {
+          providerId: 'deepseek',
+          hasCredentials: true,
+          alias: '默认',
+          keyPreview: 'sk-ds…1234',
+        },
+      ],
     });
     const wrapper = mountSettings({ config: draft, draft });
 
@@ -233,10 +239,14 @@ describe('AiProviderSettings', () => {
     expect(wrapper.get('[data-small-model-select]').text()).toContain('DeepSeek-v4-pro');
 
     await wrapper.get('[data-small-model-select]').trigger('click');
-    await findButtonByText(wrapper.findAll('.ai-credential-combobox-option'), 'DeepSeek-v4-flash')
-      .trigger('click');
+    await findButtonByText(
+      wrapper.findAll('.ai-credential-combobox-option'),
+      'DeepSeek-v4-flash',
+    ).trigger('click');
     expect(wrapper.find('[aria-label="设为小模型"]').exists()).toBe(false);
-    await findButtonByText(wrapper.get('.ai-credential-foot').findAll('button'), '保存').trigger('click');
+    await findButtonByText(wrapper.get('.ai-credential-foot').findAll('button'), '保存').trigger(
+      'click',
+    );
 
     const event = wrapper.emitted('save')?.[0];
     expect(event?.[1]).toBe('');

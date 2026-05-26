@@ -1,7 +1,7 @@
 import type {
   IActiveRunSummary,
-  IRunLogEntry,
   IRunHistoryEntry,
+  IRunLogEntry,
   IRunResult,
   TExecutorKind,
   TRunHistoryStatus,
@@ -198,51 +198,37 @@ const TERMINAL_RUN_FINAL_LOG_CODE_SET = new Set<string>([
   TERMINAL_RUN_LOG_CODES.timeout,
 ]);
 
-export const isTerminalRunStartLog = (
-  item: Pick<IRunLogEntry, 'title' | 'code'>,
-): boolean =>
+export const isTerminalRunStartLog = (item: Pick<IRunLogEntry, 'title' | 'code'>): boolean =>
   item.code === TERMINAL_RUN_LOG_CODES.start || item.title === TERMINAL_RUN_LOG_TITLES.start;
 
-export const isTerminalRunDispatchedLog = (
-  item: Pick<IRunLogEntry, 'title' | 'code'>,
-): boolean =>
-  item.code === TERMINAL_RUN_LOG_CODES.dispatched
-  || item.title === TERMINAL_RUN_LOG_TITLES.dispatched;
+export const isTerminalRunDispatchedLog = (item: Pick<IRunLogEntry, 'title' | 'code'>): boolean =>
+  item.code === TERMINAL_RUN_LOG_CODES.dispatched ||
+  item.title === TERMINAL_RUN_LOG_TITLES.dispatched;
 
-const isTerminalRunTempFileLog = (
-  item: Pick<IRunLogEntry, 'title' | 'code'>,
-): boolean =>
-  item.code === TERMINAL_RUN_LOG_CODES.tempFile
-  || item.title === TERMINAL_RUN_LOG_TITLES.tempFile;
+const isTerminalRunTempFileLog = (item: Pick<IRunLogEntry, 'title' | 'code'>): boolean =>
+  item.code === TERMINAL_RUN_LOG_CODES.tempFile || item.title === TERMINAL_RUN_LOG_TITLES.tempFile;
 
-export const isTerminalRunCompletedLog = (
-  item: Pick<IRunLogEntry, 'title' | 'code'>,
-): boolean =>
-  item.code === TERMINAL_RUN_LOG_CODES.completed
-  || item.title === TERMINAL_RUN_LOG_TITLES.completed;
+export const isTerminalRunCompletedLog = (item: Pick<IRunLogEntry, 'title' | 'code'>): boolean =>
+  item.code === TERMINAL_RUN_LOG_CODES.completed ||
+  item.title === TERMINAL_RUN_LOG_TITLES.completed;
 
-export const isTerminalRunTimeoutLog = (
-  item: Pick<IRunLogEntry, 'title' | 'code'>,
-): boolean =>
-  item.code === TERMINAL_RUN_LOG_CODES.timeout
-  || item.title === TERMINAL_RUN_LOG_TITLES.timeout;
+export const isTerminalRunTimeoutLog = (item: Pick<IRunLogEntry, 'title' | 'code'>): boolean =>
+  item.code === TERMINAL_RUN_LOG_CODES.timeout || item.title === TERMINAL_RUN_LOG_TITLES.timeout;
 
-export const isTerminalRunFailedLog = (
-  item: Pick<IRunLogEntry, 'title' | 'code'>,
-): boolean =>
-  item.code === TERMINAL_RUN_LOG_CODES.failed
-  || item.title === TERMINAL_RUN_LOG_TITLES.failed
-  || item.title === '终端执行状态异常'
-  || item.title === '脚本执行失败';
+export const isTerminalRunFailedLog = (item: Pick<IRunLogEntry, 'title' | 'code'>): boolean =>
+  item.code === TERMINAL_RUN_LOG_CODES.failed ||
+  item.title === TERMINAL_RUN_LOG_TITLES.failed ||
+  item.title === '终端执行状态异常' ||
+  item.title === '脚本执行失败';
 
 export const isTerminalRunFlowLog = (item: IRunLogEntry): boolean =>
-  item.scope === 'run'
-  || (typeof item.code === 'string' && TERMINAL_RUN_LOG_CODE_SET.has(item.code))
-  || LEGACY_RUN_FLOW_LOG_TITLES.has(item.title);
+  item.scope === 'run' ||
+  (typeof item.code === 'string' && TERMINAL_RUN_LOG_CODE_SET.has(item.code)) ||
+  LEGACY_RUN_FLOW_LOG_TITLES.has(item.title);
 
 export const isTerminalRunFinalLog = (item: IRunLogEntry): boolean =>
-  (typeof item.code === 'string' && TERMINAL_RUN_FINAL_LOG_CODE_SET.has(item.code))
-  || LEGACY_FINAL_RUN_LOG_TITLES.has(item.title);
+  (typeof item.code === 'string' && TERMINAL_RUN_FINAL_LOG_CODE_SET.has(item.code)) ||
+  LEGACY_FINAL_RUN_LOG_TITLES.has(item.title);
 
 export const resolveTerminalRunLogKind = (
   item: Pick<IRunLogEntry, 'title' | 'code'>,

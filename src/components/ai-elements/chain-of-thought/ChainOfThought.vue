@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
 import { useVModel } from '@vueuse/core';
-import { provide, type HTMLAttributes, type Ref } from 'vue';
+import { type HTMLAttributes, provide, type Ref } from 'vue';
+import { cn } from '@/lib/utils';
 import { ChainOfThoughtContextKey } from './context';
 
 interface IChainOfThoughtProps {

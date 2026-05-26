@@ -1,10 +1,10 @@
-import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
-import type { IAiChatMessage } from '@/types/ai';
-import type { IAiContextReference } from '@/types/ai/context';
 import type { LanguageModelUsage } from 'ai';
 import { getContext } from 'tokenlens';
 import type { ComputedRef } from 'vue';
 import { computed } from 'vue';
+import type { IAiChatMessage } from '@/types/ai';
+import type { IAiContextReference } from '@/types/ai/context';
+import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
 
 export interface IAiTokenContextProps {
   usedTokens: number;
@@ -58,7 +58,9 @@ const resolveUsageInputTokens = (usage: LanguageModelUsage | undefined): number 
   return undefined;
 };
 
-const hasUsableUsage = (usage: LanguageModelUsage | null | undefined): usage is LanguageModelUsage =>
+const hasUsableUsage = (
+  usage: LanguageModelUsage | null | undefined,
+): usage is LanguageModelUsage =>
   resolveUsageInputTokens(usage ?? undefined) !== undefined ||
   toNonNegativeFiniteNumber(usage?.outputTokens) !== undefined ||
   toNonNegativeFiniteNumber(usage?.totalTokens) !== undefined ||
@@ -113,7 +115,9 @@ const estimateReferenceTokens = (references: readonly IAiContextReference[]): nu
       estimateTextTokens(reference.path ?? '') +
       estimateTextTokens(reference.contentPreview);
 
-    return total + (referenceContentTokens > 0 ? referenceContentTokens + REFERENCE_TOKEN_OVERHEAD : 0);
+    return (
+      total + (referenceContentTokens > 0 ? referenceContentTokens + REFERENCE_TOKEN_OVERHEAD : 0)
+    );
   }, 0);
 
 const estimateMessageTokens = (message: IAiChatMessage): number => {
@@ -164,7 +168,7 @@ const createUsage = (
 ): LanguageModelUsage => {
   const outputTokens = toNonNegativeFiniteNumber(options?.outputTokens) ?? 0;
   const reasoningTokens = toNonNegativeFiniteNumber(options?.reasoningTokens) ?? 0;
-  const totalTokens = toNonNegativeFiniteNumber(options?.totalTokens) ?? (inputTokens + outputTokens);
+  const totalTokens = toNonNegativeFiniteNumber(options?.totalTokens) ?? inputTokens + outputTokens;
 
   return {
     inputTokens,
@@ -200,10 +204,8 @@ const sumTokenCounts = (
   return (left ?? 0) + (right ?? 0);
 };
 
-const sumRequiredTokenCounts = (
-  left: number | undefined,
-  right: number | undefined,
-): number => (left ?? 0) + (right ?? 0);
+const sumRequiredTokenCounts = (left: number | undefined, right: number | undefined): number =>
+  (left ?? 0) + (right ?? 0);
 
 const resolveAggregationInputTokenDetails = (
   usage: LanguageModelUsage,
@@ -309,11 +311,7 @@ const resolveStreamOfficialUsage = (
   const completionTokens = toNonNegativeFiniteNumber(stream.completionTokens);
   const totalTokens = toNonNegativeFiniteNumber(stream.totalTokens);
 
-  if (
-    promptTokens === undefined &&
-    completionTokens === undefined &&
-    totalTokens === undefined
-  ) {
+  if (promptTokens === undefined && completionTokens === undefined && totalTokens === undefined) {
     return undefined;
   }
 
@@ -339,9 +337,7 @@ const resolveAccumulatedStreamUsage = (
   return usage ? { source: 'official', usage } : undefined;
 };
 
-const resolveLatestAssistantOutputTokens = (
-  messages: readonly IAiChatMessage[],
-): number => {
+const resolveLatestAssistantOutputTokens = (messages: readonly IAiChatMessage[]): number => {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
 
@@ -387,9 +383,13 @@ export const useAiTokenContext = (options: IUseAiTokenContextOptions) => {
     return value ? value : undefined;
   });
 
-  const estimationMessages = computed(() => options.estimationMessages?.value ?? options.messages.value);
+  const estimationMessages = computed(
+    () => options.estimationMessages?.value ?? options.messages.value,
+  );
 
-  const accumulatedStreamUsage = computed(() => resolveAccumulatedStreamUsage(options.messages.value));
+  const accumulatedStreamUsage = computed(() =>
+    resolveAccumulatedStreamUsage(options.messages.value),
+  );
   const latestOfficialUsage = computed<IResolvedTokenUsage | undefined>(() => {
     const usage = options.officialUsage?.value;
 
@@ -402,14 +402,19 @@ export const useAiTokenContext = (options: IUseAiTokenContextOptions) => {
       usage,
     };
   });
-  const latestCompletedUsage = computed(() => latestOfficialUsage.value ?? accumulatedStreamUsage.value);
-  const latestAssistantOutputTokens = computed(() => resolveLatestAssistantOutputTokens(options.messages.value));
-
-  const estimateCurrentInputTokens = (): number => estimateInputTokens(
-    estimationMessages.value,
-    options.draft.value,
-    options.contextReferences.value,
+  const latestCompletedUsage = computed(
+    () => latestOfficialUsage.value ?? accumulatedStreamUsage.value,
   );
+  const latestAssistantOutputTokens = computed(() =>
+    resolveLatestAssistantOutputTokens(options.messages.value),
+  );
+
+  const estimateCurrentInputTokens = (): number =>
+    estimateInputTokens(
+      estimationMessages.value,
+      options.draft.value,
+      options.contextReferences.value,
+    );
 
   const projectedInputTokens = computed(() => {
     if (options.hasPendingRequest.value) {
@@ -427,11 +432,9 @@ export const useAiTokenContext = (options: IUseAiTokenContextOptions) => {
     for (let index = events.length - 1; index >= 0; index -= 1) {
       const event = events[index];
       if (
-        (
-          event?.type === 'acontext.provider_payload.checked' ||
+        (event?.type === 'acontext.provider_payload.checked' ||
           event?.type === 'acontext.token.checked' ||
-          event?.type === 'agent.model.started'
-        ) &&
+          event?.type === 'agent.model.started') &&
         event.projectedInputTokensAvailable &&
         isPositiveFiniteNumber(event.projectedInputTokens)
       ) {

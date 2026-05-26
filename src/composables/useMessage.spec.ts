@@ -1,5 +1,5 @@
-import { useMessage, type DismissDetail, type MessageDetail } from '@/composables/useMessage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { type DismissDetail, type MessageDetail, useMessage } from '@/composables/useMessage';
 
 const toastMock = vi.hoisted(() => ({
   success: vi.fn(),

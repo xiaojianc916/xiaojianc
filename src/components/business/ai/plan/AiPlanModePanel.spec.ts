@@ -152,10 +152,7 @@ describe('AiPlanModePanel', () => {
       planStatus: 'rejected',
       planUpdatedAt: '2026-04-29T10:02:00.000Z',
       planRejectionReason: '需要调整范围',
-      planVersions: [
-        createPlanVersion(2, 'rejected'),
-        createPlanVersion(1, 'approved'),
-      ],
+      planVersions: [createPlanVersion(2, 'rejected'), createPlanVersion(1, 'approved')],
     });
 
     expect(wrapper.text()).not.toContain('plan-audit');

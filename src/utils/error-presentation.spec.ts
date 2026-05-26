@@ -1,6 +1,6 @@
+import { describe, expect, it } from 'vitest';
 import { AppError } from '@/types/app-error';
 import { resolveErrorPresentation } from '@/utils/error-presentation';
-import { describe, expect, it } from 'vitest';
 
 describe('resolveErrorPresentation', () => {
   it('默认把校验错误映射到字段级展示', () => {

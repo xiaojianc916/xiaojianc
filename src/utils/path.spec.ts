@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import {
   areFileSystemPathsEqual,
   formatFileSystemPathForDisplay,
@@ -6,16 +7,13 @@ import {
   joinDisplayedPath,
   normalizeFileSystemPath,
 } from '@/utils/path';
-import { describe, expect, it } from 'vitest';
 
 describe('path utils', () => {
   it('会移除 Windows 扩展路径前缀，避免面包屑出现问号段', () => {
     expect(normalizeFileSystemPath(String.raw`\\?\D:\test\xiaojianc.sh`)).toBe(
       'd:/test/xiaojianc.sh',
     );
-    expect(normalizeFileSystemPath('//?/D:/test/xiaojianc.sh')).toBe(
-      'd:/test/xiaojianc.sh',
-    );
+    expect(normalizeFileSystemPath('//?/D:/test/xiaojianc.sh')).toBe('d:/test/xiaojianc.sh');
   });
 
   it('会保留 UNC 路径语义并移除扩展路径前缀', () => {
@@ -32,8 +30,9 @@ describe('path utils', () => {
 
   it('使用规范化后的扩展路径参与文件名和路径相等判断', () => {
     expect(getPathBaseName(String.raw`\\?\D:\test\xiaojianc.sh`)).toBe('xiaojianc.sh');
-    expect(areFileSystemPathsEqual(String.raw`\\?\D:\test\xiaojianc.sh`, 'd:/test/xiaojianc.sh'))
-      .toBe(true);
+    expect(
+      areFileSystemPathsEqual(String.raw`\\?\D:\test\xiaojianc.sh`, 'd:/test/xiaojianc.sh'),
+    ).toBe(true);
   });
 
   it('展示路径时会去掉 Windows 扩展路径前缀并保留常见分隔符习惯', () => {

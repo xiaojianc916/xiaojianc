@@ -1,15 +1,13 @@
-import { useAiStream } from '@/composables/ai/useAiStream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { effectScope, type EffectScope } from 'vue';
+import { type EffectScope, effectScope } from 'vue';
+import { useAiStream } from '@/composables/ai/useAiStream';
 
 interface IStreamHarness {
   stream: ReturnType<typeof useAiStream>;
   scope: EffectScope;
 }
 
-const createStreamHarness = (
-  options: Parameters<typeof useAiStream>[0] = {},
-): IStreamHarness => {
+const createStreamHarness = (options: Parameters<typeof useAiStream>[0] = {}): IStreamHarness => {
   const scope = effectScope();
   let stream: ReturnType<typeof useAiStream> | null = null;
 

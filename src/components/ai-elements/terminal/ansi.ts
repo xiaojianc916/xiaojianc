@@ -4,7 +4,8 @@ interface IAnsiToken {
 }
 
 const ANSI_SEQUENCE_PATTERN = /\x1B\[([0-9;]*)m/gu;
-const ANSI_CONTROL_SEQUENCE_PATTERN = /\x1B(?:\][^\x07]*(?:\x07|\x1B\\)|\[[0-?]*[ -/]*[@-~]|\][^\n\r]*)/gu;
+const ANSI_CONTROL_SEQUENCE_PATTERN =
+  /\x1B(?:\][^\x07]*(?:\x07|\x1B\\)|\[[0-?]*[ -/]*[@-~]|\][^\n\r]*)/gu;
 const ANSI_FG_COLORS: Record<number, string> = {
   30: 'var(--terminal-ansi-black)',
   31: 'var(--terminal-ansi-red)',
@@ -58,8 +59,7 @@ export const parseAnsiOutput = (output: string): IAnsiToken[] => {
 
     if (codes.length === 0 || codes.includes(0)) {
       activeCodes = [];
-    }
-    else {
+    } else {
       activeCodes = [
         ...activeCodes.filter((code) => code === 1 && !codes.includes(22)),
         ...codes.filter((code) => code !== 22),

@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import {
   buildSshPreviewMatchHits,
   countSshPreviewLines,
@@ -5,7 +6,6 @@ import {
   normalizeSshPreviewContent,
   resolveSshPreviewCursorPosition,
 } from '@/utils/ssh-file-preview';
-import { describe, expect, it } from 'vitest';
 
 describe('ssh-file-preview', () => {
   it('为组合字符与 emoji 保留正确的匹配偏移', () => {

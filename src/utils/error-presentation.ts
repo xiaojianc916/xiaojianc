@@ -1,8 +1,8 @@
 import {
-  isAppError,
   type AppError,
   type IErrorPresentationAction,
   type IResolvedErrorPresentation,
+  isAppError,
   type TErrorPresentation,
   type TErrorSeverity,
 } from '@/types/app-error';

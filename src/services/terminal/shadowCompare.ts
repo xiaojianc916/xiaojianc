@@ -79,9 +79,7 @@ export class TerminalShadowCompareStore {
     const channelRecord = this.getOrCreateRecord(runId)[channel];
     if (channelRecord.startedAtMs !== null) {
       // R2 修复:first-write-wins,避免 retry / 乱序覆盖。
-      console.warn(
-        `[shadow-compare] duplicate start ignored runId=${runId} channel=${channel}`,
-      );
+      console.warn(`[shadow-compare] duplicate start ignored runId=${runId} channel=${channel}`);
       return;
     }
     channelRecord.startedAtMs = atMs;
@@ -96,9 +94,7 @@ export class TerminalShadowCompareStore {
     const channelRecord = this.getOrCreateRecord(runId)[channel];
     if (channelRecord.completedAtMs !== null) {
       // R2 修复:first-write-wins。
-      console.warn(
-        `[shadow-compare] duplicate complete ignored runId=${runId} channel=${channel}`,
-      );
+      console.warn(`[shadow-compare] duplicate complete ignored runId=${runId} channel=${channel}`);
       return;
     }
     channelRecord.completedAtMs = atMs;
@@ -127,9 +123,7 @@ export class TerminalShadowCompareStore {
       legacyBytes,
       shadowBytes,
       durationDeltaMs:
-        legacyDuration === null || shadowDuration === null
-          ? null
-          : shadowDuration - legacyDuration,
+        legacyDuration === null || shadowDuration === null ? null : shadowDuration - legacyDuration,
       stateSequenceEqual: this.statesEqual(record.legacy.states, record.shadow.states),
     };
   }

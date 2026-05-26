@@ -1,14 +1,14 @@
-import { aiService } from '@/services/ipc/ai.service';
-import type { IAiInlineCompletionResult } from '@/types/ai';
 import { EditorSelection, StateEffect, StateField } from '@codemirror/state';
 import {
   Decoration,
+  type DecorationSet,
   EditorView,
   keymap,
-  WidgetType,
-  type DecorationSet,
   type ViewUpdate,
+  WidgetType,
 } from '@codemirror/view';
+import { aiService } from '@/services/ipc/ai.service';
+import type { IAiInlineCompletionResult } from '@/types/ai';
 
 const INLINE_COMPLETION_CONTEXT_LIMIT = 8_000;
 const INLINE_COMPLETION_DELAY_MS = 450;

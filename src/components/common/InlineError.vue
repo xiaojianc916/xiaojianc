@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import ErrorDetails from '@/components/common/ErrorDetails.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -7,7 +8,6 @@ import CircleAlert from '~icons/lucide/circle-alert';
 import Info from '~icons/lucide/info';
 import OctagonX from '~icons/lucide/octagon-x';
 import TriangleAlert from '~icons/lucide/triangle-alert';
-import { computed } from 'vue';
 
 const props = withDefaults(
   defineProps<{

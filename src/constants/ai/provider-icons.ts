@@ -1,4 +1,3 @@
-import type { TAiServicePlatformId } from '@/constants/ai/providers';
 import anthropicIconUrl from '@/assets/icons/ai-providers/anthropic.svg';
 import deepseekIconUrl from '@/assets/icons/ai-providers/deepseek-color.svg';
 import geminiIconUrl from '@/assets/icons/ai-providers/google-gemini.svg';
@@ -7,6 +6,7 @@ import ollamaIconUrl from '@/assets/icons/ai-providers/ollama.svg';
 import openaiIconUrl from '@/assets/icons/ai-providers/openai.svg';
 import qwenIconUrl from '@/assets/icons/ai-providers/qwen-color.svg';
 import zhipuIconUrl from '@/assets/icons/ai-providers/zhipu-color.svg';
+import type { TAiServicePlatformId } from '@/constants/ai/providers';
 
 export interface IAiProviderIconDefinition {
   label: string;
@@ -64,7 +64,7 @@ const FALLBACK_AI_PROVIDER_ICON_DEFINITION: IAiProviderIconDefinition = {
 };
 
 const isAiProviderIconPlatformId = (platformId: string): platformId is TAiServicePlatformId =>
-  Object.prototype.hasOwnProperty.call(AI_PROVIDER_ICON_DEFINITIONS, platformId);
+  Object.hasOwn(AI_PROVIDER_ICON_DEFINITIONS, platformId);
 
 export const findAiProviderIconDefinition = (
   platformId: string | null | undefined,

@@ -1,9 +1,9 @@
+import { describe, expect, it } from 'vitest';
 import {
   aiConversationLegacyPersistSchema,
   aiConversationPersistSchema,
   aiConversationThreadSchema,
 } from '@/types/ai/conversation.schema';
-import { describe, expect, it } from 'vitest';
 
 const createMessage = () => ({
   id: 'message-1',

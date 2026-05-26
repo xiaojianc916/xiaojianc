@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useAiWebSources } from '@/composables/ai/useAiWebSources';
 import type { IAiTaskPlanStep, IAiWebFetchResult, IAiWebSearchResult } from '@/types/ai';
@@ -130,11 +130,13 @@ describe('useAiWebSources', () => {
 
     const webSources = useAiWebSources();
 
-    await expect(webSources.search({
-      query: 'Tauri docs',
-      intent: 'official-docs',
-      maxResults: 5,
-    })).rejects.toThrow('AI_AGENT_NETWORK_NOT_ALLOWED');
+    await expect(
+      webSources.search({
+        query: 'Tauri docs',
+        intent: 'official-docs',
+        maxResults: 5,
+      }),
+    ).rejects.toThrow('AI_AGENT_NETWORK_NOT_ALLOWED');
 
     expect(webSources.errorMessage.value).toBe('AI_AGENT_NETWORK_NOT_ALLOWED');
     expect(webSources.activity.value?.state).toBe('failed');
@@ -166,4 +168,5 @@ describe('useAiWebSources', () => {
     expect(sources[0]?.stepId).toBe(step.id);
     expect(webSources.hasCompletedWebToolsForStep(step)).toBe(true);
     expect(webSources.shouldRunWebToolsForStep(step)).toBe(false);
-  });});
+  });
+});

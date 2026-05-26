@@ -1,6 +1,6 @@
-import type { IGitRepositoryStatusPayload } from '@/types/git';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { IGitRepositoryStatusPayload } from '@/types/git';
 
 import { useGitStore } from './git';
 
@@ -127,9 +127,7 @@ describe('useGitStore', () => {
     });
     tauriServiceMock.initGitRepository.mockResolvedValueOnce(parentRepositoryStatus);
 
-    await expect(gitStore.initRepository(WORKSPACE_ROOT)).rejects.toThrow(
-      MSG_INIT_MISMATCH,
-    );
+    await expect(gitStore.initRepository(WORKSPACE_ROOT)).rejects.toThrow(MSG_INIT_MISMATCH);
 
     // 抛错走 finally → isLoading 复位；但 applyStatus 没有被调用，状态保持默认空。
     expect(gitStore.status.available).toBe(false);

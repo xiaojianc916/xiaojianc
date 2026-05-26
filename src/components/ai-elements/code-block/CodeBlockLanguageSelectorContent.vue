@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { SelectContent } from '@/components/ui/select';
 
-const props = withDefaults(defineProps<{
-  align?: 'start' | 'center' | 'end';
-}>(), {
-  align: 'end',
-});
+const props = withDefaults(
+  defineProps<{
+    align?: 'start' | 'center' | 'end';
+  }>(),
+  {
+    align: 'end',
+  },
+);
 </script>
 
 <template>

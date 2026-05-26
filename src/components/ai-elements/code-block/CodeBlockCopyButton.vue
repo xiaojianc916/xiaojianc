@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 import { reactiveOmit } from '@vueuse/core';
-import CheckIcon from '~icons/lucide/check';
-import CopyIcon from '~icons/lucide/copy';
 import type { HTMLAttributes } from 'vue';
 import { computed, onBeforeUnmount, ref } from 'vue';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import CheckIcon from '~icons/lucide/check';
+import CopyIcon from '~icons/lucide/copy';
 import { useCodeBlockContext } from './context';
 
 interface IProps {
@@ -33,7 +33,7 @@ const { code } = useCodeBlockContext();
 const isCopied = ref(false);
 let resetTimer: ReturnType<typeof setTimeout> | undefined;
 
-const icon = computed(() => isCopied.value ? CheckIcon : CopyIcon);
+const icon = computed(() => (isCopied.value ? CheckIcon : CopyIcon));
 
 async function copyToClipboard(): Promise<void> {
   if (typeof window === 'undefined' || !navigator?.clipboard?.writeText) {

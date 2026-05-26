@@ -28,4 +28,3 @@ export { default as PromptInputTabsList } from './PromptInputTabsList.vue';
 export { default as PromptInputTextarea } from './PromptInputTextarea.vue';
 export { default as PromptInputTools } from './PromptInputTools.vue';
 export type { AttachmentFile, PromptInputContext, PromptInputMessage } from './types';
-

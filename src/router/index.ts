@@ -1,6 +1,7 @@
 // @status: active
-import { getThemeManager } from '@/themes';
+
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
+import { getThemeManager } from '@/themes';
 
 const routes: RouteRecordRaw[] = [
   {

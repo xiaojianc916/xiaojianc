@@ -1,20 +1,15 @@
 <script setup lang="ts">
+import { computed, onMounted, watch } from 'vue';
 import AiDiffHunkViewer from '@/components/business/ai/edit/AiDiffHunkViewer.vue';
 import { useAiDiffPreview } from '@/composables/ai/useAiDiffPreview';
 import type { IAiDiffEditorPreview } from '@/types/ai';
-import { computed, onMounted, watch } from 'vue';
 
 const props = defineProps<{
   preview: IAiDiffEditorPreview;
 }>();
 
 const previewRef = computed(() => props.preview);
-const {
-  displayPreview,
-  isLoading,
-  errorMessage,
-  load,
-} = useAiDiffPreview(previewRef);
+const { displayPreview, isLoading, errorMessage, load } = useAiDiffPreview(previewRef);
 
 watch(
   () => props.preview.id,

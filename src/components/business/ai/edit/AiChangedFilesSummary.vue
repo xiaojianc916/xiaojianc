@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import ChevronDownIcon from '~icons/lucide/chevron-down';
-import ExternalLinkIcon from '~icons/lucide/external-link';
-import Maximize2Icon from '~icons/lucide/maximize2';
-import PinIcon from '~icons/lucide/pin';
-import PinOffIcon from '~icons/lucide/pin-off';
-import Undo2Icon from '~icons/lucide/undo2';
 import { computed, ref } from 'vue';
-
 import CodeBlock from '@/components/ai-elements/code-block/CodeBlock.vue';
+import {
+  buildAiPatchPreviewFiles,
+  formatAiPatchDisplayPath,
+} from '@/components/business/ai/edit/patch-preview';
 import type {
   IAiAgentChangedFile,
   IAiAgentPatchSummary,
@@ -15,7 +12,12 @@ import type {
   IAiDiffPreviewLine,
   IAiPatchSet,
 } from '@/types/ai';
-import { buildAiPatchPreviewFiles, formatAiPatchDisplayPath } from '@/components/business/ai/edit/patch-preview';
+import ChevronDownIcon from '~icons/lucide/chevron-down';
+import ExternalLinkIcon from '~icons/lucide/external-link';
+import Maximize2Icon from '~icons/lucide/maximize2';
+import PinIcon from '~icons/lucide/pin';
+import PinOffIcon from '~icons/lucide/pin-off';
+import Undo2Icon from '~icons/lucide/undo2';
 
 interface IChangedFileViewModel {
   file: IAiAgentChangedFile;
@@ -109,10 +111,7 @@ const getLineSign = (line: IAiDiffPreviewLine): string => {
 };
 
 const getHunkCode = (hunk: IAiDiffHunkPreview): string =>
-  [
-    hunk.header,
-    ...hunk.lines.map((line) => `${getLineSign(line)}${line.content}`),
-  ].join('\n');
+  [hunk.header, ...hunk.lines.map((line) => `${getLineSign(line)}${line.content}`)].join('\n');
 
 const handleViewDiff = (file: IAiAgentChangedFile): void => {
   if (isMessageVariant.value) {
@@ -122,8 +121,7 @@ const handleViewDiff = (file: IAiAgentChangedFile): void => {
   emit('viewDiff', file.diffRef, file.path);
 };
 
-const isFileOpen = (file: IAiAgentChangedFile): boolean =>
-  openFileKeys.value.has(getFileKey(file));
+const isFileOpen = (file: IAiAgentChangedFile): boolean => openFileKeys.value.has(getFileKey(file));
 
 const toggleFile = (file: IAiAgentChangedFile): void => {
   const fileKey = getFileKey(file);

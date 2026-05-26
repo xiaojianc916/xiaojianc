@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import type { HTMLAttributes } from 'vue';
 import { HoverCardContent } from '@/components/ui/hover-card';
 import { cn } from '@/lib/utils';
-import type { HTMLAttributes } from 'vue';
 
 interface IProps {
   class?: HTMLAttributes['class'];

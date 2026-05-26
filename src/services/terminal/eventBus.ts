@@ -123,9 +123,7 @@ const emitToHandlers = <TPayload>(
   }
 };
 
-export const createTerminalEventBus = (
-  listenFn: TTerminalListen = listen,
-): ITerminalEventBus => {
+export const createTerminalEventBus = (listenFn: TTerminalListen = listen): ITerminalEventBus => {
   const terminalDataHandlers = new Set<TEventHandler<ITerminalDataEvent>>();
   const runChunkHandlers = new Set<TEventHandler<ITerminalRunChunkPayload>>();
   const runStartedHandlers = new Set<TEventHandler<ITerminalRunStartedPayload>>();
@@ -151,10 +149,7 @@ export const createTerminalEventBus = (
   ): void => {
     const parsed = schema.safeParse(payload);
     if (!parsed.success) {
-      console.warn(
-        `[terminal-event] ${eventName} payload 校验失败`,
-        z.treeifyError(parsed.error),
-      );
+      console.warn(`[terminal-event] ${eventName} payload 校验失败`, z.treeifyError(parsed.error));
       return;
     }
     emitToHandlers(handlers, parsed.data);
@@ -194,10 +189,22 @@ export const createTerminalEventBus = (
         wireListener(TERMINAL_DATA_EVENT, terminalDataEventSchema, terminalDataHandlers),
         wireListener(TERMINAL_RUN_CHUNK_EVENT, terminalRunChunkEventSchema, runChunkHandlers),
         wireListener(TERMINAL_RUN_STARTED_EVENT, terminalRunStartedEventSchema, runStartedHandlers),
-        wireListener(TERMINAL_RUN_COMPLETED_EVENT, terminalRunCompletedEventSchema, runCompletedHandlers),
+        wireListener(
+          TERMINAL_RUN_COMPLETED_EVENT,
+          terminalRunCompletedEventSchema,
+          runCompletedHandlers,
+        ),
         wireValuelessListener(TERMINAL_INTERACTIVE_READY_EVENT, interactiveReadyHandlers),
-        wireListener(TERMINAL_INTERACTIVE_EXITED_EVENT, terminalExitEventSchema, interactiveExitedHandlers),
-        wireListener(TERMINAL_STATE_CHANGED_EVENT, terminalStateChangedEventSchema, stateChangedHandlers),
+        wireListener(
+          TERMINAL_INTERACTIVE_EXITED_EVENT,
+          terminalExitEventSchema,
+          interactiveExitedHandlers,
+        ),
+        wireListener(
+          TERMINAL_STATE_CHANGED_EVENT,
+          terminalStateChangedEventSchema,
+          stateChangedHandlers,
+        ),
       ]);
 
       const succeeded: UnlistenFn[] = [];

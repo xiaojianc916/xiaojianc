@@ -12,13 +12,15 @@ describe('AI Agent stream schema', () => {
         id: 'patch-summary-1',
         runId: 'run-1',
         stepId: 'step-1',
-        files: [{
-          path: 'src/App.vue',
-          status: 'modified',
-          additions: 3,
-          deletions: 1,
-          diffRef: 'aed-diff:thread-1:src%2FApp.vue',
-        }],
+        files: [
+          {
+            path: 'src/App.vue',
+            status: 'modified',
+            additions: 3,
+            deletions: 1,
+            diffRef: 'aed-diff:thread-1:src%2FApp.vue',
+          },
+        ],
         totalAdditions: 3,
         totalDeletions: 1,
         patchRef: 'aed-patch:thread-1',

@@ -12,8 +12,8 @@
  *  - type IThemeChangedDetail       事件 payload
  */
 
-export { buildTerminalTheme } from './derive/terminal';
 export type { IXtermTheme } from './derive/terminal';
-export { createThemeManager, getThemeManager, onThemeChanged } from './manager';
+export { buildTerminalTheme } from './derive/terminal';
 export type { IComponentTokens, IThemeChangedDetail, IThemeVariant, TVariantId } from './manager';
+export { createThemeManager, getThemeManager, onThemeChanged } from './manager';
 export type { IRoles } from './types';

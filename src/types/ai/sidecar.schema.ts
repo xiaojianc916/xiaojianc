@@ -1,18 +1,17 @@
 import { z } from 'zod';
-
-import {
-    AGENT_PLAN_STATUSES,
-    AGENT_RUNTIME_EVENT_SCHEMA_VERSION,
-    AGENT_RUNTIME_EVENT_TYPES,
-    AGENT_SIDECAR_MODES,
-    type TJsonValue,
-} from '@/types/ai/sidecar';
 import { aiContextReferenceSchema } from '@/types/ai/context.schema';
 import {
-    aiLanguageModelUsageSchema,
-    UNIFIED_DIFF_HUNK_LINE_PREFIXES,
-    UNIFIED_DIFF_NO_NEWLINE_MARKER,
+  aiLanguageModelUsageSchema,
+  UNIFIED_DIFF_HUNK_LINE_PREFIXES,
+  UNIFIED_DIFF_NO_NEWLINE_MARKER,
 } from '@/types/ai/schema';
+import {
+  AGENT_PLAN_STATUSES,
+  AGENT_RUNTIME_EVENT_SCHEMA_VERSION,
+  AGENT_RUNTIME_EVENT_TYPES,
+  AGENT_SIDECAR_MODES,
+  type TJsonValue,
+} from '@/types/ai/sidecar';
 
 /* ============================================================================
  * Primitive recursive types
@@ -25,14 +24,14 @@ import {
  * 显式 key type。我们的 JSON object 总是 string keys,所以传 `z.string()`。
  */
 export const jsonValueSchema: z.ZodType<TJsonValue> = z.lazy(() =>
-    z.union([
-        z.string(),
-        z.number(),
-        z.boolean(),
-        z.null(),
-        z.array(jsonValueSchema),
-        z.record(z.string(), jsonValueSchema),
-    ]),
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
 );
 
 /* ============================================================================
@@ -53,55 +52,57 @@ export const agentPlanStatusSchema = z.enum(AGENT_PLAN_STATUSES);
  * ========================================================================== */
 
 const optionalNonEmptyStringSchema = z.preprocess((value) => {
-    if (value === null || value === undefined) {
-        return undefined;
-    }
-    if (typeof value === 'string' && value.trim().length === 0) {
-        return undefined;
-    }
-    return value;
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value === 'string' && value.trim().length === 0) {
+    return undefined;
+  }
+  return value;
 }, z.string().trim().min(1).optional());
 
 const requiredNonEmptyStringSchema = z.string().trim().min(1);
 
 const optionalAgentModeSchema = z.preprocess((value) => {
-    if (value === null || value === undefined) {
-        return undefined;
-    }
-    if (typeof value === 'string' && value.trim().length === 0) {
-        return undefined;
-    }
-    return value;
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value === 'string' && value.trim().length === 0) {
+    return undefined;
+  }
+  return value;
 }, agentSidecarModeSchema.optional());
 
 const optionalWorkspaceRootPathSchema = z.preprocess((value) => {
-    // 保留 null 语义("用户显式声明无工作区根目录"),与 undefined 区分。
-    if (value === null || value === undefined) {
-        return value;
-    }
-    if (typeof value === 'string' && value.trim().length === 0) {
-        return undefined;
-    }
+  // 保留 null 语义("用户显式声明无工作区根目录"),与 undefined 区分。
+  if (value === null || value === undefined) {
     return value;
+  }
+  if (typeof value === 'string' && value.trim().length === 0) {
+    return undefined;
+  }
+  return value;
 }, z.string().trim().min(1).nullable().optional());
 
 /* ============================================================================
  * Shared diff hunk schema (与 ai.schema 共享 unified-diff line 约束)
  * ========================================================================== */
 
-const unifiedDiffHunkLineSchema = z.string().refine(
+const unifiedDiffHunkLineSchema = z
+  .string()
+  .refine(
     (value) =>
-        value === UNIFIED_DIFF_NO_NEWLINE_MARKER ||
-        UNIFIED_DIFF_HUNK_LINE_PREFIXES.some((prefix) => value.startsWith(prefix)),
+      value === UNIFIED_DIFF_NO_NEWLINE_MARKER ||
+      UNIFIED_DIFF_HUNK_LINE_PREFIXES.some((prefix) => value.startsWith(prefix)),
     'Patch hunk line must be a unified diff line.',
-);
+  );
 
 const agentDiffHunkSchema = z.object({
-    oldStart: z.number().int().nonnegative(),
-    oldLines: z.number().int().nonnegative(),
-    newStart: z.number().int().nonnegative(),
-    newLines: z.number().int().nonnegative(),
-    lines: z.array(unifiedDiffHunkLineSchema),
+  oldStart: z.number().int().nonnegative(),
+  oldLines: z.number().int().nonnegative(),
+  newStart: z.number().int().nonnegative(),
+  newLines: z.number().int().nonnegative(),
+  lines: z.array(unifiedDiffHunkLineSchema),
 });
 
 /* ============================================================================
@@ -109,9 +110,9 @@ const agentDiffHunkSchema = z.object({
  * ========================================================================== */
 
 const requestScopedModelConfigSchema = z.object({
-    modelId: requiredNonEmptyStringSchema,
-    apiKey: requiredNonEmptyStringSchema,
-    baseUrl: optionalNonEmptyStringSchema,
+  modelId: requiredNonEmptyStringSchema,
+  apiKey: requiredNonEmptyStringSchema,
+  baseUrl: optionalNonEmptyStringSchema,
 });
 
 /* ============================================================================
@@ -119,8 +120,8 @@ const requestScopedModelConfigSchema = z.object({
  * ========================================================================== */
 
 export const agentSidecarMessageSchema = z.object({
-    role: z.enum(['user', 'assistant', 'system', 'tool']),
-    content: z.string(),
+  role: z.enum(['user', 'assistant', 'system', 'tool']),
+  content: z.string(),
 });
 
 /* ============================================================================
@@ -128,41 +129,41 @@ export const agentSidecarMessageSchema = z.object({
  * ========================================================================== */
 
 export const agentPlanStepSchema = z.object({
-    id: z.string().min(1),
-    title: z.string().min(1),
-    goal: z.string().min(1),
-    description: z.string().min(1).optional(),
-    status: z.enum(['pending', 'running', 'done', 'failed', 'skipped', 'cancelled']),
-    tools: z.array(z.string().min(1)),
-    files: z.array(z.string().min(1)).optional(),
-    commands: z.array(z.string().min(1)).optional(),
-    risks: z.array(z.string().min(1)).optional(),
-    acceptanceCriteria: z.array(z.string().min(1)).optional(),
-    riskLevel: z.enum(['low', 'medium', 'high']),
-    requiresApproval: z.boolean(),
-    expectedOutput: z.string().min(1),
+  id: z.string().min(1),
+  title: z.string().min(1),
+  goal: z.string().min(1),
+  description: z.string().min(1).optional(),
+  status: z.enum(['pending', 'running', 'done', 'failed', 'skipped', 'cancelled']),
+  tools: z.array(z.string().min(1)),
+  files: z.array(z.string().min(1)).optional(),
+  commands: z.array(z.string().min(1)).optional(),
+  risks: z.array(z.string().min(1)).optional(),
+  acceptanceCriteria: z.array(z.string().min(1)).optional(),
+  riskLevel: z.enum(['low', 'medium', 'high']),
+  requiresApproval: z.boolean(),
+  expectedOutput: z.string().min(1),
 });
 
 export const agentPlanSchema = z.object({
-    goal: z.string().min(1),
-    summary: z.string().min(1).optional(),
-    requiresApproval: z.boolean().optional(),
-    steps: z.array(agentPlanStepSchema).min(1),
+  goal: z.string().min(1),
+  summary: z.string().min(1).optional(),
+  requiresApproval: z.boolean().optional(),
+  steps: z.array(agentPlanStepSchema).min(1),
 });
 
 export const agentPlanRecordSchema = z.object({
-    planId: z.string().min(1),
-    threadId: z.string().min(1),
-    version: z.number().int().positive(),
-    status: agentPlanStatusSchema,
-    userRequest: z.string(),
-    plan: agentPlanSchema,
-    createdAt: z.string().min(1),
-    updatedAt: z.string().min(1),
-    approvedAt: z.string().min(1).nullable(),
-    executedAt: z.string().min(1).nullable(),
-    rejectionReason: z.string().min(1).nullable(),
-    errorMessage: z.string().min(1).nullable(),
+  planId: z.string().min(1),
+  threadId: z.string().min(1),
+  version: z.number().int().positive(),
+  status: agentPlanStatusSchema,
+  userRequest: z.string(),
+  plan: agentPlanSchema,
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+  approvedAt: z.string().min(1).nullable(),
+  executedAt: z.string().min(1).nullable(),
+  rejectionReason: z.string().min(1).nullable(),
+  errorMessage: z.string().min(1).nullable(),
 });
 
 /* ============================================================================
@@ -170,18 +171,18 @@ export const agentPlanRecordSchema = z.object({
  * ========================================================================== */
 
 export const approvalRequestSchema = z.object({
-    id: z.string().min(1),
-    toolName: z.string().min(1),
-    question: z.string().min(1),
-    summary: z.string().min(1),
-    riskLevel: z.enum(['low', 'medium', 'high']),
-    reversible: z.boolean(),
-    createdAt: z.string().min(1),
+  id: z.string().min(1),
+  toolName: z.string().min(1),
+  question: z.string().min(1),
+  summary: z.string().min(1),
+  riskLevel: z.enum(['low', 'medium', 'high']),
+  reversible: z.boolean(),
+  createdAt: z.string().min(1),
 });
 
 export const diffFileSchema = z.object({
-    path: z.string().min(1),
-    hunks: z.array(agentDiffHunkSchema),
+  path: z.string().min(1),
+  hunks: z.array(agentDiffHunkSchema),
 });
 
 /* ============================================================================
@@ -201,90 +202,93 @@ export const diffFileSchema = z.object({
  * ========================================================================== */
 
 export const agentRuntimeEventSchema = z
-    .object({
-        id: z.string().min(1),
-        type: z.enum(AGENT_RUNTIME_EVENT_TYPES),
-        runId: z.string().min(1),
-        sessionId: z.string().min(1),
-        agentId: z.string().min(1),
-        timestamp: z.string().min(1),
-        seq: z.number().int().nonnegative(),
-        schemaVersion: z.literal(AGENT_RUNTIME_EVENT_SCHEMA_VERSION),
-        redacted: z.literal(true),
-        visibility: z.enum(['user', 'debug']),
-        level: z.enum(['debug', 'info', 'warn', 'error']).optional(),
-        parentId: z.string().min(1).optional(),
-        spanId: z.string().min(1).optional(),
-    })
-    .passthrough();
+  .object({
+    id: z.string().min(1),
+    type: z.enum(AGENT_RUNTIME_EVENT_TYPES),
+    runId: z.string().min(1),
+    sessionId: z.string().min(1),
+    agentId: z.string().min(1),
+    timestamp: z.string().min(1),
+    seq: z.number().int().nonnegative(),
+    schemaVersion: z.literal(AGENT_RUNTIME_EVENT_SCHEMA_VERSION),
+    redacted: z.literal(true),
+    visibility: z.enum(['user', 'debug']),
+    level: z.enum(['debug', 'info', 'warn', 'error']).optional(),
+    parentId: z.string().min(1).optional(),
+    spanId: z.string().min(1).optional(),
+  })
+  .passthrough();
 
 /* ============================================================================
  * UI events (sidecar response stream)
  * ========================================================================== */
 
 export const agentUiEventSchema = z.discriminatedUnion('type', [
-    z.object({
-        type: z.literal('message_delta'),
-        text: z.string(),
-        phase: z.enum(['stage', 'final']).optional(),
-    }),
-    z.object({
-        type: z.literal('agent_event'),
-        event: agentRuntimeEventSchema,
-    }),
-    z.object({
-        type: z.literal('plan_ready'),
-        planId: z.string().min(1),
-        threadId: z.string().min(1).optional(),
-        version: z.number().int().positive(),
-        status: agentPlanStatusSchema,
-        createdAt: z.string().min(1).optional(),
-        updatedAt: z.string().min(1).optional(),
-        approvedAt: z.string().min(1).nullable().optional(),
-        executedAt: z.string().min(1).nullable().optional(),
-        rejectionReason: z.string().min(1).nullable().optional(),
-        errorMessage: z.string().min(1).nullable().optional(),
-        plan: agentPlanSchema,
-    }),
-    z.object({
-        type: z.literal('plan_record'),
-        record: agentPlanRecordSchema,
-        versions: z.array(agentPlanRecordSchema),
-    }),
-    z.object({
-        type: z.literal('tool_start'),
-        toolName: z.string().min(1),
-        input: jsonValueSchema,
-    }),
-    z.object({
-        type: z.literal('tool_result'),
-        toolName: z.string().min(1),
-        output: jsonValueSchema,
-    }),
-    z.object({
-        type: z.literal('approval_required'),
-        request: approvalRequestSchema,
-    }),
-    z.object({
-        type: z.literal('diff_ready'),
-        files: z.array(diffFileSchema),
-    }),
-    z.object({
-        type: z.literal('done'),
-        result: z.string(),
-        /** @deprecated 使用 `usage.inputTokens`。 */
-        promptTokens: z.number().nonnegative().optional(),
-        /** @deprecated 使用 `usage.outputTokens`。 */
-        completionTokens: z.number().nonnegative().optional(),
-        /** @deprecated 使用 `usage.totalTokens`。 */
-        totalTokens: z.number().nonnegative().optional(),
-        // 复用 ai.schema 的共享 schema,避免双 SoT 与 passthrough 索引签名。
-        usage: z.lazy(() => aiLanguageModelUsageSchema).nullable().optional(),
-    }),
-    z.object({
-        type: z.literal('error'),
-        message: z.string().min(1),
-    }),
+  z.object({
+    type: z.literal('message_delta'),
+    text: z.string(),
+    phase: z.enum(['stage', 'final']).optional(),
+  }),
+  z.object({
+    type: z.literal('agent_event'),
+    event: agentRuntimeEventSchema,
+  }),
+  z.object({
+    type: z.literal('plan_ready'),
+    planId: z.string().min(1),
+    threadId: z.string().min(1).optional(),
+    version: z.number().int().positive(),
+    status: agentPlanStatusSchema,
+    createdAt: z.string().min(1).optional(),
+    updatedAt: z.string().min(1).optional(),
+    approvedAt: z.string().min(1).nullable().optional(),
+    executedAt: z.string().min(1).nullable().optional(),
+    rejectionReason: z.string().min(1).nullable().optional(),
+    errorMessage: z.string().min(1).nullable().optional(),
+    plan: agentPlanSchema,
+  }),
+  z.object({
+    type: z.literal('plan_record'),
+    record: agentPlanRecordSchema,
+    versions: z.array(agentPlanRecordSchema),
+  }),
+  z.object({
+    type: z.literal('tool_start'),
+    toolName: z.string().min(1),
+    input: jsonValueSchema,
+  }),
+  z.object({
+    type: z.literal('tool_result'),
+    toolName: z.string().min(1),
+    output: jsonValueSchema,
+  }),
+  z.object({
+    type: z.literal('approval_required'),
+    request: approvalRequestSchema,
+  }),
+  z.object({
+    type: z.literal('diff_ready'),
+    files: z.array(diffFileSchema),
+  }),
+  z.object({
+    type: z.literal('done'),
+    result: z.string(),
+    /** @deprecated 使用 `usage.inputTokens`。 */
+    promptTokens: z.number().nonnegative().optional(),
+    /** @deprecated 使用 `usage.outputTokens`。 */
+    completionTokens: z.number().nonnegative().optional(),
+    /** @deprecated 使用 `usage.totalTokens`。 */
+    totalTokens: z.number().nonnegative().optional(),
+    // 复用 ai.schema 的共享 schema,避免双 SoT 与 passthrough 索引签名。
+    usage: z
+      .lazy(() => aiLanguageModelUsageSchema)
+      .nullable()
+      .optional(),
+  }),
+  z.object({
+    type: z.literal('error'),
+    message: z.string().min(1),
+  }),
 ]);
 
 /* ============================================================================
@@ -292,27 +296,27 @@ export const agentUiEventSchema = z.discriminatedUnion('type', [
  * ========================================================================== */
 
 export const agentSidecarHealthPayloadSchema = z.object({
-    ok: z.boolean(),
-    status: z.string().min(1),
-    engine: z.string().min(1),
-    version: z.string().min(1).nullable(),
-    protocolVersion: z.string().min(1).nullable().optional(),
-    implementationVersion: z.string().min(1).nullable().optional(),
-    mcp: z.object({
-        configuredServers: z.number().int().nonnegative(),
-        serverNames: z.array(z.string()),
-        errors: z.array(z.string()),
-    }),
+  ok: z.boolean(),
+  status: z.string().min(1),
+  engine: z.string().min(1),
+  version: z.string().min(1).nullable(),
+  protocolVersion: z.string().min(1).nullable().optional(),
+  implementationVersion: z.string().min(1).nullable().optional(),
+  mcp: z.object({
+    configuredServers: z.number().int().nonnegative(),
+    serverNames: z.array(z.string()),
+    errors: z.array(z.string()),
+  }),
 });
 
 export const agentSidecarWarmupPayloadSchema = z.object({
-    ok: z.boolean(),
-    providerId: z.string().min(1).nullable(),
-    origin: z.string().min(1).nullable(),
-    statusCode: z.number().int().positive().nullable(),
-    durationMs: z.number().int().nonnegative(),
-    skipped: z.boolean(),
-    reason: z.string().min(1).optional(),
+  ok: z.boolean(),
+  providerId: z.string().min(1).nullable(),
+  origin: z.string().min(1).nullable(),
+  statusCode: z.number().int().positive().nullable(),
+  durationMs: z.number().int().nonnegative(),
+  skipped: z.boolean(),
+  reason: z.string().min(1).optional(),
 });
 
 /* ============================================================================
@@ -320,70 +324,70 @@ export const agentSidecarWarmupPayloadSchema = z.object({
  * ========================================================================== */
 
 const agentSidecarBaseRequestSchema = z.object({
-    sessionId: optionalNonEmptyStringSchema,
-    goal: optionalNonEmptyStringSchema,
-    messages: z.array(agentSidecarMessageSchema),
-    workspaceRootPath: optionalWorkspaceRootPathSchema,
-    context: z.array(aiContextReferenceSchema).default([]),
-    modelConfig: requestScopedModelConfigSchema.optional(),
-    threadId: optionalNonEmptyStringSchema,
-    planId: optionalNonEmptyStringSchema,
-    planVersion: z.number().int().positive().optional(),
-    planStepId: optionalNonEmptyStringSchema,
+  sessionId: optionalNonEmptyStringSchema,
+  goal: optionalNonEmptyStringSchema,
+  messages: z.array(agentSidecarMessageSchema),
+  workspaceRootPath: optionalWorkspaceRootPathSchema,
+  context: z.array(aiContextReferenceSchema).default([]),
+  modelConfig: requestScopedModelConfigSchema.optional(),
+  threadId: optionalNonEmptyStringSchema,
+  planId: optionalNonEmptyStringSchema,
+  planVersion: z.number().int().positive().optional(),
+  planStepId: optionalNonEmptyStringSchema,
 });
 
 export const agentSidecarChatRequestSchema = agentSidecarBaseRequestSchema.extend({
-    mode: optionalAgentModeSchema,
+  mode: optionalAgentModeSchema,
 });
 
 export const agentSidecarPlanRequestSchema = agentSidecarBaseRequestSchema.extend({
-    goal: requiredNonEmptyStringSchema,
+  goal: requiredNonEmptyStringSchema,
 });
 
 export const agentSidecarExecuteRequestSchema = agentSidecarBaseRequestSchema.extend({
-    goal: requiredNonEmptyStringSchema,
-    planId: requiredNonEmptyStringSchema,
-    planVersion: z.number().int().positive(),
-    planStepId: requiredNonEmptyStringSchema,
+  goal: requiredNonEmptyStringSchema,
+  planId: requiredNonEmptyStringSchema,
+  planVersion: z.number().int().positive(),
+  planStepId: requiredNonEmptyStringSchema,
 });
 
 export const agentSidecarPlanValidateRequestSchema = agentSidecarBaseRequestSchema
-    .extend({
-        planId: requiredNonEmptyStringSchema,
-        planVersion: z.number().int().positive(),
-    })
-    .omit({ planStepId: true });
+  .extend({
+    planId: requiredNonEmptyStringSchema,
+    planVersion: z.number().int().positive(),
+  })
+  .omit({ planStepId: true });
 
 export const agentSidecarPlanReplanRequestSchema = agentSidecarBaseRequestSchema
-    .extend({
-        goal: requiredNonEmptyStringSchema,
-        planId: requiredNonEmptyStringSchema,
-        planVersion: z.number().int().positive(),
-    })
-    .omit({ planStepId: true });
+  .extend({
+    goal: requiredNonEmptyStringSchema,
+    planId: requiredNonEmptyStringSchema,
+    planVersion: z.number().int().positive(),
+  })
+  .omit({ planStepId: true });
 
 const agentSidecarPlanVersionRequestSchema = z.object({
-    sessionId: optionalNonEmptyStringSchema,
-    planId: requiredNonEmptyStringSchema,
-    version: z.number().int().positive(),
+  sessionId: optionalNonEmptyStringSchema,
+  planId: requiredNonEmptyStringSchema,
+  version: z.number().int().positive(),
 });
 
 export const agentSidecarPlanApproveRequestSchema = agentSidecarPlanVersionRequestSchema;
 
 export const agentSidecarPlanQueryRequestSchema = z.object({
-    sessionId: optionalNonEmptyStringSchema,
-    planId: requiredNonEmptyStringSchema,
-    version: z.number().int().positive().optional(),
+  sessionId: optionalNonEmptyStringSchema,
+  planId: requiredNonEmptyStringSchema,
+  version: z.number().int().positive().optional(),
 });
 
 export const agentSidecarPlanRejectRequestSchema = agentSidecarPlanVersionRequestSchema.extend({
-    reason: optionalNonEmptyStringSchema,
+  reason: optionalNonEmptyStringSchema,
 });
 
 export const agentSidecarPlanFinishRequestSchema = agentSidecarPlanVersionRequestSchema.extend({
-    // 用 enum.extract 而不是重写字面量,与 agentPlanStatusSchema 保持单一来源。
-    status: agentPlanStatusSchema.extract(['completed', 'failed']),
-    errorMessage: optionalNonEmptyStringSchema,
+  // 用 enum.extract 而不是重写字面量,与 agentPlanStatusSchema 保持单一来源。
+  status: agentPlanStatusSchema.extract(['completed', 'failed']),
+  errorMessage: optionalNonEmptyStringSchema,
 });
 
 /**
@@ -392,22 +396,22 @@ export const agentSidecarPlanFinishRequestSchema = agentSidecarPlanVersionReques
  * `sessionId` 在 partial 后已经 optional,这里不再重复声明,保持精简。
  */
 export const agentSidecarApprovalResolveRequestSchema = agentSidecarBaseRequestSchema
-    .partial()
-    .extend({
-        requestId: z.string().min(1),
-        decision: z.string().min(1),
-    });
+  .partial()
+  .extend({
+    requestId: z.string().min(1),
+    decision: z.string().min(1),
+  });
 
 export const agentSidecarRollbackStepSchema = z.union([
-    requiredNonEmptyStringSchema,
-    z.array(requiredNonEmptyStringSchema).min(1),
+  requiredNonEmptyStringSchema,
+  z.array(requiredNonEmptyStringSchema).min(1),
 ]);
 
 export const agentSidecarCheckpointRestoreRequestSchema = z.object({
-    sessionId: optionalNonEmptyStringSchema,
-    runId: requiredNonEmptyStringSchema,
-    snapshotId: optionalNonEmptyStringSchema,
-    step: agentSidecarRollbackStepSchema.optional(),
+  sessionId: optionalNonEmptyStringSchema,
+  runId: requiredNonEmptyStringSchema,
+  snapshotId: optionalNonEmptyStringSchema,
+  step: agentSidecarRollbackStepSchema.optional(),
 });
 
 /* ============================================================================
@@ -415,13 +419,13 @@ export const agentSidecarCheckpointRestoreRequestSchema = z.object({
  * ========================================================================== */
 
 export const agentSidecarResponsePayloadSchema = z.object({
-    sessionId: z.string().min(1),
-    events: z.array(agentUiEventSchema),
-    result: z.string().nullable(),
+  sessionId: z.string().min(1),
+  events: z.array(agentUiEventSchema),
+  result: z.string().nullable(),
 });
 
 export const agentSidecarStreamEventPayloadSchema = z.object({
-    sessionId: z.string().min(1),
-    seq: z.number().int().nonnegative(),
-    event: agentUiEventSchema,
+  sessionId: z.string().min(1),
+  seq: z.number().int().nonnegative(),
+  event: agentUiEventSchema,
 });

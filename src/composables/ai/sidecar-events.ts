@@ -1,13 +1,4 @@
 import type {
-  IAgentPlan,
-  IAgentPlanRecord,
-  IAgentPlanStep,
-  IAgentSidecarResponsePayload,
-  TAgentRuntimeEvent,
-  TAgentUiEvent,
-  TJsonValue,
-} from '@/types/ai/sidecar';
-import type {
   IAiAgentPlanMetadata,
   IAiAgentPlanVersionSummary,
   IAiLanguageModelUsage,
@@ -19,6 +10,15 @@ import type {
   TAiAgentPlanStepStatus,
 } from '@/types/ai';
 import { AI_AGENT_PLAN_RISK_LEVELS } from '@/types/ai/agent';
+import type {
+  IAgentPlan,
+  IAgentPlanRecord,
+  IAgentPlanStep,
+  IAgentSidecarResponsePayload,
+  TAgentRuntimeEvent,
+  TAgentUiEvent,
+  TJsonValue,
+} from '@/types/ai/sidecar';
 import { AI_AGENT_TOOL_NAMES, type TAiAgentToolName } from '@/types/ai/tools';
 import { normalizeFileSystemPath } from '@/utils/path';
 import { clipTextPreview } from '@/utils/text-preview';
@@ -31,11 +31,7 @@ import { clipTextPreview } from '@/utils/text-preview';
  * needs_replan = 步骤之间冲突或依赖错位,需要重新生成计划
  * ========================================================================== */
 
-export const AGENT_SIDECAR_PLAN_VALIDATION_STATUSES = [
-  'passed',
-  'failed',
-  'needs_replan',
-] as const;
+export const AGENT_SIDECAR_PLAN_VALIDATION_STATUSES = ['passed', 'failed', 'needs_replan'] as const;
 
 export type TAgentSidecarPlanValidationStatus =
   (typeof AGENT_SIDECAR_PLAN_VALIDATION_STATUSES)[number];
@@ -167,17 +163,9 @@ const SIDECAR_QUERY_KEYS = new Set<string>([
   'search_term',
 ]);
 
-const SIDECAR_COMMAND_KEYS = new Set<string>([
-  'command',
-  'cmd',
-  'script',
-]);
+const SIDECAR_COMMAND_KEYS = new Set<string>(['command', 'cmd', 'script']);
 
-const SIDECAR_URL_KEYS = new Set<string>([
-  'url',
-  'uri',
-  'href',
-]);
+const SIDECAR_URL_KEYS = new Set<string>(['url', 'uri', 'href']);
 
 const SIDECAR_DOMAIN_KEYS = new Set<string>([
   'domain',
@@ -366,56 +354,68 @@ export const mapSidecarToolNameToAiToolName = (toolName: string): TAiAgentToolNa
 const normalizeStatus = (status: IAgentPlanStep['status']): TAiAgentPlanStepStatus => status;
 
 const inferStepKind = (tools: readonly string[]): TAiAgentPlanStepKind => {
-  if (tools.some((tool) =>
-    tool === 'search_project_files' ||
-    tool === 'search_files' ||
-    tool === 'search_text' ||
-    tool === 'search_symbols' ||
-    tool === 'grep_in_files' ||
-    tool === 'mastra_workspace_grep' ||
-    tool === 'tavily-search' ||
-    tool === 'tavily-map' ||
-    tool === 'tavily_search' ||
-    tool === 'tavily_map' ||
-    tool === 'tavily_research' ||
-    tool === 'search_nodes'
-  )) {
+  if (
+    tools.some(
+      (tool) =>
+        tool === 'search_project_files' ||
+        tool === 'search_files' ||
+        tool === 'search_text' ||
+        tool === 'search_symbols' ||
+        tool === 'grep_in_files' ||
+        tool === 'mastra_workspace_grep' ||
+        tool === 'tavily-search' ||
+        tool === 'tavily-map' ||
+        tool === 'tavily_search' ||
+        tool === 'tavily_map' ||
+        tool === 'tavily_research' ||
+        tool === 'search_nodes',
+    )
+  ) {
     return 'search';
   }
-  if (tools.some((tool) =>
-    tool === 'write_file' ||
-    tool === 'edit_file' ||
-    tool === 'apply_file_edits' ||
-    tool === 'propose_file_patch' ||
-    tool === 'mastra_workspace_edit_file' ||
-    tool === 'mastra_workspace_write_file' ||
-    tool === 'mastra_workspace_ast_edit' ||
-    tool === 'create_directory' ||
-    tool === 'move_file' ||
-    tool === 'delete_file' ||
-    tool === 'propose_patch' ||
-    tool === 'auto_apply_patch'
-  )) {
+  if (
+    tools.some(
+      (tool) =>
+        tool === 'write_file' ||
+        tool === 'edit_file' ||
+        tool === 'apply_file_edits' ||
+        tool === 'propose_file_patch' ||
+        tool === 'mastra_workspace_edit_file' ||
+        tool === 'mastra_workspace_write_file' ||
+        tool === 'mastra_workspace_ast_edit' ||
+        tool === 'create_directory' ||
+        tool === 'move_file' ||
+        tool === 'delete_file' ||
+        tool === 'propose_patch' ||
+        tool === 'auto_apply_patch',
+    )
+  ) {
     return 'edit';
   }
-  if (tools.some((tool) =>
-    tool === 'run_shell_command' ||
-    tool === 'install_package' ||
-    tool === 'run_command' ||
-    tool === 'run_test'
-  )) {
+  if (
+    tools.some(
+      (tool) =>
+        tool === 'run_shell_command' ||
+        tool === 'install_package' ||
+        tool === 'run_command' ||
+        tool === 'run_test',
+    )
+  ) {
     return 'verify';
   }
-  if (tools.some((tool) =>
-    tool === 'git_commit' ||
-    tool === 'git_status' ||
-    tool === 'git_log' ||
-    tool === 'git_show' ||
-    tool === 'git_diff_unstaged' ||
-    tool === 'git_diff_staged' ||
-    tool === 'create_commit' ||
-    tool === 'stage_file'
-  )) {
+  if (
+    tools.some(
+      (tool) =>
+        tool === 'git_commit' ||
+        tool === 'git_status' ||
+        tool === 'git_log' ||
+        tool === 'git_show' ||
+        tool === 'git_diff_unstaged' ||
+        tool === 'git_diff_staged' ||
+        tool === 'create_commit' ||
+        tool === 'stage_file',
+    )
+  ) {
     return 'summarize';
   }
   return 'inspect';
@@ -486,10 +486,7 @@ const clipSummary = (value: string, limit = 96): string => {
   return clipTextPreview(value, { maxGraphemes: limit });
 };
 
-const getRecordValue = (
-  value: TJsonValue,
-  key: string,
-): TJsonValue | undefined => {
+const getRecordValue = (value: TJsonValue, key: string): TJsonValue | undefined => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
@@ -519,7 +516,9 @@ const getStringArrayField = (value: TJsonValue, key: string): string[] => {
   if (!Array.isArray(candidate)) {
     return [];
   }
-  return candidate.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  return candidate.filter(
+    (item): item is string => typeof item === 'string' && item.trim().length > 0,
+  );
 };
 
 const getObjectArrayField = (
@@ -537,25 +536,19 @@ const getObjectArrayField = (
  * Validation report parsing
  * ========================================================================== */
 
-const toValidationSeverity = (
-  value: string | null,
-): TAiAgentPlanRiskLevel =>
+const toValidationSeverity = (value: string | null): TAiAgentPlanRiskLevel =>
   AI_AGENT_PLAN_RISK_LEVELS.includes(value as TAiAgentPlanRiskLevel)
     ? (value as TAiAgentPlanRiskLevel)
     : 'medium';
 
-const toValidationStatus = (
-  value: string | null,
-): TAgentSidecarPlanValidationStatus | null =>
-  AGENT_SIDECAR_PLAN_VALIDATION_STATUSES.includes(
-    value as TAgentSidecarPlanValidationStatus,
-  )
+const toValidationStatus = (value: string | null): TAgentSidecarPlanValidationStatus | null =>
+  AGENT_SIDECAR_PLAN_VALIDATION_STATUSES.includes(value as TAgentSidecarPlanValidationStatus)
     ? (value as TAgentSidecarPlanValidationStatus)
     : null;
 
-const parseValidationFinding = (
-  value: { readonly [key: string]: TJsonValue },
-): IAgentSidecarPlanValidationFinding => ({
+const parseValidationFinding = (value: {
+  readonly [key: string]: TJsonValue;
+}): IAgentSidecarPlanValidationFinding => ({
   stepId: getStringField(value, ['stepId']) ?? null,
   severity: toValidationSeverity(getStringField(value, ['severity'])),
   title: getStringField(value, ['title']) ?? '验证发现',
@@ -563,18 +556,16 @@ const parseValidationFinding = (
   retryable: getBooleanField(value, 'retryable') ?? false,
 });
 
-const parseValidationAcceptance = (
-  value: { readonly [key: string]: TJsonValue },
-): IAgentSidecarPlanValidationAcceptance => ({
+const parseValidationAcceptance = (value: {
+  readonly [key: string]: TJsonValue;
+}): IAgentSidecarPlanValidationAcceptance => ({
   criterion: getStringField(value, ['criterion']) ?? '验收项',
   passed: getBooleanField(value, 'passed') ?? false,
   detail: getStringField(value, ['detail']) ?? '',
 });
 
 const parseValidationReport = (value: TJsonValue): IAgentSidecarPlanValidationReport | null => {
-  const reportValue = isJsonObject(value) && isJsonObject(value.report)
-    ? value.report
-    : value;
+  const reportValue = isJsonObject(value) && isJsonObject(value.report) ? value.report : value;
   if (!isJsonObject(reportValue)) {
     return null;
   }
@@ -659,10 +650,7 @@ const formatStringList = (values: readonly string[], limit = 2): string | null =
   return restCount > 0 ? `${visible.join('、')} 等 ${normalized.length} 项` : visible.join('、');
 };
 
-const collectFirstString = (
-  value: TJsonValue,
-  keys: ReadonlySet<string>,
-): string | null => {
+const collectFirstString = (value: TJsonValue, keys: ReadonlySet<string>): string | null => {
   const values: string[] = [];
   collectStringValuesForKeys(value, keys, values);
   return formatStringList(values, 1);
@@ -690,13 +678,13 @@ const extractUrlHost = (value: string): string | null => {
   }
 };
 
-const collectUrlDomains = (
-  value: TJsonValue,
-  limit = 2,
-): string | null => {
+const collectUrlDomains = (value: TJsonValue, limit = 2): string | null => {
   const urls: string[] = [];
   collectStringValuesForKeys(value, SIDECAR_URL_KEYS, urls);
-  return formatStringList(urls.map(extractUrlHost).filter((host): host is string => Boolean(host)), limit);
+  return formatStringList(
+    urls.map(extractUrlHost).filter((host): host is string => Boolean(host)),
+    limit,
+  );
 };
 
 const getToolPlatform = (toolName: string): string | null =>
@@ -714,18 +702,12 @@ interface IToolPayloadDescriptor {
   detailItems: string[];
 }
 
-const joinTargetParts = (
-  parts: readonly (string | null)[],
-  fallback: string,
-): string => {
+const joinTargetParts = (parts: readonly (string | null)[], fallback: string): string => {
   const normalized = uniqueNonEmptyStrings(parts.filter((part): part is string => Boolean(part)));
   return normalized.length ? normalized.map((part) => clipSummary(part, 52)).join(' · ') : fallback;
 };
 
-const describeToolPayload = (
-  toolName: string,
-  value: TJsonValue,
-): IToolPayloadDescriptor => {
+const describeToolPayload = (toolName: string, value: TJsonValue): IToolPayloadDescriptor => {
   const platform = getToolPlatform(toolName);
   const query = collectFirstString(value, SIDECAR_QUERY_KEYS);
   const scope = collectStringList(value, SIDECAR_PATH_SCOPE_KEYS, 2);
@@ -733,10 +715,7 @@ const describeToolPayload = (
   const domains = collectStringList(value, SIDECAR_DOMAIN_KEYS, 2) ?? collectUrlDomains(value, 2);
   const command = collectFirstString(value, SIDECAR_COMMAND_KEYS);
   if (WEB_SEARCH_TOOL_NAMES.has(toolName)) {
-    const targetPreview = joinTargetParts([
-      query,
-      domains,
-    ], '联网搜索');
+    const targetPreview = joinTargetParts([query, domains], '联网搜索');
     return {
       targetPreview,
       summary: targetPreview,
@@ -775,9 +754,7 @@ const describeToolPayload = (
     return {
       targetPreview,
       summary: targetPreview,
-      detailItems: compactDetailItems([
-        createDetailItem('文件', scope),
-      ]),
+      detailItems: compactDetailItems([createDetailItem('文件', scope)]),
     };
   }
   if (DIRECTORY_TOOL_NAMES.has(toolName)) {
@@ -785,9 +762,7 @@ const describeToolPayload = (
     return {
       targetPreview,
       summary: targetPreview,
-      detailItems: compactDetailItems([
-        createDetailItem('目录', scope ?? '项目结构'),
-      ]),
+      detailItems: compactDetailItems([createDetailItem('目录', scope ?? '项目结构')]),
     };
   }
   if (GIT_TOOL_NAMES.has(toolName)) {
@@ -795,18 +770,14 @@ const describeToolPayload = (
     return {
       targetPreview,
       summary: targetPreview,
-      detailItems: compactDetailItems([
-        createDetailItem('范围', scope ?? '当前仓库'),
-      ]),
+      detailItems: compactDetailItems([createDetailItem('范围', scope ?? '当前仓库')]),
     };
   }
   if (command) {
     return {
       targetPreview: command,
       summary: command,
-      detailItems: compactDetailItems([
-        createDetailItem('命令', command),
-      ]),
+      detailItems: compactDetailItems([createDetailItem('命令', command)]),
     };
   }
   const fallback = summarizeJsonValue(value);
@@ -839,10 +810,8 @@ const TOOL_RESULT_CONTAINER_KEYS = new Set([
   'artifact',
 ]);
 
-const RESULT_HEADING_PATTERN =
-  /^(?:Detailed Results?|Results?|Tool Result|Output)\s*:?\s*$/iu;
-const RESULT_FIELD_LABEL_PATTERN =
-  /^(?:Title|Summary|Content|Result|Answer|Description)\s*:\s*/iu;
+const RESULT_HEADING_PATTERN = /^(?:Detailed Results?|Results?|Tool Result|Output)\s*:?\s*$/iu;
+const RESULT_FIELD_LABEL_PATTERN = /^(?:Title|Summary|Content|Result|Answer|Description)\s*:\s*/iu;
 const URL_FIELD_LABEL_PATTERN = /^URL\s*:\s*/iu;
 
 const cleanReadableToolText = (value: string): string | null => {
@@ -851,9 +820,10 @@ const cleanReadableToolText = (value: string): string | null => {
     .split('\n')
     .map((line) => line.replace(/\s+/gu, ' ').trim())
     .filter((line) => line && !RESULT_HEADING_PATTERN.test(line));
-  const contentLine = lines.find((line) =>
-    RESULT_FIELD_LABEL_PATTERN.test(line) && !URL_FIELD_LABEL_PATTERN.test(line)
-  ) ?? lines.find((line) => !URL_FIELD_LABEL_PATTERN.test(line));
+  const contentLine =
+    lines.find(
+      (line) => RESULT_FIELD_LABEL_PATTERN.test(line) && !URL_FIELD_LABEL_PATTERN.test(line),
+    ) ?? lines.find((line) => !URL_FIELD_LABEL_PATTERN.test(line));
   if (!contentLine) {
     return null;
   }
@@ -861,11 +831,7 @@ const cleanReadableToolText = (value: string): string | null => {
   return normalized ? clipSummary(normalized) : null;
 };
 
-const collectReadableToolTexts = (
-  value: TJsonValue,
-  texts: string[],
-  depth = 0,
-): void => {
+const collectReadableToolTexts = (value: TJsonValue, texts: string[], depth = 0): void => {
   if (depth > 5 || texts.length >= 4 || value === null) {
     return;
   }
@@ -934,14 +900,10 @@ const isSidecarFileMutationEvent = (
   (event.type === 'tool_start' || event.type === 'tool_result') &&
   SIDECAR_FILE_MUTATION_TOOL_NAMES.has(event.toolName);
 
-const isAgentRuntimeToolEvent = (
-  event: TAgentRuntimeEvent,
-): event is TAgentRuntimeToolEvent =>
+const isAgentRuntimeToolEvent = (event: TAgentRuntimeEvent): event is TAgentRuntimeToolEvent =>
   event.type === 'agent.tool.started' || event.type === 'agent.tool.completed';
 
-const isRuntimeFileMutationEvent = (
-  event: TAgentUiEvent,
-): event is TAgentUiRuntimeToolEvent =>
+const isRuntimeFileMutationEvent = (event: TAgentUiEvent): event is TAgentUiRuntimeToolEvent =>
   event.type === 'agent_event' &&
   isAgentRuntimeToolEvent(event.event) &&
   SIDECAR_FILE_MUTATION_TOOL_NAMES.has(event.event.toolName);
@@ -953,17 +915,14 @@ export const extractVisibleAgentRuntimeEvents = (
   events: readonly TAgentUiEvent[],
 ): TAgentRuntimeEvent[] =>
   events
-    .filter((event): event is Extract<TAgentUiEvent, { type: 'agent_event' }> =>
-      event.type === 'agent_event' && (
-        event.event.visibility === 'user' ||
-        TIMELINE_DEBUG_EVENT_TYPES.has(event.event.type)
-      )
+    .filter(
+      (event): event is Extract<TAgentUiEvent, { type: 'agent_event' }> =>
+        event.type === 'agent_event' &&
+        (event.event.visibility === 'user' || TIMELINE_DEBUG_EVENT_TYPES.has(event.event.type)),
     )
     .map((event) => event.event);
 
-export const extractSidecarChangedFilePaths = (
-  events: readonly TAgentUiEvent[],
-): string[] => {
+export const extractSidecarChangedFilePaths = (events: readonly TAgentUiEvent[]): string[] => {
   const paths: string[] = [];
   const seen = new Set<string>();
   for (const event of events) {
@@ -973,10 +932,11 @@ export const extractSidecarChangedFilePaths = (
     }
     if (isRuntimeFileMutationEvent(event)) {
       const runtimeEvent = event.event;
-      const preview = runtimeEvent.type === 'agent.tool.started'
-        ? runtimeEvent.inputPreview
-        : runtimeEvent.resultPreview;
-      const parsedPreview = preview ? parseJsonString(preview) ?? preview : null;
+      const preview =
+        runtimeEvent.type === 'agent.tool.started'
+          ? runtimeEvent.inputPreview
+          : runtimeEvent.resultPreview;
+      const parsedPreview = preview ? (parseJsonString(preview) ?? preview) : null;
       if (parsedPreview !== null) {
         collectPathCandidates(parsedPreview, paths);
       }
@@ -1016,7 +976,9 @@ const summarizeJsonValue = (value: TJsonValue): string => {
     if (readableTexts[0]) {
       return readableTexts[0];
     }
-    const firstText = value.find((item): item is string => typeof item === 'string' && item.trim().length > 0);
+    const firstText = value.find(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    );
     return firstText ? summarizeJsonValue(firstText) : clipSummary(stringifyJsonValue(value));
   }
   const priority = getStringField(value, [
@@ -1076,7 +1038,7 @@ const createToolCallId = (event: TAgentUiEvent, index: number): string => {
 
 const createRuntimeToolCallId = (
   event: Extract<TAgentRuntimeEvent, { type: 'agent.tool.started' | 'agent.tool.completed' }>,
-): string => event.toolUseId ? `runtime-tool:${event.toolUseId}` : `runtime-tool:${event.id}`;
+): string => (event.toolUseId ? `runtime-tool:${event.toolUseId}` : `runtime-tool:${event.id}`);
 
 const findRuntimeToolCallIndex = (
   toolCalls: readonly IAiToolCall[],
@@ -1121,7 +1083,7 @@ const appendRuntimeToolCompleted = (
   const descriptor = describeRuntimeToolPreview(event.toolName, event.resultPreview);
   const summary = event.ok
     ? summarizeJsonValue(getRuntimePreviewValue(event.resultPreview)) || descriptor.summary
-    : event.errorMessage ?? '工具执行失败';
+    : (event.errorMessage ?? '工具执行失败');
   const existingIndex = findRuntimeToolCallIndex(toolCalls, event);
   if (existingIndex >= 0) {
     const existing = toolCalls[existingIndex];
@@ -1132,7 +1094,9 @@ const appendRuntimeToolCompleted = (
       ...existing,
       status: event.ok ? 'succeeded' : 'failed',
       summary,
-      ...(existing.targetPreview ? { targetPreview: existing.targetPreview } : { targetPreview: descriptor.targetPreview }),
+      ...(existing.targetPreview
+        ? { targetPreview: existing.targetPreview }
+        : { targetPreview: descriptor.targetPreview }),
       ...(existing.detailItems?.length
         ? { detailItems: existing.detailItems }
         : descriptor.detailItems.length
@@ -1169,10 +1133,14 @@ const applyRuntimeToolEventToToolCalls = (
  * ========================================================================== */
 
 const WEB_TOOL_NAME_PATTERN = /(?:web|tavily)/iu;
-const FILE_SEARCH_TOOL_NAME_PATTERN = /(?:search_(?:project_)?files|search_text|search_symbols|grep_in_files|mastra_workspace_grep)/iu;
-const DIRECTORY_TOOL_NAME_PATTERN = /(?:list_dir|list_directory|directory_tree|get_project_tree|list_project_files|mastra_workspace_list_files)/iu;
-const FILE_READ_TOOL_NAME_PATTERN = /(?:read_|get_file_info|open_nodes|mastra_workspace_lsp_inspect)/iu;
-const FILE_MUTATION_TOOL_NAME_PATTERN = /(?:write_file|edit_file|create_directory|move_file|delete_file|patch|mastra_workspace_write_file|mastra_workspace_edit_file|mastra_workspace_ast_edit|mastra_workspace_mkdir|mastra_workspace_delete)/iu;
+const FILE_SEARCH_TOOL_NAME_PATTERN =
+  /(?:search_(?:project_)?files|search_text|search_symbols|grep_in_files|mastra_workspace_grep)/iu;
+const DIRECTORY_TOOL_NAME_PATTERN =
+  /(?:list_dir|list_directory|directory_tree|get_project_tree|list_project_files|mastra_workspace_list_files)/iu;
+const FILE_READ_TOOL_NAME_PATTERN =
+  /(?:read_|get_file_info|open_nodes|mastra_workspace_lsp_inspect)/iu;
+const FILE_MUTATION_TOOL_NAME_PATTERN =
+  /(?:write_file|edit_file|create_directory|move_file|delete_file|patch|mastra_workspace_write_file|mastra_workspace_edit_file|mastra_workspace_ast_edit|mastra_workspace_mkdir|mastra_workspace_delete)/iu;
 const COMMAND_TOOL_NAME_PATTERN = /(?:run_|shell|command|install_package)/iu;
 const GIT_TOOL_NAME_PATTERN = /(?:^git_|get_git_|create_commit|stage_file)/iu;
 const TIME_TOOL_NAME_PATTERN = /(?:time)/iu;
@@ -1188,11 +1156,9 @@ const getToolDetailValue = (toolCall: IAiToolCall, label: string): string | null
   return item ? item.slice(prefix.length).trim() || null : null;
 };
 
-const isActiveToolCall = (toolCall: IAiToolCall): boolean =>
-  toolCall.status === 'running';
+const isActiveToolCall = (toolCall: IAiToolCall): boolean => toolCall.status === 'running';
 
-const isPendingToolCall = (toolCall: IAiToolCall): boolean =>
-  toolCall.status === 'pending';
+const isPendingToolCall = (toolCall: IAiToolCall): boolean => toolCall.status === 'pending';
 
 const getMutationVerb = (toolCall: IAiToolCall): string => {
   switch (toolCall.name) {
@@ -1230,8 +1196,12 @@ const buildToolActivityText = (toolCall: IAiToolCall): string => {
     const searchTarget = query ?? url ?? site ?? target;
     const isFetch = Boolean(url && !query);
     const verb = isFetch
-      ? (isActiveToolCall(toolCall) ? '正在读取网页' : '读取网页')
-      : (isActiveToolCall(toolCall) ? '正在联网搜索' : '联网搜索');
+      ? isActiveToolCall(toolCall)
+        ? '正在读取网页'
+        : '读取网页'
+      : isActiveToolCall(toolCall)
+        ? '正在联网搜索'
+        : '联网搜索';
     const siteHint = site && query ? `，站点 ${site}` : '';
     return searchTarget ? `${verb}「${searchTarget}」${siteHint}` : verb;
   }
@@ -1258,7 +1228,7 @@ const buildToolActivityText = (toolCall: IAiToolCall): string => {
   }
   if (COMMAND_TOOL_NAME_PATTERN.test(toolCall.name)) {
     const commandTarget = COMMAND_ACTIVITY_TOOL_NAMES.has(toolCall.name)
-      ? getToolDetailValue(toolCall, '命令') ?? '命令'
+      ? (getToolDetailValue(toolCall, '命令') ?? '命令')
       : target;
     return `${isActiveToolCall(toolCall) ? '正在运行' : '运行'} ${commandTarget}`;
   }
@@ -1267,7 +1237,9 @@ const buildToolActivityText = (toolCall: IAiToolCall): string => {
   }
   return target
     ? `${isActiveToolCall(toolCall) ? '正在处理' : '处理'} ${target}`
-    : (isActiveToolCall(toolCall) ? '正在处理任务' : '处理任务');
+    : isActiveToolCall(toolCall)
+      ? '正在处理任务'
+      : '处理任务';
 };
 
 const buildSidecarLiveActivityText = (
@@ -1295,12 +1267,13 @@ const buildCompletedSidecarActivityText = (
 ): string => {
   const lastToolCall = [...toolCalls]
     .reverse()
-    .find((toolCall) =>
-      toolCall.status === 'succeeded' ||
-      toolCall.status === 'failed' ||
-      toolCall.status === 'denied' ||
-      toolCall.status === 'pending' ||
-      toolCall.status === 'running'
+    .find(
+      (toolCall) =>
+        toolCall.status === 'succeeded' ||
+        toolCall.status === 'failed' ||
+        toolCall.status === 'denied' ||
+        toolCall.status === 'pending' ||
+        toolCall.status === 'running',
     );
   return lastToolCall ? buildToolActivityText(lastToolCall) : fallback || '请求处理中';
 };
@@ -1365,10 +1338,12 @@ export const mapSidecarEventsToToolCalls = (events: readonly TAgentUiEvent[]): I
         name: event.toolName,
         status: 'succeeded',
         summary,
-        ...(descriptor.detailItems.length ? {
-          targetPreview: descriptor.targetPreview,
-          detailItems: descriptor.detailItems,
-        } : {}),
+        ...(descriptor.detailItems.length
+          ? {
+              targetPreview: descriptor.targetPreview,
+              detailItems: descriptor.detailItems,
+            }
+          : {}),
       });
       continue;
     }
@@ -1394,9 +1369,10 @@ export const projectSidecarEventsToToolState = (params: {
   streamStatus: TAgentSidecarToolStreamStatus;
 }): IAgentSidecarToolProjection => {
   const toolCalls = mapSidecarEventsToToolCalls(params.events);
-  const activityText = params.streamStatus === 'streaming'
-    ? buildSidecarLiveActivityText(toolCalls, params.fallbackActivityText)
-    : buildCompletedSidecarActivityText(toolCalls, params.fallbackActivityText);
+  const activityText =
+    params.streamStatus === 'streaming'
+      ? buildSidecarLiveActivityText(toolCalls, params.fallbackActivityText)
+      : buildCompletedSidecarActivityText(toolCalls, params.fallbackActivityText);
   return {
     toolCalls,
     activityText,
@@ -1424,28 +1400,28 @@ const findLastEventByType = <K extends TAgentUiEvent['type']>(
 };
 
 const extractPlan = (events: readonly TAgentUiEvent[]): IAgentPlan | null =>
-  events.find((event): event is Extract<TAgentUiEvent, { type: 'plan_ready' }> =>
-    event.type === 'plan_ready'
+  events.find(
+    (event): event is Extract<TAgentUiEvent, { type: 'plan_ready' }> => event.type === 'plan_ready',
   )?.plan ?? null;
 
 const extractPlanReadyEvent = (
   events: readonly TAgentUiEvent[],
 ): Extract<TAgentUiEvent, { type: 'plan_ready' }> | null =>
-  events.find((event): event is Extract<TAgentUiEvent, { type: 'plan_ready' }> =>
-    event.type === 'plan_ready'
+  events.find(
+    (event): event is Extract<TAgentUiEvent, { type: 'plan_ready' }> => event.type === 'plan_ready',
   ) ?? null;
 
 const extractPlanRecordEvent = (
   events: readonly TAgentUiEvent[],
 ): Extract<TAgentUiEvent, { type: 'plan_record' }> | null =>
-  events.find((event): event is Extract<TAgentUiEvent, { type: 'plan_record' }> =>
-    event.type === 'plan_record'
+  events.find(
+    (event): event is Extract<TAgentUiEvent, { type: 'plan_record' }> =>
+      event.type === 'plan_record',
   ) ?? null;
 
 const extractErrorMessage = (events: readonly TAgentUiEvent[]): string | null =>
-  events.find((event): event is Extract<TAgentUiEvent, { type: 'error' }> =>
-    event.type === 'error'
-  )?.message ?? null;
+  events.find((event): event is Extract<TAgentUiEvent, { type: 'error' }> => event.type === 'error')
+    ?.message ?? null;
 
 const planReadyToMetadata = (
   event: Extract<TAgentUiEvent, { type: 'plan_ready' }>,
@@ -1461,12 +1437,12 @@ const planReadyToMetadata = (
   ...(event.rejectionReason !== undefined ? { rejectionReason: event.rejectionReason } : {}),
   ...(event.errorMessage !== undefined ? { errorMessage: event.errorMessage } : {}),
   ...(event.plan.summary ? { summary: event.plan.summary } : {}),
-  ...(event.plan.requiresApproval !== undefined ? { requiresApproval: event.plan.requiresApproval } : {}),
+  ...(event.plan.requiresApproval !== undefined
+    ? { requiresApproval: event.plan.requiresApproval }
+    : {}),
 });
 
-const planRecordToMetadata = (
-  record: IAgentPlanRecord,
-): IAiAgentPlanMetadata => ({
+const planRecordToMetadata = (record: IAgentPlanRecord): IAiAgentPlanMetadata => ({
   planId: record.planId,
   threadId: record.threadId,
   version: record.version,
@@ -1478,12 +1454,12 @@ const planRecordToMetadata = (
   rejectionReason: record.rejectionReason,
   errorMessage: record.errorMessage,
   ...(record.plan.summary ? { summary: record.plan.summary } : {}),
-  ...(record.plan.requiresApproval !== undefined ? { requiresApproval: record.plan.requiresApproval } : {}),
+  ...(record.plan.requiresApproval !== undefined
+    ? { requiresApproval: record.plan.requiresApproval }
+    : {}),
 });
 
-const planRecordToVersionSummary = (
-  record: IAgentPlanRecord,
-): IAiAgentPlanVersionSummary => ({
+const planRecordToVersionSummary = (record: IAgentPlanRecord): IAiAgentPlanVersionSummary => ({
   ...planRecordToMetadata(record),
   userRequest: record.userRequest,
 });
@@ -1517,17 +1493,13 @@ const DEFAULT_INPUT_TOKEN_DETAILS: NonNullable<IAiLanguageModelUsage['inputToken
 
 const DEFAULT_OUTPUT_TOKEN_DETAILS = {} as NonNullable<IAiLanguageModelUsage['outputTokenDetails']>;
 
-const normalizeLanguageModelUsage = (
-  usage: IAiLanguageModelUsage,
-): IAiLanguageModelUsage => ({
+const normalizeLanguageModelUsage = (usage: IAiLanguageModelUsage): IAiLanguageModelUsage => ({
   ...usage,
   inputTokenDetails: usage.inputTokenDetails ?? DEFAULT_INPUT_TOKEN_DETAILS,
   outputTokenDetails: usage.outputTokenDetails ?? DEFAULT_OUTPUT_TOKEN_DETAILS,
 });
 
-const extractLatestDoneUsage = (
-  events: readonly TAgentUiEvent[],
-): IAiLanguageModelUsage | null => {
+const extractLatestDoneUsage = (events: readonly TAgentUiEvent[]): IAiLanguageModelUsage | null => {
   const usage = findLastEventByType(events, 'done')?.usage;
   return usage ? normalizeLanguageModelUsage(usage) : null;
 };
@@ -1581,9 +1553,7 @@ export const projectSidecarPlanResponse = (
   return {
     goal,
     summary: plan?.summary ?? null,
-    planMetadata: plan && planReady
-      ? planReadyToMetadata(planReady)
-      : null,
+    planMetadata: plan && planReady ? planReadyToMetadata(planReady) : null,
     steps: plan ? mapSidecarPlanToTaskSteps(plan) : [],
     toolCalls: mapSidecarEventsToToolCalls(response.events),
     assistantContent: buildAssistantContent(goal, plan, extractDoneResult(response.events)),
@@ -1606,13 +1576,15 @@ export const projectSidecarPlanRecordResponse = (
 export const projectSidecarPlanValidationResponse = (
   response: IAgentSidecarResponsePayload,
 ): IAgentSidecarPlanValidationProjection => {
-  const validatorResult = response.events.find((event): event is Extract<TAgentUiEvent, { type: 'tool_result' }> =>
-    event.type === 'tool_result' && event.toolName === 'plan_validator'
+  const validatorResult = response.events.find(
+    (event): event is Extract<TAgentUiEvent, { type: 'tool_result' }> =>
+      event.type === 'tool_result' && event.toolName === 'plan_validator',
   );
   const report = validatorResult ? parseValidationReport(validatorResult.output) : null;
   return {
     report,
-    errorMessage: extractErrorMessage(response.events) ??
+    errorMessage:
+      extractErrorMessage(response.events) ??
       (report ? null : 'sidecar 未返回有效的计划验证报告。'),
   };
 };
@@ -1646,8 +1618,9 @@ const mapSidecarApprovalToToolConfirmation = (
 const extractPendingConfirmation = (
   response: IAgentSidecarResponsePayload,
 ): IAiToolConfirmationRequest | null => {
-  const approval = response.events.find((event): event is Extract<TAgentUiEvent, { type: 'approval_required' }> =>
-    event.type === 'approval_required'
+  const approval = response.events.find(
+    (event): event is Extract<TAgentUiEvent, { type: 'approval_required' }> =>
+      event.type === 'approval_required',
   );
   return approval ? mapSidecarApprovalToToolConfirmation(approval, response.sessionId) : null;
 };
@@ -1664,7 +1637,10 @@ export const projectSidecarExecuteResponse = (
   const pendingConfirmation = extractPendingConfirmation(response);
   const assistantContent = errorMessage
     ? `Agent 执行失败：${errorMessage}`
-    : doneResult ?? responseResult ?? latestDelta ?? (pendingConfirmation ? '' : 'Agent 已完成。');
+    : (doneResult ??
+      responseResult ??
+      latestDelta ??
+      (pendingConfirmation ? '' : 'Agent 已完成。'));
   return {
     toolCalls: mapSidecarEventsToToolCalls(response.events),
     assistantContent,

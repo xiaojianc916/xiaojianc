@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-
-import InlineError from '@/components/common/InlineError.vue';
 import AiWebSearchActivity from '@/components/business/ai/web/AiWebSearchActivity.vue';
 import AiWebSourceCard from '@/components/business/ai/web/AiWebSourceCard.vue';
+import InlineError from '@/components/common/InlineError.vue';
 import type { IAiWebActivity, IAiWebSourceEntry, TAiAgentNetworkPermission } from '@/types/ai';
 
 const props = defineProps<{

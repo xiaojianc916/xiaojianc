@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { ImageAttachmentPreviewGrid } from '@/components/ai-elements/image';
 import {
   Message,
@@ -7,23 +8,22 @@ import {
   MessageContent,
   MessageToolbar,
 } from '@/components/ai-elements/message';
-import AiAgentRuntimeTimeline from '@/components/business/ai/plan/AiAgentRuntimeTimeline.vue';
-import AiChangedFilesSummary from '@/components/business/ai/edit/AiChangedFilesSummary.vue';
 import AiMarkdown from '@/components/business/ai/chat/AiMarkdown.vue';
+import AiChangedFilesSummary from '@/components/business/ai/edit/AiChangedFilesSummary.vue';
 import AiPatchPreview from '@/components/business/ai/edit/AiPatchPreview.vue';
+import AiAgentRuntimeTimeline from '@/components/business/ai/plan/AiAgentRuntimeTimeline.vue';
 import { useMessage } from '@/composables/useMessage';
 import type { TAiServicePlatformId } from '@/constants/ai/providers';
-import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
 import type {
   IAiChatMessage,
   IAiContextReference,
   IAiToolCall,
   TAiChatMessageActionId,
 } from '@/types/ai';
+import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
 import { tryWriteClipboardText } from '@/utils/clipboard';
 import Check from '~icons/lucide/check';
 import Copy from '~icons/lucide/copy';
-import { computed, onBeforeUnmount, ref } from 'vue';
 import AiThinkingStatus from './AiThinkingStatus.vue';
 
 const props = defineProps<{
@@ -74,10 +74,13 @@ const hasRenderableContent = computed(() => Boolean(props.message.content.trim()
 const hasToolCalls = computed(() => Boolean(props.message.toolCalls?.length));
 
 const hasRuntimeTimeline = computed(() =>
-  Boolean(props.message.stream?.runtimeEvents?.some((event) =>
-    event.type !== 'acontext.memory.compressed' &&
-    !HIDDEN_RUNTIME_TIMELINE_EVENT_TYPES.has(event.type)
-  )),
+  Boolean(
+    props.message.stream?.runtimeEvents?.some(
+      (event) =>
+        event.type !== 'acontext.memory.compressed' &&
+        !HIDDEN_RUNTIME_TIMELINE_EVENT_TYPES.has(event.type),
+    ),
+  ),
 );
 
 const hasRuntimeEventBuffer = computed(() => Array.isArray(props.message.stream?.runtimeEvents));
@@ -126,8 +129,8 @@ const canShowRuntimeMessageBubble = computed(
 
 const hasMessageActions = computed(() => Boolean(props.message.actions?.length));
 const hasChangedFilesSummary = computed(() => Boolean(props.message.changedFilesSummary));
-const hasInlinePatches = computed(() =>
-  Boolean(props.message.patches?.length) && !hasChangedFilesSummary.value,
+const hasInlinePatches = computed(
+  () => Boolean(props.message.patches?.length) && !hasChangedFilesSummary.value,
 );
 
 const isToolProgressContent = computed(() => {
@@ -316,10 +319,12 @@ const getToolCallActionLabel = (toolCall: IAiToolCall): string => {
 const normalizeToolCallSummary = (toolCall: IAiToolCall): string => {
   const summary = toolCall.targetPreview?.trim() || toolCall.summary.trim() || toolCall.name;
 
-  return summary
-    .replace(/^正在(?:读取|搜索|执行|修改|使用|运行|验证)\s*[：:]?\s*/u, '')
-    .replace(/^已(?:读取|搜索|执行|修改|使用|运行|验证)\s*[：:]?\s*/u, '')
-    .trim() || summary;
+  return (
+    summary
+      .replace(/^正在(?:读取|搜索|执行|修改|使用|运行|验证)\s*[：:]?\s*/u, '')
+      .replace(/^已(?:读取|搜索|执行|修改|使用|运行|验证)\s*[：:]?\s*/u, '')
+      .trim() || summary
+  );
 };
 
 const formatToolCallLabel = (toolCall: IAiToolCall): string =>

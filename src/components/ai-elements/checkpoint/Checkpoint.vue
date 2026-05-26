@@ -1,13 +1,16 @@
 <script setup lang="ts">
+import type { HTMLAttributes } from 'vue';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import type { HTMLAttributes } from 'vue';
 
-const props = withDefaults(defineProps<{
-  class?: HTMLAttributes['class'];
-}>(), {
-  class: undefined,
-});
+const props = withDefaults(
+  defineProps<{
+    class?: HTMLAttributes['class'];
+  }>(),
+  {
+    class: undefined,
+  },
+);
 </script>
 
 <template>

@@ -1,5 +1,5 @@
 // composables/useMessage.ts
-import { toast, type ExternalToast } from 'vue-sonner';
+import { type ExternalToast, toast } from 'vue-sonner';
 
 export type TMessageType = 'success' | 'error' | 'warning' | 'info' | 'loading';
 

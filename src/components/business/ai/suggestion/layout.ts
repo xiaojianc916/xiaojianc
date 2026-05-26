@@ -127,9 +127,7 @@ export const groupSuggestionsByEstimatedWidth = (
       continue;
     }
     const chipWidth = estimateSuggestionChipWidth(suggestionText, options);
-    const nextWidth = currentRow.length > 0
-      ? currentWidth + chipGap + chipWidth
-      : chipWidth;
+    const nextWidth = currentRow.length > 0 ? currentWidth + chipGap + chipWidth : chipWidth;
 
     if (currentRow.length > 0 && nextWidth > targetWidth) {
       rows.push(currentRow);

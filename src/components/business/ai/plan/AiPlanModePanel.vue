@@ -1,155 +1,146 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue';
+import { AiQueue, type IAiQueueItem } from '@/components/ai-elements/queue';
+import type {
+  IAiAgentPlanVersionSummary,
+  IAiAgentRun,
+  IAiTaskPlanStep,
+  IAiToolActivityInline,
+  IAiToolConfirmationRequest,
+  IAiWebActivity,
+  TAiAgentRunStatus,
+  TAiToolConfirmationDecision,
+} from '@/types/ai';
+import type { TAgentPlanStatus } from '@/types/ai/sidecar';
 import ChevronDown from '~icons/lucide/chevron-down';
 import Play from '~icons/lucide/play';
-import { computed, ref } from 'vue';
-
-import { AiQueue, type IAiQueueItem } from '@/components/ai-elements/queue';
-import type { TAgentPlanStatus } from '@/types/ai/sidecar';
-import type {
-    IAiAgentPlanVersionSummary,
-    IAiAgentRun,
-    IAiToolConfirmationRequest,
-    IAiToolActivityInline,
-    IAiTaskPlanStep,
-    IAiWebActivity,
-    TAiAgentRunStatus,
-    TAiToolConfirmationDecision,
-} from '@/types/ai';
 
 const props = defineProps<{
-    goal: string;
-    planSummary?: string | null;
-    planStatus?: TAgentPlanStatus | null;
-    planId?: string | null;
-    planVersion?: number | null;
-    planThreadId?: string | null;
-    planCreatedAt?: string | null;
-    planUpdatedAt?: string | null;
-    planExecutedAt?: string | null;
-    planRejectionReason?: string | null;
-    planErrorMessage?: string | null;
-    planVersions?: IAiAgentPlanVersionSummary[];
-    steps: IAiTaskPlanStep[];
-    classificationReason: string;
-    errorMessage: string;
-    isPlanning: boolean;
-    isApproving: boolean;
-    approvedAt: string | null;
-    activeRun: IAiAgentRun | null;
-    isRunActionPending: boolean;
-    isClassifying?: boolean;
-    webActivity?: IAiWebActivity | null;
-    toolActivity?: IAiToolActivityInline | null;
-    toolConfirmation?: IAiToolConfirmationRequest | null;
+  goal: string;
+  planSummary?: string | null;
+  planStatus?: TAgentPlanStatus | null;
+  planId?: string | null;
+  planVersion?: number | null;
+  planThreadId?: string | null;
+  planCreatedAt?: string | null;
+  planUpdatedAt?: string | null;
+  planExecutedAt?: string | null;
+  planRejectionReason?: string | null;
+  planErrorMessage?: string | null;
+  planVersions?: IAiAgentPlanVersionSummary[];
+  steps: IAiTaskPlanStep[];
+  classificationReason: string;
+  errorMessage: string;
+  isPlanning: boolean;
+  isApproving: boolean;
+  approvedAt: string | null;
+  activeRun: IAiAgentRun | null;
+  isRunActionPending: boolean;
+  isClassifying?: boolean;
+  webActivity?: IAiWebActivity | null;
+  toolActivity?: IAiToolActivityInline | null;
+  toolConfirmation?: IAiToolConfirmationRequest | null;
 }>();
 
 const isCollapsed = ref(false);
 const planContentId = 'ai-plan-mode-panel-content';
 const emit = defineEmits<{
-    updateStepTitle: [stepId: string, title: string];
-    removeStep: [stepId: string];
-    regenerate: [];
-    reject: [];
-    reset: [];
-    approve: [];
-    runStep: [];
-    pauseRun: [];
-    resumeRun: [];
-    cancelRun: [];
-    resolveToolConfirmation: [decision: TAiToolConfirmationDecision];
+  updateStepTitle: [stepId: string, title: string];
+  removeStep: [stepId: string];
+  regenerate: [];
+  reject: [];
+  reset: [];
+  approve: [];
+  runStep: [];
+  pauseRun: [];
+  resumeRun: [];
+  cancelRun: [];
+  resolveToolConfirmation: [decision: TAiToolConfirmationDecision];
 }>();
 
 const runStatusLabel = computed(() => {
-    if (!props.activeRun) {
-        return props.approvedAt ? '等待启动' : '';
-    }
+  if (!props.activeRun) {
+    return props.approvedAt ? '等待启动' : '';
+  }
 
-    switch (props.activeRun.status) {
-        case 'waiting-for-plan-approval':
-            return '等待批准';
-        case 'running-plan':
-            return '运行中';
-        case 'running-step':
-            return '执行步骤中';
-        case 'waiting-for-tool-confirmation':
-            return '等待工具确认';
-        case 'paused':
-            return '可继续';
-        case 'completed':
-            return '已完成';
-        case 'failed':
-            return '失败';
-        case 'cancelled':
-            return '已取消';
-        default:
-            return '未知状态';
-    }
+  switch (props.activeRun.status) {
+    case 'waiting-for-plan-approval':
+      return '等待批准';
+    case 'running-plan':
+      return '运行中';
+    case 'running-step':
+      return '执行步骤中';
+    case 'waiting-for-tool-confirmation':
+      return '等待工具确认';
+    case 'paused':
+      return '可继续';
+    case 'completed':
+      return '已完成';
+    case 'failed':
+      return '失败';
+    case 'cancelled':
+      return '已取消';
+    default:
+      return '未知状态';
+  }
 });
 
 const runStatusClass = computed(() =>
-    props.activeRun ? `is-${props.activeRun.status}` : 'is-waiting',
+  props.activeRun ? `is-${props.activeRun.status}` : 'is-waiting',
 );
 
-const executionSteps = computed(() =>
-    props.activeRun?.steps ?? props.steps,
+const executionSteps = computed(() => props.activeRun?.steps ?? props.steps);
+
+const completedStepCount = computed(
+  () => executionSteps.value.filter((step) => step.status === 'done').length,
 );
 
-const completedStepCount = computed(() =>
-    executionSteps.value.filter((step) => step.status === 'done').length,
-);
-
-const totalStepCount = computed(() =>
-    executionSteps.value.length,
-);
+const totalStepCount = computed(() => executionSteps.value.length);
 
 const todoTitle = computed(() =>
-    totalStepCount.value > 0
-        ? `执行进度(${completedStepCount.value}/${totalStepCount.value})`
-        : '执行进度',
+  totalStepCount.value > 0
+    ? `执行进度(${completedStepCount.value}/${totalStepCount.value})`
+    : '执行进度',
 );
 
 const planStateLabel = computed(() => {
-    if (props.isClassifying) {
-        return '判断任务';
-    }
+  if (props.isClassifying) {
+    return '判断任务';
+  }
 
-    if (props.isPlanning) {
-        return '生成计划';
-    }
+  if (props.isPlanning) {
+    return '生成计划';
+  }
 
-    if (props.activeRun) {
-        return runStatusLabel.value;
-    }
+  if (props.activeRun) {
+    return runStatusLabel.value;
+  }
 
-    if (props.approvedAt) {
-        return '已批准';
-    }
+  if (props.approvedAt) {
+    return '已批准';
+  }
 
-    if (props.steps.length) {
-        return '待确认';
-    }
+  if (props.steps.length) {
+    return '待确认';
+  }
 
-    return '计划';
+  return '计划';
 });
 
 const planQueueItems = computed<IAiQueueItem[]>(() =>
-    executionSteps.value.map((step) => ({
-        id: step.id,
-        label: step.title,
-        status: step.status,
-    })),
+  executionSteps.value.map((step) => ({
+    id: step.id,
+    label: step.title,
+    status: step.status,
+  })),
 );
 
-const collapseLabel = computed(() =>
-    isCollapsed.value ? '展开执行进度' : '收起执行进度',
-);
+const collapseLabel = computed(() => (isCollapsed.value ? '展开执行进度' : '收起执行进度'));
 
-const canResumeRun = computed(() =>
-    props.activeRun?.status === 'paused',
-);
+const canResumeRun = computed(() => props.activeRun?.status === 'paused');
 
 const toggleCollapsed = (): void => {
-    isCollapsed.value = !isCollapsed.value;
+  isCollapsed.value = !isCollapsed.value;
 };
 </script>
 

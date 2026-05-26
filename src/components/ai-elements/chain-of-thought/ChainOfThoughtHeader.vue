@@ -1,16 +1,19 @@
 <script setup lang="ts">
+import type { HTMLAttributes } from 'vue';
 import { Collapsible, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import BrainIcon from '~icons/lucide/brain';
 import ChevronDownIcon from '~icons/lucide/chevron-down';
-import type { HTMLAttributes } from 'vue';
 import { useChainOfThought } from './context';
 
-const props = withDefaults(defineProps<{
-  class?: HTMLAttributes['class'];
-}>(), {
-  class: undefined,
-});
+const props = withDefaults(
+  defineProps<{
+    class?: HTMLAttributes['class'];
+  }>(),
+  {
+    class: undefined,
+  },
+);
 
 const { isOpen, setIsOpen } = useChainOfThought();
 </script>

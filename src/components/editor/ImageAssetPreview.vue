@@ -47,12 +47,12 @@
 </template>
 
 <script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue';
 import InlineError from '@/components/common/InlineError.vue';
 import { tauriService } from '@/services/tauri';
 import type { IImageAssetPayload } from '@/types/editor';
 import { toErrorMessage } from '@/utils/error';
 import { formatBytes } from '@/utils/file-assets';
-import { computed, onMounted, ref, watch } from 'vue';
 
 const props = defineProps<{
   path: string;

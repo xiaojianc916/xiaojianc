@@ -9,18 +9,18 @@
 </template>
 
 <script setup lang="ts">
-import { buildCodeMirrorSettingsExtensions } from '@/services/editor/codemirror-config';
-import { resolveCodeMirrorLanguageExtension } from '@/services/editor/codemirror-language';
-import type { TThemeMode } from '@/types/app';
-import type { IGitDiffPreviewPayload } from '@/types/git';
-import type { IEditorSettings } from '@/types/settings';
-import { resolveLanguageForPath } from '@/utils/editor-language';
 import { MergeView } from '@codemirror/merge';
 import type { Extension } from '@codemirror/state';
 import { EditorView, highlightSpecialChars } from '@codemirror/view';
 import { githubLight } from '@fsegurai/codemirror-theme-github-light';
 import { useResizeObserver } from '@vueuse/core';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { buildCodeMirrorSettingsExtensions } from '@/services/editor/codemirror-config';
+import { resolveCodeMirrorLanguageExtension } from '@/services/editor/codemirror-language';
+import type { TThemeMode } from '@/types/app';
+import type { IGitDiffPreviewPayload } from '@/types/git';
+import type { IEditorSettings } from '@/types/settings';
+import { resolveLanguageForPath } from '@/utils/editor-language';
 
 const props = defineProps<{
   preview: IGitDiffPreviewPayload;

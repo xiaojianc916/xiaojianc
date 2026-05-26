@@ -208,15 +208,14 @@ const getDefaultAiServicePlatformPreset = (): IAiServicePlatformPreset => {
   return preset;
 };
 
-export const findAiProviderPreset = (
-  _providerType: TAiProviderType,
-): IAiProviderPreset => MASTRA_PROVIDER_PRESET;
+export const findAiProviderPreset = (_providerType: TAiProviderType): IAiProviderPreset =>
+  MASTRA_PROVIDER_PRESET;
 
 export const findAiServicePlatformPreset = (
   platformId: TAiServicePlatformId,
 ): IAiServicePlatformPreset =>
-  AI_SERVICE_PLATFORM_PRESETS.find((platform) => platform.id === platformId)
-  ?? getDefaultAiServicePlatformPreset();
+  AI_SERVICE_PLATFORM_PRESETS.find((platform) => platform.id === platformId) ??
+  getDefaultAiServicePlatformPreset();
 
 export const findAiServicePlatformByModel = (
   modelId: string | null | undefined,

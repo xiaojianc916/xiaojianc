@@ -43,8 +43,7 @@ export type TEditorContextMenuAction =
   | 'paste'
   | 'select-all';
 
-export interface IEditorContextMenuItem
-  extends Omit<ILinearContextMenuItem, 'icon' | 'children'> {
+export interface IEditorContextMenuItem extends Omit<ILinearContextMenuItem, 'icon' | 'children'> {
   icon: TEditorContextMenuIcon;
   action?: TEditorContextMenuAction;
   children?: IEditorContextMenuItem[];

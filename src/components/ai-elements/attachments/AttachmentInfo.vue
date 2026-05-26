@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils';
 import { computed, type HTMLAttributes } from 'vue';
+import { cn } from '@/lib/utils';
 import { useAttachmentContext } from './context';
 import { getAttachmentLabel } from './utils';
 

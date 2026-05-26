@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from 'vue';
-import { cn } from '@/lib/utils';
 import { getUsage } from 'tokenlens';
+import type { HTMLAttributes } from 'vue';
 import { computed } from 'vue';
+import { cn } from '@/lib/utils';
 import { useContextValue } from './context';
 import TokensWithCost from './TokensWithCost.vue';
 
@@ -12,8 +12,8 @@ const props = defineProps<{
 
 const { usage, modelId } = useContextValue();
 
-const reasoningTokens = computed(() =>
-  usage.value?.outputTokenDetails.reasoningTokens ?? usage.value?.reasoningTokens ?? 0,
+const reasoningTokens = computed(
+  () => usage.value?.outputTokenDetails.reasoningTokens ?? usage.value?.reasoningTokens ?? 0,
 );
 
 const reasoningCostText = computed(() => {

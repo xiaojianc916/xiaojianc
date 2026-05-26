@@ -4,6 +4,9 @@
  * 终端状态与事件编排收口在 TerminalSession（src/terminal/session.ts）。
  * R-18.4.1 / R-20.2.1 / R-20.2.3
  */
+
+import { storeToRefs } from 'pinia';
+import { nextTick, onBeforeUnmount, onMounted, type Ref, readonly, ref, watch } from 'vue';
 import { tauriService } from '@/services/tauri';
 import { useTerminalFacade } from '@/services/terminal/facade';
 import { useEditorStore } from '@/store/editor';
@@ -13,24 +16,14 @@ import type { ITerminalSessionCallbacks } from '@/terminal/session';
 import type { TThemeMode } from '@/types/app';
 import type { ITerminalSettings } from '@/types/settings';
 import type {
-  ITerminalDataEvent,
   ITerminalBufferDiagnostic,
-  ITerminalRunCompletedPayload,
+  ITerminalDataEvent,
   ITerminalRunChunkPayload,
+  ITerminalRunCompletedPayload,
   ITerminalStatusChangePayload,
   ITerminalVisualWritePayload,
 } from '@/types/terminal';
 import { DEFAULT_TERMINAL_SESSION_ID } from '@/types/terminal';
-import { storeToRefs } from 'pinia';
-import {
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  readonly,
-  ref,
-  watch,
-  type Ref,
-} from 'vue';
 import { toErrorMessage } from '@/utils/error';
 
 // --- 类型定义 ---

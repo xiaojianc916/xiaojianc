@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { cn } from "@/lib/utils";
-import type { HTMLAttributes, LabelHTMLAttributes } from "vue";
+import type { HTMLAttributes, LabelHTMLAttributes } from 'vue';
+import { cn } from '@/lib/utils';
 
 const props = withDefaults(
-    defineProps<{
-        class?: HTMLAttributes["class"]
-        for?: LabelHTMLAttributes["for"]
-    }>(),
-    {
-        class: undefined,
-        for: undefined,
-    },
-)
+  defineProps<{
+    class?: HTMLAttributes['class'];
+    for?: LabelHTMLAttributes['for'];
+  }>(),
+  {
+    class: undefined,
+    for: undefined,
+  },
+);
 </script>
 
 <template>

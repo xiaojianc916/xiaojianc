@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import { reactiveOmit } from '@vueuse/core';
 import type { HoverCardContentProps } from 'reka-ui';
 import { HoverCardContent } from '@/components/ui/hover-card';
-import { reactiveOmit } from '@vueuse/core';
 
 const props = withDefaults(defineProps<HoverCardContentProps>(), {
   align: 'start',

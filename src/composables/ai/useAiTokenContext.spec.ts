@@ -1,10 +1,10 @@
-import { useAiTokenContext } from '@/composables/ai/useAiTokenContext';
-import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
-import type { IAiChatMessage } from '@/types/ai';
-import type { IAiContextReference } from '@/types/ai/context';
 import type { LanguageModelUsage } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { computed, ref } from 'vue';
+import { useAiTokenContext } from '@/composables/ai/useAiTokenContext';
+import type { IAiChatMessage } from '@/types/ai';
+import type { IAiContextReference } from '@/types/ai/context';
+import type { TAgentRuntimeEvent } from '@/types/ai/sidecar';
 
 const createMessage = (content: string): IAiChatMessage => ({
   id: 'message-1',
@@ -324,9 +324,7 @@ describe('useAiTokenContext', () => {
   });
 
   it('ignores chat history when estimating a new agent request', () => {
-    const messages = ref<IAiChatMessage[]>([
-      createMessage('历史对话内容。'.repeat(80)),
-    ]);
+    const messages = ref<IAiChatMessage[]>([createMessage('历史对话内容。'.repeat(80))]);
     const estimationMessages = ref<IAiChatMessage[]>([]);
     const draft = ref('帮我检查当前文件。');
     const hasPendingRequest = ref(true);
@@ -345,7 +343,9 @@ describe('useAiTokenContext', () => {
       hasPendingRequest,
     });
 
-    expect(agentContext.contextProps.value.usedTokens).toBeLessThan(chatContext.contextProps.value.usedTokens);
+    expect(agentContext.contextProps.value.usedTokens).toBeLessThan(
+      chatContext.contextProps.value.usedTokens,
+    );
   });
 
   it('estimates plan output tokens from the current flow message when real usage is unavailable', () => {
@@ -382,7 +382,9 @@ describe('useAiTokenContext', () => {
         references: [],
       },
     ]);
-    const contextReferences = ref<IAiContextReference[]>([createPendingReference('当前文件内容'.repeat(10))]);
+    const contextReferences = ref<IAiContextReference[]>([
+      createPendingReference('当前文件内容'.repeat(10)),
+    ]);
     const hasPendingRequest = ref(true);
     const context = createContext({
       mode: 'plan',

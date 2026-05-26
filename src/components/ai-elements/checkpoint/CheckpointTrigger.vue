@@ -1,24 +1,22 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 type TCheckpointButtonVariant = 'default' | 'outline' | 'ghost';
 type TCheckpointButtonSize = 'default' | 'sm' | 'icon' | 'lg';
 
-const props = withDefaults(defineProps<{
-  tooltip?: string;
-  variant?: TCheckpointButtonVariant;
-  size?: TCheckpointButtonSize;
-}>(), {
-  tooltip: undefined,
-  variant: 'ghost',
-  size: 'sm',
-});
+const props = withDefaults(
+  defineProps<{
+    tooltip?: string;
+    variant?: TCheckpointButtonVariant;
+    size?: TCheckpointButtonSize;
+  }>(),
+  {
+    tooltip: undefined,
+    variant: 'ghost',
+    size: 'sm',
+  },
+);
 </script>
 
 <template>

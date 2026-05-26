@@ -1,19 +1,4 @@
-import {
-  agentSidecarApprovalResolveRequestSchema,
-  agentSidecarChatRequestSchema,
-  agentSidecarCheckpointRestoreRequestSchema,
-  agentSidecarExecuteRequestSchema,
-  agentSidecarHealthPayloadSchema,
-  agentSidecarWarmupPayloadSchema,
-  agentSidecarPlanApproveRequestSchema,
-  agentSidecarPlanFinishRequestSchema,
-  agentSidecarPlanQueryRequestSchema,
-  agentSidecarPlanReplanRequestSchema,
-  agentSidecarPlanRequestSchema,
-  agentSidecarPlanRejectRequestSchema,
-  agentSidecarPlanValidateRequestSchema,
-  agentSidecarResponsePayloadSchema,
-} from '@/types/ai/sidecar.schema';
+import { z } from 'zod';
 import {
   aiEditAuthStateSchema,
   aiEditCreateSnapshotPayloadSchema,
@@ -60,8 +45,24 @@ import {
   aiWebFetchInputSchema,
   aiWebFetchPayloadSchema,
   aiWebSearchInputSchema,
-  aiWebSearchPayloadSchema
+  aiWebSearchPayloadSchema,
 } from '@/types/ai/schema';
+import {
+  agentSidecarApprovalResolveRequestSchema,
+  agentSidecarChatRequestSchema,
+  agentSidecarCheckpointRestoreRequestSchema,
+  agentSidecarExecuteRequestSchema,
+  agentSidecarHealthPayloadSchema,
+  agentSidecarPlanApproveRequestSchema,
+  agentSidecarPlanFinishRequestSchema,
+  agentSidecarPlanQueryRequestSchema,
+  agentSidecarPlanRejectRequestSchema,
+  agentSidecarPlanReplanRequestSchema,
+  agentSidecarPlanRequestSchema,
+  agentSidecarPlanValidateRequestSchema,
+  agentSidecarResponsePayloadSchema,
+  agentSidecarWarmupPayloadSchema,
+} from '@/types/ai/sidecar.schema';
 import {
   installWslLinkAgentPayloadSchema,
   installWslLinkAgentRequestSchema,
@@ -71,10 +72,9 @@ import {
   startWslLinkSupervisorRequestSchema,
   wslLinkAgentArtifactPayloadSchema,
   wslLinkEnvironmentReportSchema,
-  wslLinkSupervisorControlPayloadSchema,
   wslLinkStatusPayloadSchema,
+  wslLinkSupervisorControlPayloadSchema,
 } from '@/types/wsl-link/schema';
-import { z } from 'zod';
 
 /**
  * @deprecated Tauri invoke 契约正在迁移到 tauri-specta 生成绑定。
@@ -203,13 +203,7 @@ const gitStashListPayloadSchema = z.object({
   entries: z.array(gitStashEntryPayloadSchema),
 });
 
-const gitPullRequestProviderSchema = z.enum([
-  'github',
-  'gitlab',
-  'gitea',
-  'bitbucket',
-  'unknown',
-]);
+const gitPullRequestProviderSchema = z.enum(['github', 'gitlab', 'gitea', 'bitbucket', 'unknown']);
 
 const gitPullRequestSupportPayloadSchema = z.object({
   available: z.boolean(),
@@ -228,19 +222,21 @@ const terminalSessionPayloadSchema = z.object({
   initialOutput: z.string().nullable().optional(),
 });
 
-const terminalSessionPayloadSnakeSchema = z.object({
-  session_id: z.string(),
-  cwd: z.string(),
-  shell_label: z.string(),
-  created: z.boolean(),
-  initial_output: z.string().nullable().optional(),
-}).transform((value) => ({
-  sessionId: value.session_id,
-  cwd: value.cwd,
-  shellLabel: value.shell_label,
-  created: value.created,
-  initialOutput: value.initial_output,
-}));
+const terminalSessionPayloadSnakeSchema = z
+  .object({
+    session_id: z.string(),
+    cwd: z.string(),
+    shell_label: z.string(),
+    created: z.boolean(),
+    initial_output: z.string().nullable().optional(),
+  })
+  .transform((value) => ({
+    sessionId: value.session_id,
+    cwd: value.cwd,
+    shellLabel: value.shell_label,
+    created: value.created,
+    initialOutput: value.initial_output,
+  }));
 
 const dispatchTerminalScriptPayloadSchema = z.object({
   sessionId: z.string(),
@@ -250,19 +246,21 @@ const dispatchTerminalScriptPayloadSchema = z.object({
   startedAt: z.string(),
 });
 
-const dispatchTerminalScriptPayloadSnakeSchema = z.object({
-  session_id: z.string(),
-  cwd: z.string(),
-  command_line: z.string(),
-  used_temp_file: z.boolean(),
-  started_at: z.string(),
-}).transform((value) => ({
-  sessionId: value.session_id,
-  cwd: value.cwd,
-  commandLine: value.command_line,
-  usedTempFile: value.used_temp_file,
-  startedAt: value.started_at,
-}));
+const dispatchTerminalScriptPayloadSnakeSchema = z
+  .object({
+    session_id: z.string(),
+    cwd: z.string(),
+    command_line: z.string(),
+    used_temp_file: z.boolean(),
+    started_at: z.string(),
+  })
+  .transform((value) => ({
+    sessionId: value.session_id,
+    cwd: value.cwd,
+    commandLine: value.command_line,
+    usedTempFile: value.used_temp_file,
+    startedAt: value.started_at,
+  }));
 
 export const tauriContracts = {
   agentSidecarHealth: {
@@ -524,12 +522,14 @@ export const tauriContracts = {
     }),
     outSchema: z.object({
       path: z.string(),
-      entries: z.array(z.object({
-        name: z.string(),
-        path: z.string(),
-        kind: z.enum(['directory', 'file']),
-        size: z.number().int().nonnegative(),
-      })),
+      entries: z.array(
+        z.object({
+          name: z.string(),
+          path: z.string(),
+          kind: z.enum(['directory', 'file']),
+          size: z.number().int().nonnegative(),
+        }),
+      ),
     }),
   },
   downloadSshFile: {
@@ -725,10 +725,12 @@ export const tauriContracts = {
       metadata: aiApplyPatchMetadataSchema.optional(),
     }),
     outSchema: z.object({
-      appliedFiles: z.array(z.object({
-        path: z.string(),
-        byteSize: z.number().int().nonnegative(),
-      })),
+      appliedFiles: z.array(
+        z.object({
+          path: z.string(),
+          byteSize: z.number().int().nonnegative(),
+        }),
+      ),
     }),
   },
   aiEditGetAuthLevel: {
@@ -793,7 +795,10 @@ export const tauriContracts = {
       isDirty: z.boolean(),
       runId: z.string(),
     }),
-    outSchema: z.union([dispatchTerminalScriptPayloadSchema, dispatchTerminalScriptPayloadSnakeSchema]),
+    outSchema: z.union([
+      dispatchTerminalScriptPayloadSchema,
+      dispatchTerminalScriptPayloadSnakeSchema,
+    ]),
   },
   writeTerminalInput: {
     inSchema: z.object({

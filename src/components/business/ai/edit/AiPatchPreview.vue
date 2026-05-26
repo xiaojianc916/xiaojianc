@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import CopyIcon from '~icons/lucide/copy';
 import { computed } from 'vue';
-
 import AiDiffHunkViewer from '@/components/business/ai/edit/AiDiffHunkViewer.vue';
-import type {
-  IAiDiffHunkPreview,
-  IAiPatchSet,
-} from '@/types/ai';
+import {
+  buildAiPatchPreviewFiles,
+  type IAiPatchPreviewFile,
+} from '@/components/business/ai/edit/patch-preview';
+import type { IAiDiffHunkPreview, IAiPatchSet } from '@/types/ai';
 import type { IGitDiffPreviewPayload } from '@/types/git';
-import { buildAiPatchPreviewFiles, type IAiPatchPreviewFile } from '@/components/business/ai/edit/patch-preview';
 import { tryWriteClipboardText } from '@/utils/clipboard';
+import CopyIcon from '~icons/lucide/copy';
 
 interface IPatchFileStats {
   additions: number;
@@ -52,7 +51,10 @@ const isMessageVariant = computed(() => props.variant === 'message');
 
 const getFileName = (path: string): string => {
   const normalized = path.replace(/\\/gu, '/');
-  const fileName = normalized.split('/').filter((part) => part.length > 0).at(-1);
+  const fileName = normalized
+    .split('/')
+    .filter((part) => part.length > 0)
+    .at(-1);
 
   return fileName ?? path;
 };

@@ -33,6 +33,8 @@ variant="ghost" size="sm" class="app-dialog-button app-dialog-secondary-button"
 </template>
 
 <script setup lang="ts">
+import { useEventListener } from '@vueuse/core';
+import { nextTick, onBeforeUnmount, onMounted, ref, useId } from 'vue';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,8 +53,6 @@ import {
   type TAppDialogAction,
   type TAppDialogVariant,
 } from '@/types/dialog';
-import { nextTick, onBeforeUnmount, onMounted, ref, useId } from 'vue';
-import { useEventListener } from '@vueuse/core';
 
 type TResolvedDialogState = {
   id: string;
@@ -166,9 +166,9 @@ const handleWindowKeydown = (event: KeyboardEvent): void => {
 };
 
 onMounted(() => {
-useEventListener(window, APP_DIALOG_EVENT, handleDialogEvent);
-useEventListener(window, APP_DIALOG_DISMISS_EVENT, handleDialogDismissEvent);
-useEventListener(window, 'keydown', handleWindowKeydown);
+  useEventListener(window, APP_DIALOG_EVENT, handleDialogEvent);
+  useEventListener(window, APP_DIALOG_DISMISS_EVENT, handleDialogDismissEvent);
+  useEventListener(window, 'keydown', handleWindowKeydown);
 });
 
 onBeforeUnmount(() => {

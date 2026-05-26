@@ -44,7 +44,8 @@ const getPlacementCandidates = (preferredPlacement: TTooltipPlacement): TTooltip
   }
 };
 
-const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
 
 const ensureTooltipElement = (): HTMLDivElement => {
   const existing = document.querySelector<HTMLDivElement>('#app-global-tooltip');
@@ -77,7 +78,14 @@ const measureTooltip = (
   tooltipElement.style.left = '-9999px';
   tooltipElement.style.top = '-9999px';
   tooltipElement.style.maxWidth = `${maxWidth}px`;
-  tooltipElement.classList.remove('is-visible', 'is-top', 'is-bottom', 'is-left', 'is-right', 'is-multiline');
+  tooltipElement.classList.remove(
+    'is-visible',
+    'is-top',
+    'is-bottom',
+    'is-left',
+    'is-right',
+    'is-multiline',
+  );
 
   const nowrapWidth = tooltipElement.offsetWidth;
   if (nowrapWidth > maxWidth) {
@@ -261,7 +269,10 @@ export const initAppTooltipSystem = (): void => {
         return;
       }
 
-      if (activeSource === 'pointer' && (!hasPointerPosition || !isPointerOverTarget(activeTarget))) {
+      if (
+        activeSource === 'pointer' &&
+        (!hasPointerPosition || !isPointerOverTarget(activeTarget))
+      ) {
         hideTooltip();
       }
     }, POINTER_WATCHDOG_INTERVAL_MS);
