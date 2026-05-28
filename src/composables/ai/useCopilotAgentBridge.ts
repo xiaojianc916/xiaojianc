@@ -1,7 +1,6 @@
 /**
- * useCopilotAgentBridge — full CopilotKit chat bridge using useAgent.
- * Provides sendMessage / stop with reactive messages, ready to eventually
- * replace useAiAssistant for the core send-receive cycle.
+ * useCopilotAgentBridge — CopilotKit chat bridge. Gracefully degrades
+ * to no-op when CopilotKitProvider is not in the component tree.
  */
 import type { Message } from '@ag-ui/core';
 import { useAgent } from '@copilotkit/vue';
@@ -17,8 +16,26 @@ export interface IUseCopilotAgentBridgeResult {
   clearMessages: () => void;
 }
 
+const noopFn = (): void => {};
+const noopAsync = async (): Promise<void> => {};
+
+const createNoop = (): IUseCopilotAgentBridgeResult => ({
+  messages: shallowRef([]),
+  isRunning: ref(false),
+  errorMessage: ref(''),
+  sendMessage: noopAsync,
+  stop: noopFn,
+  clearMessages: noopFn,
+});
+
 export const useCopilotAgentBridge = (): IUseCopilotAgentBridgeResult => {
-  const { agent } = useAgent({ agentId: 'default' });
+  let agent: ReturnType<typeof useAgent>['agent'];
+
+  try {
+    ({ agent } = useAgent({ agentId: 'default' }));
+  } catch {
+    return createNoop();
+  }
 
   const messages = shallowRef<readonly Message[]>([]);
   const errorMessage = ref('');
@@ -31,15 +48,9 @@ export const useCopilotAgentBridge = (): IUseCopilotAgentBridgeResult => {
   const sendMessage = async (content: string): Promise<void> => {
     if (!agent.value || isRunning.value) return;
     errorMessage.value = '';
-
     try {
-      agent.value.addMessage({
-        id: createEventId('user-msg'),
-        role: 'user',
-        content,
-      } as Message);
+      agent.value.addMessage({ id: createEventId('user-msg'), role: 'user', content } as Message);
       sync();
-
       await agent.value.runAgent();
     } catch (err) {
       errorMessage.value = err instanceof Error ? err.message : 'Agent run failed';
@@ -52,7 +63,6 @@ export const useCopilotAgentBridge = (): IUseCopilotAgentBridgeResult => {
     agent.value?.abortRun();
     sync();
   };
-
   const clearMessages = (): void => {
     agent.value?.setMessages([]);
     messages.value = [];

@@ -335,6 +335,28 @@ export const createSidecarEventAdapter = (
         }
         break;
       }
+      case 'approval_required': {
+        const request = event.request as Record<string, unknown> | undefined;
+        if (!request) break;
+        const toolName = typeof request.toolName === 'string' ? request.toolName : 'unknown';
+        const key = typeof request.id === 'string' ? request.id : toolName;
+        const { id: toolCallId } = getOrCreateToolCallId(key);
+        events.push(createToolCallStartEvent(base, toolCallId, `approve.${toolName}`, messageId));
+        events.push(
+          createToolCallArgsEvent(
+            base,
+            toolCallId,
+            safeStringify({
+              toolName,
+              question: typeof request.question === 'string' ? request.question : '',
+              summary: typeof request.summary === 'string' ? request.summary : '',
+              riskLevel: typeof request.riskLevel === 'string' ? request.riskLevel : 'medium',
+              reversible: Boolean(request.reversible),
+            }),
+          ),
+        );
+        break;
+      }
       case 'error': {
         events.push(
           createRunErrorEvent(

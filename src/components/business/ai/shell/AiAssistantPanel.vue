@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { CopilotChatSuggestionView, useFrontendTool } from '@copilotkit/vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { z } from 'zod';
 import Checkpoint from '@/components/ai-elements/checkpoint/Checkpoint.vue';
 import CheckpointIcon from '@/components/ai-elements/checkpoint/CheckpointIcon.vue';
 import CheckpointTrigger from '@/components/ai-elements/checkpoint/CheckpointTrigger.vue';
@@ -12,7 +14,6 @@ import AiPlanModePanel from '@/components/business/ai/plan/AiPlanModePanel.vue';
 import AiProviderIcon from '@/components/business/ai/provider/AiProviderIcon.vue';
 import AiProviderSettings from '@/components/business/ai/provider/AiProviderSettings.vue';
 import AiToolConfirmationCard from '@/components/business/ai/shell/AiToolConfirmationCard.vue';
-import AiFloatingSuggestions from '@/components/business/ai/suggestion/AiFloatingSuggestions.vue';
 import AiWebSourcesPanel from '@/components/business/ai/web/AiWebSourcesPanel.vue';
 import { useAiAgentNetwork } from '@/composables/ai/useAiAgentNetwork';
 import { useAiAgentRun } from '@/composables/ai/useAiAgentRun';
@@ -95,6 +96,17 @@ useCopilotContext({
 // CopilotKit agent bridge — primary chat path replacing manual IPC calls.
 // useAiAssistant remains for advanced features (plan mode, patches, checkpoints).
 const copilotBridge = useCopilotAgentBridge();
+// Local alias for template safety — always a boolean.
+const ckIsRunning = computed(() => copilotBridge?.isRunning?.value ?? false);
+
+// Register CopilotKit frontend tools — replaces manual tool activity tracking.
+// Catch-all registration for Mastra tools; HITL intercepts approval-required events.
+try {
+  useFrontendTool({ name: '*', parameters: z.object({}).passthrough(), handler: async () => 'ok' });
+} catch {
+  /* provider not ready */
+}
+
 const settingsDraft = ref<IAiConfigPayload>(cloneAiConfigPayload(assistant.config.value));
 const settingsApiKey = ref('');
 const settingsTavilyApiKey = ref('');
@@ -297,7 +309,7 @@ const directToolConfirmationVisible = computed(() => {
   return Boolean(visibleDirectToolConfirmation.value) && !planProgressVisible.value;
 });
 const composerDisabled = computed(
-  () => assistant.isSending.value || Boolean(visibleDirectToolConfirmation.value),
+  () => ckIsRunning.value || Boolean(visibleDirectToolConfirmation.value),
 );
 const activePlanStep = computed(() => {
   const currentStepId = planActiveRun.value?.currentStepId;
@@ -723,12 +735,22 @@ const confirmClearConversation = (): void => {
 };
 
 const handleSuggestionSelect = async (suggestion: string): Promise<void> => {
-  if (assistant.isSending.value || copilotBridge.isRunning.value) {
+  if (assistant.isSending.value || ckIsRunning.value) {
     return;
   }
 
   assistant.draft.value = suggestion;
   await copilotBridge.sendMessage(suggestion);
+};
+
+const handleSubmitMessage = async (): Promise<void> => {
+  const text = assistant.draft.value.trim();
+  if (!text || ckIsRunning.value) return;
+
+  assistant.draft.value = '';
+  // CopilotKit as primary send path; advanced Mastra features (plan mode,
+  // patches, checkpoints) are handled via sidecar event listeners in useAiAssistant.
+  await copilotBridge.sendMessage(text);
 };
 
 const getHistoryTimeLabel = (timestampText: string): string => {
@@ -1213,7 +1235,7 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <AiChatThread :messages="threadMessages" :is-typing="assistant.isSending.value" :platform-id="aiIconPlatformId"
+    <AiChatThread :messages="threadMessages" :is-typing="ckIsRunning" :platform-id="aiIconPlatformId"
       :provider-label="aiIconTitle" :conversation-id="assistant.activeConversationId.value"
       :workspace-root-path="workspaceRootPath" :scroll-state="assistant.activeConversationScrollState.value"
       :typing-label="assistantTypingLabel" :has-extra-content="planConfirmationVisible || directToolConfirmationVisible"
@@ -1223,8 +1245,8 @@ onBeforeUnmount(() => {
       @changed-files-rollback="assistant.rollbackChangedFilesSummary"
       @changed-files-pin="assistant.setChangedFilesSummaryPin">
       <template #empty>
-        <AiFloatingSuggestions :suggestions="suggestionPool.suggestions.value" :disabled="assistant.isSending.value"
-          @select="handleSuggestionSelect" />
+        <CopilotChatSuggestionView :suggestions="suggestionPool.suggestions.value"
+          @select-suggestion="(s: { message: string }) => handleSuggestionSelect(s.message)" />
       </template>
       <template #after-message="{ message }">
         <Checkpoint v-if="getConversationCheckpoint(message.id)" class="ai-conversation-checkpoint">
@@ -1298,13 +1320,13 @@ onBeforeUnmount(() => {
         @reset="handleResetPlan" @run-step="handleRunStep" @pause-run="handlePauseRun" @resume-run="handleResumeRun"
         @cancel-run="handleCancelRun" @resolve-tool-confirmation="handleResolveToolConfirmation" />
       <AiPromptInput v-model="assistant.draft.value" v-model:active-mode="assistant.activeMode.value"
-        :disabled="composerDisabled" :stop-visible="assistant.isSending.value"
+        :disabled="composerDisabled" :stop-visible="ckIsRunning"
         :error-message="assistant.errorMessage.value" :submit-label="submitLabel"
         :config="assistant.config.value" :is-model-saving="isPromptModelSaving"
         :network-permission="networkPermission" :is-network-permission-saving="agentNetwork.pending.value"
         :attachments="assistant.attachedFiles.value"
         :has-attachments="assistant.attachedFiles.value.length > 0" :token-context="tokenContextProps"
-        @submit="assistant.sendMessage" @stop="assistant.stopCurrentRequest" @file-selected="assistant.attachFile"
+        @submit="handleSubmitMessage" @stop="copilotBridge.stop" @file-selected="assistant.attachFile"
         @remove-file="assistant.removeAttachedFile" @model-change="handlePromptModelChange"
         @network-permission-change="handlePromptNetworkPermissionChange"
         @information-sources-open="openPromptInformationSources"

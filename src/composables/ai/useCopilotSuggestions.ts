@@ -1,16 +1,8 @@
-/**
- * useCopilotSuggestions — replaces useAiSuggestionPool with CopilotKit's
- * suggestion infrastructure. Provides the same `suggestions: Ref<string[]>`
- * interface so AiFloatingSuggestions can consume it without template changes.
- */
 import type { Suggestion } from '@copilotkit/core';
 import { useConfigureSuggestions, useSuggestions } from '@copilotkit/vue';
 import { computed, type Ref, readonly, ref } from 'vue';
 
-// ---------------------------------------------------------------------------
-// Static suggestions — served by CopilotKit instead of the narrator model.
-// ---------------------------------------------------------------------------
-const STATIC_SUGGESTIONS: Suggestion[] = [
+const STATIC: Suggestion[] = [
   { title: '解释代码', message: '请解释当前文件的代码逻辑', isLoading: false },
   { title: '优化代码', message: '请分析当前代码并给出优化建议', isLoading: false },
   { title: '写注释', message: '请为当前代码添加详细的中文注释', isLoading: false },
@@ -19,33 +11,28 @@ const STATIC_SUGGESTIONS: Suggestion[] = [
   { title: '重构建议', message: '请给出当前代码的重构建议', isLoading: false },
 ];
 
-// ---------------------------------------------------------------------------
-// Composable
-// ---------------------------------------------------------------------------
-export const useCopilotSuggestions = (): {
-  suggestions: Ref<string[]>;
-  rotateBatch: () => void;
-} => {
-  // Configure static suggestions
-  useConfigureSuggestions({
-    suggestions: STATIC_SUGGESTIONS,
-    available: 'before-first-message',
-  });
+export interface IUseCopilotSuggestionsResult {
+  suggestions: Ref<readonly Suggestion[]>;
+  suggestionTexts: Ref<readonly string[]>;
+}
 
-  const { suggestions: raw } = useSuggestions({ agentId: 'default' });
+export const useCopilotSuggestions = (): IUseCopilotSuggestionsResult => {
+  let raw: Ref<Suggestion[]> = ref(STATIC) as unknown as Ref<Suggestion[]>;
 
-  const suggestions = computed<string[]>(() =>
-    raw.value
-      .filter((s: Suggestion) => s.message.trim().length > 0)
-      .map((s: Suggestion) => s.message),
+  try {
+    useConfigureSuggestions({ suggestions: STATIC, available: 'before-first-message' });
+    ({ suggestions: raw } = useSuggestions({ agentId: 'default' }));
+  } catch {
+    // Provider absent — fall back to static suggestions.
+  }
+
+  const suggestions = computed<readonly Suggestion[]>(() =>
+    raw.value.filter((s: Suggestion) => s.message.trim().length > 0),
   );
 
-  const rotateBatch = (): void => {
-    // Static suggestions are not rotated; this is a no-op compatibility shim.
-  };
+  const suggestionTexts = computed<readonly string[]>(() =>
+    suggestions.value.map((s: Suggestion) => s.message),
+  );
 
-  return {
-    suggestions: readonly(suggestions),
-    rotateBatch,
-  };
+  return { suggestions, suggestionTexts };
 };
