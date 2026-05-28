@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { BundledLanguage, ThemedToken } from 'shiki';
 import { computed, ref, watch } from 'vue';
 import { cn } from '@/lib/utils';
 import {
   createRawTokens,
   highlightCode,
+  type ICodeMirrorHighlightToken,
   type ITokenizedCode,
   isBold,
   isItalic,
@@ -14,7 +14,7 @@ import {
 const props = withDefaults(
   defineProps<{
     code: string;
-    language: BundledLanguage;
+    language: string;
     showLineNumbers?: boolean;
   }>(),
   {
@@ -23,7 +23,7 @@ const props = withDefaults(
 );
 
 interface IKeyedToken {
-  token: ThemedToken;
+  token: ICodeMirrorHighlightToken;
   key: string;
 }
 

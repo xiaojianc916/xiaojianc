@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { ThemedToken } from 'shiki';
 import {
   type CSSProperties,
   computed,
@@ -12,6 +11,7 @@ import {
 import {
   createRawTokens,
   highlightCode,
+  type ICodeMirrorHighlightToken,
   type ITokenizedCode,
   isBold,
   isItalic,
@@ -197,7 +197,7 @@ const findCountLabel = computed(() => {
 });
 
 const tokenized = ref<ITokenizedCode>(
-  highlightCode(currentContent.value, languageInfo.value.shikiLanguage) ??
+  highlightCode(currentContent.value, languageInfo.value.codeMirrorLanguage) ??
     createRawTokens(currentContent.value),
 );
 
@@ -228,13 +228,13 @@ watch(
 );
 
 watch(
-  () => [currentContent.value, languageInfo.value.shikiLanguage] as const,
+  () => [currentContent.value, languageInfo.value.codeMirrorLanguage] as const,
   ([code, language]) => {
     tokenized.value = highlightCode(code, language) ?? createRawTokens(code);
 
     void Promise.resolve().then(() => {
       highlightCode(code, language, (result) => {
-        if (currentContent.value === code && languageInfo.value.shikiLanguage === language) {
+        if (currentContent.value === code && languageInfo.value.codeMirrorLanguage === language) {
           tokenized.value = result;
         }
       });
@@ -306,7 +306,7 @@ const renderedLines = computed<IRenderedPreviewLine[]>(() =>
 );
 
 const previewFileIcon = computed(() =>
-  languageInfo.value.shikiLanguage === 'text' ? FileText : FileCode2,
+  languageInfo.value.codeMirrorLanguage === 'text' ? FileText : FileCode2,
 );
 const editorHighlightStyle = computed<CSSProperties>(() => ({
   transform: `translate(${-editorScrollLeft.value}px, ${-editorScrollTop.value}px)`,
@@ -340,7 +340,7 @@ function formatRemoteFileSize(size: number): string {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function resolveTokenStyle(token: ThemedToken): CSSProperties {
+function resolveTokenStyle(token: ICodeMirrorHighlightToken): CSSProperties {
   return {
     color: token.color ?? undefined,
     backgroundColor: token.bgColor ?? undefined,
@@ -352,7 +352,7 @@ function resolveTokenStyle(token: ThemedToken): CSSProperties {
 }
 
 function buildRenderedLineSegments(
-  tokens: readonly ThemedToken[],
+  tokens: readonly ICodeMirrorHighlightToken[],
   line: string,
   lineHits: readonly IIndexedPreviewMatchHit[],
   currentActiveHitIndex: number,

@@ -10,10 +10,10 @@ import {
   CodeBlockTitle,
 } from '@/components/ai-elements/code-block';
 import {
-  normalizeLanguageTag,
-  resolveShikiLanguage,
-  SHIKI_LANGUAGE_LABELS,
-} from '@/utils/shiki-language';
+  CODEMIRROR_LANGUAGE_LABELS,
+  normalizeCodeMirrorLanguageTag,
+  resolveCodeMirrorLanguageId,
+} from '@/services/editor/codemirror-language';
 import ChevronDown from '~icons/lucide/chevron-down';
 import ChevronUp from '~icons/lucide/chevron-up';
 import FileIcon from '~icons/lucide/file';
@@ -23,10 +23,10 @@ const props = defineProps<Pick<CodeBlockNodeProps, 'node'>>();
 const isExpanded = ref(true);
 const renderedSourceCode = ref(getCurrentSourceCode());
 
-const normalizedLanguage = computed(() => normalizeLanguageTag(props.node.language));
-const shikiLanguage = computed(() => resolveShikiLanguage(normalizedLanguage.value));
+const normalizedLanguage = computed(() => normalizeCodeMirrorLanguageTag(props.node.language));
+const codeMirrorLanguage = computed(() => resolveCodeMirrorLanguageId(normalizedLanguage.value));
 const languageLabel = computed(
-  () => SHIKI_LANGUAGE_LABELS[shikiLanguage.value] ?? shikiLanguage.value,
+  () => CODEMIRROR_LANGUAGE_LABELS[codeMirrorLanguage.value] ?? codeMirrorLanguage.value,
 );
 const filename = computed(() =>
   resolveCodeBlockFilename(String(props.node.raw ?? ''), languageLabel.value),
@@ -95,7 +95,7 @@ function handleError(error: Error): void {
     class="ai-markdown-code-block"
     :class="{ 'is-collapsed': !isExpanded }"
     :code="renderedSourceCode"
-    :language="shikiLanguage"
+    :language="codeMirrorLanguage"
   >
     <CodeBlockHeader class="ai-markdown-code-block__header">
       <CodeBlockTitle class="ai-markdown-code-block__title">

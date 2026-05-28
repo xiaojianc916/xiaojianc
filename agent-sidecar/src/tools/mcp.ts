@@ -7,8 +7,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import {
   MCPClient,
   type LogMessage,
-  type MastraFetchLike,
-  type MastraMCPServerDefinition,
+  type MastraMCPServerDefinition
 } from '@mastra/mcp';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -292,12 +291,8 @@ const mergeHeaders = (
   }
   return headers;
 };
-
-const createHeaderFetch = (headers: Record<string, string>): MastraFetchLike =>
-  async (url, init) => fetch(url, {
-    ...init,
-    headers: mergeHeaders(init?.headers, headers),
-  });
+// NOTE: 使用 MCPClient 的 `requestInit` 支持传入 headers，
+// 所以不再需要自定义的 fetch 包装器。保留注释便于回退。
 
 const toMastraMcpServerDefinition = (
   config: IMcpServerConfig,
@@ -316,7 +311,8 @@ const toMastraMcpServerDefinition = (
     return {
       url: new URL(url),
       logger,
-      ...(config.headers ? { fetch: createHeaderFetch(config.headers) } : {}),
+      // 使用官方 MCPClient 的 requestInit 支持传入 headers（例如 Authorization）
+      ...(config.headers ? { requestInit: { headers: config.headers } } : {}),
     };
   }
   const command = trimToNull(config.command);

@@ -9,10 +9,10 @@ import {
   CodeBlockTitle,
 } from '@/components/ai-elements/code-block';
 import {
-  normalizeLanguageTag,
-  resolveShikiLanguage,
-  SHIKI_LANGUAGE_LABELS,
-} from '@/utils/shiki-language';
+  CODEMIRROR_LANGUAGE_LABELS,
+  normalizeCodeMirrorLanguageTag,
+  resolveCodeMirrorLanguageId,
+} from '@/services/editor/codemirror-language';
 import ChevronDown from '~icons/lucide/chevron-down';
 import ChevronUp from '~icons/lucide/chevron-up';
 import FileIcon from '~icons/lucide/file';
@@ -31,10 +31,12 @@ const props = withDefaults(
 
 const isExpanded = ref(true);
 
-const normalizedLanguage = computed(() => normalizeLanguageTag(props.language || props.fenceInfo));
-const shikiLanguage = computed(() => resolveShikiLanguage(normalizedLanguage.value));
+const normalizedLanguage = computed(() =>
+  normalizeCodeMirrorLanguageTag(props.language || props.fenceInfo),
+);
+const codeMirrorLanguage = computed(() => resolveCodeMirrorLanguageId(normalizedLanguage.value));
 const languageLabel = computed(
-  () => SHIKI_LANGUAGE_LABELS[shikiLanguage.value] ?? shikiLanguage.value,
+  () => CODEMIRROR_LANGUAGE_LABELS[codeMirrorLanguage.value] ?? codeMirrorLanguage.value,
 );
 const filename = computed(() => resolveCodeBlockFilename(props.fenceInfo, languageLabel.value));
 
@@ -62,7 +64,7 @@ function handleError(error: Error): void {
 
 <template>
     <CodeBlock class="ai-reasoning-code-block" :class="{ 'is-collapsed': !isExpanded }" :code="props.code"
-        :language="shikiLanguage">
+        :language="codeMirrorLanguage">
         <CodeBlockHeader class="ai-reasoning-code-block__header">
             <CodeBlockTitle class="ai-reasoning-code-block__title">
                 <FileIcon :size="15" aria-hidden="true" />

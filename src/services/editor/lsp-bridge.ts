@@ -18,21 +18,27 @@ import type {
   CompletionContext,
   CompletionResult,
   CompletionSource,
-} from '@codemirror/autocomplete';
-import type { Diagnostic } from '@codemirror/lint';
-import { setDiagnostics } from '@codemirror/lint';
-import type { Extension, Text } from '@codemirror/state';
-import { EditorView, hoverTooltip, type Tooltip, type ViewUpdate } from '@codemirror/view';
-import type { UnlistenFn } from '@tauri-apps/api/event';
+} from "@codemirror/autocomplete";
+import type { Diagnostic } from "@codemirror/lint";
+import { setDiagnostics } from "@codemirror/lint";
+import type { Extension, Text } from "@codemirror/state";
+import {
+  EditorView,
+  hoverTooltip,
+  type Tooltip,
+  type ViewUpdate,
+} from "@codemirror/view";
+import type { UnlistenFn } from "@tauri-apps/api/event";
+import { highlightCodeToHtml } from "@/services/editor/codemirror-static-highlight";
 
 // ============================================================================
 // 补全 / 悬停全局样式（!important 暴力覆盖 CM6 暗色主题）
 // ============================================================================
 (function injectCm6Styles() {
-  if (typeof document === 'undefined') return;
-  const id = 'cm6-lsp-style';
+  if (typeof document === "undefined") return;
+  const id = "cm6-lsp-style";
   if (document.getElementById(id)) return;
-  const s = document.createElement('style');
+  const s = document.createElement("style");
   s.id = id;
   s.textContent = `.cm-tooltip-autocomplete{background:#fff!important;border:1px solid rgba(0,0,0,.08)!important;border-radius:10px!important;box-shadow:0 8px 24px rgba(0,0,0,.08)!important;max-width:none!important}.cm-tooltip.cm-tooltip-hover{max-width:none!important}.cm-tooltip-autocomplete .cm-completionInfo{max-width:none!important;background:#fff!important;border-left:1px solid rgba(0,0,0,.06)!important}.cm-completionOption{display:flex!important;flex-direction:row!important;align-items:center!important;gap:8px!important;padding:4px 10px!important}.cm-completionIcon{display:flex!important;flex-shrink:0!important;width:22px!important;height:22px!important;align-items:center!important;justify-content:center!important;border-radius:5px!important;opacity:1!important}.cm-completionIcon svg{width:14px!important;height:14px!important;color:#fff!important}.cm-completionLabel{flex:1!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-family:var(--font-mono)!important;font-size:12.5px!important;color:#111317!important}.cm-completionDetail{flex-shrink:0!important;font-size:11px!important;color:#8a8f98!important}.cm-completionMatchedText{color:#3872e0!important;font-weight:600!important}.cm-completionOption[aria-selected]{background:rgba(56,114,224,.06)!important}.cm-completionList::-webkit-scrollbar{width:6px!important}.cm-completionList::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12)!important;border-radius:8px!important}.cm-lsp-doc{max-width:520px!important;max-height:320px!important;overflow:auto!important;padding:10px 14px!important;font-size:12px!important;line-height:1.55!important;color:#5b6068!important;word-break:break-word!important}.cm-lsp-doc .cm-lsp-code-block{max-width:100%!important;overflow:auto!important}.cm-lsp-doc .cm-lsp-code-block pre{white-space:pre-wrap!important;word-break:break-all!important}`;
   document.head.appendChild(s);
@@ -44,12 +50,15 @@ export const lspCompletionTheme = EditorView.theme({}, {});
 // Lucide SVG 图标（补全种类图标）
 // ============================================================================
 const LUCIDE_PATHS: Record<string, string> = {
-  function: 'M17.5 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11ZM9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3M9 11h5.7',
-  method: 'M17.5 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11ZM9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3M9 11h5.7',
-  keyword: 'm15 15-6 6v-4H4v-4h2v-2a6 6 0 0 1 6-6h3v4h-3a2 2 0 0 0-2 2v2h5Z',
-  variable: 'M8 21s-4-3-4-9 4-9 4-9m8 0s4 3 4 9-4 9-4 9M5 12h14',
-  text: 'M4 7V4h16v3M9 21h6M12 4v17',
-  snippet: 'M8 3H6a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4c0 1.1.9 2 2 2h2M16 21h2a2 2 0 0 0 2-2v-4c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-2',
+  function:
+    "M17.5 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11ZM9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3M9 11h5.7",
+  method:
+    "M17.5 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11ZM9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3M9 11h5.7",
+  keyword: "m15 15-6 6v-4H4v-4h2v-2a6 6 0 0 1 6-6h3v4h-3a2 2 0 0 0-2 2v2h5Z",
+  variable: "M8 21s-4-3-4-9 4-9 4-9m8 0s4 3 4 9-4 9-4 9M5 12h14",
+  text: "M4 7V4h16v3M9 21h6M12 4v17",
+  snippet:
+    "M8 3H6a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4c0 1.1.9 2 2 2h2M16 21h2a2 2 0 0 0 2-2v-4c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-2",
 };
 
 function cm6TypeToLucide(type: string): string {
@@ -57,50 +66,48 @@ function cm6TypeToLucide(type: string): string {
 }
 
 export function createLucideCompletionIcon(type: string): HTMLElement {
-  const ns = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '2');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
-  svg.setAttribute('width', '14');
-  svg.setAttribute('height', '14');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS(ns, 'path');
-  path.setAttribute('d', cm6TypeToLucide(type));
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", cm6TypeToLucide(type));
   svg.appendChild(path);
-  const wrapper = document.createElement('span');
-  wrapper.className = 'cm-lsp-icon';
-  wrapper.setAttribute('data-type', type);
+  const wrapper = document.createElement("span");
+  wrapper.className = "cm-lsp-icon";
+  wrapper.setAttribute("data-type", type);
   wrapper.appendChild(svg);
   return wrapper;
-}
-
-// 懒加载 Shiki（避免阻塞编辑器初始化）
-type ShikiMod = typeof import('@/services/editor/shiki');
-let shikiModPromise: Promise<ShikiMod> | null = null;
-function getShikiMod(): Promise<ShikiMod> {
-  shikiModPromise ??= import('@/services/editor/shiki');
-  return shikiModPromise;
 }
 
 // ============================================================================
 // Tauri IPC(懒加载,避免 SSR / 测试环境炸)
 // ============================================================================
-type TauriCore = typeof import('@tauri-apps/api/core');
-type TauriEvent = typeof import('@tauri-apps/api/event');
+type TauriCore = typeof import("@tauri-apps/api/core");
+type TauriEvent = typeof import("@tauri-apps/api/event");
 let corePromise: Promise<TauriCore> | null = null;
 let eventPromise: Promise<TauriEvent> | null = null;
 
-async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  corePromise ??= import('@tauri-apps/api/core');
+async function tauriInvoke<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  corePromise ??= import("@tauri-apps/api/core");
   const core = await corePromise;
   return core.invoke<T>(cmd, args);
 }
-async function tauriListen<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {
-  eventPromise ??= import('@tauri-apps/api/event');
+async function tauriListen<T>(
+  event: string,
+  handler: (payload: T) => void,
+): Promise<UnlistenFn> {
+  eventPromise ??= import("@tauri-apps/api/event");
   const ev = await eventPromise;
   return ev.listen<T>(event, (e) => handler(e.payload));
 }
@@ -151,16 +158,16 @@ interface LspHover {
 function normalizePath(p: string): string {
   // 去掉 Windows 扩展路径前缀 \\?\ 或 \\.\ (含正斜杠变体)
   let cleaned = p;
-  if (cleaned.startsWith('\\\\?\\UNC\\')) {
-    cleaned = '\\\\' + cleaned.slice('\\\\?\\UNC\\'.length);
-  } else if (cleaned.startsWith('\\\\?\\') || cleaned.startsWith('\\\\.\\')) {
-    cleaned = cleaned.slice('\\\\?\\'.length);
-  } else if (cleaned.startsWith('//?/UNC/')) {
-    cleaned = '//' + cleaned.slice('//?/UNC/'.length);
-  } else if (cleaned.startsWith('//?/') || cleaned.startsWith('//./')) {
-    cleaned = cleaned.slice('//?/'.length);
+  if (cleaned.startsWith("\\\\?\\UNC\\")) {
+    cleaned = "\\\\" + cleaned.slice("\\\\?\\UNC\\".length);
+  } else if (cleaned.startsWith("\\\\?\\") || cleaned.startsWith("\\\\.\\")) {
+    cleaned = cleaned.slice("\\\\?\\".length);
+  } else if (cleaned.startsWith("//?/UNC/")) {
+    cleaned = "//" + cleaned.slice("//?/UNC/".length);
+  } else if (cleaned.startsWith("//?/") || cleaned.startsWith("//./")) {
+    cleaned = cleaned.slice("//?/".length);
   }
-  return cleaned.replace(/\\/g, '/');
+  return cleaned.replace(/\\/g, "/");
 }
 
 // ============================================================================
@@ -168,9 +175,9 @@ function normalizePath(p: string): string {
 // ============================================================================
 type FileHandler = (diags: LspDiag[]) => void;
 export type BridgeStateEvent =
-  | { type: 'started' }
-  | { type: 'stopped' }
-  | { type: 'crashed'; exitStatus?: string };
+  | { type: "started" }
+  | { type: "stopped" }
+  | { type: "crashed"; exitStatus?: string };
 export type BridgeStateListener = (e: BridgeStateEvent) => void;
 
 interface PendingDidOpen {
@@ -196,34 +203,43 @@ class LspBridge {
 
     this.startPromise = (async () => {
       // 先建监听,避免 didOpen → 第一波诊断丢失
-      this.unlistenDiagnostics = await tauriListen<LspDiagEvent>('lsp-diagnostics', (e) => {
-        const key = normalizePath(e.filePath);
-        const handlers = this.fileHandlers.get(key);
-        console.log(
-          `[lsp] diagnostics event: filePath=${key} diags=${e.diagnostics.length} handlers=${handlers?.size ?? 0}`,
-        );
-        if (!handlers) return;
-        for (const h of handlers) {
-          try {
-            h(e.diagnostics);
-          } catch (err) {
-            console.warn('[lsp-bridge] diagnostics handler error', err);
+      this.unlistenDiagnostics = await tauriListen<LspDiagEvent>(
+        "lsp-diagnostics",
+        (e) => {
+          const key = normalizePath(e.filePath);
+          const handlers = this.fileHandlers.get(key);
+          console.log(
+            `[lsp] diagnostics event: filePath=${key} diags=${e.diagnostics.length} handlers=${handlers?.size ?? 0}`,
+          );
+          if (!handlers) return;
+          for (const h of handlers) {
+            try {
+              h(e.diagnostics);
+            } catch (err) {
+              console.warn("[lsp-bridge] diagnostics handler error", err);
+            }
           }
-        }
-      });
-      this.unlistenCrashed = await tauriListen<LspCrashedEvent>('lsp-crashed', (payload) => {
-        this.onBackendCrashed(payload?.exitStatus);
-      });
+        },
+      );
+      this.unlistenCrashed = await tauriListen<LspCrashedEvent>(
+        "lsp-crashed",
+        (payload) => {
+          this.onBackendCrashed(payload?.exitStatus);
+        },
+      );
 
       try {
-        console.log('[lsp] invoking lsp_start with workspaceRoot:', workspaceRoot);
-        await tauriInvoke<void>('lsp_start', { workspaceRoot });
+        console.log(
+          "[lsp] invoking lsp_start with workspaceRoot:",
+          workspaceRoot,
+        );
+        await tauriInvoke<void>("lsp_start", { workspaceRoot });
         this.started = true;
-        console.log('[lsp] lsp_start succeeded, started=true');
-        this.emitState({ type: 'started' });
+        console.log("[lsp] lsp_start succeeded, started=true");
+        this.emitState({ type: "started" });
         await this.flushPendingOps();
       } catch (err) {
-        console.error('[lsp] lsp_start FAILED:', err);
+        console.error("[lsp] lsp_start FAILED:", err);
         this.tearDownListeners();
         throw err;
       }
@@ -245,7 +261,8 @@ class LspBridge {
         /* ignore */
       }
     }
-    if (!this.started && !this.unlistenDiagnostics && !this.unlistenCrashed) return;
+    if (!this.started && !this.unlistenDiagnostics && !this.unlistenCrashed)
+      return;
 
     this.started = false;
     this.pendingOps.clear();
@@ -253,11 +270,11 @@ class LspBridge {
     this.fileHandlers.clear();
     this.tearDownListeners();
     try {
-      await tauriInvoke<void>('lsp_stop');
+      await tauriInvoke<void>("lsp_stop");
     } catch (err) {
-      console.warn('[lsp-bridge] lsp_stop invoke failed', err);
+      console.warn("[lsp-bridge] lsp_stop invoke failed", err);
     } finally {
-      this.emitState({ type: 'stopped' });
+      this.emitState({ type: "stopped" });
     }
   }
 
@@ -291,7 +308,11 @@ class LspBridge {
     };
   }
 
-  async didOpen(filePath: string, content: string, languageId: string): Promise<void> {
+  async didOpen(
+    filePath: string,
+    content: string,
+    languageId: string,
+  ): Promise<void> {
     const key = normalizePath(filePath);
     if (this.startPromise) {
       console.log(`[lsp] didOpen WAITING for start: key=${key}`);
@@ -303,8 +324,14 @@ class LspBridge {
       }
     }
     if (this.started) {
-      console.log(`[lsp] didOpen SENDING: key=${key} lang=${languageId} len=${content.length}`);
-      await tauriInvoke<void>('lsp_did_open', { filePath: key, content, languageId });
+      console.log(
+        `[lsp] didOpen SENDING: key=${key} lang=${languageId} len=${content.length}`,
+      );
+      await tauriInvoke<void>("lsp_did_open", {
+        filePath: key,
+        content,
+        languageId,
+      });
       return;
     }
     console.log(`[lsp] didOpen QUEUED: key=${key}`);
@@ -312,9 +339,13 @@ class LspBridge {
   }
 
   /** @returns 是否真正发送出去(false = 当前未启动,调用方应自行处理重发) */
-  async didChange(filePath: string, content: string, version: number): Promise<boolean> {
+  async didChange(
+    filePath: string,
+    content: string,
+    version: number,
+  ): Promise<boolean> {
     if (!this.started) return false;
-    await tauriInvoke<void>('lsp_did_change', {
+    await tauriInvoke<void>("lsp_did_change", {
       filePath: normalizePath(filePath),
       content,
       version,
@@ -326,21 +357,29 @@ class LspBridge {
     const key = normalizePath(filePath);
     this.pendingOps.delete(key);
     if (!this.started) return;
-    await tauriInvoke<void>('lsp_did_close', { filePath: key });
+    await tauriInvoke<void>("lsp_did_close", { filePath: key });
   }
 
-  async completion(filePath: string, line: number, column: number): Promise<LspItem[]> {
+  async completion(
+    filePath: string,
+    line: number,
+    column: number,
+  ): Promise<LspItem[]> {
     if (!this.started) return [];
-    return tauriInvoke<LspItem[]>('lsp_completion', {
+    return tauriInvoke<LspItem[]>("lsp_completion", {
       filePath: normalizePath(filePath),
       line,
       column,
     });
   }
 
-  async hover(filePath: string, line: number, column: number): Promise<LspHover | null> {
+  async hover(
+    filePath: string,
+    line: number,
+    column: number,
+  ): Promise<LspHover | null> {
     if (!this.started) return null;
-    return tauriInvoke<LspHover | null>('lsp_hover', {
+    return tauriInvoke<LspHover | null>("lsp_hover", {
       filePath: normalizePath(filePath),
       line,
       column,
@@ -362,7 +401,7 @@ class LspBridge {
         try {
           h([]);
         } catch (err) {
-          console.warn('[lsp-bridge] clear handler error', err);
+          console.warn("[lsp-bridge] clear handler error", err);
         }
       }
     }
@@ -373,7 +412,7 @@ class LspBridge {
     this.started = false;
     // 不清空 fileHandlers——编辑器可能想保留监听等候自动重启
     this.clearAllDiagnostics();
-    this.emitState({ type: 'crashed', exitStatus });
+    this.emitState({ type: "crashed", exitStatus });
   }
 
   private async flushPendingOps(): Promise<void> {
@@ -381,13 +420,13 @@ class LspBridge {
     this.pendingOps.clear();
     for (const op of ops) {
       try {
-        await tauriInvoke<void>('lsp_did_open', {
+        await tauriInvoke<void>("lsp_did_open", {
           filePath: op.filePath,
           content: op.content,
           languageId: op.languageId,
         });
       } catch (err) {
-        console.warn('[lsp-bridge] replay didOpen failed', op.filePath, err);
+        console.warn("[lsp-bridge] replay didOpen failed", op.filePath, err);
       }
     }
   }
@@ -397,7 +436,7 @@ class LspBridge {
       try {
         l(e);
       } catch (err) {
-        console.warn('[lsp-bridge] state listener error', err);
+        console.warn("[lsp-bridge] state listener error", err);
       }
     }
   }
@@ -408,15 +447,18 @@ declare global {
   // eslint-disable-next-line no-var
   var __lspBridge__: LspBridge | undefined;
 }
-export const lspBridge: LspBridge = (globalThis.__lspBridge__ ??= new LspBridge());
+export const lspBridge: LspBridge = (globalThis.__lspBridge__ ??=
+  new LspBridge());
 
 // --- 兼容旧的命名导出 -------------------------------------------------------
 /** @deprecated 用 `lspBridge.start(...)` */
-export const lspStartBridge = (workspaceRoot: string) => lspBridge.start(workspaceRoot);
+export const lspStartBridge = (workspaceRoot: string) =>
+  lspBridge.start(workspaceRoot);
 /** @deprecated 用 `lspBridge.stop()` */
 export const lspStopBridge = () => lspBridge.stop();
 /** @deprecated 用 `lspBridge.didOpen(...)` */
-export const lspDidOpenBridge = (f: string, c: string, l: string) => lspBridge.didOpen(f, c, l);
+export const lspDidOpenBridge = (f: string, c: string, l: string) =>
+  lspBridge.didOpen(f, c, l);
 /** @deprecated 用 `lspBridge.didChange(...)` */
 export const lspDidChangeBridge = (f: string, c: string, v: number) =>
   lspBridge.didChange(f, c, v).then(() => undefined);
@@ -426,60 +468,60 @@ export const lspDidCloseBridge = (f: string) => lspBridge.didClose(f);
 // ============================================================================
 // 严重度 / 种类映射
 // ============================================================================
-function severityToCm6(sev: number): 'error' | 'warning' | 'info' | 'hint' {
+function severityToCm6(sev: number): "error" | "warning" | "info" | "hint" {
   switch (sev) {
     case 1:
-      return 'error';
+      return "error";
     case 2:
-      return 'warning';
+      return "warning";
     case 3:
-      return 'info';
+      return "info";
     case 4:
-      return 'hint';
+      return "hint";
     default:
       // 与 Rust 侧对齐:缺省视为 Error
-      return 'error';
+      return "error";
   }
 }
 function lspKindToType(kind: number | null): string {
   // LSP CompletionItemKind 1..=25 → CM6 type 字符串(只覆盖 bash 常见)
   switch (kind) {
     case 1:
-      return 'text';
+      return "text";
     case 2:
-      return 'method';
+      return "method";
     case 3:
-      return 'function';
+      return "function";
     case 4:
-      return 'function'; // Constructor
+      return "function"; // Constructor
     case 5:
-      return 'property'; // Field
+      return "property"; // Field
     case 6:
-      return 'variable';
+      return "variable";
     case 7:
-      return 'class';
+      return "class";
     case 8:
-      return 'interface';
+      return "interface";
     case 9:
-      return 'namespace'; // Module
+      return "namespace"; // Module
     case 10:
-      return 'property';
+      return "property";
     case 11:
-      return 'constant'; // Unit
+      return "constant"; // Unit
     case 12:
-      return 'constant'; // Value
+      return "constant"; // Value
     case 13:
-      return 'enum';
+      return "enum";
     case 14:
-      return 'keyword';
+      return "keyword";
     case 15:
-      return 'text'; // Snippet
+      return "text"; // Snippet
     case 17:
-      return 'text'; // File
+      return "text"; // File
     case 21:
-      return 'constant';
+      return "constant";
     default:
-      return 'text';
+      return "text";
   }
 }
 
@@ -500,7 +542,7 @@ function lspDiagToPositioned(d: LspDiag, doc: Text): Diagnostic {
     to,
     severity: severityToCm6(d.severity),
     message: d.message,
-    source: d.code ?? d.source ?? 'shellcheck',
+    source: d.code ?? d.source ?? "shellcheck",
   };
 }
 
@@ -510,60 +552,64 @@ function lspDiagToPositioned(d: LspDiag, doc: Text): Diagnostic {
 
 /**
  * 把 bash-language-server 返回的 man-page 风格 markdown 转成 HTML。
- * 支持 ```lang 代码块（用 Shiki 高亮）、行内代码、段落。
+ * 支持 ```lang 代码块（用 CodeMirror/Lezer 静态高亮）、行内代码、段落。
  * 所有异常内部消化，确保始终返回合法的 HTML 字符串。
  */
 async function renderLspDoc(md: string): Promise<string> {
   try {
     // 统一换行符，避免 Windows \r\n 导致正则不匹配
-    const normalized = md.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const normalized = md.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
     // 分离代码块和普通文本
     const parts: Array<
-      { type: 'code'; lang: string; code: string } | { type: 'text'; text: string }
+      | { type: "code"; lang: string; code: string }
+      | { type: "text"; text: string }
     > = [];
     const codeBlockRe = /```(\S*)\n([\s\S]*?)```/g;
     let lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = codeBlockRe.exec(normalized)) !== null) {
       if (match.index > lastIndex) {
-        parts.push({ type: 'text', text: normalized.slice(lastIndex, match.index) });
+        parts.push({
+          type: "text",
+          text: normalized.slice(lastIndex, match.index),
+        });
       }
       parts.push({
-        type: 'code',
-        lang: match[1] || 'bash',
-        code: match[2].replace(/\n$/, ''),
+        type: "code",
+        lang: match[1] || "bash",
+        code: match[2].replace(/\n$/, ""),
       });
       lastIndex = match.index + match[0].length;
     }
     if (lastIndex < normalized.length) {
-      parts.push({ type: 'text', text: normalized.slice(lastIndex) });
+      parts.push({ type: "text", text: normalized.slice(lastIndex) });
     }
 
     // 如果没有任何代码块也没有文本 → 兜底：整个内容按文本段落渲染
     if (parts.length === 0 && normalized.trim()) {
-      parts.push({ type: 'text', text: normalized });
+      parts.push({ type: "text", text: normalized });
     }
 
     // 渲染各部分
     const rendered: string[] = [];
     for (const part of parts) {
-      if (part.type === 'code') {
+      if (part.type === "code") {
         rendered.push(await renderCodeBlock(part.lang, part.code));
       } else {
         rendered.push(renderTextBlock(part.text));
       }
     }
-    return rendered.join('') || escapeHtml(normalized);
+    return rendered.join("") || escapeHtml(normalized);
   } catch (err) {
-    console.warn('[lsp] renderLspDoc failed', err);
+    console.warn("[lsp] renderLspDoc failed", err);
     // 最终兜底：转义后展示纯文本
     return `<pre class="cm-lsp-code-block"><code>${escapeHtml(md)}</code></pre>`;
   }
 }
 
 function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function renderTextBlock(text: string): string {
@@ -573,37 +619,22 @@ function renderTextBlock(text: string): string {
     .map((p) => p.trim())
     .filter(Boolean);
 
-  if (paragraphs.length === 0) return '';
+  if (paragraphs.length === 0) return "";
 
   return paragraphs
     .map((p) => {
-      // 行内代码
-      const withInlineCode = p.replace(
+      const escaped = escapeHtml(p);
+      const withInlineCode = escaped.replace(
         /`([^`]+)`/g,
         '<code class="cm-lsp-inline-code">$1</code>',
       );
       return `<p class="cm-lsp-para">${withInlineCode}</p>`;
     })
-    .join('');
+    .join("");
 }
 
 async function renderCodeBlock(lang: string, code: string): Promise<string> {
-  try {
-    const shiki = await getShikiMod();
-    const hl = shiki.getShikiHighlighter();
-    const shikiLang = lang ? shiki.toShikiLanguage(lang) : null;
-
-    if (hl && shikiLang) {
-      await shiki.ensureShikiLanguageLoaded(shikiLang);
-      const html = hl.codeToHtml(code, { lang: shikiLang, theme: 'dark-plus' });
-      return `<div class="cm-lsp-code-block">${html}</div>`;
-    }
-  } catch {
-    // Shiki 不可用时优雅降级
-  }
-  // 降级：纯文本代码块
-  const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  return `<pre class="cm-lsp-code-block"><code>${escaped}</code></pre>`;
+  return `<div class="cm-lsp-code-block">${highlightCodeToHtml(code, lang || "bash")}</div>`;
 }
 
 // ============================================================================
@@ -628,10 +659,13 @@ export interface LspExtensionHandle {
   detach(): void;
 }
 
-export function createLspExtension(opts: LspExtensionOptions): LspExtensionHandle {
+export function createLspExtension(
+  opts: LspExtensionOptions,
+): LspExtensionHandle {
   const { filePath, languageId, getContent } = opts;
   const debounceMs = opts.changeDebounceMs ?? 200;
-  const onError = opts.onError ?? ((err) => console.warn('[lsp-extension]', err));
+  const onError =
+    opts.onError ?? ((err) => console.warn("[lsp-extension]", err));
 
   let view: EditorView | null = null;
   let attached = false;
@@ -731,7 +765,11 @@ export function createLspExtension(opts: LspExtensionOptions): LspExtensionHandl
       if (detached) return null;
       const pos = ctx.pos;
       const line = ctx.state.doc.lineAt(pos);
-      const items = await lspBridge.completion(filePath, line.number - 1, pos - line.from);
+      const items = await lspBridge.completion(
+        filePath,
+        line.number - 1,
+        pos - line.from,
+      );
       if (!items.length) return null;
       return {
         from: word ? word.from : pos,
@@ -741,10 +779,15 @@ export function createLspExtension(opts: LspExtensionOptions): LspExtensionHandl
             detail: item.detail ?? undefined,
             info: item.documentation
               ? () => {
-                  const dom = document.createElement('div');
-                  dom.className = 'cm-lsp-doc';
-                  dom.textContent = item.documentation!;
-                  renderLspDoc(item.documentation!).then((h) => { dom.innerHTML = h; }).catch(() => {});
+                  const documentation = item.documentation ?? "";
+                  const dom = document.createElement("div");
+                  dom.className = "cm-lsp-doc";
+                  dom.textContent = documentation;
+                  renderLspDoc(documentation)
+                    .then((h) => {
+                      dom.innerHTML = h;
+                    })
+                    .catch(() => {});
                   return dom;
                 }
               : undefined,
@@ -766,20 +809,24 @@ export function createLspExtension(opts: LspExtensionOptions): LspExtensionHandl
       await flushPendingChanges();
       if (detached) return null;
       const line = v.state.doc.lineAt(pos);
-      const result = await lspBridge.hover(filePath, line.number - 1, pos - line.from);
+      const result = await lspBridge.hover(
+        filePath,
+        line.number - 1,
+        pos - line.from,
+      );
       if (!result?.contents) return null;
-      // 异步渲染 markdown → HTML（Shiki 代码高亮）
+      // 异步渲染 markdown → HTML（CodeMirror/Lezer 代码高亮）
       const html = await renderLspDoc(result.contents);
       return {
         pos,
         create() {
-          const dom = document.createElement('div');
-          dom.className = 'cm-lsp-hover';
+          const dom = document.createElement("div");
+          dom.className = "cm-lsp-hover";
           dom.innerHTML = html;
           // CM6 的 tooltip wrapper 有内置 max-width，去掉
           requestAnimationFrame(() => {
-            const tooltip = dom.closest('.cm-tooltip') as HTMLElement | null;
-            if (tooltip) tooltip.style.maxWidth = 'none';
+            const tooltip = dom.closest(".cm-tooltip") as HTMLElement | null;
+            if (tooltip) tooltip.style.maxWidth = "none";
           });
           return { dom };
         },
@@ -828,9 +875,11 @@ export function createLspExtension(opts: LspExtensionOptions): LspExtensionHandl
       lastSentVersion = 1;
       flushInFlight = null;
       unregisterDiag = lspBridge.registerFile(filePath, onDiagnostics);
-      openPromise = lspBridge.didOpen(filePath, getContent(), languageId).catch((err) => {
-        onError(err);
-      });
+      openPromise = lspBridge
+        .didOpen(filePath, getContent(), languageId)
+        .catch((err) => {
+          onError(err);
+        });
     },
     detach() {
       detachInternal();

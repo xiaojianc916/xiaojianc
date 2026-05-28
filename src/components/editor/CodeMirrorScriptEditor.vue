@@ -1190,9 +1190,5 @@ defineExpose<IEditorExpose>({
   font-size: 11.5px;
   line-height: 1.45;
 }
-.cm-lsp-code-block .shiki {
-  padding: 8px 10px;
-  font-size: 11.5px;
-  line-height: 1.45;
-}
+
 </style>

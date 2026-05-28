@@ -29,9 +29,9 @@
  * non-DeepSeek bodies (no `messages` array).
  */
 
+import { createParser, type EventSourceMessage, type EventSourceParser } from 'eventsource-parser';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { toNonEmptyString, toRecord } from '../../engines/utils.js';
-import { createParser, type EventSourceMessage, type EventSourceParser } from 'eventsource-parser';
 
 // -----------------------------------------------------------------------------
 // Types
@@ -127,7 +127,7 @@ const estimateInputTokensByChars = (value: string): number => {
   }
   return Math.max(tokens, 1);
 };
-};
+
 
 const logReasoningDebug = (
   event: string,
