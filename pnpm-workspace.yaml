@@ -7,5 +7,5 @@ allowBuilds:
   esbuild: true
   tree-sitter-bash: true
   vue-demi: true
-  edgedriver: false
-  geckodriver: false
+  edgedriver: true
+  geckodriver: true

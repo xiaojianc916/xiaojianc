@@ -55,6 +55,8 @@
     "@copilotkit/core": "^1.58.0",
     "@copilotkit/vue": "^1.58.0",
     "@fsegurai/codemirror-theme-github-light": "^6.2.5",
+    "@incremark/core": "^1.0.2",
+    "@incremark/vue": "^1.0.2",
     "@lezer/highlight": "^1.2.3",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-dialog": "^2.7.1",
