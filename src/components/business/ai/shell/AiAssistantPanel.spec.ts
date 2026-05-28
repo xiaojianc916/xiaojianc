@@ -38,14 +38,24 @@ import type {
 import type { IGitRepositoryStatusPayload } from '@/types/git';
 
 const useAiAssistantMock = vi.hoisted(() => vi.fn());
-const useAiSuggestionPoolMock = vi.hoisted(() => vi.fn());
+const useCopilotSuggestionsMock = vi.hoisted(() => vi.fn());
+const useCopilotContextMock = vi.hoisted(() => vi.fn());
+const useCopilotAgentBridgeMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/composables/ai/useAiAssistant', () => ({
   useAiAssistant: useAiAssistantMock,
 }));
 
-vi.mock('@/composables/ai/useAiSuggestionPool', () => ({
-  useAiSuggestionPool: useAiSuggestionPoolMock,
+vi.mock('@/composables/ai/useCopilotSuggestions', () => ({
+  useCopilotSuggestions: useCopilotSuggestionsMock,
+}));
+
+vi.mock('@/composables/ai/useCopilotContext', () => ({
+  useCopilotContext: useCopilotContextMock,
+}));
+
+vi.mock('@/composables/ai/useCopilotAgentBridge', () => ({
+  useCopilotAgentBridge: useCopilotAgentBridgeMock,
 }));
 
 interface IAiConversationThreadMock {
@@ -394,12 +404,18 @@ const createGitStatus = (): IGitRepositoryStatusPayload => ({
 describe('AiAssistantPanel', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
-    useAiSuggestionPoolMock.mockReturnValue({
+    useCopilotSuggestionsMock.mockReturnValue({
       suggestions: ref(['讲一个科学小知识']),
-      isRefreshing: ref(false),
-      refreshErrorMessage: ref(''),
       rotateBatch: vi.fn(),
-      refreshPool: vi.fn(),
+    });
+    useCopilotContextMock.mockReturnValue(undefined);
+    useCopilotAgentBridgeMock.mockReturnValue({
+      messages: ref([]),
+      isRunning: ref(false),
+      errorMessage: ref(''),
+      sendMessage: vi.fn(),
+      stop: vi.fn(),
+      clearMessages: vi.fn(),
     });
   });
 

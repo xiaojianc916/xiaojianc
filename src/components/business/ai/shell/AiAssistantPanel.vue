@@ -17,9 +17,11 @@ import AiWebSourcesPanel from '@/components/business/ai/web/AiWebSourcesPanel.vu
 import { useAiAgentNetwork } from '@/composables/ai/useAiAgentNetwork';
 import { useAiAgentRun } from '@/composables/ai/useAiAgentRun';
 import { type IAiConversationCheckpoint, useAiAssistant } from '@/composables/ai/useAiAssistant';
-import { useAiSuggestionPool } from '@/composables/ai/useAiSuggestionPool';
 import { useAiTokenContext } from '@/composables/ai/useAiTokenContext';
 import { useAiWebSources } from '@/composables/ai/useAiWebSources';
+import { useCopilotAgentBridge } from '@/composables/ai/useCopilotAgentBridge';
+import { useCopilotContext } from '@/composables/ai/useCopilotContext';
+import { useCopilotSuggestions } from '@/composables/ai/useCopilotSuggestions';
 import { findAiServicePlatformByModel } from '@/constants/ai/providers';
 import { aiService } from '@/services/ipc/ai.service';
 import { cloneAiConfigPayload, resolveDefaultAiBaseUrl } from '@/services/ipc/ai-config.service';
@@ -32,6 +34,7 @@ import type {
   IAiTaskPlanStep,
   IAiToolActivityInline,
   IAiToolCall,
+  TAiAgentNetworkPermission,
   TAiModelRole,
   TAiToolConfirmationDecision,
 } from '@/types/ai';
@@ -77,9 +80,21 @@ const assistant = useAiAssistant({
 const agentRun = useAiAgentRun();
 const agentNetwork = useAiAgentNetwork();
 const webSources = useAiWebSources();
-const suggestionPool = useAiSuggestionPool({
-  isRefreshEnabled: computed(() => assistant.config.value.narrator.isConfigured),
+const suggestionPool = useCopilotSuggestions();
+
+// Share editor state with CopilotKit agent
+useCopilotContext({
+  document: documentRef,
+  activeRun: activeRunRef,
+  analysis: analysisRef,
+  selection: selectionRef,
+  gitStatus: gitStatusRef,
+  workspaceRootPath: workspaceRootPathRef,
 });
+
+// CopilotKit agent bridge — primary chat path replacing manual IPC calls.
+// useAiAssistant remains for advanced features (plan mode, patches, checkpoints).
+const copilotBridge = useCopilotAgentBridge();
 const settingsDraft = ref<IAiConfigPayload>(cloneAiConfigPayload(assistant.config.value));
 const settingsApiKey = ref('');
 const settingsTavilyApiKey = ref('');
@@ -347,8 +362,10 @@ const buildAgentFlowToolCalls = (run: IAiAgentRun | null): IAiToolCall[] => {
 
   return planStore.value
     .getToolActivities(run.id)
-    .filter((activity) => run.status !== 'paused' || !isLiveToolActivity(activity))
-    .map((activity) => ({
+    .filter(
+      (activity: IAiToolActivityInline) => run.status !== 'paused' || !isLiveToolActivity(activity),
+    )
+    .map((activity: IAiToolActivityInline) => ({
       id: activity.id,
       name: activity.toolName,
       status: mapActivityToToolCallStatus(activity.state),
@@ -706,12 +723,12 @@ const confirmClearConversation = (): void => {
 };
 
 const handleSuggestionSelect = async (suggestion: string): Promise<void> => {
-  if (assistant.isSending.value) {
+  if (assistant.isSending.value || copilotBridge.isRunning.value) {
     return;
   }
 
   assistant.draft.value = suggestion;
-  await assistant.sendMessage();
+  await copilotBridge.sendMessage(suggestion);
 };
 
 const getHistoryTimeLabel = (timestampText: string): string => {

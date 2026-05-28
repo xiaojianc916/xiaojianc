@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@ag-ui/client':
+        specifier: ^0.0.53
+        version: 0.0.53
+      '@ag-ui/core':
+        specifier: ^0.0.53
+        version: 0.0.53
       '@codemirror/autocomplete':
         specifier: ^6.20.2
         version: 6.20.2
@@ -170,6 +176,9 @@ importers:
       reka-ui:
         specifier: ^2.9.8
         version: 2.9.8(vue@3.5.35(typescript@6.0.3))
+      rxjs:
+        specifier: ^7.8.1
+        version: 7.8.1
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.6.0

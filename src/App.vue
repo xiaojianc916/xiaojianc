@@ -4,6 +4,7 @@ import AppDialogHost from '@/components/common/AppDialogHost.vue';
 import BrowserContextMenuHost from '@/components/common/BrowserContextMenuHost.vue';
 import FatalErrorScreen from '@/components/common/FatalErrorScreen.vue';
 import { Toaster } from '@/components/ui/sonner';
+import CopilotKitProvider from '@/copilotkit/CopilotKitProvider.vue';
 import { applyWindowStage } from '@/services/ipc/window.service';
 import { runtimeErrorState } from '@/utils/runtime-diagnostics';
 import { markStartup, reportStartupTimings } from '@/utils/startup-profiler';
@@ -87,8 +88,10 @@ watch(
       :code="runtimeErrorState.code"
       :trace-id="runtimeErrorState.traceId"
     />
-    <router-view v-else v-slot="{ Component: RouteComponent, route: routeRecord }">
-      <component :is="RouteComponent" :key="routeRecord.fullPath" @ready="handleWorkbenchReady" />
-    </router-view>
+    <CopilotKitProvider v-else>
+      <router-view v-slot="{ Component: RouteComponent, route: routeRecord }">
+        <component :is="RouteComponent" :key="routeRecord.fullPath" @ready="handleWorkbenchReady" />
+      </router-view>
+    </CopilotKitProvider>
   </div>
 </template>
