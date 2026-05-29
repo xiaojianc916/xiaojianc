@@ -348,3 +348,544 @@ class LspBridge {
 
   async didClose(filePath: string): Promise<void> {
     const key = normalizePath(filePath);
+    this.openDocuments.delete(key);
+    if (!this.started) return;
+    await tauriInvoke<void>("lsp_did_close", { filePath: key });
+  }
+
+  async completion(
+    filePath: string,
+    line: number,
+    column: number,
+  ): Promise<LspItem[]> {
+    if (!this.started) return [];
+    return tauriInvoke<LspItem[]>("lsp_completion", {
+      filePath: normalizePath(filePath),
+      line,
+      column,
+    });
+  }
+
+  async hover(
+    filePath: string,
+    line: number,
+    column: number,
+  ): Promise<LspHover | null> {
+    if (!this.started) return null;
+    return tauriInvoke<LspHover | null>("lsp_hover", {
+      filePath: normalizePath(filePath),
+      line,
+      column,
+    });
+  }
+
+  // --- 内部 ----------------------------------------------------------------
+
+  private tearDownListeners() {
+    this.unlistenDiagnostics?.();
+    this.unlistenDiagnostics = null;
+    this.unlistenCrashed?.();
+    this.unlistenCrashed = null;
+  }
+
+  private clearAllDiagnostics() {
+    for (const handlers of this.fileHandlers.values()) {
+      for (const h of handlers) {
+        try {
+          h([]);
+        } catch (err) {
+          console.warn("[lsp-bridge] clear handler error", err);
+        }
+      }
+    }
+  }
+
+  private onBackendCrashed(exitStatus?: string) {
+    if (!this.started) return;
+    this.started = false;
+    // 保留 fileHandlers 与 openDocuments——自动重启后可重放 didOpen 并继续接收诊断
+    this.clearAllDiagnostics();
+    this.emitState({ type: "crashed", exitStatus });
+  }
+
+  /** 向(重新)启动的服务重放所有已打开文档的最新内容，恢复服务端文档状态。 */
+  private async replayOpenDocuments(): Promise<void> {
+    const docs = Array.from(this.openDocuments.values());
+    for (const doc of docs) {
+      try {
+        await tauriInvoke<void>("lsp_did_open", {
+          filePath: doc.filePath,
+          content: doc.content,
+          languageId: doc.languageId,
+        });
+      } catch (err) {
+        console.warn("[lsp-bridge] replay didOpen failed", doc.filePath, err);
+      }
+    }
+  }
+
+  private emitState(e: BridgeStateEvent) {
+    for (const l of this.stateListeners) {
+      try {
+        l(e);
+      } catch (err) {
+        console.warn("[lsp-bridge] state listener error", err);
+      }
+    }
+  }
+}
+
+// HMR / SSR 安全的全局单例:Vite 热更新不会复制 bridge，避免监听泄漏。
+declare global {
+  // eslint-disable-next-line no-var
+  var __lspBridge__: LspBridge | undefined;
+}
+export const lspBridge: LspBridge = (globalThis.__lspBridge__ ??=
+  new LspBridge());
+
+// --- 兼容旧的命名导出 -------------------------------------------------------
+/** @deprecated 用 `lspBridge.start(...)` */
+export const lspStartBridge = (workspaceRoot: string) =>
+  lspBridge.start(workspaceRoot);
+/** @deprecated 用 `lspBridge.stop()` */
+export const lspStopBridge = () => lspBridge.stop();
+/** @deprecated 用 `lspBridge.didOpen(...)` */
+export const lspDidOpenBridge = (f: string, c: string, l: string) =>
+  lspBridge.didOpen(f, c, l);
+/** @deprecated 用 `lspBridge.didChange(...)` */
+export const lspDidChangeBridge = (f: string, c: string, v: number) =>
+  lspBridge.didChange(f, c, v).then(() => undefined);
+/** @deprecated 用 `lspBridge.didClose(...)` */
+export const lspDidCloseBridge = (f: string) => lspBridge.didClose(f);
+
+// ============================================================================
+// 严重度 / 种类映射
+// ============================================================================
+function severityToCm6(sev: number): "error" | "warning" | "info" | "hint" {
+  switch (sev) {
+    case 1:
+      return "error";
+    case 2:
+      return "warning";
+    case 3:
+      return "info";
+    case 4:
+      return "hint";
+    default:
+      // 与 Rust 侧对齐:缺省视为 Error
+      return "error";
+  }
+}
+function lspKindToType(kind: number | null): string {
+  // LSP CompletionItemKind 1..=25 → CM6 type 字符串(只覆盖 bash 常见)
+  switch (kind) {
+    case 1:
+      return "text";
+    case 2:
+      return "method";
+    case 3:
+      return "function";
+    case 4:
+      return "function"; // Constructor
+    case 5:
+      return "property"; // Field
+    case 6:
+      return "variable";
+    case 7:
+      return "class";
+    case 8:
+      return "interface";
+    case 9:
+      return "namespace"; // Module
+    case 10:
+      return "property";
+    case 11:
+      return "constant"; // Unit
+    case 12:
+      return "constant"; // Value
+    case 13:
+      return "enum";
+    case 14:
+      return "keyword";
+    case 15:
+      return "text"; // Snippet
+    case 17:
+      return "text"; // File
+    case 21:
+      return "constant";
+    default:
+      return "text";
+  }
+}
+
+// bash 标识符包含 `-`(命令名)和 `$`(变量)。
+const BASH_IDENT_RE = /[\w$-]*/u;
+const BASH_IDENT_VALID_FOR = /^[\w$-]*$/u;
+
+function lspDiagToPositioned(d: LspDiag, doc: Text): Diagnostic {
+  const lineNo = Math.min(Math.max(d.line + 1, 1), doc.lines);
+  const line = doc.line(lineNo);
+  const from = Math.min(line.from + d.column, line.to);
+  const endLineNo = Math.min(Math.max(d.endLine + 1, 1), doc.lines);
+  const endLine = doc.line(endLineNo);
+  let to = Math.min(endLine.from + d.endColumn, endLine.to);
+  if (to < from) to = from;
+  return {
+    from,
+    to,
+    severity: severityToCm6(d.severity),
+    message: d.message,
+    source: d.code ?? d.source ?? "bash-language-server",
+  };
+}
+
+// ============================================================================
+// Markdown → HTML 轻量渲染（LSP 文档专用）
+// ============================================================================
+
+/**
+ * 把 bash-language-server 返回的 man-page 风格 markdown 转成 HTML。
+ * 支持 ```lang 代码块（用 CodeMirror/Lezer 静态高亮）、行内代码、段落。
+ * 所有异常内部消化，确保始终返回合法的 HTML 字符串。
+ */
+async function renderLspDoc(md: string): Promise<string> {
+  try {
+    // 统一换行符，避免 Windows \r\n 导致正则不匹配
+    const normalized = md.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+    // 分离代码块和普通文本
+    const parts: Array<
+      | { type: "code"; lang: string; code: string }
+      | { type: "text"; text: string }
+    > = [];
+    const codeBlockRe = /```(\S*)\n([\s\S]*?)```/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = codeBlockRe.exec(normalized)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push({
+          type: "text",
+          text: normalized.slice(lastIndex, match.index),
+        });
+      }
+      parts.push({
+        type: "code",
+        lang: match[1] || "bash",
+        code: match[2].replace(/\n$/, ""),
+      });
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < normalized.length) {
+      parts.push({ type: "text", text: normalized.slice(lastIndex) });
+    }
+
+    // 如果没有任何代码块也没有文本 → 兜底：整个内容按文本段落渲染
+    if (parts.length === 0 && normalized.trim()) {
+      parts.push({ type: "text", text: normalized });
+    }
+
+    // 渲染各部分
+    const rendered: string[] = [];
+    for (const part of parts) {
+      if (part.type === "code") {
+        rendered.push(await renderCodeBlock(part.lang, part.code));
+      } else {
+        rendered.push(renderTextBlock(part.text));
+      }
+    }
+    return rendered.join("") || escapeHtml(normalized);
+  } catch (err) {
+    console.warn("[lsp] renderLspDoc failed", err);
+    // 最终兜底：转义后展示纯文本
+    return `<pre class="cm-lsp-code-block"><code>${escapeHtml(md)}</code></pre>`;
+  }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function renderTextBlock(text: string): string {
+  // 段落分割
+  const paragraphs = text
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length === 0) return "";
+
+  return paragraphs
+    .map((p) => {
+      const escaped = escapeHtml(p);
+      const withInlineCode = escaped.replace(
+        /`([^`]+)`/g,
+        '<code class="cm-lsp-inline-code">$1</code>',
+      );
+      return `<p class="cm-lsp-para">${withInlineCode}</p>`;
+    })
+    .join("");
+}
+
+async function renderCodeBlock(lang: string, code: string): Promise<string> {
+  return `<div class="cm-lsp-code-block">${highlightCodeToHtml(code, lang || "bash")}</div>`;
+}
+
+// ============================================================================
+// CM6 Extension 工厂
+// ============================================================================
+export interface LspExtensionOptions {
+  filePath: string;
+  languageId: string; // e.g. "shellscript"
+  /** 取当前最新内容;调用方负责其安全性 */
+  getContent: () => string;
+  /** didChange debounce 毫秒;默认 200 */
+  changeDebounceMs?: number;
+  /** 内部失败时的回调(IPC 失败、解析失败等)。默认 console.warn */
+  onError?: (err: unknown) => void;
+  /**
+   * 收到该文件的 LSP 诊断时回调(已映射为 CM6 Diagnostic[]，可为空表示清空)。
+   * 提供后，扩展不再自行 setDiagnostics —— 由上层把 LSP 与 ShellCheck 等来源
+   * 合并为单一诊断集合后统一写入，避免两套来源互相覆盖。
+   */
+  onDiagnostics?: (diags: Diagnostic[]) => void;
+}
+
+export interface LspExtensionHandle {
+  extensions: Extension[];
+  /** LSP 补全源,合并到上层 autocompletion 的 override 列表中避免冲突 */
+  completionSource: CompletionSource;
+  attach(view: EditorView): void;
+  detach(): void;
+}
+
+export function createLspExtension(
+  opts: LspExtensionOptions,
+): LspExtensionHandle {
+  const { filePath, languageId, getContent } = opts;
+  const debounceMs = opts.changeDebounceMs ?? 200;
+  const onError =
+    opts.onError ?? ((err) => console.warn("[lsp-extension]", err));
+
+  let view: EditorView | null = null;
+  let attached = false;
+  let detached = false;
+  let unregisterDiag: (() => void) | null = null;
+
+  // 版本号 1 与 Rust didOpen 的 version=1 对齐;didChange 起步用 2。
+  let docVersion = 1;
+  let lastSentVersion = 1;
+  let changeTimer: ReturnType<typeof setTimeout> | null = null;
+  let openPromise: Promise<void> | null = null;
+  let flushInFlight: Promise<void> | null = null;
+
+  function cancelTimer() {
+    if (changeTimer) {
+      clearTimeout(changeTimer);
+      changeTimer = null;
+    }
+  }
+
+  /** 单次实际发送 */
+  async function doFlush(): Promise<void> {
+    // didChange 必须排在 didOpen 之后,否则 bash-ls 会忽略
+    if (openPromise) {
+      try {
+        await openPromise;
+      } catch {
+        return;
+      }
+    }
+    if (detached) return;
+    cancelTimer();
+    const v = docVersion;
+    // 用 view.state 做权威 snapshot,fallback 到 getContent
+    const content = view?.state.doc.toString() ?? getContent();
+    try {
+      const sent = await lspBridge.didChange(filePath, content, v);
+      if (sent) lastSentVersion = v;
+    } catch (err) {
+      onError(err);
+    }
+  }
+
+  /** 把还未发的 didChange 同步发出。串行化 + 循环补齐至最新版本。 */
+  async function flushPendingChanges(): Promise<void> {
+    if (detached) return;
+    while (!detached && lastSentVersion !== docVersion) {
+      if (flushInFlight) {
+        try {
+          await flushInFlight;
+        } catch {
+          /* swallow, 下一轮重试 */
+        }
+        continue;
+      }
+      const prev = lastSentVersion;
+      flushInFlight = doFlush();
+      try {
+        await flushInFlight;
+      } finally {
+        flushInFlight = null;
+      }
+      if (lastSentVersion === prev) {
+        // 没推进 → LSP 不可用或失败,退出避免死循环
+        break;
+      }
+    }
+  }
+
+  function scheduleDidChange(): void {
+    cancelTimer();
+    changeTimer = setTimeout(() => {
+      changeTimer = null;
+      if (detached) return;
+      void flushPendingChanges();
+    }, debounceMs);
+  }
+
+  function onDiagnostics(diags: LspDiag[]): void {
+    if (!view || detached) return;
+    const doc = view.state.doc;
+    const positioned = diags.map((d) => lspDiagToPositioned(d, doc));
+    if (opts.onDiagnostics) {
+      // 交给上层合并(LSP + ShellCheck → 单一来源);空数组用于清空 LSP 部分
+      opts.onDiagnostics(positioned);
+      return;
+    }
+    // 兜底:无上层合并时退回自管理(仍会覆盖其它 lint 来源,故推荐提供 onDiagnostics)
+    view.dispatch(setDiagnostics(view.state, positioned));
+  }
+
+  const completionSource: CompletionSource = async (
+    ctx: CompletionContext,
+  ): Promise<CompletionResult | null> => {
+    if (detached) return null;
+    const word = ctx.matchBefore(BASH_IDENT_RE);
+    if (!ctx.explicit && (!word || word.from === word.to)) return null;
+
+    try {
+      await flushPendingChanges();
+      if (detached) return null;
+      const pos = ctx.pos;
+      const line = ctx.state.doc.lineAt(pos);
+      const items = await lspBridge.completion(
+        filePath,
+        line.number - 1,
+        pos - line.from,
+      );
+      if (!items.length) return null;
+      return {
+        from: word ? word.from : pos,
+        options: items.map(
+          (item): Completion => ({
+            label: item.label,
+            detail: item.detail ?? undefined,
+            info: item.documentation
+              ? () => {
+                  const documentation = item.documentation ?? "";
+                  const dom = document.createElement("div");
+                  dom.className = "cm-lsp-doc";
+                  dom.textContent = documentation;
+                  renderLspDoc(documentation)
+                    .then((h) => {
+                      dom.innerHTML = h;
+                    })
+                    .catch(() => {});
+                  return dom;
+                }
+              : undefined,
+            type: lspKindToType(item.kind),
+            apply: item.insertText ?? item.label,
+          }),
+        ),
+        validFor: BASH_IDENT_VALID_FOR,
+      };
+    } catch (err) {
+      onError(err);
+      return null;
+    }
+  };
+
+  const hoverExt = hoverTooltip(async (v, pos): Promise<Tooltip | null> => {
+    if (detached) return null;
+    try {
+      await flushPendingChanges();
+      if (detached) return null;
+      const line = v.state.doc.lineAt(pos);
+      const result = await lspBridge.hover(
+        filePath,
+        line.number - 1,
+        pos - line.from,
+      );
+      if (!result?.contents) return null;
+      // 异步渲染 markdown → HTML（CodeMirror/Lezer 代码高亮）
+      const html = await renderLspDoc(result.contents);
+      return {
+        pos,
+        create() {
+          const dom = document.createElement("div");
+          dom.className = "cm-lsp-hover";
+          dom.innerHTML = html;
+          // CM6 的 tooltip wrapper 有内置 max-width，去掉
+          requestAnimationFrame(() => {
+            const tooltip = dom.closest(".cm-tooltip") as HTMLElement | null;
+            if (tooltip) tooltip.style.maxWidth = "none";
+          });
+          return { dom };
+        },
+      };
+    } catch (err) {
+      onError(err);
+      return null;
+    }
+  });
+
+  const viewListener = EditorView.updateListener.of((update: ViewUpdate) => {
+    if (!view) view = update.view;
+    if (update.docChanged) {
+      docVersion++;
+      scheduleDidChange();
+    }
+  });
+
+  const extensions: Extension[] = [hoverExt, viewListener];
+
+  function detachInternal() {
+    detached = true;
+    attached = false;
+    cancelTimer();
+    flushInFlight = null;
+    openPromise = null;
+    if (unregisterDiag) {
+      unregisterDiag();
+      unregisterDiag = null;
+    }
+    void lspBridge.didClose(filePath).catch((err) => onError(err));
+    view = null;
+  }
+
+  return {
+    extensions,
+    /** LSP 补全源，调用方应将其合并到自有 autocompletion 的 override 列表中 */
+    completionSource,
+    attach(v: EditorView) {
+      // 双重 attach 守卫:先把旧的拆掉
+      if (attached) detachInternal();
+      attached = true;
+      detached = false;
+      view = v;
+      docVersion = 1;
+      lastSentVersion = 1;
+      flushInFlight = null;
+      unregisterDiag = lspBridge.registerFile(filePath, onDiagnostics);
+      openPromise = lspBridge
+        .didOpen(filePath, getContent(), languageId)
+        .catch((err) => {
+          onError(err);
+        });
+    },
+    detach() {
+      detachInternal();
+    },
+  };
+}
