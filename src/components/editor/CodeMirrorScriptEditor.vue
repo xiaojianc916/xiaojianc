@@ -27,6 +27,29 @@
 </template>
 
 <script setup lang="ts">
+import EditorContextMenu from '@/components/editor/EditorContextMenu.vue';
+import type { IEditorContextMenuItem } from '@/components/editor/editor-context-menu.types';
+import { buildCodeMirrorSettingsExtensions } from '@/services/editor/codemirror-config';
+import { createCodeMirrorInlineCompletionController } from '@/services/editor/codemirror-inline-completion';
+import { resolveCodeMirrorLanguageExtension } from '@/services/editor/codemirror-language';
+import { createLspExtension, createLucideCompletionIcon, lspCompletionTheme } from '@/services/editor/lsp-bridge';
+import { aiService } from '@/services/ipc/ai.service';
+import { useEditorStore } from '@/store/editor';
+import type { IAiCodeActionRequest, IAiCodeActionResult } from '@/types/ai';
+import type { TThemeMode } from '@/types/app';
+import type {
+  IAnalyzeScriptPayload,
+  IEditorSelectionSummary,
+  TScriptDiagnosticSeverity,
+} from '@/types/editor';
+import type { IEditorSettings } from '@/types/settings';
+import { tryReadClipboardText, writeClipboardText } from '@/utils/clipboard';
+import { resolveLanguageForPath } from '@/utils/editor-language';
+import {
+  SHELL_WINDOW_RESIZE_END_EVENT,
+  SHELL_WINDOW_RESIZE_SETTLED_EVENT,
+  SHELL_WINDOW_RESIZE_START_EVENT,
+} from '@/utils/window-resize-events';
 import type {
   CompletionContext,
   CompletionResult,
@@ -78,29 +101,6 @@ import {
 import { githubLight } from '@fsegurai/codemirror-theme-github-light';
 import { useResizeObserver } from '@vueuse/core';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import EditorContextMenu from '@/components/editor/EditorContextMenu.vue';
-import type { IEditorContextMenuItem } from '@/components/editor/editor-context-menu.types';
-import { buildCodeMirrorSettingsExtensions } from '@/services/editor/codemirror-config';
-import { createCodeMirrorInlineCompletionController } from '@/services/editor/codemirror-inline-completion';
-import { resolveCodeMirrorLanguageExtension } from '@/services/editor/codemirror-language';
-import { createLspExtension, createLucideCompletionIcon, lspCompletionTheme, lspStopBridge } from '@/services/editor/lsp-bridge';
-import { aiService } from '@/services/ipc/ai.service';
-import { useEditorStore } from '@/store/editor';
-import type { IAiCodeActionRequest, IAiCodeActionResult } from '@/types/ai';
-import type { TThemeMode } from '@/types/app';
-import type {
-  IAnalyzeScriptPayload,
-  IEditorSelectionSummary,
-  TScriptDiagnosticSeverity,
-} from '@/types/editor';
-import type { IEditorSettings } from '@/types/settings';
-import { tryReadClipboardText, writeClipboardText } from '@/utils/clipboard';
-import { resolveLanguageForPath } from '@/utils/editor-language';
-import {
-  SHELL_WINDOW_RESIZE_END_EVENT,
-  SHELL_WINDOW_RESIZE_SETTLED_EVENT,
-  SHELL_WINDOW_RESIZE_START_EVENT,
-} from '@/utils/window-resize-events';
 
 interface IEditorExpose {
   focusEditor: () => void;
@@ -213,27 +213,27 @@ const buildCompletionExtension = (
 ): Extension =>
   editorSettings.commandCompletion
     ? autocompletion({
-        activateOnTyping: true,
-        activateOnTypingDelay: editorSettings.suggestionDelay,
-        icons: (completion) => {
-          try {
-            return createLucideCompletionIcon(completion.type ?? 'text');
-          } catch {
-            return null;
-          }
-        },
-        override:
-          language === 'shell'
-            ? [
-                async (completionContext: CompletionContext): Promise<CompletionResult | null> => {
-                  const source = await getShellCompletionSource();
-                  return source(completionContext);
-                },
-                ...(lspCompletionSource ? [lspCompletionSource] : []),
-              ]
-            : [completeAnyWord],
-        maxRenderedOptions: 80,
-      })
+      activateOnTyping: true,
+      activateOnTypingDelay: editorSettings.suggestionDelay,
+      icons: (completion) => {
+        try {
+          return createLucideCompletionIcon(completion.type ?? 'text');
+        } catch {
+          return null;
+        }
+      },
+      override:
+        language === 'shell'
+          ? [
+            async (completionContext: CompletionContext): Promise<CompletionResult | null> => {
+              const source = await getShellCompletionSource();
+              return source(completionContext);
+            },
+            ...(lspCompletionSource ? [lspCompletionSource] : []),
+          ]
+          : [completeAnyWord],
+      maxRenderedOptions: 80,
+    })
     : [];
 
 const getCurrentLanguage = (): string =>
@@ -406,23 +406,35 @@ const toDiagnosticSeverity = (level: TScriptDiagnosticSeverity): Diagnostic['sev
   }
 };
 
+let shellcheckDiagnostics: Diagnostic[] = [];
+let lspDiagnostics: Diagnostic[] = [];
+
+const applyDiagnostics = (): void => {
+  const view = editorView;
+  if (!view) return;
+  const merged = [...shellcheckDiagnostics, ...lspDiagnostics].sort(
+    (a, b) => a.from - b.from || a.to - b.to,
+  );
+  view.dispatch(setDiagnostics(view.state, merged));
+};
+
 const syncDiagnostics = (): void => {
   const view = editorView;
   if (!view) return;
-  const diagnostics = analysisState.value.available
+  shellcheckDiagnostics = analysisState.value.available
     ? analysisState.value.diagnostics.map((item): Diagnostic => {
-        const from = lineColumnToOffset(view, item.line, item.column);
-        const to = Math.max(from + 1, lineColumnToOffset(view, item.endLine, item.endColumn));
-        return {
-          from,
-          to: Math.min(to, view.state.doc.length),
-          severity: toDiagnosticSeverity(item.level),
-          source: item.code,
-          message: `${item.code} · ${item.message}`,
-        };
-      })
+      const from = lineColumnToOffset(view, item.line, item.column);
+      const to = Math.max(from + 1, lineColumnToOffset(view, item.endLine, item.endColumn));
+      return {
+        from,
+        to: Math.min(to, view.state.doc.length),
+        severity: toDiagnosticSeverity(item.level),
+        source: item.code,
+        message: `${item.code} · ${item.message}`,
+      };
+    })
     : [];
-  view.dispatch(setDiagnostics(view.state, diagnostics));
+  applyDiagnostics();
 };
 
 // ──────────────────────────────────────────────────────────────────────
@@ -763,6 +775,8 @@ let currentLsp: ReturnType<typeof createLspExtension> | null = null;
 const buildLspExtension = (): Extension => {
   currentLsp?.detach();
   currentLsp = null;
+  lspDiagnostics = [];
+  applyDiagnostics();
 
   const lang = getCurrentLanguage();
   if (lang !== 'shell' || !props.documentPath) return [];
@@ -771,10 +785,15 @@ const buildLspExtension = (): Extension => {
     filePath: props.documentPath,
     languageId: 'shellscript',
     getContent: () => props.modelValue,
+    onDiagnostics: (diags) => {
+      lspDiagnostics = diags;
+      applyDiagnostics();
+    },
   });
 
   return currentLsp.extensions;
 };
+
 const createBaseExtensions = (language: string): Extension[] => [
   lspCompletionTheme,
   highlightSpecialChars(),
@@ -969,7 +988,6 @@ onBeforeUnmount(() => {
   clearViewStateSaveTimer();
   inlineCompletionController.destroy();
   currentLsp?.detach();
-  void lspStopBridge();
   if (editorLayoutFrameId !== null) {
     window.cancelAnimationFrame(editorLayoutFrameId);
     editorLayoutFrameId = null;
@@ -1019,15 +1037,33 @@ defineExpose<IEditorExpose>({
 <style>
 /* ================================================================
    CM6 补全 / hover 全局样式（非 scoped — CM6 弹窗不在组件 DOM 内）
+   颜色走主题变量，跟随明暗主题；不使用 !important。
    ================================================================ */
 
-/* -- 覆盖 CM6 内置 max-width -- */
+/* -- 弹窗外观 + 覆盖 CM6 内置 max-width -- */
 .cm-tooltip.cm-tooltip-hover,
-.cm-tooltip-autocomplete {
+.cm-tooltip.cm-tooltip-autocomplete {
   max-width: none;
+  border: 1px solid color-mix(in srgb, var(--text-quaternary) 45%, transparent);
+  border-radius: 10px;
+  background: var(--editor-bg);
+  color: var(--text-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
 }
+
 .cm-tooltip-autocomplete .cm-completionInfo {
   max-width: none;
+  border-left: 1px solid color-mix(in srgb, var(--text-quaternary) 45%, transparent);
+  background: var(--editor-bg);
+}
+
+/* -- 补全列表行布局 -- */
+.cm-tooltip-autocomplete>ul>li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
 }
 
 /* -- 补全列表图标 -- */
@@ -1041,23 +1077,28 @@ defineExpose<IEditorExpose>({
   justify-content: center;
   flex-shrink: 0;
 }
+
 .cm-tooltip-autocomplete .cm-completionIcon svg {
   width: 14px;
   height: 14px;
 }
+
 .cm-tooltip-autocomplete .cm-completionIcon[data-type="function"],
 .cm-tooltip-autocomplete .cm-completionIcon[data-type="method"] {
   background: var(--accent-strong);
   color: #fff;
 }
+
 .cm-tooltip-autocomplete .cm-completionIcon[data-type="keyword"] {
   background: color-mix(in srgb, #8b5cf6 88%, white);
   color: #fff;
 }
+
 .cm-tooltip-autocomplete .cm-completionIcon[data-type="variable"] {
   background: color-mix(in srgb, #0d9488 88%, white);
   color: #fff;
 }
+
 .cm-tooltip-autocomplete .cm-completionIcon[data-type="text"] {
   background: transparent;
   color: var(--text-tertiary);
@@ -1066,105 +1107,58 @@ defineExpose<IEditorExpose>({
 
 /* -- 补全列表文字 -- */
 .cm-tooltip-autocomplete .cm-completionLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 12.5px;
+  color: var(--text-primary);
 }
+
 .cm-tooltip-autocomplete .cm-completionDetail {
+  flex-shrink: 0;
   font-size: 11px;
   color: var(--text-tertiary);
   opacity: 1;
+  font-style: normal;
 }
+
 .cm-tooltip-autocomplete .cm-completionMatchedText {
   color: var(--accent-strong);
   font-weight: 600;
+  text-decoration: none;
 }
 
 /* -- 选中项 -- */
 .cm-tooltip-autocomplete li[aria-selected] {
   background: color-mix(in srgb, var(--accent-strong) 10%, transparent);
-}
-
-/* -- 补全详情面板 -- */
-.cm-lsp-info {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-  min-width: 240px;
-  max-width: 520px;
-}
-.cm-lsp-info-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.cm-lsp-info-title {
-  font-family: var(--font-mono);
-  font-size: 13px;
   color: var(--text-primary);
-}
-.cm-lsp-info-tag {
-  display: inline-flex;
-  align-items: center;
-  height: 18px;
-  padding: 0 6px;
-  font-size: 10.5px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--surface-soft-strong) 50%, transparent);
-  color: var(--text-tertiary);
-}
-.cm-lsp-info-detail {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text-secondary);
-}
-.cm-lsp-info-doc {
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text-secondary);
-}
-.cm-lsp-info-doc .cm-lsp-para {
-  margin: 2px 0;
-}
-.cm-lsp-info-doc .cm-lsp-code-block {
-  margin: 6px 0;
-}
-.cm-lsp-info-snippet {
-  margin: 0;
-  padding: 10px 12px;
-  background: color-mix(in srgb, var(--app-bg) 86%, black);
-  border-radius: 6px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-primary);
-  white-space: pre-wrap;
-  word-break: break-all;
-  overflow-wrap: anywhere;
-}
-.cm-lsp-ph {
-  background: color-mix(in srgb, var(--accent-strong) 14%, transparent);
-  color: var(--accent-strong);
-  padding: 0 3px;
-  border-radius: 3px;
-}
-.cm-lsp-info-foot {
-  display: flex;
-  justify-content: flex-end;
-  font-size: 11px;
-  color: var(--text-quaternary);
 }
 
 /* -- 补全列表滚动条 -- */
-.cm-tooltip-autocomplete ul::-webkit-scrollbar { width: 8px; }
+.cm-tooltip-autocomplete ul::-webkit-scrollbar {
+  width: 8px;
+}
+
 .cm-tooltip-autocomplete ul::-webkit-scrollbar-thumb {
   background: var(--text-quaternary);
   border-radius: 8px;
 }
 
-/* -- hover 悬停 -- */
+/* -- 补全文档 / hover 容器（completion.info 渲染为 .cm-lsp-doc） -- */
+.cm-lsp-doc {
+  max-width: 520px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
 .cm-lsp-hover {
   padding: 8px 10px;
   font-size: 12.5px;
@@ -1173,7 +1167,10 @@ defineExpose<IEditorExpose>({
 }
 
 /* -- markdown 通用 -- */
-.cm-lsp-para { margin: 4px 0; }
+.cm-lsp-para {
+  margin: 4px 0;
+}
+
 .cm-lsp-inline-code {
   background: color-mix(in srgb, var(--surface-soft-strong) 60%, transparent);
   border-radius: 3px;
@@ -1181,7 +1178,13 @@ defineExpose<IEditorExpose>({
   font-family: var(--font-mono);
   font-size: 0.92em;
 }
-.cm-lsp-code-block { margin: 6px 0; border-radius: 4px; }
+
+.cm-lsp-code-block {
+  margin: 6px 0;
+  border-radius: 4px;
+  overflow: auto;
+}
+
 .cm-lsp-code-block pre {
   margin: 0;
   padding: 8px 10px;
@@ -1189,6 +1192,7 @@ defineExpose<IEditorExpose>({
   font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
-
 </style>

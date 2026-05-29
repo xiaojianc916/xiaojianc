@@ -1,9 +1,7 @@
-PS D:\com.xiaojianc\my_desktop_app> & "C:\ProgramData\chocolatey\lib\tree\tools\tree.exe" -I 'node_modules|target|dist|.git|.idea|.vscode|.cargo|__pycache__|*.log' -L 9
 .
 |-- AGENTS.md
 |-- Cargo.lock
 |-- Cargo.toml
-|-- RESIZE_NOTES.md
 |-- agent-sidecar
 |   |-- MATURITY.md
 |   |-- package.json
@@ -70,15 +68,10 @@ PS D:\com.xiaojianc\my_desktop_app> & "C:\ProgramData\chocolatey\lib\tree\tools\
 |   |   |-- server.spec.ts
 |   |   |-- server.ts
 |   |   |-- streaming
-|   |   |   |-- stream-adapter.ts
-|   |   |   |-- stream-debug-recorder.ts
-|   |   |   |-- stream-event-bus.ts
-|   |   |   |-- stream-helpers.ts
-|   |   |   |-- stream-normalizer.ts
-|   |   |   |-- stream-runner.ts
 |   |   |   |-- stream-runtime-contract.ts
-|   |   |   |-- stream-types.ts
-|   |   |   `-- streaming.spec.ts
+|   |   |   `-- stream-types.ts
+|   |   |-- test-support
+|   |   |   `-- tool-context.ts
 |   |   |-- tools
 |   |   |   |-- generated.ts
 |   |   |   |-- log.ts
@@ -145,8 +138,8 @@ PS D:\com.xiaojianc\my_desktop_app> & "C:\ProgramData\chocolatey\lib\tree\tools\
 |-- hooks_mcp.yaml
 |-- index.html
 |-- knip.json
+|-- lefthook.yml
 |-- localhost_2026-05-27_21-24-38.report.html
-|-- noise_audit.txt
 |-- package.json
 |-- playwright.config.ts
 |-- pnpm-lock.yaml
@@ -570,70 +563,62 @@ PS D:\com.xiaojianc\my_desktop_app> & "C:\ProgramData\chocolatey\lib\tree\tools\
 |   |   |-- business
 |   |   |   `-- ai
 |   |   |       |-- chat
-|   |   |       |   |                               `-- AiChatThread.spec.ts
-|   |   |       |   |                               `-- AiChatThread.vue
-|   |   |       |   |                               `-- AiMarkdown.spec.ts
-|   |   |       |   |                               `-- AiMarkdown.vue
-|   |   |       |   |                               `-- AiMarkdownCodeBlock.vue
-|   |   |       |   |                               `-- AiMarkdownTable.vue
-|   |   |       |   |                               `-- AiMessageItem.spec.ts
-|   |   |       |   |                               `-- AiMessageItem.vue
-|   |   |       |   |                               `-- AiPromptInput.spec.ts
-|   |   |       |   |                               `-- AiPromptInput.vue
-|   |   |       |   |                               `-- AiReasoningCodeBlock.vue
-|   |   |       |   |                               `-- AiThinkingStatus.vue
-|   |   |       |   |                               `-- index.ts
-|   |   |       |                                   `-- normalize-math.ts
+|   |   |       |   |-- AiChatThread.spec.ts
+|   |   |       |   |-- AiChatThread.vue
+|   |   |       |   |-- AiMarkdown.spec.ts
+|   |   |       |   |-- AiMarkdown.vue
+|   |   |       |   |-- AiMarkdownCodeBlock.vue
+|   |   |       |   |-- AiMarkdownTable.vue
+|   |   |       |   |-- AiMessageItem.spec.ts
+|   |   |       |   |-- AiMessageItem.vue
+|   |   |       |   |-- AiPromptInput.spec.ts
+|   |   |       |   |-- AiPromptInput.vue
+|   |   |       |   |-- AiReasoningCodeBlock.vue
+|   |   |       |   |-- AiThinkingStatus.vue
+|   |   |       |   |-- index.ts
+|   |   |       |   `-- normalize-math.ts
 |   |   |       |-- edit
-|   |   |       |   |                               `-- AiChangedFilesSummary.spec.ts
-|   |   |       |   |                               `-- AiChangedFilesSummary.vue
-|   |   |       |   |                               `-- AiDiffHunkViewer.spec.ts
-|   |   |       |   |                               `-- AiDiffHunkViewer.vue
-|   |   |       |   |                               `-- AiDiffPreviewEditor.spec.ts
-|   |   |       |   |                               `-- AiDiffPreviewEditor.vue
-|   |   |       |   |                               `-- AiPatchPreview.spec.ts
-|   |   |       |   |                               `-- AiPatchPreview.vue
-|   |   |       |   |                               `-- diff-ref.spec.ts
-|   |   |       |   |                               `-- diff-ref.ts
-|   |   |       |   |                               `-- index.ts
-|   |   |       |   |                               `-- patch-preview.ts
-|   |   |       |   |                               `-- patch-summary.spec.ts
-|   |   |       |                                   `-- patch-summary.ts
+|   |   |       |   |-- AiChangedFilesSummary.spec.ts
+|   |   |       |   |-- AiChangedFilesSummary.vue
+|   |   |       |   |-- AiDiffHunkViewer.spec.ts
+|   |   |       |   |-- AiDiffHunkViewer.vue
+|   |   |       |   |-- AiDiffPreviewEditor.spec.ts
+|   |   |       |   |-- AiDiffPreviewEditor.vue
+|   |   |       |   |-- AiPatchPreview.spec.ts
+|   |   |       |   |-- AiPatchPreview.vue
+|   |   |       |   |-- diff-ref.spec.ts
+|   |   |       |   |-- diff-ref.ts
+|   |   |       |   |-- index.ts
+|   |   |       |   |-- patch-preview.ts
+|   |   |       |   |-- patch-summary.spec.ts
+|   |   |       |   `-- patch-summary.ts
 |   |   |       |-- plan
-|   |   |       |   |                               `-- AiAgentRuntimeTimeline.spec.ts
-|   |   |       |   |                               `-- AiAgentRuntimeTimeline.vue
-|   |   |       |   |                               `-- AiPlanConfirmationMessage.vue
-|   |   |       |   |                               `-- AiPlanModePanel.spec.ts
-|   |   |       |   |                               `-- AiPlanModePanel.vue
-|   |   |       |                                   `-- index.ts
+|   |   |       |   |-- AiAgentRuntimeTimeline.spec.ts
+|   |   |       |   |-- AiAgentRuntimeTimeline.vue
+|   |   |       |   |-- AiPlanConfirmationMessage.vue
+|   |   |       |   |-- AiPlanModePanel.spec.ts
+|   |   |       |   |-- AiPlanModePanel.vue
+|   |   |       |   `-- index.ts
 |   |   |       |-- provider
-|   |   |       |   |                               `-- AiProviderIcon.spec.ts
-|   |   |       |   |                               `-- AiProviderIcon.vue
-|   |   |       |   |                               `-- AiProviderSettings.spec.ts
-|   |   |       |   |                               `-- AiProviderSettings.vue
-|   |   |       |   |                               `-- deepseek-pricing.spec.ts
-|   |   |       |   |                               `-- deepseek-pricing.ts
-|   |   |       |                                   `-- index.ts
+|   |   |       |   |-- AiProviderIcon.spec.ts
+|   |   |       |   |-- AiProviderIcon.vue
+|   |   |       |   |-- AiProviderSettings.spec.ts
+|   |   |       |   |-- AiProviderSettings.vue
+|   |   |       |   |-- deepseek-pricing.spec.ts
+|   |   |       |   |-- deepseek-pricing.ts
+|   |   |       |   `-- index.ts
 |   |   |       |-- shell
-|   |   |       |   |                               `-- AiAssistantPanel.spec.ts
-|   |   |       |   |                               `-- AiAssistantPanel.vue
-|   |   |       |   |                               `-- AiToolConfirmationCard.vue
-|   |   |       |   |                               `-- AiWorkspaceSurface.vue
-|   |   |       |                                   `-- index.ts
-|   |   |       |-- suggestion
-|   |   |       |   |                               `-- AiFloatingSuggestions.spec.ts
-|   |   |       |   |                               `-- AiFloatingSuggestions.vue
-|   |   |       |   |                               `-- index.ts
-|   |   |       |   |                               `-- layout.spec.ts
-|   |   |       |   |                               `-- layout.ts
-|   |   |       |   |                               `-- suggestion-selection.spec.ts
-|   |   |       |                                   `-- suggestion-selection.ts
+|   |   |       |   |-- AiAssistantPanel.spec.ts
+|   |   |       |   |-- AiAssistantPanel.vue
+|   |   |       |   |-- AiToolConfirmationCard.vue
+|   |   |       |   |-- AiWorkspaceSurface.vue
+|   |   |       |   `-- index.ts
 |   |   |       `-- web
-|   |   |           |                               `-- AiWebSearchActivity.vue
-|   |   |           |                               `-- AiWebSourceCard.vue
-|   |   |           |                               `-- AiWebSourcesPanel.spec.ts
-|   |   |           |                               `-- AiWebSourcesPanel.vue
-|   |   |                                           `-- index.ts
+|   |   |           |-- AiWebSearchActivity.vue
+|   |   |           |-- AiWebSourceCard.vue
+|   |   |           |-- AiWebSourcesPanel.spec.ts
+|   |   |           |-- AiWebSourcesPanel.vue
+|   |   |           `-- index.ts
 |   |   |-- common
 |   |   |   |-- AppDialogHost.vue
 |   |   |   |-- BrowserContextMenuHost.vue
@@ -846,12 +831,13 @@ PS D:\com.xiaojianc\my_desktop_app> & "C:\ProgramData\chocolatey\lib\tree\tools\
 |   |   |   |-- useAiDiffPreview.ts
 |   |   |   |-- useAiStream.spec.ts
 |   |   |   |-- useAiStream.ts
-|   |   |   |-- useAiSuggestionPool.spec.ts
-|   |   |   |-- useAiSuggestionPool.ts
 |   |   |   |-- useAiTokenContext.spec.ts
 |   |   |   |-- useAiTokenContext.ts
 |   |   |   |-- useAiWebSources.spec.ts
-|   |   |   `-- useAiWebSources.ts
+|   |   |   |-- useAiWebSources.ts
+|   |   |   |-- useCopilotAgentBridge.ts
+|   |   |   |-- useCopilotContext.ts
+|   |   |   `-- useCopilotSuggestions.ts
 |   |   |-- useBrowserContextMenu.ts
 |   |   |-- useDialog.ts
 |   |   |-- useDocumentLifecycle.ts
@@ -878,13 +864,17 @@ PS D:\com.xiaojianc\my_desktop_app> & "C:\ProgramData\chocolatey\lib\tree\tools\
 |   |   |   |-- providers.ts
 |   |   |   |-- runtime-tools.generated.ts
 |   |   |   |-- runtime-tools.spec.ts
-|   |   |   |-- runtime-tools.ts
-|   |   |   `-- suggestions.ts
+|   |   |   `-- runtime-tools.ts
 |   |   |-- editor
 |   |   |-- shell
 |   |   |   `-- command-catalog.ts
 |   |   `-- terminal
 |   |       `-- index.ts
+|   |-- copilotkit
+|   |   |-- CopilotKitProvider.vue
+|   |   |-- event-adapter.ts
+|   |   |-- index.ts
+|   |   `-- sidecar-agent.ts
 |   |-- env.d.ts
 |   |-- generated
 |   |   `-- shell-catalog
@@ -1041,8 +1031,6 @@ PS D:\com.xiaojianc\my_desktop_app> & "C:\ProgramData\chocolatey\lib\tree\tools\
 |   |   |   |-- stream.schema.spec.ts
 |   |   |   |-- stream.schema.ts
 |   |   |   |-- stream.ts
-|   |   |   |-- suggestion.schema.spec.ts
-|   |   |   |-- suggestion.schema.ts
 |   |   |   |-- tools.ts
 |   |   |   |-- web.schema.spec.ts
 |   |   |   |-- web.schema.ts
@@ -1246,28 +1234,28 @@ PS D:\com.xiaojianc\my_desktop_app> & "C:\ProgramData\chocolatey\lib\tree\tools\
 |   |   |   |   `-- mod.rs
 |   |   |   |-- edit
 |   |   |   |   |-- apply
-|   |   |   |   |   |                               `-- auto_apply.rs
-|   |   |   |   |   |                               `-- diff_render.rs
-|   |   |   |   |                                   `-- mod.rs
+|   |   |   |   |   |-- auto_apply.rs
+|   |   |   |   |   |-- diff_render.rs
+|   |   |   |   |   `-- mod.rs
 |   |   |   |   |-- errors.rs
 |   |   |   |   |-- history
-|   |   |   |   |   |                               `-- edit_journal.rs
-|   |   |   |   |   |                               `-- mod.rs
-|   |   |   |   |   |                               `-- pins.rs
-|   |   |   |   |   |                               `-- revert.rs
-|   |   |   |   |   |                               `-- snapshot.rs
-|   |   |   |   |                                   `-- timeline.rs
+|   |   |   |   |   |-- edit_journal.rs
+|   |   |   |   |   |-- mod.rs
+|   |   |   |   |   |-- pins.rs
+|   |   |   |   |   |-- revert.rs
+|   |   |   |   |   |-- snapshot.rs
+|   |   |   |   |   `-- timeline.rs
 |   |   |   |   |-- io
-|   |   |   |   |   |                               `-- atomic_write.rs
-|   |   |   |   |   |                               `-- file_transaction.rs
-|   |   |   |   |   |                               `-- mod.rs
-|   |   |   |   |                                   `-- storage_lock.rs
+|   |   |   |   |   |-- atomic_write.rs
+|   |   |   |   |   |-- file_transaction.rs
+|   |   |   |   |   |-- mod.rs
+|   |   |   |   |   `-- storage_lock.rs
 |   |   |   |   |-- mod.rs
 |   |   |   |   |-- patch.rs
 |   |   |   |   `-- security
-|   |   |   |       |                               `-- mod.rs
-|   |   |   |       |                               `-- path_security.rs
-|   |   |   |                                       `-- protected_paths.rs
+|   |   |   |       |-- mod.rs
+|   |   |   |       |-- path_security.rs
+|   |   |   |       `-- protected_paths.rs
 |   |   |   |-- errors.rs
 |   |   |   |-- gateway
 |   |   |   |   |-- config.rs
@@ -1384,7 +1372,6 @@ PS D:\com.xiaojianc\my_desktop_app> & "C:\ProgramData\chocolatey\lib\tree\tools\
 |       |   `-- tokenizer.json
 |       `-- qwen
 |           `-- tokenizer.json
-|-- stage2_audit.txt
 |-- test-results
 |-- tmp
 |-- tsconfig.app.json
@@ -1509,14 +1496,14 @@ PS D:\com.xiaojianc\my_desktop_app> & "C:\ProgramData\chocolatey\lib\tree\tools\
 |           |-- android
 |           |   |-- binding.rs
 |           |   |-- kotlin
-|           |   |   |                               `-- Ipc.kt
-|           |   |   |                               `-- Logger.kt
-|           |   |   |                               `-- PermissionHelper.kt
-|           |   |   |                               `-- RustWebChromeClient.kt
-|           |   |   |                               `-- RustWebView.kt
-|           |   |   |                               `-- RustWebViewClient.kt
-|           |   |   |                               `-- WryActivity.kt
-|           |   |                                   `-- proguard-wry.pro
+|           |   |   |-- Ipc.kt
+|           |   |   |-- Logger.kt
+|           |   |   |-- PermissionHelper.kt
+|           |   |   |-- RustWebChromeClient.kt
+|           |   |   |-- RustWebView.kt
+|           |   |   |-- RustWebViewClient.kt
+|           |   |   |-- WryActivity.kt
+|           |   |   `-- proguard-wry.pro
 |           |   |-- main_pipe.rs
 |           |   `-- mod.rs
 |           |-- custom_protocol_workaround.rs
@@ -1538,20 +1525,20 @@ PS D:\com.xiaojianc\my_desktop_app> & "C:\ProgramData\chocolatey\lib\tree\tools\
 |           |   `-- visual_host.rs
 |           `-- wkwebview
 |               |-- class
-|               |   |                               `-- document_title_changed_observer.rs
-|               |   |                               `-- mod.rs
-|               |   |                               `-- url_scheme_handler.rs
-|               |   |                               `-- wry_download_delegate.rs
-|               |   |                               `-- wry_navigation_delegate.rs
-|               |   |                               `-- wry_web_view.rs
-|               |   |                               `-- wry_web_view_delegate.rs
-|               |   |                               `-- wry_web_view_parent.rs
-|               |                                   `-- wry_web_view_ui_delegate.rs
+|               |   |-- document_title_changed_observer.rs
+|               |   |-- mod.rs
+|               |   |-- url_scheme_handler.rs
+|               |   |-- wry_download_delegate.rs
+|               |   |-- wry_navigation_delegate.rs
+|               |   |-- wry_web_view.rs
+|               |   |-- wry_web_view_delegate.rs
+|               |   |-- wry_web_view_parent.rs
+|               |   `-- wry_web_view_ui_delegate.rs
 |               |-- download.rs
 |               |-- drag_drop.rs
 |               |-- ios
-|               |   |                               `-- WKWebView.rs
-|               |                                   `-- mod.rs
+|               |   |-- WKWebView.rs
+|               |   `-- mod.rs
 |               |-- mod.rs
 |               |-- navigation.rs
 |               |-- proxy.rs
@@ -1560,5 +1547,4 @@ PS D:\com.xiaojianc\my_desktop_app> & "C:\ProgramData\chocolatey\lib\tree\tools\
 |-- vite.config.ts
 `-- vitest.config.ts
 
-232 directories, 1327 files
-PS D:\com.xiaojianc\my_desktop_app>
+233 directories, 1314 files
