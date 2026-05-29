@@ -70,7 +70,7 @@
                 </ResizablePanel>
 
                 <ResizableHandle
-                  class="bg-transparent after:rounded-full after:bg-(--shell-divider) data-[panel-group-direction=vertical]:after:h-[4px]" />
+                  class="bg-transparent after:rounded-full after:bg-(--shell-divider) data-[panel-group-direction=vertical]:after:h-1" />
 
                 <ResizablePanel class="min-h-0 overflow-hidden" :default-size="terminalHeight" :min-size="140"
                   size-unit="px" @resize="handleTerminalHeightChange">
