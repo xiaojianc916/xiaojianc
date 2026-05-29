@@ -20,7 +20,6 @@ import { useAiAgentRun } from '@/composables/ai/useAiAgentRun';
 import { type IAiConversationCheckpoint, useAiAssistant } from '@/composables/ai/useAiAssistant';
 import { useAiTokenContext } from '@/composables/ai/useAiTokenContext';
 import { useAiWebSources } from '@/composables/ai/useAiWebSources';
-import { useCopilotAgentBridge } from '@/composables/ai/useCopilotAgentBridge';
 import { useCopilotContext } from '@/composables/ai/useCopilotContext';
 import { useCopilotSuggestions } from '@/composables/ai/useCopilotSuggestions';
 import { findAiServicePlatformByModel } from '@/constants/ai/providers';
@@ -92,12 +91,6 @@ useCopilotContext({
   gitStatus: gitStatusRef,
   workspaceRootPath: workspaceRootPathRef,
 });
-
-// CopilotKit agent bridge — primary chat path replacing manual IPC calls.
-// useAiAssistant remains for advanced features (plan mode, patches, checkpoints).
-const copilotBridge = useCopilotAgentBridge();
-// Local alias for template safety — always a boolean.
-const ckIsRunning = computed(() => copilotBridge?.isRunning?.value ?? false);
 
 // Register CopilotKit frontend tools — replaces manual tool activity tracking.
 // Catch-all registration for Mastra tools; HITL intercepts approval-required events.
@@ -309,7 +302,7 @@ const directToolConfirmationVisible = computed(() => {
   return Boolean(visibleDirectToolConfirmation.value) && !planProgressVisible.value;
 });
 const composerDisabled = computed(
-  () => ckIsRunning.value || Boolean(visibleDirectToolConfirmation.value),
+  () => assistant.isSending.value || Boolean(visibleDirectToolConfirmation.value),
 );
 const activePlanStep = computed(() => {
   const currentStepId = planActiveRun.value?.currentStepId;
@@ -735,22 +728,25 @@ const confirmClearConversation = (): void => {
 };
 
 const handleSuggestionSelect = async (suggestion: string): Promise<void> => {
-  if (assistant.isSending.value || ckIsRunning.value) {
+  if (assistant.isSending.value) {
     return;
   }
 
+  // Fill the composer then send through the real pipeline so this behaves
+  // exactly like the user typing the suggestion and pressing send: the user
+  // bubble shows in the thread and the composer clears.
   assistant.draft.value = suggestion;
-  await copilotBridge.sendMessage(suggestion);
+  await assistant.sendMessage();
 };
 
 const handleSubmitMessage = async (): Promise<void> => {
-  const text = assistant.draft.value.trim();
-  if (!text || ckIsRunning.value) return;
+  if (!assistant.draft.value.trim() || assistant.isSending.value) {
+    return;
+  }
 
-  assistant.draft.value = '';
-  // CopilotKit as primary send path; advanced Mastra features (plan mode,
-  // patches, checkpoints) are handled via sidecar event listeners in useAiAssistant.
-  await copilotBridge.sendMessage(text);
+  // Route through useAiAssistant so chat/agent/plan modes, streaming, patches
+  // and conversation-title generation all keep working from a single source.
+  await assistant.sendMessage();
 };
 
 const getHistoryTimeLabel = (timestampText: string): string => {
@@ -1175,7 +1171,7 @@ onBeforeUnmount(() => {
       <div class="ai-provider-mark" aria-label="当前 AI 平台和模型" :title="providerMarkTitle">
         <AiProviderIcon class="ai-provider-mark__icon" :platform-id="aiIconPlatformId" decorative />
         <span class="ai-provider-mark__copy">
-          <span class="ai-provider-mark__label"> aiModelName </span>
+          <span class="ai-provider-mark__label" v-text="aiModelName"></span>
         </span>
       </div>
       <div class="ai-panel-actions">
@@ -1216,10 +1212,10 @@ onBeforeUnmount(() => {
                   :class="{ 'is-active': thread.id === assistant.activeConversationId.value }">
                   <button type="button" class="ai-history-button" @click="openHistoryThread(thread.id)">
                     <div class="ai-history-meta">
-                      <strong class="ai-history-title"> thread.title </strong>
-                      <time> getHistoryTimeLabel(thread.updatedAt) </time>
+                      <strong class="ai-history-title" v-text="thread.title"></strong>
+                      <time v-text="getHistoryTimeLabel(thread.updatedAt)"></time>
                     </div>
-                    <div class="ai-history-subtitle"> getHistoryMessageCountLabel(thread.messages) </div>
+                    <div class="ai-history-subtitle" v-text="getHistoryMessageCountLabel(thread.messages)"></div>
                   </button>
                   <button type="button" class="ai-history-delete-button" aria-label="删除这条对话记录"
                     @click.stop="openDeleteConversationDialog(thread.id)">
@@ -1235,7 +1231,7 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <AiChatThread :messages="threadMessages" :is-typing="ckIsRunning" :platform-id="aiIconPlatformId"
+    <AiChatThread :messages="threadMessages" :is-typing="assistant.isSending.value" :platform-id="aiIconPlatformId"
       :provider-label="aiIconTitle" :conversation-id="assistant.activeConversationId.value"
       :workspace-root-path="workspaceRootPath" :scroll-state="assistant.activeConversationScrollState.value"
       :typing-label="assistantTypingLabel" :has-extra-content="planConfirmationVisible || directToolConfirmationVisible"
@@ -1255,7 +1251,7 @@ onBeforeUnmount(() => {
           <CheckpointTrigger class="ai-conversation-checkpoint__trigger" :disabled="isConversationCheckpointDisabled"
             @click="handleRestoreConversationCheckpoint(message.id)">
             <CheckpointIcon class="ai-conversation-checkpoint__icon" aria-hidden="true" />
-            <span class="ai-conversation-checkpoint__label"> getConversationCheckpointLabel(message.id) </span>
+            <span class="ai-conversation-checkpoint__label" v-text="getConversationCheckpointLabel(message.id)"></span>
             <Loader v-if="isConversationCheckpointRestoring(message.id)" class="ai-conversation-checkpoint__loader"
               :size="12" />
             <span v-else class="ai-conversation-checkpoint__spacer" aria-hidden="true"></span>
@@ -1282,7 +1278,7 @@ onBeforeUnmount(() => {
           <path d="M3 7v5h5" />
           <path d="M21 17a8 8 0 0 0-13.66-5.66L3 16" />
         </svg>
-        <span> fileRollbackLabel </span>
+        <span v-text="fileRollbackLabel"></span>
       </button>
       <span class="ai-file-rollback-entry__line" aria-hidden="true"></span>
     </div>
@@ -1322,13 +1318,13 @@ onBeforeUnmount(() => {
         @reset="handleResetPlan" @run-step="handleRunStep" @pause-run="handlePauseRun" @resume-run="handleResumeRun"
         @cancel-run="handleCancelRun" @resolve-tool-confirmation="handleResolveToolConfirmation" />
       <AiPromptInput v-model="assistant.draft.value" v-model:active-mode="assistant.activeMode.value"
-        :disabled="composerDisabled" :stop-visible="ckIsRunning"
+        :disabled="composerDisabled" :stop-visible="assistant.isSending.value"
         :error-message="assistant.errorMessage.value" :submit-label="submitLabel"
         :config="assistant.config.value" :is-model-saving="isPromptModelSaving"
         :network-permission="networkPermission" :is-network-permission-saving="agentNetwork.pending.value"
         :attachments="assistant.attachedFiles.value"
         :has-attachments="assistant.attachedFiles.value.length > 0" :token-context="tokenContextProps"
-        @submit="handleSubmitMessage" @stop="copilotBridge.stop" @file-selected="assistant.attachFile"
+        @submit="handleSubmitMessage" @stop="assistant.stopCurrentRequest" @file-selected="assistant.attachFile"
         @remove-file="assistant.removeAttachedFile" @model-change="handlePromptModelChange"
         @network-permission-change="handlePromptNetworkPermissionChange"
         @information-sources-open="openPromptInformationSources"
@@ -1345,8 +1341,8 @@ onBeforeUnmount(() => {
       <div v-if="assistant.isClearDialogOpen.value" class="ai-dialog-backdrop" @click.self="cancelClearConversation">
         <section class="ai-dialog is-compact" role="alertdialog" aria-modal="true">
           <div class="ai-dialog-copy">
-            <h3> getDeleteDialogTitle() </h3>
-            <p> getDeleteDialogDescription() </p>
+            <h3 v-text="getDeleteDialogTitle()"></h3>
+            <p v-text="getDeleteDialogDescription()"></p>
           </div>
           <div class="ai-dialog-actions">
             <button type="button" class="ai-button is-ghost" @click="cancelClearConversation">取消</button>
