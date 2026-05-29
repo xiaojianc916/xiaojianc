@@ -1794,12 +1794,13 @@ onBeforeUnmount(() => {
 
 .ai-suggestion-empty {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, auto);
+  justify-content: center;
   align-items: center;
   justify-items: center;
   width: 100%;
   min-width: 0;
-  gap: 12px;
+  gap: 12px 16px;
   padding: clamp(72px, 22vh, 220px) 16px 0;
 }
 
