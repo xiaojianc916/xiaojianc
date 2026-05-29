@@ -152,6 +152,7 @@ export class MastraRuntimeChat extends MastraRuntimeBase {
                     runId: stream.runId ?? requestedRunId,
                     sessionId,
                     agentId: DEFAULT_EXECUTION_AGENT_ID,
+                    ...(stream.traceId ? { traceId: stream.traceId } : {}),
                     ...(this.now ? { now: this.now } : {}),
                 });
                 payloadEventSink.attachRuntimeEventFactory(createRuntimeEvent);
