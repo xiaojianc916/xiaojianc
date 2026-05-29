@@ -4,24 +4,133 @@ import { computed, onMounted, type Ref, ref } from 'vue';
 import { aiService } from '@/services/ipc/ai.service';
 import { logger } from '@/utils/logger';
 
-/** 兜底静态建议：免费小模型不可用时展示。 */
-const STATIC: Suggestion[] = [
-  { title: '解释代码', message: '请解释当前文件的代码逻辑', isLoading: false },
-  { title: '优化代码', message: '请分析当前代码并给出优化建议', isLoading: false },
-  { title: '写注释', message: '请为当前代码添加详细的中文注释', isLoading: false },
-  { title: '找 Bug', message: '请检查当前代码是否存在潜在问题', isLoading: false },
-  { title: '写单测', message: '请为当前代码编写单元测试', isLoading: false },
-  { title: '重构建议', message: '请给出当前代码的重构建议', isLoading: false },
+/**
+ * 兜底建议池：免费小模型(narrator)不可用时使用。
+ * 严格按 src-tauri/src/ai/gateway/suggestions.rs 的规则编写：
+ * - 每条 7-15 个汉字字符；
+ * - 简体中文生活/通识话题，严禁代码、编程、命令行、API、调试、配置、框架等开发话题；
+ * - 覆盖 健康/生活/科学/文学/历史/艺术/学习/效率/旅行/饮食/心理/科技/自然/哲学/沟通；
+ * - 疑问/祈使/陈述句式混合，末尾不带标点，任意“前两个字”重复 <= 3 次。
+ * 共 90 条（对齐网关 MAX_SUGGESTION_POOL_SIZE），每次随机取 DISPLAY_COUNT 条展示。
+ */
+const STATIC_POOL: readonly string[] = [
+  '久坐之后如何快速放松肩颈',
+  '每天喝多少水才算足够',
+  '为什么熬夜后更难入睡',
+  '三个改善久坐的小动作',
+  '讲讲深呼吸为何能减压',
+  '护眼的二十二十法则',
+  '衣服上的油渍怎么去除',
+  '如何让毛巾恢复松软',
+  '冰箱除味的几个妙招',
+  '推荐几个收纳小技巧',
+  '雨天鞋子快速变干的办法',
+  '为什么切洋葱会让人流泪',
+  '为什么天空在白天是蓝色',
+  '用比喻讲讲什么是熵增',
+  '彩虹是怎么形成的',
+  '介绍相对论的基本思想',
+  '哪些动物能在深海发光',
+  '闪电和雷声为何不同步',
+  '唐诗里最孤独的一句',
+  '推荐一本被低估的小说',
+  '为何红楼梦没有写完',
+  '讲讲莎士比亚的悲剧',
+  '哪些诗人写过明月',
+  '比较李白和杜甫的诗风',
+  '唐宋八大家为何没有李白',
+  '古人怎么计算月亮距离',
+  '丝绸之路到底有多长',
+  '介绍一位被遗忘的发明家',
+  '哪个朝代的服饰最华丽',
+  '长城最初是为了防御谁',
+  '用电影解释什么是存在主义',
+  '介绍一种小众的乐器',
+  '梵高的画为何充满漩涡',
+  '怎样欣赏一幅抽象画',
+  '推荐几首适合雨天的音乐',
+  '哪些建筑被称为凝固音乐',
+  '如何用费曼法学新知识',
+  '记不住单词有什么办法',
+  '间隔重复为何更高效',
+  '列出三种高效笔记法',
+  '怎样坚持每天阅读',
+  '碎片时间能学好一门外语吗',
+  '如何专注而不被打断',
+  '番茄工作法到底怎么用',
+  '列出告别拖延的小方法',
+  '早晨第一小时该做什么',
+  '怎样制定可执行的计划',
+  '三个减少分心的环境改造',
+  '第一次独自旅行要注意什么',
+  '有哪些小众的海边小城',
+  '怎么精简旅行的行李',
+  '有哪些经典的徒步路线',
+  '长途飞行怎么缓解疲劳',
+  '旅行为何能缓解焦虑',
+  '一道适合周末做的家常菜',
+  '面包为何要二次发酵',
+  '泡好一杯手冲咖啡的窍门',
+  '哪种地方小吃值得一试',
+  '隔夜饭菜还能放心吃吗',
+  '三种解腻又开胃的饮品',
+  '焦虑的时候怎么平静下来',
+  '为何独处也是一种能力',
+  '三个缓解压力的小习惯',
+  '慢慢建立自信的方法',
+  '拖延背后的心理原因',
+  '哪种习惯能提升幸福感',
+  '手机电池为何越用越不耐用',
+  '卫星是怎么定位你的位置',
+  '手机为何越用越卡',
+  '微波炉加热食物的原理',
+  '无线充电到底是什么原理',
+  '有哪些科技来自航天',
+  '候鸟如何找到迁徙方向',
+  '树叶到了秋天为何变红',
+  '大海的颜色为何会变化',
+  '哪种植物能在沙漠存活',
+  '萤火虫为何会发光',
+  '一种奇特的深海生物',
+  '自由意志真的存在吗',
+  '用电车难题聊聊选择',
+  '什么是真正的幸福生活',
+  '我们为何害怕未知',
+  '时间到底是不是幻觉',
+  '比较东方和西方的智慧',
+  '怎么拒绝别人又不伤感情',
+  '第一次见面怎么找话题',
+  '表达不同意见的得体方式',
+  '列出几句高情商回应',
+  '倾听为何比表达更重要',
+  '非暴力沟通的核心是什么',
 ];
 
 /** 免费小模型(narrator endpoint)建议词池请求参数。 */
 const POOL_LOCALE = 'zh-CN';
-const POOL_COUNT = 12;
-const POOL_TOPICS = ['代码解释', '代码优化', '调试排错', '单元测试', '重构', 'Shell 脚本'] as const;
-/** 空态一行展示的建议数量。 */
-const DISPLAY_COUNT = 6;
+/** narrator 词池请求数量，对齐网关 MAX_SUGGESTION_POOL_SIZE。 */
+const POOL_COUNT = 90;
+const POOL_TOPICS = [
+  '健康',
+  '生活小知识',
+  '科学',
+  '文学',
+  '历史',
+  '艺术',
+  '学习',
+  '效率',
+  '旅行',
+  '饮食',
+  '心理',
+  '科技',
+  '自然',
+  '哲学',
+  '沟通',
+] as const;
+/** 空态一次展示的建议数量（多行交错铺排）。 */
+const DISPLAY_COUNT = 9;
 /** 建议标题最大展示长度，超出截断加省略号。 */
-const TITLE_MAX_LENGTH = 12;
+const TITLE_MAX_LENGTH = 15;
 
 const toSuggestion = (message: string): Suggestion => {
   const title =
@@ -45,10 +154,12 @@ export interface IUseCopilotSuggestionsResult {
 }
 
 export const useCopilotSuggestions = (): IUseCopilotSuggestionsResult => {
-  let raw: Ref<Suggestion[]> = ref(STATIC) as unknown as Ref<Suggestion[]>;
+  // 每次进入空态都从兜底池随机取 DISPLAY_COUNT 条，保证多样。
+  const fallback = pickFromPool(STATIC_POOL);
+  let raw: Ref<Suggestion[]> = ref(fallback) as unknown as Ref<Suggestion[]>;
 
   try {
-    useConfigureSuggestions({ suggestions: STATIC, available: 'before-first-message' });
+    useConfigureSuggestions({ suggestions: fallback, available: 'before-first-message' });
     ({ suggestions: raw } = useSuggestions({ agentId: 'default' }));
   } catch {
     // Provider absent — fall back to static suggestions.
