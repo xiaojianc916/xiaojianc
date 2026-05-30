@@ -23,6 +23,9 @@ export const EDITOR_FONT_FAMILY =
 // 超过该长度不做整文档高亮，避免大文件卡顿。
 const MAX_HIGHLIGHT_LENGTH = 300_000;
 
+// 输入停顿后过多久触发一次全量重算（毫秒）；过小会让连续输入仍频繁重算，过大高亮滞后明显。
+const HIGHLIGHT_RECOMPUTE_DEBOUNCE_MS = 90;
+
 const FONT_STYLE_ITALIC = 1;
 const FONT_STYLE_BOLD = 2;
 const FONT_STYLE_UNDERLINE = 4;
@@ -31,10 +34,34 @@ const FONT_STYLE_UNDERLINE = 4;
 const setShikiLanguageEffect = StateEffect.define<string>();
 // 语法异步加载完成后借此 effect 触发一次重新高亮。
 const shikiReadyEffect = StateEffect.define<null>();
+// 防抖超时触发的全量重算信号。
+const shikiRecomputeEffect = StateEffect.define<null>();
 
 /** 供外部在语言切换时派发，通知高亮插件更新语言。 */
 export const setShikiLanguage = (language: string): StateEffect<string> =>
   setShikiLanguageEffect.of(language);
+
+export type TShikiHighlightUpdateAction = 'recompute' | 'remap' | 'skip';
+
+/**
+ * 纯函数：根据一次 ViewUpdate 的特征决定高亮插件应执行的动作。
+ * - recompute：语言切换或收到重算请求时，立即全量 tokenize。
+ * - remap：仅文档变化时，按编辑位移映射现有 decorations，随后防抖重算。
+ * - skip：其余情况（如纯选区变化）保持现有 decorations。
+ */
+export const resolveShikiHighlightUpdateAction = (input: {
+  languageChanged: boolean;
+  recomputeRequested: boolean;
+  docChanged: boolean;
+}): TShikiHighlightUpdateAction => {
+  if (input.languageChanged || input.recomputeRequested) {
+    return 'recompute';
+  }
+  if (input.docChanged) {
+    return 'remap';
+  }
+  return 'skip';
+};
 
 const shikiLanguageField = StateField.define<string>({
   create: () => 'text',
@@ -115,6 +142,7 @@ const shikiHighlightPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
     private destroyed = false;
+    private recomputeTimer: number | null = null;
 
     constructor(view: EditorView) {
       this.decorations = this.compute(view);
@@ -124,16 +152,57 @@ const shikiHighlightPlugin = ViewPlugin.fromClass(
       const languageChanged =
         update.startState.field(shikiLanguageField, false) !==
         update.state.field(shikiLanguageField, false);
-      const readyDispatched = update.transactions.some((tr) =>
-        tr.effects.some((effect) => effect.is(shikiReadyEffect)),
+      const recomputeRequested = update.transactions.some((tr) =>
+        tr.effects.some(
+          (effect) => effect.is(shikiReadyEffect) || effect.is(shikiRecomputeEffect),
+        ),
       );
-      if (update.docChanged || languageChanged || readyDispatched) {
+
+      const action = resolveShikiHighlightUpdateAction({
+        languageChanged,
+        recomputeRequested,
+        docChanged: update.docChanged,
+      });
+
+      if (action === 'recompute') {
+        this.cancelScheduledRecompute();
         this.decorations = this.compute(update.view);
+        return;
+      }
+
+      if (action === 'remap') {
+        // 仅按编辑位移映射已有高亮，避免每次按键对整篇文档重新 tokenize。
+        this.decorations = this.decorations.map(update.changes);
+        this.scheduleRecompute(update.view);
       }
     }
 
     destroy(): void {
       this.destroyed = true;
+      this.cancelScheduledRecompute();
+    }
+
+    private cancelScheduledRecompute(): void {
+      if (this.recomputeTimer !== null) {
+        window.clearTimeout(this.recomputeTimer);
+        this.recomputeTimer = null;
+      }
+    }
+
+    private scheduleRecompute(view: EditorView): void {
+      this.cancelScheduledRecompute();
+      this.recomputeTimer = window.setTimeout(() => {
+        this.recomputeTimer = null;
+        if (this.destroyed) {
+          return;
+        }
+        try {
+          // 派发重算 effect，让插件在下一次 update 中做一次全量 tokenize。
+          view.dispatch({ effects: shikiRecomputeEffect.of(null) });
+        } catch {
+          // view 已销毁，忽略。
+        }
+      }, HIGHLIGHT_RECOMPUTE_DEBOUNCE_MS);
     }
 
     private compute(view: EditorView): DecorationSet {
