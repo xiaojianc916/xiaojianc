@@ -26,10 +26,26 @@ const DECLARATION_PATTERN =
   /\b(?:export|local|readonly|declare|unset)\s+([A-Za-z_][A-Za-z0-9_]*)?$/;
 const CURRENT_TOKEN_PATTERN = /(?:^|[\s|;&()])([^\s|;&()]+)$/;
 
+interface IShellParseCacheEntry {
+  source: string;
+  tree: Tree;
+  symbols: ISymbolSnapshot | null;
+  refCount: number;
+  superseded: boolean;
+}
+
 interface IParsedShellDocument {
   language: Language;
-  parser: Parser;
-  tree: Tree | null;
+  entry: IShellParseCacheEntry;
+}
+
+interface IShellSourceEdit {
+  startIndex: number;
+  oldEndIndex: number;
+  newEndIndex: number;
+  startPosition: Point;
+  oldEndPosition: Point;
+  newEndPosition: Point;
 }
 
 interface IVariableContext {
@@ -76,6 +92,8 @@ interface ICommandCatalogContext {
 }
 
 let runtimePromise: Promise<Language> | null = null;
+let parserPromise: Promise<Parser> | null = null;
+let shellParseCache: IShellParseCacheEntry | null = null;
 let commandCatalogRootEntriesPromise: Promise<IShellCompletionEntry[]> | null = null;
 let lastProviderErrorMessage: string | null = null;
 
@@ -279,6 +297,24 @@ const ensureTreeSitterLanguage = async (): Promise<Language> => {
   return runtimePromise;
 };
 
+// 复用单例 Parser：避免每次补全都 new/delete 一个 tree-sitter 解析器。
+const ensureParser = async (): Promise<Parser> => {
+  if (!parserPromise) {
+    parserPromise = (async () => {
+      try {
+        const language = await ensureTreeSitterLanguage();
+        const parser = new Parser();
+        parser.setLanguage(language);
+        return parser;
+      } catch (error) {
+        parserPromise = null;
+        throw error;
+      }
+    })();
+  }
+  return parserPromise;
+};
+
 const reportShellCompletionProviderError = (error: unknown): void => {
   const nextMessage = error instanceof Error ? error.message : String(error);
   if (lastProviderErrorMessage === nextMessage) {
@@ -290,16 +326,127 @@ const reportShellCompletionProviderError = (error: unknown): void => {
 
 const getUtf8ByteLength = (value: string): number => textEncoder.encode(value).byteLength;
 
+// 将字符下标转换为 tree-sitter 期望的字节坐标 Point（与 getUtf8ByteLength 的约定保持一致）。
+const toBytePoint = (source: string, charIndex: number): Point => {
+  let row = 0;
+  let lineStartChar = 0;
+  for (let index = 0; index < charIndex; index += 1) {
+    if (source.charCodeAt(index) === 10) {
+      row += 1;
+      lineStartChar = index + 1;
+    }
+  }
+  return {
+    row,
+    column: getUtf8ByteLength(source.slice(lineStartChar, charIndex)),
+  };
+};
+
+// 通过最小公共前后缀计算单段替换编辑；该编辑精确描述 oldSource -> newSource 的差异，
+// 故 tree-sitter 增量重解析结果始终正确（即便两段文本不相关，最多退化为全量解析）。
+const computeShellSourceEdit = (oldSource: string, newSource: string): IShellSourceEdit => {
+  const oldLength = oldSource.length;
+  const newLength = newSource.length;
+  const prefixLimit = Math.min(oldLength, newLength);
+  let startChar = 0;
+  while (
+    startChar < prefixLimit &&
+    oldSource.charCodeAt(startChar) === newSource.charCodeAt(startChar)
+  ) {
+    startChar += 1;
+  }
+  let oldEndChar = oldLength;
+  let newEndChar = newLength;
+  while (
+    oldEndChar > startChar &&
+    newEndChar > startChar &&
+    oldSource.charCodeAt(oldEndChar - 1) === newSource.charCodeAt(newEndChar - 1)
+  ) {
+    oldEndChar -= 1;
+    newEndChar -= 1;
+  }
+  return {
+    startIndex: getUtf8ByteLength(newSource.slice(0, startChar)),
+    oldEndIndex: getUtf8ByteLength(oldSource.slice(0, oldEndChar)),
+    newEndIndex: getUtf8ByteLength(newSource.slice(0, newEndChar)),
+    startPosition: toBytePoint(newSource, startChar),
+    oldEndPosition: toBytePoint(oldSource, oldEndChar),
+    newEndPosition: toBytePoint(newSource, newEndChar),
+  };
+};
+
+const acquireParseEntry = (entry: IShellParseCacheEntry): IShellParseCacheEntry => {
+  entry.refCount += 1;
+  return entry;
+};
+
+const releaseParseEntry = (entry: IShellParseCacheEntry): void => {
+  if (entry.refCount > 0) {
+    entry.refCount -= 1;
+  }
+  if (entry.refCount === 0 && entry.superseded) {
+    entry.tree.delete();
+  }
+};
+
+const supersedeParseEntry = (entry: IShellParseCacheEntry): void => {
+  entry.superseded = true;
+  if (entry.refCount === 0) {
+    entry.tree.delete();
+  }
+};
+
+const getEntrySymbols = (entry: IShellParseCacheEntry): ISymbolSnapshot => {
+  if (!entry.symbols) {
+    entry.symbols = collectDocumentSymbols(entry.tree.rootNode);
+  }
+  return entry.symbols;
+};
+
+// 解析 shell 文档：命中缓存直接复用；文本变化时尽量增量重解析，异常回退全量解析。
 const parseShellDocument = async (source: string): Promise<IParsedShellDocument> => {
   const language = await ensureTreeSitterLanguage();
-  const parser = new Parser();
-  parser.setLanguage(language);
-  const tree = parser.parse(source);
-  return {
-    language,
-    parser,
+  const parser = await ensureParser();
+  const cached = shellParseCache;
+
+  if (cached && cached.source === source) {
+    return { language, entry: acquireParseEntry(cached) };
+  }
+
+  let tree: Tree | null = null;
+
+  // 仅在没有在途读取者时复用旧树做增量解析，避免 edit 影响并发请求正在读取的树。
+  if (cached && cached.refCount === 0) {
+    try {
+      cached.tree.edit(computeShellSourceEdit(cached.source, source));
+      tree = parser.parse(source, cached.tree);
+    } catch (error) {
+      reportShellCompletionProviderError(error);
+      tree = null;
+    }
+  }
+
+  if (!tree) {
+    tree = parser.parse(source);
+  }
+  if (!tree) {
+    throw new Error('tree-sitter 返回空语法树。');
+  }
+
+  const entry: IShellParseCacheEntry = {
+    source,
     tree,
+    symbols: null,
+    refCount: 0,
+    superseded: false,
   };
+  shellParseCache = entry;
+
+  if (cached && cached.tree !== tree) {
+    supersedeParseEntry(cached);
+  }
+
+  return { language, entry: acquireParseEntry(entry) };
 };
 
 const collectAncestors = (node: Node | null): Node[] => {
@@ -942,11 +1089,11 @@ const dedupeEntries = (entries: IShellCompletionEntry[]): IShellCompletionEntry[
 const buildCompletionEntries = async (
   language: Language,
   context: ICompletionContext,
+  symbols: ISymbolSnapshot,
 ): Promise<IShellCompletionEntry[]> => {
   if (context.isInComment) {
     return [];
   }
-  const symbols = collectDocumentSymbols(context.tree.rootNode);
   const lookaheadEntries = collectLookaheadEntries(language, context, symbols);
   if (context.variableContext || context.isDeclarationContext) {
     return dedupeEntries([...lookaheadEntries, ...buildVariableEntries(context, symbols)]).slice(
@@ -1039,25 +1186,23 @@ export const createShellCodeMirrorCompletionSource =
           row: Math.max(0, line.number - 1),
           column: getUtf8ByteLength(linePrefix),
         };
-        const parsedDocument = await parseShellDocument(source);
-        if (completionContext.aborted) {
-          parsedDocument.tree?.delete();
-          parsedDocument.parser.delete();
-          return null;
-        }
-
+        const { language, entry } = await parseShellDocument(source);
         try {
-          if (!parsedDocument.tree) {
+          if (completionContext.aborted) {
             return null;
           }
           const shellContext = resolveCompletionContext(
-            parsedDocument.tree,
+            entry.tree,
             cursorByteOffset,
             linePrefix,
             lineSuffix,
             point,
           );
-          const entries = await buildCompletionEntries(parsedDocument.language, shellContext);
+          const entries = await buildCompletionEntries(
+            language,
+            shellContext,
+            getEntrySymbols(entry),
+          );
           lastProviderErrorMessage = null;
           const prefixLength = shellContext.variableContext
             ? shellContext.variableContext.partial.length
@@ -1067,12 +1212,13 @@ export const createShellCodeMirrorCompletionSource =
           const from = Math.max(0, completionContext.pos - prefixLength);
           return {
             from,
-            options: entries.map((entry) => toCodeMirrorCompletion(entry, shellContext)),
+            options: entries.map((completionEntry) =>
+              toCodeMirrorCompletion(completionEntry, shellContext),
+            ),
             validFor: /^[A-Za-z0-9_./:${}-]*$/u,
           };
         } finally {
-          parsedDocument.tree?.delete();
-          parsedDocument.parser.delete();
+          releaseParseEntry(entry);
         }
       } catch (error) {
         reportShellCompletionProviderError(error);
