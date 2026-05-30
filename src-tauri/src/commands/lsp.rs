@@ -734,8 +734,8 @@ pub async fn lsp_start(
             },
             "workspace": { "workspaceFolders": false }
         },
-        // 显式禁用 shellcheck,使用 bash-language-server 内置语法解析
-        "initializationOptions": { "shellcheckPath": "" }
+        // 启用 shellcheck(诊断来源)。空串=禁用;给 "shellcheck" 走 PATH,或换绝对路径
+        "initializationOptions": { "shellcheckPath": "shellcheck" }
     });
 
     let _init_resp = send_request(
