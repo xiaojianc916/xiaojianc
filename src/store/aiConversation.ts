@@ -173,11 +173,6 @@ const trimThreads = (
   return trimmedNonEmptyThreads;
 };
 
-const normalizeThreads = (
-  threads: IAiConversationThread[],
-  activeThreadId: string | null,
-): IAiConversationThread[] => trimThreads(threads.map(syncThreadMeta), activeThreadId);
-
 const normalizeHydratedThreads = (
   threads: IAiConversationThread[],
   activeThreadId: string | null,
@@ -236,11 +231,11 @@ const ensureActiveThread = (
 export const useAiConversationStore = defineStore(
   'ai-conversation',
   () => {
-    // ── State ────────────────────────────────────────────────────────────────
+    // ── State
     const threads = ref<IAiConversationThread[]>([createThread()]);
     const activeThreadId = ref<string | null>(threads.value[0]?.id ?? null);
 
-    // ── Getters ──────────────────────────────────────────────────────────────
+    // ── Getters
     const activeThread = computed<IAiConversationThread | null>(
       () => threads.value.find((thread) => thread.id === activeThreadId.value) ?? null,
     );
@@ -253,11 +248,21 @@ export const useAiConversationStore = defineStore(
 
     const hasMessages = computed(() => activeMessages.value.length > 0);
 
-    // ── Internal helpers ─────────────────────────────────────────────────────
+    // ── Internal helpers
 
+    /**
+     * 提交线程状态。
+     *
+     * 性能不变量: threads 中每个线程对象始终处于'已 syncThreadMeta 归一化'状态
+     * —— 初始 [createThread()] 已归一化, hydrate 经 normalizeHydratedThreads 归一化,
+     * 之后每次 mutation 要么追加由 createThread() 生成的归一化线程, 要么仅对被改动
+     * 的那条线程调用 syncThreadMeta(见 patchActiveThread / patchThread)。
+     * 因此这里无需再对全部线程重跑 syncThreadMeta, 只做 trim + 选定 active,
+     * 未改动线程保持原对象引用(结构共享)。
+     */
     const replaceThreadsState = (nextState: IAiConversationPersistShape): void => {
-      const normalizedThreads = normalizeThreads(nextState.threads, nextState.activeThreadId);
-      const resolvedState = ensureActiveThread(nextState.activeThreadId, normalizedThreads);
+      const trimmedThreads = trimThreads(nextState.threads, nextState.activeThreadId);
+      const resolvedState = ensureActiveThread(nextState.activeThreadId, trimmedThreads);
       threads.value = resolvedState.threads;
       activeThreadId.value = resolvedState.activeThreadId;
     };
@@ -296,11 +301,13 @@ export const useAiConversationStore = defineStore(
       if (!threads.value.some((thread) => thread.id === threadId)) return;
       replaceThreadsState({
         activeThreadId: activeThreadId.value,
-        threads: threads.value.map((thread) => (thread.id === threadId ? updater(thread) : thread)),
+        threads: threads.value.map((thread) =>
+          thread.id === threadId ? syncThreadMeta(updater(thread)) : thread,
+        ),
       });
     };
 
-    // ── Actions: messages ────────────────────────────────────────────────────
+    // ── Actions: messages
 
     const appendMessage = (message: IAiChatMessage): void => {
       patchActiveThread((thread) => ({
@@ -317,15 +324,14 @@ export const useAiConversationStore = defineStore(
     };
 
     const replaceThreadMessages = (threadId: string, messages: IAiChatMessage[]): void => {
-      patchThread(threadId, (thread) =>
-        syncThreadMeta({
-          ...thread,
-          messages,
-        }),
-      );
+      // patchThread 已对变更线程统一调用 syncThreadMeta, 此处无需重复。
+      patchThread(threadId, (thread) => ({
+        ...thread,
+        messages,
+      }));
     };
 
-    // ── Actions: thread lifecycle ────────────────────────────────────────────
+    // ── Actions: thread lifecycle
 
     const switchThread = (threadId: string): void => {
       if (!threads.value.some((thread) => thread.id === threadId)) return;
@@ -384,7 +390,7 @@ export const useAiConversationStore = defineStore(
       return true;
     };
 
-    // ── Actions: title generation ────────────────────────────────────────────
+    // ── Actions: title generation
 
     const getThreadTitleStatus = (threadId: string): TAiConversationTitleStatus => {
       const thread = threads.value.find((item) => item.id === threadId);
@@ -461,15 +467,15 @@ export const useAiConversationStore = defineStore(
           activeMessages?: IAiChatMessage[];
         };
 
-        // ── 当前版本快照 ──────────────────────────────────────────────
+        // ── 当前版本快照
         const parsedCurrent = aiConversationPersistSchema.safeParse({
           activeThreadId: store.activeThreadId,
           threads: store.threads,
         });
         if (parsedCurrent.success) {
-          // 边界 cast: parse 成功 → 运行时形状与 IAiConversationPersistShape
-          // 等价;TS 看到的差异仅来自 IAiChatMessage 手写接口与
-          // aiChatMessageSchema 推断类型的字面量 union 命名漂移。
+          // 边界 cast: parse 成功 → 运行时形状与 IAiConversationPersistShape 等价;
+          // TS 看到的差异仅来自 IAiChatMessage 手写接口与 aiChatMessageSchema
+          // 推断类型的字面量 union 命名漂移。
           const parsed = parsedCurrent.data as unknown as IAiConversationPersistShape;
           const normalized = ensureActiveThread(
             parsed.activeThreadId,
@@ -480,7 +486,7 @@ export const useAiConversationStore = defineStore(
           return;
         }
 
-        // ── 旧版本快照 (单数组 activeMessages) ────────────────────────
+        // ── 旧版本快照 (单数组 activeMessages)
         const parsedLegacy = aiConversationLegacyPersistSchema.safeParse({
           activeMessages: store.activeMessages ?? [],
         });
