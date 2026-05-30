@@ -1046,18 +1046,43 @@ defineExpose<IEditorExpose>({
    主色纯白 #ffffff，图标 Lucide，颜色按语义区分 */
 
 /* 弹窗：纯白卡片 */
-.cm-tooltip.cm-tooltip-autocomplete {
+.cm-tooltip.cm-tooltip.cm-tooltip-autocomplete {
   background: #ffffff;
   border: 1px solid #e6e8eb;
   border-radius: 12px;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12), 0 0 0 0.5px rgba(15, 23, 42, 0.04);
   padding: 4px;
-  overflow: hidden;
+}
+
+.cm-tooltip.cm-tooltip.cm-tooltip-autocomplete>ul {
+  background: #ffffff;
 }
 
 .cm-tooltip.cm-tooltip-hover,
 .cm-tooltip-autocomplete {
   max-width: none;
+}
+
+/* 隐藏补全弹窗滚动条(仍可滚动) */
+.cm-tooltip-autocomplete>ul,
+.cm-tooltip-autocomplete .cm-completionInfo {
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* 旧 Edge */
+}
+
+.cm-tooltip-autocomplete>ul::-webkit-scrollbar,
+.cm-tooltip-autocomplete .cm-completionInfo::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+  /* Chromium / Tauri */
+}
+
+/* 选中行圆角：与外框同心(外 12 − 内边距 4 = 8) */
+.cm-tooltip.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  border-radius: 8px;
 }
 
 /* 列表项 */
