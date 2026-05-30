@@ -9,6 +9,8 @@
 //! - 子进程由独立 watcher 任务 own；进程崩溃会把 state 置回 Stopped 并 emit `lsp-crashed`。
 //! - 启动流程被 `startup` 互斥锁串行化，避免 TOCTOU 双实例。
 //! - 反向 request (server → client) 对常见方法返回合规响应，对未知方法返回 MethodNotFound。
+//! - shellcheck 路径:bash-language-server 的 onInitialize 不读 initializationOptions,
+//!   只从环境变量 SHELLCHECK_PATH 或 workspace/configuration 读。我们通过前者传入。
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -578,10 +580,10 @@ fn resolve_node_executable() -> Result<PathBuf, String> {
 
 /// 解析 shellcheck 可执行文件的绝对路径。
 ///
-/// bash-language-server 的诊断完全来自 shellcheck。若仅传裸名 "shellcheck"
-/// 让其在 PATH 中查找，GUI 进程拿到的精简 PATH 往往不含 scoop/winget/choco
-/// 等 shim 目录，导致 bash-ls 找不到 shellcheck 而静默不发诊断。
-/// 这里像解析 node / bash-ls CLI 一样，按优先级定位绝对路径:
+/// bash-language-server 的诊断完全来自 shellcheck。重要:它的 onInitialize 不读
+/// initializationOptions,只从环境变量 SHELLCHECK_PATH 或 workspace/configuration 读。
+/// 本函数解析出绝对路径,调用方将其作为子进程环境变量 SHELLCHECK_PATH 传入。
+/// 查找优先级:
 ///   1. 环境变量 XIAOJIANC_SHELLCHECK_EXE
 ///   2. 项目 node_modules 里 shellcheck npm 包自带的二进制(最常见)
 ///   3. 常见系统安装位置(scoop/winget/choco/Homebrew 等)
@@ -767,9 +769,21 @@ pub async fn lsp_start(
 
     let (node, cli_js) =
         resolve_lsp_command().map_err(|e| format!("无法启动 bash-language-server: {e}"))?;
+
+    // 解析 shellcheck 绝对路径。必须在 spawn 之前完成,因为要作为子进程环境变量传入。
+    // 关键:bash-language-server 的 onInitialize 根本不读 initializationOptions,
+    // 它在 onInitialized 时从环境变量 SHELLCHECK_PATH 或 workspace/configuration 读配置。
+    // 我们未声明 configuration 能力,所以最稳妥的方式是用 SHELLCHECK_PATH 环境变量。
+    // shellcheck 是诊断的唯一来源;找不到时退回裸名,至少保持旧行为。
+    let shellcheck_path = resolve_shellcheck_executable()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "shellcheck".to_string());
+    log::info!("bash-ls 将使用 SHELLCHECK_PATH={shellcheck_path}");
+
     let mut child = Command::new(&node)
         .arg(&cli_js)
         .arg("start")
+        .env("SHELLCHECK_PATH", &shellcheck_path)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -808,12 +822,6 @@ pub async fn lsp_start(
         }
     });
 
-    // 解析 shellcheck 绝对路径。shellcheck 是诊断的唯一来源,显式传给 bash-ls,
-    // 避免依赖 GUI 进程可能精简过的 PATH。找不到时退回裸名。
-    let shellcheck_path = resolve_shellcheck_executable()
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "shellcheck".to_string());
-
     // initialize (阻塞等响应,符合协议)
     let root_uri = path_to_uri(&workspace_root)?;
     let init_params = serde_json::json!({
@@ -832,8 +840,9 @@ pub async fn lsp_start(
             },
             "workspace": { "workspaceFolders": false }
         },
-        // 启用 shellcheck(诊断来源)。传解析到的绝对路径;找不到时退回裸名走 PATH。
-        "initializationOptions": { "shellcheckPath": shellcheck_path }
+        // 注意:bash-language-server 的 onInitialize 会忽略 initializationOptions。
+        // shellcheck 路径改为通过子进程环境变量 SHELLCHECK_PATH 传入(见上)。
+        "initializationOptions": {}
     });
 
     let _init_resp = send_request(
