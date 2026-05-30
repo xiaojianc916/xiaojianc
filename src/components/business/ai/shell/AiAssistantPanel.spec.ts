@@ -470,6 +470,10 @@ describe('AiAssistantPanel', () => {
   it('点击空态提示词会直接发送给 AI', async () => {
     const assistantMock = createAssistantMock([]);
     useAiAssistantMock.mockReturnValue(assistantMock);
+    useCopilotSuggestionsMock.mockReturnValue({
+      suggestions: ref([{ title: '讲一个科学小知识', message: '讲一个科学小知识' }]),
+      rotateBatch: vi.fn(),
+    });
 
     const wrapper = mount(AiAssistantPanel, {
       props: {
@@ -483,20 +487,6 @@ describe('AiAssistantPanel', () => {
       global: {
         stubs: {
           AiChatThread: { template: '<section><slot name="empty" /></section>' },
-          AiFloatingSuggestions: {
-            props: ['suggestions', 'disabled'],
-            emits: ['select'],
-            template: `
-                            <button
-                                type="button"
-                                data-testid="suggestion"
-                                :disabled="disabled"
-                                @click="$emit('select', '讲一个科学小知识')"
-                            >
-                                提示词
-                            </button>
-                        `,
-          },
           AiContextChips: { template: '<div />' },
           AiPatchPreview: { template: '<div />' },
           AiPromptInput: { template: '<div />' },
@@ -509,7 +499,7 @@ describe('AiAssistantPanel', () => {
       },
     });
 
-    await wrapper.get('[data-testid="suggestion"]').trigger('click');
+    await wrapper.get('.ai-suggestion-chip').trigger('click');
 
     expect(assistantMock.draft.value).toBe('讲一个科学小知识');
     expect(assistantMock.sendMessage).toHaveBeenCalledTimes(1);
@@ -556,7 +546,7 @@ describe('AiAssistantPanel', () => {
             props: ['disabled', 'tooltip'],
             emits: ['click'],
             template:
-              '<button class="checkpoint-trigger-stub" :disabled="disabled" :title="tooltip" @click="$emit(\'click\')"><slot /></button>',
+              '<button class="checkpoint-trigger-stub" :disabled="disabled" :title="tooltip" @click="$emit(\\'click\\')"><slot /></button>',
           },
           CheckpointIcon: { template: '<span class="checkpoint-icon-stub" />' },
           Loader: { template: '<span class="loader-stub" />' },
@@ -949,7 +939,7 @@ describe('AiAssistantPanel', () => {
           AiPromptInput: {
             emits: ['update:activeMode'],
             template:
-              '<button data-testid="switch-plan" @click="$emit(\'update:activeMode\', \'plan\')">切到 Plan</button>',
+              '<button data-testid="switch-plan" @click="$emit(\\'update:activeMode\\', \\'plan\\')">切到 Plan</button>',
           },
           AiProviderSettings: { template: '<div />' },
           AiPlanModePanel: { template: '<div data-testid="plan-mode-panel" />' },
@@ -1003,7 +993,9 @@ describe('AiAssistantPanel', () => {
       },
       global: {
         stubs: {
-          AiChatThread: { template: '<div />' },
+          AiChatThread: {
+            template: '<div data-testid="chat-thread"><slot name="after-messages" /></div>',
+          },
           AiContextChips: { template: '<div />' },
           AiPatchPreview: { template: '<div />' },
           AiPromptInput: { template: '<div />' },
