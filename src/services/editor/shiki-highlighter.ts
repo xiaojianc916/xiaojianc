@@ -4,14 +4,18 @@ import {
 } from '@/services/editor/codemirror-github-light-highlight';
 import { resolveCodeMirrorLanguageId } from '@/services/editor/codemirror-language';
 import { createHighlighterCore, type HighlighterCore } from 'shiki/core';
-import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
+import { createOnigurumaEngine } from 'shiki/engine/oniguruma';
 
 /**
  * 专业版 Shiki 高亮服务。
  *
  * 设计要点：
- * - 使用 fine-grained 的 `shiki/core` + JS 正则引擎，避免引入 oniguruma WASM，
- *   主题/语法全部按需动态 import，配合打包器做代码分割，初始 bundle 不含任何语法。
+ * - 使用 fine-grained 的 `shiki/core`，主题/语法全部按需动态 import，配合打包器做
+ *   代码分割，初始 bundle 不含任何语法。
+ * - 正则引擎采用官方 Oniguruma WASM（`shiki/engine/oniguruma` + `shiki/wasm`）。
+ *   JS 正则引擎虽然更小，但与 Oniguruma 并非 100% 兼容，Vue/HTML 等重度内嵌
+ *   语法会出现大片不高亮；WASM 通过 `import('shiki/wasm')` 动态加载、被 Vite 单独
+ *   切 chunk，只在首次高亮时拉一次，不影响初始包体积与按需加载。
  * - 只接入 github-light 一个主题，保持与编辑器整体浅色风格一致。
  * - 语言语法用显式静态 import 字面量声明（而非模板字符串），保证 Vite 能静态分析、
  *   为每个语法生成独立 chunk，真正做到按需加载。
@@ -103,7 +107,7 @@ export const ensureHighlighter = (): Promise<HighlighterCore> => {
     highlighterPromise = createHighlighterCore({
       themes: [import('@shikijs/themes/github-light')],
       langs: [],
-      engine: createJavaScriptRegexEngine({ forgiving: true }),
+      engine: createOnigurumaEngine(import('shiki/wasm')),
     }).then((highlighter) => {
       highlighterInstance = highlighter;
       return highlighter;
