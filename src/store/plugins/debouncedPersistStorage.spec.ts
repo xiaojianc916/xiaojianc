@@ -1,104 +1,118 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createDebouncedPersistStorage, type IPersistStorageLike } from './debouncedPersistStorage';
-
-const createMemoryStorage = () => {
+const { idbMock } = vi.hoisted(() => {
   const map = new Map<string, string>();
-  const base: IPersistStorageLike = {
-    getItem: vi.fn((key: string) => map.get(key) ?? null),
-    setItem: vi.fn((key: string, value: string) => {
-      map.set(key, value);
-    }),
-    removeItem: vi.fn((key: string) => {
-      map.delete(key);
-    }),
+  return {
+    idbMock: {
+      map,
+      createStore: vi.fn(() => ({})),
+      get: vi.fn(async (key: string) => map.get(key)),
+      set: vi.fn(async (key: string, value: string) => {
+        map.set(key, value);
+      }),
+      del: vi.fn(async (key: string) => {
+        map.delete(key);
+      }),
+    },
   };
-  return { base, map };
+});
+
+vi.mock('idb-keyval', () => ({
+  createStore: idbMock.createStore,
+  get: idbMock.get,
+  set: idbMock.set,
+  del: idbMock.del,
+}));
+
+const KEY = 'shell-ide.ai-conversation';
+
+const loadModule = async () => {
+  vi.resetModules();
+  return import('./debouncedPersistStorage');
 };
 
-describe('createDebouncedPersistStorage', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
+beforeEach(() => {
+  idbMock.map.clear();
+  idbMock.createStore.mockClear();
+  idbMock.get.mockClear();
+  idbMock.set.mockClear();
+  idbMock.del.mockClear();
+  localStorage.clear();
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('ai-conversation idb 持久化 storage', () => {
+  it('hydrate 前 getItem 返回 null', async () => {
+    const mod = await loadModule();
+    expect(mod.getAiConversationPersistStorage().getItem(KEY)).toBeNull();
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
+  it('hydrate 命中 idb 已有值后 getItem 返回该值', async () => {
+    idbMock.map.set(KEY, '{"threads":[]}');
+    const mod = await loadModule();
+    const status = await mod.hydrateAiConversationStorage();
+    expect(status).toBe('loaded');
+    expect(mod.getAiConversationPersistStorage().getItem(KEY)).toBe('{"threads":[]}');
   });
 
-  it('在防抖窗口内合并多次写入，仅落盘最后一次', () => {
-    const { base, map } = createMemoryStorage();
-    const debounced = createDebouncedPersistStorage(base, 300);
-
-    debounced.storage.setItem('k', 'v1');
-    debounced.storage.setItem('k', 'v2');
-    debounced.storage.setItem('k', 'v3');
-
-    expect(base.setItem).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(300);
-
-    expect(base.setItem).toHaveBeenCalledTimes(1);
-    expect(base.setItem).toHaveBeenLastCalledWith('k', 'v3');
-    expect(map.get('k')).toBe('v3');
+  it('idb 为空时从 localStorage 迁移并清除旧 key', async () => {
+    localStorage.setItem(KEY, '{"legacy":true}');
+    const mod = await loadModule();
+    const status = await mod.hydrateAiConversationStorage();
+    expect(status).toBe('loaded');
+    expect(idbMock.set).toHaveBeenCalledWith(KEY, '{"legacy":true}', expect.anything());
+    expect(localStorage.getItem(KEY)).toBeNull();
+    expect(mod.getAiConversationPersistStorage().getItem(KEY)).toBe('{"legacy":true}');
   });
 
-  it('getItem 优先返回尚未落盘的最新值', () => {
-    const { base } = createMemoryStorage();
-    const debounced = createDebouncedPersistStorage(base, 300);
-
-    debounced.storage.setItem('k', 'pending');
-
-    expect(debounced.storage.getItem('k')).toBe('pending');
-    expect(base.getItem).not.toHaveBeenCalled();
+  it('idb 与 localStorage 均为空时以空态启动', async () => {
+    const mod = await loadModule();
+    const status = await mod.hydrateAiConversationStorage();
+    expect(status).toBe('empty');
+    expect(mod.getAiConversationPersistStorage().getItem(KEY)).toBeNull();
   });
 
-  it('getItem 在无挂起写入时回退到底层 storage', () => {
-    const { base, map } = createMemoryStorage();
-    map.set('k', 'persisted');
-    const debounced = createDebouncedPersistStorage(base, 300);
+  it('setItem 更新 cache 并防抖落盘到 idb', async () => {
+    const mod = await loadModule();
+    await mod.hydrateAiConversationStorage();
+    const storage = mod.getAiConversationPersistStorage();
 
-    expect(debounced.storage.getItem('k')).toBe('persisted');
-    expect(base.getItem).toHaveBeenCalledWith('k');
+    storage.setItem(KEY, '{"v":1}');
+    expect(storage.getItem(KEY)).toBe('{"v":1}'); // cache 立即可见
+    expect(idbMock.set).not.toHaveBeenCalled(); // 尚未落盘
+
+    await vi.advanceTimersByTimeAsync(SAVE_WAIT_MS);
+    expect(idbMock.set).toHaveBeenCalledWith(KEY, '{"v":1}', expect.anything());
   });
 
-  it('flush 立即落盘全部挂起写入并清空定时器', () => {
-    const { base, map } = createMemoryStorage();
-    const debounced = createDebouncedPersistStorage(base, 300);
+  it('setItem 与 cache 相同时不重复落盘', async () => {
+    idbMock.map.set(KEY, '{"v":1}');
+    const mod = await loadModule();
+    await mod.hydrateAiConversationStorage();
+    idbMock.set.mockClear();
+    const storage = mod.getAiConversationPersistStorage();
 
-    debounced.storage.setItem('a', '1');
-    debounced.storage.setItem('b', '2');
-    debounced.flush();
-
-    expect(map.get('a')).toBe('1');
-    expect(map.get('b')).toBe('2');
-    expect(base.setItem).toHaveBeenCalledTimes(2);
-
-    vi.advanceTimersByTime(300);
-    expect(base.setItem).toHaveBeenCalledTimes(2);
+    storage.setItem(KEY, '{"v":1}'); // 与 cache 相同
+    await vi.advanceTimersByTimeAsync(SAVE_WAIT_MS);
+    expect(idbMock.set).not.toHaveBeenCalled();
   });
 
-  it('removeItem 同时清除挂起写入与底层值', () => {
-    const { base, map } = createMemoryStorage();
-    map.set('k', 'persisted');
-    const debounced = createDebouncedPersistStorage(base, 300);
+  it('removeItem 清空 cache 并删除 idb 记录', async () => {
+    idbMock.map.set(KEY, '{"v":1}');
+    const mod = await loadModule();
+    await mod.hydrateAiConversationStorage();
+    const storage = mod.getAiConversationPersistStorage();
 
-    debounced.storage.setItem('k', 'pending');
-    debounced.storage.removeItem?.('k');
-    vi.advanceTimersByTime(300);
-
-    expect(base.removeItem).toHaveBeenCalledWith('k');
-    expect(map.has('k')).toBe(false);
-    expect(base.setItem).not.toHaveBeenCalled();
-  });
-
-  it('cancel 丢弃挂起定时器且不落盘', () => {
-    const { base } = createMemoryStorage();
-    const debounced = createDebouncedPersistStorage(base, 300);
-
-    debounced.storage.setItem('k', 'v');
-    debounced.cancel();
-    vi.advanceTimersByTime(300);
-
-    expect(base.setItem).not.toHaveBeenCalled();
+    storage.removeItem(KEY);
+    expect(storage.getItem(KEY)).toBeNull();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(idbMock.del).toHaveBeenCalledWith(KEY, expect.anything());
   });
 });
+
+// 防抖窗口上限 + 一点余量，确保定时器已触发。
+const SAVE_WAIT_MS = 350;
