@@ -1,8 +1,5 @@
 import type { Component } from 'vue';
-import {
-  normalizeRuntimeToolName,
-  type TAiRuntimeToolKind,
-} from '@/constants/ai/runtime-tools';
+import { normalizeRuntimeToolName, type TAiRuntimeToolKind } from '@/constants/ai/runtime-tools';
 import Activity from '~icons/lucide/activity';
 import BadgeCheck from '~icons/lucide/badge-check';
 import BookOpen from '~icons/lucide/book-open';
