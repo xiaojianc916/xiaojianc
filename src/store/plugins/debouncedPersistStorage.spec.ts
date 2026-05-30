@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// 防抖窗口上限 + 一点余量，确保定时器已触发。
+const SAVE_WAIT_MS = 350;
+
 const { idbMock } = vi.hoisted(() => {
   const map = new Map<string, string>();
   return {
@@ -113,6 +116,3 @@ describe('ai-conversation idb 持久化 storage', () => {
     expect(idbMock.del).toHaveBeenCalledWith(KEY, expect.anything());
   });
 });
-
-// 防抖窗口上限 + 一点余量，确保定时器已触发。
-const SAVE_WAIT_MS = 350;
