@@ -833,7 +833,7 @@ describe('AiAssistantPanel', () => {
         stubs: {
           AiChatThread: {
             props: ['typingLabel'],
-            template: '<div class="chat-thread-stub"> typingLabel </div>',
+            template: '<div class="chat-thread-stub" v-text="typingLabel"></div>',
           },
           AiContextChips: { template: '<div />' },
           AiPatchPreview: { template: '<div />' },
@@ -1058,7 +1058,7 @@ describe('AiAssistantPanel', () => {
             props: ['messages'],
             template: `
                             <section data-testid="chat-thread">
-                                <p v-for="message in messages" :key="message.id"> message.content </p>
+                                <p v-for="message in messages" :key="message.id" v-text="message.content"></p>
                             </section>
                         `,
           },
@@ -1150,12 +1150,13 @@ describe('AiAssistantPanel', () => {
                                     :key="message.id"
                                     :data-role="message.role"
                                 >
-                                    <p> message.content </p>
+                                    <p v-text="message.content"></p>
                                     <ol v-if="message.toolCalls?.length">
                                         <li
                                             v-for="toolCall in message.toolCalls"
                                             :key="toolCall.id"
-                                        > toolCall.name : toolCall.status : toolCall.summary </li>
+                                            v-text="toolCall.name + ':' + toolCall.status + ':' + toolCall.summary"
+                                        ></li>
                                     </ol>
                                 </article>
                             </section>
@@ -1235,9 +1236,9 @@ describe('AiAssistantPanel', () => {
             template: `
                             <section data-testid="chat-thread">
                                 <article v-for="message in messages" :key="message.id">
-                                    <p> message.content </p>
+                                    <p v-text="message.content"></p>
                                     <ol v-if="message.toolCalls?.length">
-                                        <li v-for="toolCall in message.toolCalls" :key="toolCall.id"> toolCall.name : toolCall.status : toolCall.summary </li>
+                                        <li v-for="toolCall in message.toolCalls" :key="toolCall.id" v-text="toolCall.name + ':' + toolCall.status + ':' + toolCall.summary"></li>
                                     </ol>
                                 </article>
                             </section>
